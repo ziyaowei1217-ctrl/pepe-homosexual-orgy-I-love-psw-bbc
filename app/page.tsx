@@ -233,12 +233,12 @@ function AppHeader() {
   return (
     <header className="sticky top-0 z-30 border-b bg-white/95 backdrop-blur">
       <div className="mx-auto flex h-16 max-w-[1500px] items-center gap-4 px-4 xl:px-6">
-        <div className="flex items-center gap-3">
+        <div className="flex min-w-0 items-center gap-3">
           <div className="flex size-10 items-center justify-center rounded-md bg-primary text-primary-foreground">
             <Home className="size-5" aria-hidden="true" />
           </div>
-          <div className="leading-tight">
-            <div className="text-base font-bold text-primary">Sublet Pipeline</div>
+          <div className="min-w-0 leading-tight">
+            <div className="truncate text-base font-bold text-primary">Sublet Pipeline</div>
             <div className="text-xs font-semibold text-muted-foreground">
               Marketplace & Co-living
             </div>
@@ -257,14 +257,14 @@ function AppHeader() {
           ))}
         </nav>
 
-        <div className="ml-auto flex items-center gap-2">
+        <div className="ml-auto flex shrink-0 items-center gap-2">
           <Button variant="outline" size="sm" className="hidden sm:inline-flex">
             <ShieldCheck data-icon="inline-start" />
             .edu Verified
           </Button>
-          <Button variant="trust" size="sm">
+          <Button variant="trust" size="sm" className="max-sm:size-10 max-sm:px-0">
             <DoorOpen data-icon="inline-start" />
-            发布房源
+            <span className="max-sm:sr-only">发布房源</span>
           </Button>
         </div>
       </div>
@@ -301,17 +301,17 @@ function SearchPanel({
           </div>
         </label>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-[repeat(2,minmax(0,1fr))] gap-3">
           <label className="flex flex-col gap-2 text-sm font-semibold">
             入住
-            <Button variant="outline" className="justify-start">
+            <Button variant="outline" className="w-full min-w-0 justify-start">
               <CalendarDays data-icon="inline-start" />
               6/18
             </Button>
           </label>
           <label className="flex flex-col gap-2 text-sm font-semibold">
             搬出
-            <Button variant="outline" className="justify-start">
+            <Button variant="outline" className="w-full min-w-0 justify-start">
               <CalendarDays data-icon="inline-start" />
               9/05
             </Button>
@@ -336,7 +336,7 @@ function SearchPanel({
 
         <div className="flex flex-col gap-3">
           <span className="text-sm font-semibold">设施偏好</span>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-[repeat(2,minmax(0,1fr))] gap-2">
             {amenities.map((amenity) => {
               const Icon = amenity.icon;
               const active = amenity.label === selectedAmenity;
@@ -345,7 +345,7 @@ function SearchPanel({
                 <button
                   key={amenity.label}
                   className={cn(
-                    "flex h-12 items-center gap-2 rounded-md border px-3 text-left text-sm font-semibold transition-colors",
+                    "flex h-12 min-w-0 items-center gap-2 rounded-md border px-3 text-left text-sm font-semibold transition-colors",
                     active
                       ? "border-trust-sky bg-trust-sky/10 text-trust-blue"
                       : "border-border bg-white text-muted-foreground hover:bg-secondary"
@@ -386,10 +386,10 @@ function MarketToolbar() {
           </p>
         </div>
         <Tabs defaultValue="map" className="w-full lg:w-auto">
-          <TabsList className="grid w-full grid-cols-3 lg:w-[330px]">
-            <TabsTrigger value="map">地图</TabsTrigger>
-            <TabsTrigger value="list">房源</TabsTrigger>
-            <TabsTrigger value="match">室友</TabsTrigger>
+          <TabsList className="grid w-full grid-cols-[repeat(3,minmax(0,1fr))] lg:w-[330px]">
+            <TabsTrigger value="map" className="px-2">地图</TabsTrigger>
+            <TabsTrigger value="list" className="px-2">房源</TabsTrigger>
+            <TabsTrigger value="match" className="px-2">室友</TabsTrigger>
           </TabsList>
           <TabsContent value="map" className="sr-only">
             地图视图
@@ -437,7 +437,7 @@ function MapCanvas({ selectedListing }: { selectedListing: Listing }) {
               {selectedListing.area}
             </p>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-[repeat(2,minmax(0,1fr))] gap-3">
             <Metric icon={Clock3} label="通勤" value={selectedListing.commute} />
             <Metric icon={DollarSign} label="净租金" value={`$${selectedListing.price}/月`} />
             <Metric icon={BedDouble} label="卧室" value={`${selectedListing.beds} Bed`} />
@@ -484,12 +484,12 @@ function Metric({
   value: string;
 }) {
   return (
-    <div className="rounded-md bg-secondary p-3">
+    <div className="min-w-0 rounded-md bg-secondary p-3">
       <div className="flex items-center gap-2 text-xs font-bold text-muted-foreground">
         <Icon className="size-4" aria-hidden="true" />
         {label}
       </div>
-      <div className="mt-1 line-clamp-2 text-sm font-bold text-primary">{value}</div>
+      <div className="mt-1 line-clamp-2 break-words text-sm font-bold text-primary">{value}</div>
     </div>
   );
 }
@@ -599,7 +599,7 @@ function RoommateDeck({
               </p>
             </div>
 
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-[repeat(2,minmax(0,1fr))] gap-2">
               <Metric icon={WalletCards} label="预算" value={roommate.budget} />
               <Metric icon={TrainFront} label="通勤" value={roommate.commute} />
             </div>
@@ -667,7 +667,7 @@ function GroupPanel({ groupBudget }: { groupBudget: string }) {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-[repeat(2,minmax(0,1fr))] gap-2">
           <Badge variant="success">无烟</Badge>
           <Badge variant="trust">2 卫以上</Badge>
           <Badge variant="secondary">可养猫</Badge>
