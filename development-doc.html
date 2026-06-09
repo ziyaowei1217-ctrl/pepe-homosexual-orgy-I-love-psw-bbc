@@ -1,0 +1,1170 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Development Documentation - Sublet Marketplace & Co-living Pipeline</title>
+    <style>
+        :root {
+            --navy-dark: #002244;
+            --navy-medium: #004B87;
+            --navy-light: #41748D;
+            --accent-blue: #0076A8;
+            --green: #107C41;
+            --amber: #B45309;
+            --red: #D9381E;
+            --purple: #6D28D9;
+            --gray-bg: #F4F6F8;
+            --gray-soft: #EEF2F5;
+            --gray-border: #D1D5DB;
+            --text-dark: #222222;
+            --text-muted: #555555;
+            --white: #FFFFFF;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans CJK SC", sans-serif;
+            color: var(--text-dark);
+            background: var(--gray-bg);
+            line-height: 1.6;
+            margin: 0;
+        }
+
+        .container {
+            max-width: 1220px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+
+        .hero {
+            background: linear-gradient(135deg, var(--navy-dark), var(--navy-medium));
+            color: var(--white);
+            padding: 48px 0 36px;
+        }
+
+        .hero h1 {
+            color: var(--white);
+            font-size: 32px;
+            line-height: 1.2;
+            margin: 0 0 12px;
+        }
+
+        .hero p {
+            max-width: 920px;
+            margin: 0;
+            color: #E0F2FE;
+            font-size: 16px;
+        }
+
+        .meta-card {
+            background: var(--white);
+            border-top: 6px solid var(--navy-dark);
+            border-radius: 4px;
+            padding: 24px;
+            margin-top: -20px;
+            margin-bottom: 28px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.06);
+        }
+
+        .meta-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 16px;
+        }
+
+        .meta-label {
+            color: var(--text-muted);
+            display: block;
+            font-size: 13px;
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+
+        .meta-value {
+            color: var(--navy-dark);
+            font-weight: 650;
+        }
+
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            border-radius: 12px;
+            padding: 2px 9px;
+            font-size: 12px;
+            font-weight: 700;
+            background: #E5E7EB;
+            color: #374151;
+        }
+
+        .badge-active {
+            background: #D1FAE5;
+            color: #065F46;
+        }
+
+        .navbar {
+            position: sticky;
+            top: 0;
+            z-index: 20;
+            background: var(--white);
+            border-bottom: 1px solid var(--gray-border);
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+        }
+
+        .nav-links {
+            max-width: 1220px;
+            margin: 0 auto;
+            display: flex;
+            overflow-x: auto;
+            gap: 4px;
+            padding: 0 20px;
+        }
+
+        .nav-links a {
+            color: var(--navy-dark);
+            text-decoration: none;
+            font-weight: 650;
+            font-size: 13px;
+            white-space: nowrap;
+            padding: 14px 12px;
+            border-bottom: 3px solid transparent;
+        }
+
+        .nav-links a:hover {
+            border-bottom-color: var(--accent-blue);
+            color: var(--accent-blue);
+        }
+
+        h2 {
+            color: var(--navy-dark);
+            border-bottom: 2px solid var(--navy-medium);
+            font-size: 22px;
+            margin: 44px 0 18px;
+            padding-bottom: 8px;
+        }
+
+        h3 {
+            color: var(--navy-dark);
+            font-size: 17px;
+            margin: 28px 0 12px;
+        }
+
+        p {
+            margin: 0 0 14px;
+        }
+
+        .subtitle {
+            color: var(--text-muted);
+            font-size: 15px;
+        }
+
+        .section-card,
+        .note-box {
+            background: var(--white);
+            border: 1px solid var(--gray-border);
+            border-radius: 4px;
+            padding: 22px;
+            margin-bottom: 22px;
+        }
+
+        .note-box {
+            border-left: 5px solid var(--accent-blue);
+        }
+
+        .warning-box {
+            border-left-color: var(--amber);
+            background: #FFFBEB;
+        }
+
+        .grid-2,
+        .grid-3,
+        .grid-4 {
+            display: grid;
+            gap: 16px;
+            margin: 18px 0;
+        }
+
+        .grid-2 {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .grid-3 {
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+
+        .grid-4 {
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+        }
+
+        .mini-card {
+            background: var(--white);
+            border: 1px solid var(--gray-border);
+            border-radius: 4px;
+            padding: 16px;
+        }
+
+        .mini-card strong {
+            color: var(--navy-dark);
+            display: block;
+            margin-bottom: 6px;
+        }
+
+        .mini-card p {
+            color: var(--text-muted);
+            font-size: 14px;
+            margin: 0;
+        }
+
+        .arch {
+            display: grid;
+            gap: 10px;
+            margin: 18px 0 10px;
+        }
+
+        .arch-row {
+            display: grid;
+            grid-template-columns: 190px 1fr;
+            gap: 10px;
+            align-items: stretch;
+        }
+
+        .arch-label {
+            background: var(--navy-dark);
+            color: var(--white);
+            border-radius: 4px;
+            padding: 12px;
+            font-weight: 700;
+            text-align: center;
+        }
+
+        .arch-body {
+            background: var(--white);
+            border: 1px solid var(--gray-border);
+            border-radius: 4px;
+            padding: 12px;
+        }
+
+        .chip-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 8px;
+        }
+
+        .chip {
+            display: inline-flex;
+            align-items: center;
+            border-radius: 14px;
+            border: 1px solid var(--gray-border);
+            background: var(--gray-soft);
+            color: #27364A;
+            font-size: 12px;
+            font-weight: 650;
+            padding: 4px 9px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: var(--white);
+            border-radius: 4px;
+            overflow: hidden;
+            margin: 16px 0 28px;
+            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+        }
+
+        th,
+        td {
+            border-bottom: 1px solid var(--gray-border);
+            text-align: left;
+            vertical-align: top;
+            padding: 13px 14px;
+            font-size: 14px;
+        }
+
+        th {
+            background: var(--navy-dark);
+            color: var(--white);
+            font-size: 13px;
+            letter-spacing: 0;
+        }
+
+        tr:last-child td {
+            border-bottom: none;
+        }
+
+        code {
+            background: #EEF2FF;
+            color: #273064;
+            border-radius: 4px;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+            font-size: 0.92em;
+            padding: 2px 5px;
+        }
+
+        pre {
+            background: #111827;
+            color: #E5E7EB;
+            border-radius: 4px;
+            overflow-x: auto;
+            padding: 16px;
+            font-size: 13px;
+            line-height: 1.55;
+        }
+
+        pre code {
+            background: transparent;
+            color: inherit;
+            padding: 0;
+        }
+
+        .priority {
+            display: inline-flex;
+            align-items: center;
+            border-radius: 12px;
+            color: var(--white);
+            font-size: 12px;
+            font-weight: 800;
+            padding: 2px 8px;
+        }
+
+        .p0 { background: var(--red); }
+        .p1 { background: var(--amber); }
+        .p2 { background: var(--green); }
+
+        .state-flow {
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin: 14px 0 18px;
+        }
+
+        .state {
+            background: var(--white);
+            border: 1px solid var(--gray-border);
+            border-left: 4px solid var(--accent-blue);
+            border-radius: 4px;
+            padding: 9px 11px;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+            font-size: 13px;
+            font-weight: 700;
+        }
+
+        .arrow {
+            color: var(--text-muted);
+            font-weight: 700;
+        }
+
+        ul {
+            padding-left: 20px;
+            margin-top: 8px;
+        }
+
+        li {
+            margin-bottom: 6px;
+        }
+
+        .footer {
+            color: var(--text-muted);
+            border-top: 1px solid var(--gray-border);
+            font-size: 13px;
+            margin-top: 48px;
+            padding-top: 18px;
+        }
+
+        @media (max-width: 900px) {
+            .grid-2,
+            .grid-3,
+            .grid-4 {
+                grid-template-columns: 1fr;
+            }
+
+            .arch-row {
+                grid-template-columns: 1fr;
+            }
+
+            .hero h1 {
+                font-size: 26px;
+            }
+        }
+
+        @media (max-width: 640px) {
+            .container {
+                padding: 28px 14px;
+            }
+
+            .hero {
+                padding-top: 34px;
+            }
+
+            .section-card,
+            .note-box,
+            .mini-card {
+                padding: 16px;
+            }
+
+            table,
+            thead,
+            tbody,
+            th,
+            td,
+            tr {
+                display: block;
+            }
+
+            thead {
+                display: none;
+            }
+
+            tr {
+                border: 1px solid var(--gray-border);
+                border-radius: 4px;
+                margin-bottom: 12px;
+                overflow: hidden;
+            }
+
+            td {
+                border-bottom: 1px solid #E5E7EB;
+            }
+
+            td::before {
+                content: attr(data-label);
+                color: var(--text-muted);
+                display: block;
+                font-size: 12px;
+                font-weight: 800;
+                margin-bottom: 4px;
+            }
+
+            .state-flow {
+                align-items: stretch;
+                flex-direction: column;
+            }
+
+            .arrow {
+                display: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header class="hero">
+        <div class="container">
+            <h1>开发文档 - 大学生与白领高质短租平台</h1>
+            <p>面向工程团队的三阶段实现说明，覆盖正式版技术栈、业务域拆分、数据模型、API 模块、支付托管状态机、部署和测试策略。</p>
+        </div>
+    </header>
+
+    <main>
+        <div class="container">
+            <section class="meta-card">
+                <div class="meta-grid">
+                    <div>
+                        <span class="meta-label">项目代号</span>
+                        <span class="meta-value">Sublet Marketplace & Co-living Pipeline</span>
+                    </div>
+                    <div>
+                        <span class="meta-label">文档类型</span>
+                        <span class="meta-value">Engineering Development Documentation</span>
+                    </div>
+                    <div>
+                        <span class="meta-label">技术路线</span>
+                        <span class="meta-value">正式版栈</span>
+                    </div>
+                    <div>
+                        <span class="meta-label">状态</span>
+                        <span class="meta-value"><span class="badge badge-active">Ready for Engineering Breakdown</span></span>
+                    </div>
+                    <div>
+                        <span class="meta-label">最后更新</span>
+                        <span class="meta-value">2026-06-09</span>
+                    </div>
+                    <div>
+                        <span class="meta-label">需求来源</span>
+                        <span class="meta-value">PRD v2.0 社交组队与高频生态升级版</span>
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <nav class="navbar">
+            <div class="nav-links">
+                <a href="#overview">1. 项目概览</a>
+                <a href="#architecture">2. 总体架构</a>
+                <a href="#domains">3. 业务域</a>
+                <a href="#data-model">4. 数据模型</a>
+                <a href="#api">5. API 模块</a>
+                <a href="#payments">6. 支付状态机</a>
+                <a href="#roadmap">7. 三阶段排期</a>
+                <a href="#ops">8. 部署与测试</a>
+            </div>
+        </nav>
+
+        <div class="container">
+            <section id="overview">
+                <h2>1. 项目概览与技术目标</h2>
+                <div class="section-card">
+                    <p>本项目是一个面向高校学生、留学生、实习生与白领人群的高信任短租/转租平台。核心闭环为：用户认证 -> 室友匹配 -> Group 组队 -> 地图找房 -> 房源确认 -> 定金托管 -> 入住核销 -> 双向评价与信用沉淀。</p>
+                    <p>系统需要同时处理 marketplace 供需撮合、社交匹配、地理搜索、支付托管、合同材料、内容审核与信用风控。正式版采用模块化单体优先，避免早期微服务拆分带来的运维复杂度。</p>
+                </div>
+
+                <div class="grid-4">
+                    <article class="mini-card">
+                        <strong>开发原则</strong>
+                        <p>先跑通 P0 交易闭环，再扩展推荐、金融收益与高频留存服务。</p>
+                    </article>
+                    <article class="mini-card">
+                        <strong>可靠性目标</strong>
+                        <p>支付、退款、信用、审核必须可审计，关键状态变化写入日志与 ledger。</p>
+                    </article>
+                    <article class="mini-card">
+                        <strong>产品目标</strong>
+                        <p>降低异地短租的信任成本，提高找室友和找房源的撮合效率。</p>
+                    </article>
+                    <article class="mini-card">
+                        <strong>合规边界</strong>
+                        <p>本文档不是法律或金融意见，支付托管上线前必须经过专业复核。</p>
+                    </article>
+                </div>
+
+                <h3>正式版技术栈</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>层级</th>
+                            <th>技术</th>
+                            <th>职责</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td data-label="层级">Web Frontend</td>
+                            <td data-label="技术"><code>Next.js App Router</code> + <code>React</code> + <code>TypeScript</code> + <code>Tailwind CSS</code> + <code>shadcn/ui</code></td>
+                            <td data-label="职责">用户端、房东端、Group 协作页、后台管理入口、SEO 可索引房源页。</td>
+                        </tr>
+                        <tr>
+                            <td data-label="层级">API Backend</td>
+                            <td data-label="技术"><code>NestJS</code> + <code>TypeScript</code></td>
+                            <td data-label="职责">认证、业务规则、交易状态机、支付回调、审核、信用评分、后台 API。</td>
+                        </tr>
+                        <tr>
+                            <td data-label="层级">Database</td>
+                            <td data-label="技术"><code>PostgreSQL</code> + <code>PostGIS</code> + <code>Prisma</code></td>
+                            <td data-label="职责">核心业务数据、地理位置、租期、评价、交易 ledger；复杂地理查询可用 raw SQL。</td>
+                        </tr>
+                        <tr>
+                            <td data-label="层级">Queue & Cache</td>
+                            <td data-label="技术"><code>Redis</code> + <code>BullMQ</code></td>
+                            <td data-label="职责">邮件验证码、支付 webhook 后处理、媒体审核、评分重算、曝光降权。</td>
+                        </tr>
+                        <tr>
+                            <td data-label="层级">Payment</td>
+                            <td data-label="技术"><code>Stripe Connect</code></td>
+                            <td data-label="职责">平台收款、连接账户、定金/首月租金代管、退款、服务费分账、争议处理。</td>
+                        </tr>
+                        <tr>
+                            <td data-label="层级">Map & Search</td>
+                            <td data-label="技术"><code>Mapbox</code> + <code>PostGIS</code> + <code>Meilisearch/Typesense</code></td>
+                            <td data-label="职责">地理编码、地图气泡、通勤时间展示、房源文本与筛选搜索。</td>
+                        </tr>
+                        <tr>
+                            <td data-label="层级">Storage</td>
+                            <td data-label="技术"><code>Cloudflare R2</code> 或 <code>S3</code></td>
+                            <td data-label="职责">房源图片、短视频、合同、证件审核材料、纠纷证据图。</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </section>
+
+            <section id="architecture">
+                <h2>2. 总体架构</h2>
+                <div class="note-box">
+                    <p><strong>架构选择：</strong>采用模块化单体 API + 独立 Web 前端。数据库保持单一事实源，异步任务通过 Redis 队列处理。支付状态以 Stripe webhook 为事实输入，但系统内部必须维护自己的 <code>Booking</code> 与 <code>EscrowLedger</code> 状态。</p>
+                </div>
+
+                <div class="arch">
+                    <div class="arch-row">
+                        <div class="arch-label">Client Layer</div>
+                        <div class="arch-body">
+                            <strong>Next.js Web App</strong>
+                            <div class="chip-list">
+                                <span class="chip">Tenant App</span>
+                                <span class="chip">Lister/Landlord App</span>
+                                <span class="chip">Group Workspace</span>
+                                <span class="chip">Admin Console</span>
+                                <span class="chip">Map Search</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="arch-row">
+                        <div class="arch-label">API Layer</div>
+                        <div class="arch-body">
+                            <strong>NestJS Modular Monolith</strong>
+                            <div class="chip-list">
+                                <span class="chip">AuthModule</span>
+                                <span class="chip">ListingModule</span>
+                                <span class="chip">MatchingModule</span>
+                                <span class="chip">GroupModule</span>
+                                <span class="chip">BookingModule</span>
+                                <span class="chip">PaymentModule</span>
+                                <span class="chip">ReviewModule</span>
+                                <span class="chip">ModerationModule</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="arch-row">
+                        <div class="arch-label">Data Layer</div>
+                        <div class="arch-body">
+                            <strong>PostgreSQL/PostGIS + Redis + Object Storage</strong>
+                            <div class="chip-list">
+                                <span class="chip">Core Tables</span>
+                                <span class="chip">Geo Index</span>
+                                <span class="chip">Ledger Tables</span>
+                                <span class="chip">BullMQ Jobs</span>
+                                <span class="chip">Media Buckets</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="arch-row">
+                        <div class="arch-label">External Services</div>
+                        <div class="arch-body">
+                            <strong>Stripe, Mapbox, Email, KYC/Moderation Providers</strong>
+                            <div class="chip-list">
+                                <span class="chip">Stripe Connect</span>
+                                <span class="chip">Mapbox Geocoding</span>
+                                <span class="chip">Mapbox Directions</span>
+                                <span class="chip">Transactional Email</span>
+                                <span class="chip">Content Moderation</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <h3>前端分区</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>区域</th>
+                            <th>主要页面</th>
+                            <th>关键交互</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td data-label="区域">租客端</td>
+                            <td data-label="主要页面">注册认证、画像编辑、卡片流、地图找房、房源详情、订单支付、评价。</td>
+                            <td data-label="关键交互">右滑 Match、Group 邀请、日期选择、地图筛选、在线支付、缺陷提交。</td>
+                        </tr>
+                        <tr>
+                            <td data-label="区域">房东/原租客端</td>
+                            <td data-label="主要页面">发房流程、媒体上传、价格补贴、转租承诺、订单确认、评价。</td>
+                            <td data-label="关键交互">分类相册、短视频上传、净价计算、合同材料上传、成交核销。</td>
+                        </tr>
+                        <tr>
+                            <td data-label="区域">Group 工作台</td>
+                            <td data-label="主要页面">成员列表、群组偏好、预算交集、候选房源、账单拆分。</td>
+                            <td data-label="关键交互">成员邀请、统一预算、整租推荐、拼单/账单扩展功能。</td>
+                        </tr>
+                        <tr>
+                            <td data-label="区域">后台管理</td>
+                            <td data-label="主要页面">用户审核、房源审核、订单与退款、举报、信用分、运营配置。</td>
+                            <td data-label="关键交互">人工审核、冻结订单、处理争议、调整曝光、查看 ledger。</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </section>
+
+            <section id="domains">
+                <h2>3. 核心业务域</h2>
+                <div class="grid-3">
+                    <article class="mini-card">
+                        <strong>Auth & Verification</strong>
+                        <p>邮箱注册、校园/企业邮箱验证码、人工材料审核、认证标签、后台审核流。</p>
+                    </article>
+                    <article class="mini-card">
+                        <strong>Listings</strong>
+                        <p>房源创建、租期、地理坐标、分类相册、短视频、补贴、合同承诺、发布审核。</p>
+                    </article>
+                    <article class="mini-card">
+                        <strong>Matching & Groups</strong>
+                        <p>租客画像、左/右滑、双向 Match、群聊解锁、Group 固化、群组偏好聚合。</p>
+                    </article>
+                    <article class="mini-card">
+                        <strong>Booking & Escrow</strong>
+                        <p>预订、Stripe 支付、资金托管、确认入住、退款、争议、人工客服介入。</p>
+                    </article>
+                    <article class="mini-card">
+                        <strong>Review & Credit</strong>
+                        <p>双向盲评、三维评分、信用分重算、低分降权、金牌转租人激励。</p>
+                    </article>
+                    <article class="mini-card">
+                        <strong>Moderation & Risk</strong>
+                        <p>媒体审核、虚假房源举报、证据收集、账户处罚、订单冻结、后台审计。</p>
+                    </article>
+                </div>
+
+                <h3>业务规则摘要</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>规则</th>
+                            <th>实现要求</th>
+                            <th>落地阶段</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td data-label="规则">校园/企业认证</td>
+                            <td data-label="实现要求">邮箱验证码优先；无邮箱权限走人工材料审核；认证结果写入 <code>Verification</code>。</td>
+                            <td data-label="落地阶段"><span class="priority p0">P0</span></td>
+                        </tr>
+                        <tr>
+                            <td data-label="规则">租期精确到日</td>
+                            <td data-label="实现要求">入住/搬出日期必填；允许 3-7 天弹性窗口；搜索时按时间窗交叉匹配。</td>
+                            <td data-label="落地阶段"><span class="priority p0">P0</span></td>
+                        </tr>
+                        <tr>
+                            <td data-label="规则">分类相册</td>
+                            <td data-label="实现要求">媒体归类为卧室、公共客厅、厨房/卫浴、周边环境；首图必须通过质量检查。</td>
+                            <td data-label="落地阶段"><span class="priority p0">P0</span></td>
+                        </tr>
+                        <tr>
+                            <td data-label="规则">双向盲评</td>
+                            <td data-label="实现要求">双方 14 天内提交；双方提交或截止后同时公开；评分进入信用重算队列。</td>
+                            <td data-label="落地阶段"><span class="priority p0">P0</span></td>
+                        </tr>
+                        <tr>
+                            <td data-label="规则">低分惩罚</td>
+                            <td data-label="实现要求">信用分低于阈值时降低曝光、提高保证金或限制卡片流展示。</td>
+                            <td data-label="落地阶段"><span class="priority p1">P1</span></td>
+                        </tr>
+                        <tr>
+                            <td data-label="规则">高频生态</td>
+                            <td data-label="实现要求">假期转租、微仓、拼单外卖、水电拆分作为 P2 独立模块接入 Group。</td>
+                            <td data-label="落地阶段"><span class="priority p2">P2</span></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </section>
+
+            <section id="data-model">
+                <h2>4. 数据模型草案</h2>
+                <div class="note-box">
+                    <p>数据模型采用 Prisma 管理 schema；涉及地理位置的字段使用 PostGIS 类型并通过 migration/raw SQL 创建空间索引。金额字段统一用最小货币单位整数存储，例如 cents。</p>
+                </div>
+
+                <table>
+                    <thead>
+                        <tr>
+                            <th>模型</th>
+                            <th>核心字段</th>
+                            <th>说明</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td data-label="模型"><code>User</code></td>
+                            <td data-label="核心字段">id, email, phone, role, status, createdAt</td>
+                            <td data-label="说明">平台统一账号；角色可包含 tenant、lister、landlord、admin。</td>
+                        </tr>
+                        <tr>
+                            <td data-label="模型"><code>Verification</code></td>
+                            <td data-label="核心字段">userId, type, provider, status, evidenceUrl, reviewedBy</td>
+                            <td data-label="说明">校园/企业邮箱认证与人工材料审核结果。</td>
+                        </tr>
+                        <tr>
+                            <td data-label="模型"><code>Profile</code></td>
+                            <td data-label="核心字段">userId, displayName, school, company, bio, lifestyleTags</td>
+                            <td data-label="说明">卡片流和信用展示使用的公开画像。</td>
+                        </tr>
+                        <tr>
+                            <td data-label="模型"><code>Listing</code></td>
+                            <td data-label="核心字段">id, ownerId, title, address, geoPoint, bedrooms, bathrooms, rentCents, status</td>
+                            <td data-label="说明">房源主表；地图查询依赖 geoPoint 与 PostGIS 索引。</td>
+                        </tr>
+                        <tr>
+                            <td data-label="模型"><code>ListingMedia</code></td>
+                            <td data-label="核心字段">listingId, type, category, url, sortOrder, moderationStatus</td>
+                            <td data-label="说明">图片、短视频、审核结果和首图排序。</td>
+                        </tr>
+                        <tr>
+                            <td data-label="模型"><code>LeaseTerm</code></td>
+                            <td data-label="核心字段">listingId, startDate, endDate, flexibleDays, depositCents</td>
+                            <td data-label="说明">租期与押金信息，供时间窗匹配与订单计算。</td>
+                        </tr>
+                        <tr>
+                            <td data-label="模型"><code>RoommatePreference</code></td>
+                            <td data-label="核心字段">userId, budgetMinCents, budgetMaxCents, commuteTargets, habits, petPolicy</td>
+                            <td data-label="说明">租客匹配画像，供卡片流和 Group 推荐读取。</td>
+                        </tr>
+                        <tr>
+                            <td data-label="模型"><code>Swipe</code> / <code>Match</code></td>
+                            <td data-label="核心字段">actorId, targetUserId, direction, matchedAt</td>
+                            <td data-label="说明">左滑/右滑记录；双向右滑生成 Match 并解锁聊天。</td>
+                        </tr>
+                        <tr>
+                            <td data-label="模型"><code>Group</code></td>
+                            <td data-label="核心字段">id, ownerId, name, memberCount, totalBudgetCents, sharedTags, status</td>
+                            <td data-label="说明">合租小队，聚合预算、标签、通勤目标与候选房源。</td>
+                        </tr>
+                        <tr>
+                            <td data-label="模型"><code>Booking</code></td>
+                            <td data-label="核心字段">id, listingId, groupId, tenantId, status, amountCents, moveInDate</td>
+                            <td data-label="说明">交易主状态机，所有资金和退款动作都关联 booking。</td>
+                        </tr>
+                        <tr>
+                            <td data-label="模型"><code>PaymentIntent</code></td>
+                            <td data-label="核心字段">bookingId, stripePaymentIntentId, amountCents, status, connectedAccountId</td>
+                            <td data-label="说明">Stripe 支付意图映射，不直接替代内部订单状态。</td>
+                        </tr>
+                        <tr>
+                            <td data-label="模型"><code>EscrowLedger</code></td>
+                            <td data-label="核心字段">bookingId, entryType, amountCents, currency, source, createdAt</td>
+                            <td data-label="说明">资金流水审计表，记录 hold、release、refund、fee、adjustment。</td>
+                        </tr>
+                        <tr>
+                            <td data-label="模型"><code>RefundCase</code></td>
+                            <td data-label="核心字段">bookingId, reason, status, evidenceUrls, decision, resolvedBy</td>
+                            <td data-label="说明">取消、入住日重大缺陷、争议和客服处理。</td>
+                        </tr>
+                        <tr>
+                            <td data-label="模型"><code>Review</code> / <code>CreditScore</code></td>
+                            <td data-label="核心字段">subjectId, reviewerId, dimensions, rating, visibleAt, aggregateScore</td>
+                            <td data-label="说明">盲评和信用分沉淀，支持后续曝光降权与保证金调整。</td>
+                        </tr>
+                        <tr>
+                            <td data-label="模型"><code>Report</code> / <code>ModerationCase</code></td>
+                            <td data-label="核心字段">reporterId, targetType, targetId, reason, evidenceUrls, status</td>
+                            <td data-label="说明">举报、媒体审核、虚假房源、用户处罚与后台审计。</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </section>
+
+            <section id="api">
+                <h2>5. API 模块清单</h2>
+                <p class="subtitle">接口前缀建议使用 <code>/api/v1</code>。所有写接口默认要求鉴权；后台接口要求 admin 权限；支付 webhook 只接受 Stripe 签名校验通过的请求。</p>
+
+                <table>
+                    <thead>
+                        <tr>
+                            <th>模块</th>
+                            <th>关键接口</th>
+                            <th>权限与状态变化</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td data-label="模块">Auth</td>
+                            <td data-label="关键接口"><code>POST /auth/register</code>, <code>POST /auth/login</code>, <code>POST /auth/email-code</code>, <code>POST /auth/verify-email</code></td>
+                            <td data-label="权限与状态变化">创建用户、发验证码、完成校园/企业邮箱认证。</td>
+                        </tr>
+                        <tr>
+                            <td data-label="模块">Verification</td>
+                            <td data-label="关键接口"><code>POST /verifications/manual</code>, <code>GET /admin/verifications</code>, <code>PATCH /admin/verifications/:id</code></td>
+                            <td data-label="权限与状态变化">用户提交材料；管理员通过/拒绝，更新认证标签。</td>
+                        </tr>
+                        <tr>
+                            <td data-label="模块">Listings</td>
+                            <td data-label="关键接口"><code>POST /listings</code>, <code>PATCH /listings/:id</code>, <code>POST /listings/:id/media</code>, <code>POST /listings/:id/submit</code></td>
+                            <td data-label="权限与状态变化">房源从 draft 到 pending_review，再到 published 或 rejected。</td>
+                        </tr>
+                        <tr>
+                            <td data-label="模块">Search & Map</td>
+                            <td data-label="关键接口"><code>GET /listings/search</code>, <code>GET /listings/map</code>, <code>GET /commute/estimate</code></td>
+                            <td data-label="权限与状态变化">公开读取 published 房源；按日期、预算、设施、地理范围过滤。</td>
+                        </tr>
+                        <tr>
+                            <td data-label="模块">Matching</td>
+                            <td data-label="关键接口"><code>GET /matches/feed</code>, <code>POST /swipes</code>, <code>GET /matches</code></td>
+                            <td data-label="权限与状态变化">记录左/右滑；双向右滑生成 Match；低信用用户可被降权。</td>
+                        </tr>
+                        <tr>
+                            <td data-label="模块">Groups</td>
+                            <td data-label="关键接口"><code>POST /groups</code>, <code>POST /groups/:id/invites</code>, <code>PATCH /groups/:id/preferences</code>, <code>GET /groups/:id/recommendations</code></td>
+                            <td data-label="权限与状态变化">创建合租 Group、邀请成员、聚合预算与偏好、推荐整租房源。</td>
+                        </tr>
+                        <tr>
+                            <td data-label="模块">Bookings</td>
+                            <td data-label="关键接口"><code>POST /bookings</code>, <code>POST /bookings/:id/confirm</code>, <code>POST /bookings/:id/cancel</code>, <code>POST /bookings/:id/move-in-report</code></td>
+                            <td data-label="权限与状态变化">创建订单、确认预订、取消、提交入住日重大缺陷。</td>
+                        </tr>
+                        <tr>
+                            <td data-label="模块">Payments</td>
+                            <td data-label="关键接口"><code>POST /payments/intent</code>, <code>POST /payments/webhook/stripe</code>, <code>POST /admin/refunds/:id/resolve</code></td>
+                            <td data-label="权限与状态变化">创建 Stripe PaymentIntent；webhook 驱动 funds_held；管理员处理退款。</td>
+                        </tr>
+                        <tr>
+                            <td data-label="模块">Reviews</td>
+                            <td data-label="关键接口"><code>POST /reviews</code>, <code>GET /reviews/received</code>, <code>POST /admin/credit/recalculate</code></td>
+                            <td data-label="权限与状态变化">提交盲评；14 天规则控制公开；触发信用分重算。</td>
+                        </tr>
+                        <tr>
+                            <td data-label="模块">Moderation</td>
+                            <td data-label="关键接口"><code>POST /reports</code>, <code>GET /admin/moderation</code>, <code>PATCH /admin/moderation/:id</code></td>
+                            <td data-label="权限与状态变化">举报、媒体审核、冻结房源/订单、处罚用户。</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h3>接口设计约定</h3>
+                <ul>
+                    <li>所有金额字段使用整数最小货币单位，所有时间字段使用 ISO 8601。</li>
+                    <li>状态变化接口必须幂等；支付 webhook 必须记录事件 ID，避免重复处理。</li>
+                    <li>用户端不能直接传入信用分、曝光权重、ledger entry 等系统字段。</li>
+                    <li>后台管理动作必须写入 audit log，包含操作者、目标对象、动作、前后状态。</li>
+                </ul>
+            </section>
+
+            <section id="payments">
+                <h2>6. 支付与托管状态机</h2>
+                <div class="warning-box note-box">
+                    <p><strong>合规提醒：</strong>PRD 中的定金代管、资金沉淀和收益账户设计涉及支付、托管、货币传输和消费者保护风险。工程实现前必须确认 Stripe Connect 模式、平台责任、资金流和当地监管要求。</p>
+                </div>
+
+                <h3>主流程状态</h3>
+                <div class="state-flow">
+                    <span class="state">draft</span>
+                    <span class="arrow">-></span>
+                    <span class="state">pending_payment</span>
+                    <span class="arrow">-></span>
+                    <span class="state">funds_held</span>
+                    <span class="arrow">-></span>
+                    <span class="state">confirmed</span>
+                    <span class="arrow">-></span>
+                    <span class="state">move_in_pending</span>
+                    <span class="arrow">-></span>
+                    <span class="state">completed</span>
+                </div>
+
+                <table>
+                    <thead>
+                        <tr>
+                            <th>状态</th>
+                            <th>进入条件</th>
+                            <th>允许动作</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td data-label="状态"><code>draft</code></td>
+                            <td data-label="进入条件">用户选择房源、租期、Group 或单人身份，创建预订草稿。</td>
+                            <td data-label="允许动作">修改租期、取消草稿、发起支付。</td>
+                        </tr>
+                        <tr>
+                            <td data-label="状态"><code>pending_payment</code></td>
+                            <td data-label="进入条件">系统创建 Stripe PaymentIntent，等待用户支付。</td>
+                            <td data-label="允许动作">完成支付、过期关闭、用户取消。</td>
+                        </tr>
+                        <tr>
+                            <td data-label="状态"><code>funds_held</code></td>
+                            <td data-label="进入条件">Stripe webhook 确认支付成功，内部 ledger 记录 hold。</td>
+                            <td data-label="允许动作">房东/原租客确认、风控冻结、退款申请。</td>
+                        </tr>
+                        <tr>
+                            <td data-label="状态"><code>confirmed</code></td>
+                            <td data-label="进入条件">供给方确认订单，平台锁定房源对应租期。</td>
+                            <td data-label="允许动作">进入入住待核销、按规则取消、提交争议。</td>
+                        </tr>
+                        <tr>
+                            <td data-label="状态"><code>move_in_pending</code></td>
+                            <td data-label="进入条件">到达入住日或入住窗口。</td>
+                            <td data-label="允许动作">租客确认入住、提交重大缺陷、客服冻结。</td>
+                        </tr>
+                        <tr>
+                            <td data-label="状态"><code>completed</code></td>
+                            <td data-label="进入条件">入住核销完成，资金释放和服务费入账。</td>
+                            <td data-label="允许动作">发起盲评、售后举报、查看合同与收据。</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h3>异常分支</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>场景</th>
+                            <th>处理规则</th>
+                            <th>系统记录</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td data-label="场景">取消与退款</td>
+                            <td data-label="处理规则">P1 实现阶梯规则：入住前 7 天及以上全退，3 天内扣 50%，入住当天取消按规则补偿受损方。</td>
+                            <td data-label="系统记录"><code>RefundCase</code> + <code>EscrowLedger</code> refund/fee/adjustment。</td>
+                        </tr>
+                        <tr>
+                            <td data-label="场景">入住日重大缺陷</td>
+                            <td data-label="处理规则">租客提交照片证据后订单进入 frozen_review；客服审核后全退、部分退或驳回。</td>
+                            <td data-label="系统记录">证据 URL、客服决策、冻结时间、最终资金动作。</td>
+                        </tr>
+                        <tr>
+                            <td data-label="场景">支付 webhook 重复</td>
+                            <td data-label="处理规则">用 Stripe event id 做幂等键；重复事件只记录，不重复记账。</td>
+                            <td data-label="系统记录">webhook event log 与处理结果。</td>
+                        </tr>
+                        <tr>
+                            <td data-label="场景">人工客服介入</td>
+                            <td data-label="处理规则">后台可冻结订单、要求补充证据、执行退款或释放资金。</td>
+                            <td data-label="系统记录">admin audit log 与 ledger adjustment。</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </section>
+
+            <section id="roadmap">
+                <h2>7. 三阶段开发里程碑</h2>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>阶段</th>
+                            <th>目标</th>
+                            <th>功能范围</th>
+                            <th>验收标准</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td data-label="阶段"><span class="priority p0">P0</span> MVP Launch</td>
+                            <td data-label="目标">跑通“认证 -> 组队 -> 找房 -> 支付托管 -> 入住 -> 评价”的基础闭环。</td>
+                            <td data-label="功能范围">邮箱认证、房源发布、分类相册、地图找房、租期日历、室友卡片流、Group 创建、基础 Stripe 托管、基础盲评。</td>
+                            <td data-label="验收标准">真实用户可发布房源、完成 Match/Group、通过地图找到房源、支付定金、订单进入资金托管状态并完成评价。</td>
+                        </tr>
+                        <tr>
+                            <td data-label="阶段"><span class="priority p1">P1</span> Scale & FinTech</td>
+                            <td data-label="目标">提升整租大户型消化效率，完善退款风控和信用惩罚，接入服务费分账。</td>
+                            <td data-label="功能范围">Group 房源推荐、阶梯退款、入住日缺陷保障、低分曝光降权、保证金调整、止损精算器、服务费分账。</td>
+                            <td data-label="验收标准">Group 推荐可解释；退款和缺陷案例可审计；信用分影响排序；服务费与资金流水对账一致。</td>
+                        </tr>
+                        <tr>
+                            <td data-label="阶段"><span class="priority p2">P2</span> Retention Moat</td>
+                            <td data-label="目标">用高频生活服务延长用户生命周期，形成租后留存。</td>
+                            <td data-label="功能范围">假期快捷转租、共享微仓、Group 拼单外卖、水电费多因子拆分工具。</td>
+                            <td data-label="验收标准">已成交 Group 可发起二次供给或生活服务；账单拆分可按入住天数和房间权重计算；P2 功能不破坏 P0/P1 交易链路。</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </section>
+
+            <section id="ops">
+                <h2>8. 部署、环境变量、日志、监控与测试</h2>
+
+                <h3>部署建议</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>组件</th>
+                            <th>部署位置</th>
+                            <th>备注</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td data-label="组件">Next.js Web</td>
+                            <td data-label="部署位置">Vercel</td>
+                            <td data-label="备注">负责 SSR/SEO 和前端体验；后台管理可同仓不同 route group。</td>
+                        </tr>
+                        <tr>
+                            <td data-label="组件">NestJS API</td>
+                            <td data-label="部署位置">Fly.io / Render / AWS ECS</td>
+                            <td data-label="备注">需要稳定处理 webhook、队列任务和后台 API。</td>
+                        </tr>
+                        <tr>
+                            <td data-label="组件">PostgreSQL/PostGIS</td>
+                            <td data-label="部署位置">托管 Postgres</td>
+                            <td data-label="备注">必须启用 PostGIS；生产环境开启自动备份和 point-in-time recovery。</td>
+                        </tr>
+                        <tr>
+                            <td data-label="组件">Redis</td>
+                            <td data-label="部署位置">托管 Redis</td>
+                            <td data-label="备注">BullMQ 队列、验证码短缓存、限流计数。</td>
+                        </tr>
+                        <tr>
+                            <td data-label="组件">Object Storage</td>
+                            <td data-label="部署位置">Cloudflare R2 或 S3</td>
+                            <td data-label="备注">私有 bucket + 短期签名上传；证件材料和纠纷证据默认私有。</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h3>关键环境变量</h3>
+                <pre><code>DATABASE_URL=postgresql://...
+REDIS_URL=redis://...
+NEXT_PUBLIC_API_BASE_URL=https://api.example.com
+JWT_SECRET=...
+STRIPE_SECRET_KEY=...
+STRIPE_WEBHOOK_SECRET=...
+STRIPE_CONNECT_CLIENT_ID=...
+MAPBOX_ACCESS_TOKEN=...
+R2_ACCOUNT_ID=...
+R2_ACCESS_KEY_ID=...
+R2_SECRET_ACCESS_KEY=...
+R2_BUCKET_NAME=...
+EMAIL_PROVIDER_API_KEY=...</code></pre>
+
+                <h3>日志与监控</h3>
+                <ul>
+                    <li>API 请求日志包含 request id、user id、route、latency、status code。</li>
+                    <li>支付 webhook、booking 状态变化、ledger 写入、管理员操作必须进入结构化日志。</li>
+                    <li>关键告警：支付 webhook 失败、队列积压、数据库连接耗尽、地图 API 错误率、媒体审核失败率。</li>
+                    <li>生产错误建议接入 Sentry；业务指标建议接入 PostHog 或同类分析工具。</li>
+                </ul>
+
+                <h3>测试策略</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>测试类型</th>
+                            <th>覆盖内容</th>
+                            <th>工具建议</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td data-label="测试类型">Unit Tests</td>
+                            <td data-label="覆盖内容">租期匹配、价格净价计算、退款规则、信用分计算、状态机转移。</td>
+                            <td data-label="工具建议">Jest / Vitest</td>
+                        </tr>
+                        <tr>
+                            <td data-label="测试类型">Integration Tests</td>
+                            <td data-label="覆盖内容">Prisma 数据访问、PostGIS 查询、Stripe webhook 幂等、队列任务。</td>
+                            <td data-label="工具建议">Jest + Testcontainers</td>
+                        </tr>
+                        <tr>
+                            <td data-label="测试类型">E2E Tests</td>
+                            <td data-label="覆盖内容">注册认证、发房、地图搜索、右滑 Match、创建 Group、支付订单、盲评。</td>
+                            <td data-label="工具建议">Playwright</td>
+                        </tr>
+                        <tr>
+                            <td data-label="测试类型">Manual QA</td>
+                            <td data-label="覆盖内容">移动端卡片流、地图气泡、媒体上传、后台退款处理、争议证据查看。</td>
+                            <td data-label="工具建议">浏览器真机与测试账号矩阵</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h3>工程验收清单</h3>
+                <ul>
+                    <li>P0 上线前必须完成 Stripe webhook 幂等、ledger 对账、房源审核、认证审核和基础风控。</li>
+                    <li>所有后台操作必须有 audit log；所有资金相关动作必须有 ledger entry。</li>
+                    <li>地图搜索必须验证桌面端和移动端；卡片流必须验证低端移动设备滑动性能。</li>
+                    <li>支付托管、资金沉淀和退款规则上线前必须完成法律与支付合规复核。</li>
+                </ul>
+            </section>
+
+            <footer class="footer">
+                <p>本文档为内部工程开发文档，不构成法律、金融、支付合规或税务建议。当前版本基于 PRD v2.0 编写，原 PRD 文件不被修改。</p>
+            </footer>
+        </div>
+    </main>
+</body>
+</html>

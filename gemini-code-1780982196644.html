@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Product Requirement Document - 大学生与白领高质短租平台 (社交与生态升级版)</title>
+    <style>
+        :root {
+            --navy-dark: #002244;
+            --navy-medium: #004B87;
+            --navy-light: #41748D;
+            --accent-blue: #0076A8;
+            --gray-bg: #F4F6F8;
+            --gray-border: #D1D5DB;
+            --text-dark: #222222;
+            --text-muted: #555555;
+            --p0-color: #D9381E;
+            --p1-color: #E68A00;
+            --p2-color: #107C41;
+            --purple-accent: #6D28D9;
+            --gold-accent: #B45309;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans CJK SC", sans-serif;
+            color: var(--text-dark);
+            background-color: var(--gray-bg);
+            line-height: 1.6;
+            margin: 0;
+            padding: 0;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+
+        .meta-card {
+            background: #ffffff;
+            border-top: 6px solid var(--navy-dark);
+            border-radius: 4px;
+            padding: 24px;
+            margin-bottom: 30px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+        .meta-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 16px;
+            margin-top: 16px;
+        }
+        .meta-item {
+            font-size: 14px;
+        }
+        .meta-label {
+            color: var(--text-muted);
+            font-weight: 600;
+            display: block;
+            margin-bottom: 4px;
+        }
+        .meta-value {
+            font-weight: 500;
+            color: var(--navy-dark);
+        }
+        .badge {
+            background-color: #E5E7EB;
+            color: #374151;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        .badge-active {
+            background-color: #D1FAE5;
+            color: #065F46;
+        }
+
+        .scq-container {
+            background: linear-gradient(135deg, var(--navy-dark) 0%, var(--navy-medium) 100%);
+            color: #ffffff;
+            padding: 30px;
+            border-radius: 6px;
+            margin-bottom: 40px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        .scq-title {
+            font-size: 20px;
+            font-weight: 700;
+            border-bottom: 1px solid rgba(255,255,255,0.2);
+            padding-bottom: 12px;
+            margin-top: 0;
+            margin-bottom: 20px;
+            letter-spacing: 1px;
+        }
+        .scq-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 24px;
+        }
+        .scq-box strong {
+            display: block;
+            font-size: 16px;
+            margin-bottom: 8px;
+            color: #E0F2FE;
+        }
+        .scq-box p {
+            font-size: 14px;
+            margin: 0;
+            opacity: 0.9;
+        }
+
+        h1 {
+            font-size: 28px;
+            color: var(--navy-dark);
+            margin-bottom: 8px;
+        }
+        h2 {
+            font-size: 22px;
+            color: var(--navy-dark);
+            border-bottom: 2px solid var(--navy-medium);
+            padding-bottom: 8px;
+            margin-top: 40px;
+            margin-bottom: 20px;
+        }
+        .subtitle {
+            color: var(--text-muted);
+            margin-bottom: 30px;
+            font-size: 15px;
+        }
+
+        .matrix-table {
+            width: 100%;
+            border-collapse: collapse;
+            background: #ffffff;
+            border-radius: 4px;
+            overflow: hidden;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+            margin-bottom: 30px;
+        }
+        .matrix-table th {
+            background-color: var(--navy-dark);
+            color: #ffffff;
+            text-align: left;
+            padding: 14px 16px;
+            font-size: 14px;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+        }
+        .matrix-table td {
+            padding: 16px;
+            border-bottom: 1px solid var(--gray-border);
+            vertical-align: top;
+            font-size: 14px;
+        }
+        .matrix-table tr:hover {
+            background-color: #F9FAFB;
+        }
+        .id-col { width: 6%; font-weight: 700; color: var(--navy-light); }
+        .name-col { width: 20%; font-weight: 600; color: var(--navy-dark); }
+        .spec-col { width: 42%; }
+        .why-col { width: 24%; background-color: #F9FAFB; font-style: italic; color: var(--text-muted); }
+        .prio-col { width: 8%; text-align: center; }
+
+        .prio-tag {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 700;
+            text-align: center;
+        }
+        .prio-p0 { background-color: #FEE2E2; color: var(--p0-color); border: 1px solid #FCA5A5; }
+        .prio-p1 { background-color: #FEF3C7; color: var(--p1-color); border: 1px solid #FCD34D; }
+        .prio-p2 { background-color: #D1FAE5; color: var(--p2-color); border: 1px solid #6EE7B7; }
+
+        .roadmap-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+        .roadmap-card {
+            background: #ffffff;
+            border-radius: 6px;
+            padding: 24px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.04);
+            border-left: 5px solid #ccc;
+        }
+        .rc-p0 { border-left-color: var(--p0-color); }
+        .rc-p1 { border-left-color: var(--p1-color); }
+        .rc-p2 { border-left-color: var(--p2-color); }
+        
+        .rc-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+        .rc-title {
+            font-size: 16px;
+            font-weight: 700;
+            color: var(--navy-dark);
+        }
+        .rc-goal {
+            font-size: 13px;
+            background-color: var(--gray-bg);
+            padding: 8px 12px;
+            border-radius: 4px;
+            margin-bottom: 14px;
+            color: var(--text-dark);
+            border-left: 3px solid var(--navy-light);
+        }
+        .rc-list {
+            margin: 0;
+            padding-left: 18px;
+            font-size: 13px;
+            color: var(--text-muted);
+        }
+        .rc-list li {
+            margin-bottom: 6px;
+        }
+
+        .navbar {
+            position: sticky;
+            top: 0;
+            background-color: #ffffff;
+            border-bottom: 1px solid var(--gray-border);
+            padding: 10px 0;
+            z-index: 100;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.03);
+        }
+        .nav-links {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 20px;
+            display: flex;
+            gap: 20px;
+            overflow-x: auto;
+            white-space: nowrap;
+        }
+        .nav-links a {
+            color: var(--text-muted);
+            text-decoration: none;
+            font-size: 14px;
+            font-weight: 500;
+            padding: 4px 8px;
+        }
+        .nav-links a:hover {
+            color: var(--navy-medium);
+            border-bottom: 2px solid var(--navy-medium);
+        }
+
+        @media (max-width: 768px) {
+            .matrix-table, .matrix-table tbody, .matrix-table tr, .matrix-table td, .matrix-table th {
+                display: block;
+            }
+            .matrix-table th { display: none; }
+            .matrix-table td {
+                width: auto !important;
+                border-bottom: none;
+                padding: 10px 16px;
+            }
+            .matrix-table tr {
+                border-bottom: 2px solid var(--gray-border);
+                padding-bottom: 10px;
+                background: #fff;
+                margin-bottom: 15px;
+                border-radius: 4px;
+            }
+            .id-col { font-size: 16px; color: var(--navy-medium); padding-top: 16px !important;}
+            .why-col { background-color: #f9f9f9; border-top: 1px dashed #eee; margin-top: 8px;}
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>产品需求文档 (PRD) — 大学生与白领高质短租平台</h1>
+        <p class="subtitle">解构学生与白领阶层核心租期摩擦，结合 Dating 社交组队与双向信用矩阵，建立基于高信任生态的供需双端极速撮合及长尾生活生态。</p>
+
+        <div class="meta-card">
+            <div class="meta-grid">
+                <div class="meta-item">
+                    <span class="meta-label">项目名称</span>
+                    <span class="meta-value">Sublet Marketplace & Co-living Pipeline</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">文档状态</span>
+                    <span class="meta-value"><span class="badge badge-active">🟢 Approved / Ready for Dev</span></span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">最后更新时间</span>
+                    <span class="meta-value">2026-06-09</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">版本</span>
+                    <span class="meta-value">v2.0 (社交组队与高频生态升级版)</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="scq-container">
+            <div class="scq-title">STRATEGIC CONTEXT & VALUE PROPOSITION (S-C-Q 商业画布)</div>
+            <div class="scq-grid">
+                <div class="scq-box">
+                    <strong>Situation (现状)</strong>
+                    <p>高校留学生与大厂实习生在面对毕业、异地实习、跨国交换等场景时，产生了极其高频的“短租/转租”与“室友拼房”需求。其核心诉求是高度追求时效、资金安全以及室友生活习惯的适配度。</p>
+                </div>
+                <div class="scq-box">
+                    <strong>Complication (冲突)</strong>
+                    <p>传统租赁平台缺乏信任链条且多为超低频的工具属性，导致用户“用完即删”。租房决策中“找对人”极难，临时拼凑的室友因习惯不和极易纠纷违约。此外，跨国交易缺乏定金代管机制，放鸽子成本极低。</p>
+                </div>
+                <div class="scq-box">
+                    <strong>Question (核心策略)</strong>
+                    <p>如何构建一个引入 Dating 卡片流交互以极速组建高契合度 Group、在底层由合规美国壳公司进行美元代管与利息留存、并利用双向信用打分以及存包/外卖等高频服务切入的留学生全周期本地生活生态？</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="navbar">
+        <div class="nav-links">
+            <a href="#mod-1">1. 通用与信任基础</a>
+            <a href="#mod-2">2. 社交组队与找房</a>
+            <a href="#mod-3">3. 房东/原租客发房</a>
+            <a href="#mod-4">4. 金融托管与交易</a>
+            <a href="#mod-5">5. 生命周期与高频生态</a>
+            <a href="#mod-6">6. 实施优先级排期</a>
+        </div>
+    </div>
+
+    <div class="container">
+
+        <h2 id="mod-1">一、 通用与信任基础模块 (General & Trust Infrastructure)</h2>
+        <table class="matrix-table">
+            <thead>
+                <tr>
+                    <th class="id-col">ID</th>
+                    <th class="name-col">功能名称</th>
+                    <th class="spec-col">功能规格描述 (Functional Specification)</th>
+                    <th class="why-col">商业逻辑支撑 (So What / Why)</th>
+                    <th class="prio-col">优先级</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td class="id-col">F-01</td>
+                    <td class="name-col">校园与企业邮箱认证</td>
+                    <td class="spec-col">用户注册后支持输入 <strong>.edu 后缀</strong>高校邮箱或知名企业公司邮箱接收验证码进行在线实时认证。认证成功点亮专属标签。无邮箱权限者支持上传学生证、工牌或学信网截图走人工审核。</td>
+                    <td class="why-col">引入线下的学校和公司关系链，利用校友圈层和职场信用形成天然约束，能从源头过滤诈骗信息并提升建群信任度。</td>
+                    <td class="prio-col"><span class="prio-tag prio-p0">P0</span></td>
+                </tr>
+                <tr>
+                    <td class="id-col">F-02</td>
+                    <td class="name-col">双向评价与盲评机制</td>
+                    <td class="spec-col">租期结束后，原租客与新租客可对彼此进行星级打分、文字及照片互评。平台采用<strong>盲评规则</strong>：双方必须在 14 天内均提交评价，或待 14 天截止时，评价内容方可同时公开可见。</td>
+                    <td class="why-col">彻底杜绝“报复性差评”和“人情好评”，保证评价的真实性，帮助新租客甄别室友作息。</td>
+                    <td class="prio-col"><span class="prio-tag prio-p1">P1</span></td>
+                </tr>
+                <tr>
+                    <td class="id-col">F-03</td>
+                    <td class="name-col">金牌转租人激励</td>
+                    <td class="spec-col">后台每月自动审计：当原租客满足<strong>“消息回复率 > 90%”</strong>、<strong>“近半年无主动取消订单”</strong>、<strong>“综合评价 > 4.8分”</strong>三项指标时，自动点亮“金牌转租人”勋章并赋予推荐流量。</td>
+                    <td class="why-col">激励转租人更积极回复、更真实描述房源。产生强烈的安全感，提高整体撮合效率。</td>
+                    <td class="prio-col"><span class="prio-tag prio-p1">P1</span></td>
+                </tr>
+                <tr>
+                    <td class="id-col">F-30</td>
+                    <td class="name-col">Uber式三维双向盲评机制</td>
+                    <td class="spec-col">构建涵盖三端互评的深度信用网络：<br>1. <strong>房东 ↔ 租客Group</strong>（房东评小队是否爱干净、准时交租；小队评房东修东西时效）。<br>2. <strong>Roommate ↔ Roommate</strong>（内部室友针对卫生、噪音、社交边界进行高频匿打分）。评分采用盲评逻辑。</td>
+                    <td class="why-col">在海外信用是一切的基础。将无形的人品和生活习惯转化为数字资产，建立竞争壁垒，把不靠谱的用户筛选出去。</td>
+                    <td class="prio-col"><span class="prio-tag prio-p0">P0</span></td>
+                </tr>
+                <tr>
+                    <td class="id-col">F-31</td>
+                    <td class="name-col">低分惩罚与特权降级</td>
+                    <td class="spec-col">系统建立动态信用阶梯：综合评分低于 4.2 分的房东将限制其房源曝光率；低于 4.0 分的租客在刷 Tinder 室友卡片时将被大幅降权，甚至直接被系统要求提高其线上交易的保证金比例。</td>
+                    <td class="why-col">通过严厉的产品规则强制净化生态，形成“高素质、好习惯人群聚集地”的品牌心智，大幅降低合租破裂率。</td>
+                    <td class="prio-col"><span class="prio-tag prio-p1">P1</span></td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h2 id="mod-2">二、 社交组队与租客找房模块 (Social Matching & Tenant Discovery)</h2>
+        <table class="matrix-table">
+            <thead>
+                <tr>
+                    <th class="id-col">ID</th>
+                    <th class="name-col">功能名称</th>
+                    <th class="spec-col">功能规格描述 (Functional Specification)</th>
+                    <th class="why-col">商业逻辑支撑 (So What / Why)</th>
+                    <th class="prio-col">优先级</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td class="id-col">F-22</td>
+                    <td class="name-col">Tinder-like 室友卡片流</td>
+                    <td class="spec-col">用户填写深度画像（MBTI、作息时间、宠物、做饭习惯、预算等）。系统生成社交卡片，支持用户通过**左滑表示无感、右滑表示喜欢**的方式进行高效筛选，双向右滑时即判定 Match 并解锁群聊。</td>
+                    <td class="why-col">借用成熟 Dating 软件的即时反馈机制，把枯燥痛苦的“找室友”过程变成充满趣味的社交体验，快速聚拢年轻流量。</td>
+                    <td class="prio-col"><span class="prio-tag prio-p0">P0</span></td>
+                </tr>
+                <tr>
+                    <td class="id-col">F-23</td>
+                    <td class="name-col">Group (合租战队) 自动创建</td>
+                    <td class="spec-col">当 2-3 人通过卡片 Match 确认组队意向后，系统一键将其固化为“合租 Group”。Group 具备独立的协同看板、累计预算上限以及统一的交集标签，群主可自主分享及邀请新成员加入。</td>
+                    <td class="why-col">散客拼团。将原本零散、非标准化的单人需求在前端快速聚合为标准化、高客单价的 Group 组织，便于下一步吞下大户型房源。</td>
+                    <td class="prio-col"><span class="prio-tag prio-p0">P0</span></td>
+                </tr>
+                <tr>
+                    <td class="id-col">F-24</td>
+                    <td class="name-col">针对 Group 需求的房源算法推荐</td>
+                    <td class="spec-col">推荐引擎升级：除了支持常规的单人找房外，系统能读取整个 Group 聚合的交集数据（如：Group 总预算上限 $3500/月、有宠物、均需通勤至特定校区），**直接推荐符合该小队的整租大户型房源**。</td>
+                    <td class="why-col">市场上多居室整租房源常因单人负担重而滞销。通过 Group 推荐直接消耗整租库存，能帮助房东极速去库存，同时让租客享受更高性价比。</td>
+                    <td class="prio-col"><span class="prio-tag prio-p1">P1</span></td>
+                </tr>
+                <tr>
+                    <td class="id-col">F-04</td>
+                    <td class="name-col">租期日历选择器</td>
+                    <td class="spec-col">强制在日历组件选择精准的“入住时间”与“搬出时间”（精确到日）。允许勾选“租期可上下浮动 3 到 7 天”的弹性选项，系统底层自动交叉匹配对齐时间窗。</td>
+                    <td class="why-col">短租群体的空置期多一天少一天都是真金白银。在底层把时间精确数字化，直接过滤无效房源，避免沟通到后期发现时间错位的窘境。</td>
+                    <td class="prio-col"><span class="prio-tag prio-p0">P0</span></td>
+                </tr>
+                <tr>
+                    <td class="id-col">F-05</td>
+                    <td class="name-col">地标锚定与通勤地图</td>
+                    <td class="spec-col">采用地图页承载房源气泡（气泡显示扣除补贴后的实际净租金），强制标注并置顶周边 3 公里内的大学校区和大厂办公楼。点击房源时自动拉出通勤连线，标注“步行 X 分钟 / 坐地铁 Y 分钟”。</td>
+                    <td class="why-col">青年短租地理位置的本质是通勤时间。他们不关心抽象的行政区划，只关心“这房子离我上课的教室或实习的工位走路要多久”。</td>
+                    <td class="prio-col"><span class="prio-tag prio-p0">P0</span></td>
+                </tr>
+                <tr>
+                    <td class="id-col">F-07</td>
+                    <td class="name-col">多维过滤器与设施图标</td>
+                    <td class="spec-col">支持价格区间、卧室/独卫数量筛选。统一将房屋设施抽象为标准可视化图标（如高速 Wi-Fi、滚筒洗衣机、空调、宠物友好等）。</td>
+                    <td class="why-col">统一视觉语言，方便租客快速看清此房间是否缺生活必需品。合租场景中，卫浴配比和宠物政策是影响决策的硬性指标。</td>
+                    <td class="prio-col"><span class="prio-tag prio-p0">P0</span></td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h2 id="mod-3">三、 房东/原租客发房模块 (Listing Supply Management)</h2>
+        <table class="matrix-table">
+            <thead>
+                <tr>
+                    <th class="id-col">ID</th>
+                    <th class="name-col">功能名称</th>
+                    <th class="spec-col">功能规格描述 (Functional Specification)</th>
+                    <th class="why-col">商业逻辑支撑 (So What / Why)</th>
+                    <th class="prio-col">优先级</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td class="id-col">F-09</td>
+                    <td class="name-col">房屋照片分类相册</td>
+                    <td class="spec-col">支持最高 9 张高清图片和 1 段 30 秒短视频。原租客上传时，系统强制引导归类至<strong>“卧室”、“公共客厅”、“厨房/卫浴”、“周边环境”</strong>独立相册，并强制挑选高画质图作为列表首图。</td>
+                    <td class="why-col">视觉直观性是线上租房成交的第一决定要素。清晰、分门别类的相册能带来规范、高级的视觉体验，视频则能有效降低照片欺骗的概率。</td>
+                    <td class="prio-col"><span class="prio-tag prio-p0">P0</span></td>
+                </tr>
+                <tr>
+                    <td class="id-col">F-11</td>
+                    <td class="name-col">期望价格与转租补贴设置</td>
+                    <td class="spec-col">强制填写原合同月租金与押金形式。提供独立“转租补贴”字段，支持输入<strong>“每月帮新租客掏 X 元”</strong>或<strong>“免除首周房租”</strong>，系统前端自动计算并高亮高饱和度显示“实际承租手净价”。</td>
+                    <td class="why-col">原租客强行跟房东违约会被扣掉 1 到 2 个月的巨额押金。把这个违约成本变成给新租客的降价补贴，能让房子显得极具性价比，加快转单止损。</td>
+                    <td class="prio-col"><span class="prio-tag prio-p0">P0</span></td>
+                </tr>
+                <tr>
+                    <td class="id-col">F-12</td>
+                    <td class="name-col">房东知情承诺与标准合同</td>
+                    <td class="spec-col">发布最后工序，强制勾选“房东已知情且允许转租”电子承诺书。平台嵌入提供由专业法务拟定的标准<strong>《三方转租协议（房东、原租客、新租客）》电子版</strong>，支持在线签署、存证或一键打印。</td>
+                    <td class="why-col">绝大多数转租纠纷都来自二房东非法分租或房东不知情。通过前端承诺和合同模板，不仅能在法律上为平台免责，也给缺乏社会经验的大学生提供一份法律吃定心丸。</td>
+                    <td class="prio-col"><span class="prio-tag prio-p0">P0</span></td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h2 id="mod-4">四、 金融托管与交易保障模块 (FinTech Escrow & Booking)</h2>
+        <table class="matrix-table">
+            <thead>
+                <tr>
+                    <th class="id-col">ID</th>
+                    <th class="name-col">功能名称</th>
+                    <th class="spec-col">功能规格描述 (Functional Specification)</th>
+                    <th class="why-col">商业逻辑支撑 (So What / Why)</th>
+                    <th class="prio-col">优先级</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td class="id-col">F-25</td>
+                    <td class="name-col">美国壳公司跨境定金代管</td>
+                    <td class="spec-col">针对美元交易，平台设立**特拉华州合规壳公司 (US Shell Company)**，接入 Stripe 和 ACH 银行转账等支付网关。新租客/Group 支付的保证金与首月租金由平台官方账户作为独立第三方代管。</td>
+                    <td class="why-col">打通跨境合规通道，解决异地跨国找房的绝对信任赤字。让学生在入境前就可以放心地用美元在全球任何地方锁定房源。</td>
+                    <td class="prio-col"><span class="prio-tag prio-p0">P0</span></td>
+                </tr>
+                <tr>
+                    <td class="id-col">F-26</td>
+                    <td class="name-col">利息资金池与服务费收益</td>
+                    <td class="spec-col">平台对每笔成功撮合的租金交易收取 <strong>X% 的平台交易服务费</strong>。同时，所有由平台托管的长周期押金与预付资金，在入住核销前会留存在合规的 Yield-bearing 高息增值账户中。</td>
+                    <td class="why-col">突破传统房产中介只赚单次佣金的低频局限，利用大额资金留存期的时间差创造极其稳健、可持续的利息金融收益。</td>
+                    <td class="prio-col"><span class="prio-tag prio-p1">P1</span></td>
+                </tr>
+                <tr>
+                    <td class="id-col">F-14</td>
+                    <td class="name-col">阶梯式退定金风控系统</td>
+                    <td class="spec-col">线上代管执行强约束规则：入住前 $\ge 7$ 天取消全额退；前 3 天内取消扣 50% 补偿给对方；入住当天取消定金全额全扣补偿给受损方。签约成功后定金解冻结算。</td>
+                    <td class="why-col">这是防放鸽子的核武器。传统转租最怕口头约好，临近开学一方反悔。线上定金代管让违约有了真实的财务成本，同时卡死了资金流，防止用户私加微信跳单。</td>
+                    <td class="prio-col"><span class="prio-tag prio-p1">P1</span></td>
+                </tr>
+                <tr>
+                    <td class="id-col">F-15</td>
+                    <td class="name-col">入住日重大缺陷保障</td>
+                    <td class="spec-col">入住当日，若新租客/Group 发现房源存在重大物理缺陷（虚假房源、无床、严重漏水等）且在线提交照片，平台<strong>立即冻结并全额返还定金</strong>，同时客服介入协助对接平台内备用应急短租房源。</td>
+                    <td class="why-col">留学生异地找房往往无法肉眼验房。平台提供“入住首日保障”，能彻底击穿他们的防御心理，让他们敢于在线上直接付大额订金。</td>
+                    <td class="prio-col"><span class="prio-tag prio-p1">P1</span></td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h2 id="mod-5">五、 生命周期与高频生态模块 (Co-living Lifecycle & High-Frequency Services)</h2>
+        <table class="matrix-table">
+            <thead>
+                <tr>
+                    <th class="id-col">ID</th>
+                    <th class="name-col">功能名称</th>
+                    <th class="spec-col">功能规格描述 (Functional Specification)</th>
+                    <th class="why-col">商业逻辑支撑 (So What / Why)</th>
+                    <th class="prio-col">优先级</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td class="id-col">F-27</td>
+                    <td class="name-col">假期小队快捷转租 (Holiday Sublet)</td>
+                    <td class="spec-col">原先已在平台组队成交的 Group 迎来暑假/感恩节回国时，系统支持一键将整个 Group 的全部房间或部分空闲租期挂载到首页的“极速转租流”，无缝匹配面向夏校及暑期实习群体的极短租需求。</td>
+                    <td class="why-col">精准解决留学生群体“假期回国两三个月，人不在却要白交数千刀房租”的痛点。把老用户变为二次供给方，大幅延长平台生命周期。</td>
+                    <td class="prio-col"><span class="prio-tag prio-p2">P2</span></td>
+                </tr>
+                <tr>
+                    <td class="id-col">F-28</td>
+                    <td class="name-col">共享微仓低价行李寄存 (Micro-Storage)</td>
+                    <td class="spec-col">平台联合平台内拥有闲置车库/地下室的长期房东，或本地自营迷你仓合作商。为平台内的 Group 提供高性价比行李寄存储物服务，支持 App 一键下单、上门取件、按件计费。</td>
+                    <td class="why-col">行李无处放是每年暑期回国的硬通货刚需。利用闲置空间做“轻资产共享微仓”，给房东带来额外收益的同时，用远低于美国市面传统大型仓储的价格死死黏住用户。</td>
+                    <td class="prio-col"><span class="prio-tag prio-p2">P2</span></td>
+                </tr>
+                <tr>
+                    <td class="id-col">F-29</td>
+                    <td class="name-col">合租拼单中餐送餐 (Group Food Ordering)</td>
+                    <td class="spec-col">在 App 内开辟本地生活轻量板块，联合周边高分中餐馆、中餐聚合商。允许同一个 Group 的多位室友在平台内进行一键拼单（Group Ordering），享受免配送费或满减优惠，由外卖员一并送达公寓。</td>
+                    <td class="why-col">高频打低频。租房一年一次，吃饭一日三次。通过极具凝聚力的合租群组外卖拼单，彻底改变 App“用完即删”的短命属性，将高频流量沉淀为高频生活手册。</td>
+                    <td class="prio-col"><span class="prio-tag prio-p2">P2</span></td>
+                </tr>
+                <tr>
+                    <td class="id-col">F-19</td>
+                    <td class="name-col">水电费多因子智能拆分工具</td>
+                    <td class="spec-col">合租记账组件。现有室友可随时拍摄上传水、电、网、燃气原始账单照片并输入总金额，系统结合各人<strong>“实际入住天数”与“房间权重系数”</strong>自动实现按天按比例精确分摊，并支持一键发起线上结算。</td>
+                    <td class="why-col">用自动化的产品规则代替敏感的人情账目。彻底消灭合租场景中因“谁多用了空调、谁少住了几天该怎么摊电费”引发的日常矛盾。</td>
+                    <td class="prio-col"><span class="prio-tag prio-p2">P2</span></td>
+                </tr>
+                <tr>
+                    <td class="id-col">F-20</td>
+                    <td class="name-col">转租止损精算器</td>
+                    <td class="spec-col">交互式精算工具。原租客键入月租、剩余租期、直接违约会被扣除的押金金额。系统自动跑出对比精算可视化图表：<strong>“若每月让利补贴新租客 200 元，预计 5 天内转出，比硬性违约少亏损 1,400 元。”</strong></td>
+                    <td class="why-col">很多人在转租前期因为心理不平衡不愿意降价，导致房子白白空置。这个工具用数据打破用户的心理防御，引导他们合理定价，从而盘活全平台的整体成交速度。</td>
+                    <td class="prio-col"><span class="prio-tag prio-p1">P1</span></td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h2 id="mod-6">六、 实施优先级排期 (Milestone Roadmap)</h2>
+        <p class="subtitle">基于精益创业原则进行敏捷小步快跑，核心研发带宽在早期锁死在“社交组队、跨境金融支付、双向盲评机制”三大核心支柱上。</p>
+        
+        <div class="roadmap-grid">
+            <div class="roadmap-card rc-p0">
+                <div class="rc-header">
+                    <span class="rc-title" style="color: var(--p0-color)">【第一阶段】核心组队与交易期 (P0)</span>
+                    <span class="prio-tag prio-p0">MVP Launch</span>
+                </div>
+                <div class="rc-goal"><strong>核心目标：</strong> 跑通“社交卡片流组队 -> 跨境壳公司定金代管 -> 建立初始信用双向评价”的核心闭环。</div>
+                <ul class="rc-list">
+                    <li><strong>F-22 & F-23</strong> Tinder式室友卡片流与 Group 自动组队创建</li>
+                    <li><strong>F-25</strong> 美国合规壳公司 Escrow 跨境美元定金托管系统</li>
+                    <li><strong>F-30</strong> Uber式三维双向盲评信用机制 (基础版本)</li>
+                    <li><strong>F-01</strong> 校园与企业邮箱权威验证 (安全机制)</li>
+                    <li><strong>F-04 & F-05</strong> 租期精确日历选择器与地标通勤路线地图</li>
+                    <li><strong>F-09 & F-12</strong> 房屋分类相册与房东知情承诺电子转租合同</li>
+                </ul>
+            </div>
+
+            <div class="roadmap-card rc-p1">
+                <div class="rc-header">
+                    <span class="rc-title" style="color: var(--p1-color)">【第二阶段】智能大户匹配与金融期 (P1)</span>
+                    <span class="prio-tag prio-p1">Scale & FinTech</span>
+                </div>
+                <div class="rc-goal"><strong>核心目标：</strong> 放大整租多居室匹配体量，通过长周期沉淀资金池产生利息与金融衍生收益。</div>
+                <ul class="rc-list">
+                    <li><strong>F-24</strong> 针对 Group 空间交集需求的多居室大户型算法推荐</li>
+                    <li><strong>F-26</strong> 利息增值资金池沉淀与自动化结算服务费分账</li>
+                    <li><strong>F-31</strong> 低分惩罚、曝光降权与高额保证金惩罚策略</li>
+                    <li><strong>F-14 & F-15</strong> 阶梯式退款风控机制与入住首日重大缺陷平台兜底保障</li>
+                    <li><strong>F-20</strong> 交互式转租止损精算器 (用理性推导促进合理低价)</li>
+                </ul>
+            </div>
+
+            <div class="roadmap-card rc-p2">
+                <div class="rc-header">
+                    <span class="rc-title" style="color: var(--p2-color)">【第三阶段】长尾高频留存期 (P2)</span>
+                    <span class="prio-tag prio-p2">Retention Moat</span>
+                </div>
+                <div class="rc-goal"><strong>核心目标：</strong> 跨界延伸至高频本地生活、仓储及外卖服务，将平台升维成长尾留存高粘性社区。</div>
+                <ul class="rc-list">
+                    <li><strong>F-27</strong> 假期 Group 小队整体租期快捷一键转租通道</li>
+                    <li><strong>F-28</strong> 联合房东空置空间的“轻资产共享微仓”低价寄存储物</li>
+                    <li><strong>F-29</strong> 依托 Group 合租群体的本地中餐馆拼单特惠送餐服务</li>
+                    <li><strong>F-19</strong> 强透明度的合租水电、网费多因子按天智能拆分记账工具</li>
+                </ul>
+            </div>
+        </div>
+
+    </div>
+
+    <div style="text-align: center; color: var(--text-muted); font-size: 12px; margin: 60px 0 30px 0; border-top: 1px solid var(--gray-border); padding-top: 20px;">
+        CONFIDENTIAL — FOR INTERNAL DEV, PRODUCT AND ARCHITECT TEAMS ONLY — PLATFORM UPGRADE DESIGN v2.0
+    </div>
+
+</body>
+</html>
