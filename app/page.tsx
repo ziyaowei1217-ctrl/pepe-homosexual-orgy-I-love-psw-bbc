@@ -689,11 +689,11 @@ function GroupPanel({ groupBudget }: { groupBudget: string }) {
 }
 
 function EscrowPanel({ listing }: { listing: Listing }) {
-  const steps = [
-    ["pending_payment", "待支付", true],
-    ["funds_held", "托管中", true],
-    ["confirmed", "已确认", true],
-    ["move_in_pending", "入住核销", false]
+  const steps: Array<{ code: string; label: string; active: boolean }> = [
+    { code: "pending_payment", label: "待支付", active: true },
+    { code: "funds_held", label: "托管中", active: true },
+    { code: "confirmed", label: "已确认", active: true },
+    { code: "move_in_pending", label: "入住核销", active: false }
   ];
 
   return (
@@ -703,7 +703,7 @@ function EscrowPanel({ listing }: { listing: Listing }) {
         <CardDescription>{listing.title} · Stripe Connect 模拟状态</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
-        {steps.map(([code, label, active]) => (
+        {steps.map(({ code, label, active }) => (
           <div key={code} className="flex items-center gap-3">
             <div
               className={cn(
