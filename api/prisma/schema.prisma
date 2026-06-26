@@ -1,0 +1,104 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  USER
+  ADMIN
+}
+
+model User {
+  id        String    @id @default(cuid())
+  email     String    @unique
+  role      UserRole  @default(USER)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  listings  Listing[]
+}
+
+model VerificationCode {
+  id         String    @id @default(cuid())
+  email      String
+  code       String
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([email, code, consumedAt])
+}
+
+model Listing {
+  id            String         @id @default(cuid())
+  ownerId       String
+  owner         User           @relation(fields: [ownerId], references: [id])
+  title         String
+  area          String
+  image         String
+  price         Int
+  originalPrice Int
+  beds          Int
+  baths         Int
+  commute       String
+  transit       String
+  trust         String
+  tags          String[]
+  score         Float          @default(4.8)
+  media         ListingMedia[]
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+}
+
+model ListingMedia {
+  id        String   @id @default(cuid())
+  listingId String
+  listing   Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  url       String
+  kind      String
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+}
+
+model RoommateProfile {
+  id        String   @id @default(cuid())
+  name      String
+  age       Int
+  role      String
+  image     String
+  match     Int
+  budget    String
+  commute   String
+  tags      String[]
+  createdAt DateTime @default(now())
+}
+
+model Group {
+  id        String   @id @default(cuid())
+  name      String
+  budget    String
+  members   Json
+  createdAt DateTime @default(now())
+}
+
+model Booking {
+  id        String   @id @default(cuid())
+  listingId String
+  title     String
+  amount    Int
+  status    String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model TrustQueueItem {
+  id        String   @id @default(cuid())
+  label     String
+  value     Int
+  variant   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}

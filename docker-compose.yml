@@ -1,0 +1,14 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: sublet
+      POSTGRES_PASSWORD: sublet
+      POSTGRES_DB: sublet_pipeline
+    ports:
+      - "5432:5432"
+    volumes:
+      - sublet_pipeline_pg:/var/lib/postgresql/data
+
+volumes:
+  sublet_pipeline_pg:

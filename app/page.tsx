@@ -32,9 +32,10 @@ import {
   X
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { RoommateFirstWorkspace } from "@/components/roommate-first-workspace";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -46,11 +47,21 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  apiGet,
+  apiPost,
+  type ApiGroup,
+  type ApiListing,
+  type ApiRoommate,
+  type ApiTrip,
+  type ApiTrustQueue,
+  type SessionUser
+} from "@/lib/api";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 
 type Listing = {
-  id: number;
+  id: string;
   title: string;
   area: string;
   image: string;
@@ -66,6 +77,7 @@ type Listing = {
 };
 
 type Roommate = {
+  id?: string;
   name: string;
   age: number;
   role: string;
@@ -95,6 +107,7 @@ type PublishDraft = {
 };
 
 type QueueItem = {
+  id?: string;
   label: string;
   value: number;
   icon: LucideIcon;
@@ -103,7 +116,7 @@ type QueueItem = {
 
 const seedListings: Listing[] = [
   {
-    id: 1,
+    id: "1",
     title: "Fenway 高层主卧短租",
     area: "Boston · Fenway",
     image:
@@ -119,7 +132,7 @@ const seedListings: Listing[] = [
     score: 4.92
   },
   {
-    id: 2,
+    id: "2",
     title: "Cambridge 三室整租 Group 优选",
     area: "Cambridge · Central",
     image:
@@ -135,7 +148,7 @@ const seedListings: Listing[] = [
     score: 4.88
   },
   {
-    id: 3,
+    id: "3",
     title: "Jersey City 河景 Studio",
     area: "NYC · Newport",
     image:
@@ -236,7 +249,7 @@ function createListings(): Listing[] {
     const target = commuteTargets[index % commuteTargets.length];
 
     return {
-      id: index + 1,
+      id: String(index + 1),
       title,
       area,
       image: listingImages[index % listingImages.length],
@@ -369,8 +382,8 @@ const roommates = createRoommates();
 
 const navItems: Array<{ label: string; section: AppSection }> = [
   { label: "Discover", section: "Discover" },
-  { label: "Roommates", section: "Roommates" },
-  { label: "Groups", section: "Groups" },
+  { label: "Match", section: "Roommates" },
+  { label: "Deal Room", section: "Groups" },
   { label: "Publish", section: "Publish" },
   { label: "Trips", section: "Trips" },
   { label: "Trust", section: "Trust" }
@@ -382,24 +395,117 @@ const amenities = [
   { label: "近地铁", icon: TrainFront }
 ];
 
+function normalizeListing(listing: ApiListing): Listing {
+  return {
+    id: String(listing.id),
+    title: listing.title,
+    area: listing.area,
+    image: listing.image,
+    price: listing.price,
+    originalPrice: listing.originalPrice,
+    beds: listing.beds,
+    baths: listing.baths,
+    commute: listing.commute,
+    transit: listing.transit,
+    trust: listing.trust,
+    tags: listing.tags,
+    score: listing.score
+  };
+}
+
+function normalizeRoommate(roommate: ApiRoommate): Roommate {
+  return {
+    id: roommate.id,
+    name: roommate.name,
+    age: roommate.age,
+    role: roommate.role,
+    image: roommate.image,
+    match: roommate.match,
+    budget: roommate.budget,
+    commute: roommate.commute,
+    tags: roommate.tags
+  };
+}
+
 export default function HomePage() {
   const [allListings, setAllListings] = useState(listings);
   const [selectedListing, setSelectedListing] = useState(listings[0]);
+  const [apiRoommates, setApiRoommates] = useState<Roommate[]>(roommates);
+  const [apiGroups, setApiGroups] = useState<ApiGroup[]>([]);
+  const [apiTrips, setApiTrips] = useState<ApiTrip[]>([]);
+  const [apiTrustQueues, setApiTrustQueues] = useState<ApiTrustQueue[]>([]);
   const [roommateIndex, setRoommateIndex] = useState(0);
-  const [activeSection, setActiveSection] = useState<AppSection>("Discover");
+  const [activeSection, setActiveSection] = useState<AppSection>("Roommates");
   const [viewMode, setViewMode] = useState<ViewMode>("map");
   const [filters, setFilters] = useState<SearchFilters>({
     query: "Northeastern University",
     budget: 2200,
     amenity: "Wi-Fi"
   });
-  const [favoriteIds, setFavoriteIds] = useState<Set<number>>(new Set([1]));
-  const [groupMembers, setGroupMembers] = useState<Roommate[]>(roommates.slice(0, 3));
+  const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set(["1"]));
+  const [groupMembers, setGroupMembers] = useState<Roommate[]>(roommates.slice(1, 2));
+  const [likedRoommateIds, setLikedRoommateIds] = useState<Set<string>>(new Set());
   const [skippedCount, setSkippedCount] = useState(0);
+  const [tourRequested, setTourRequested] = useState(false);
   const [escrowStep, setEscrowStep] = useState(2);
-  const [toast, setToast] = useState("已加载 100 套房源和 50 个室友");
+  const [toast, setToast] = useState("");
+  const [apiError, setApiError] = useState<string | null>(null);
+  const [token, setToken] = useState<string | null>(null);
+  const [user, setUser] = useState<SessionUser | null>(null);
 
-  const roommate = roommates[roommateIndex];
+  useEffect(() => {
+    const storedToken = window.localStorage.getItem("sublet_token");
+    if (storedToken) setToken(storedToken);
+  }, []);
+
+  useEffect(() => {
+    async function loadApiData() {
+      try {
+        const [apiListings, apiRoommateData, apiGroupData, apiTripData, apiQueueData] =
+          await Promise.all([
+            apiGet<ApiListing[]>("/listings"),
+            apiGet<ApiRoommate[]>("/roommates"),
+            apiGet<ApiGroup[]>("/groups"),
+            apiGet<ApiTrip[]>("/trips"),
+            apiGet<ApiTrustQueue[]>("/trust/queues")
+          ]);
+
+        const normalizedListings = apiListings.map(normalizeListing);
+        const normalizedRoommates = apiRoommateData.map(normalizeRoommate);
+        setAllListings(normalizedListings);
+        setSelectedListing((current) => normalizedListings.find((listing) => listing.id === current.id) ?? normalizedListings[0] ?? current);
+        setApiRoommates(normalizedRoommates);
+        setGroupMembers(normalizedRoommates.slice(1, 2));
+        setApiGroups(apiGroupData);
+        setApiTrips(apiTripData);
+        setApiTrustQueues(apiQueueData);
+        setApiError(null);
+        setToast("已从后端 API 加载数据");
+      } catch (error) {
+        setApiError(error instanceof Error ? error.message : "后端 API 不可用");
+      }
+    }
+
+    void loadApiData();
+  }, []);
+
+  useEffect(() => {
+    async function loadMe() {
+      if (!token) return;
+      try {
+        const currentUser = await apiGet<SessionUser>("/auth/me", token);
+        setUser(currentUser);
+      } catch {
+        window.localStorage.removeItem("sublet_token");
+        setToken(null);
+        setUser(null);
+      }
+    }
+
+    void loadMe();
+  }, [token]);
+
+  const roommate = apiRoommates[roommateIndex] ?? apiRoommates[0] ?? roommates[0];
   const filteredListings = useMemo(
     () =>
       allListings.filter((listing) => {
@@ -440,8 +546,8 @@ export default function HomePage() {
   function cycleRoommate(direction: 1 | -1) {
     setRoommateIndex((current) => {
       const next = current + direction;
-      if (next < 0) return roommates.length - 1;
-      if (next >= roommates.length) return 0;
+      if (next < 0) return apiRoommates.length - 1;
+      if (next >= apiRoommates.length) return 0;
       return next;
     });
   }
@@ -451,7 +557,7 @@ export default function HomePage() {
     setToast(`已筛选设施：${amenity}`);
   }
 
-  function handleFavorite(listingId: number) {
+  function handleFavorite(listingId: string) {
     setFavoriteIds((current) => {
       const next = new Set(current);
       if (next.has(listingId)) {
@@ -466,23 +572,42 @@ export default function HomePage() {
   }
 
   function handleAcceptRoommate() {
+    const memberKey = roommate.id ?? roommate.name;
+    setLikedRoommateIds((current) => new Set(current).add(memberKey));
     setGroupMembers((current) => {
       if (current.some((member) => member.name === roommate.name)) return current;
       return [...current, roommate].slice(-4);
     });
-    setToast(`${roommate.name} 已加入 Group 候选`);
-    cycleRoommate(1);
+    setTourRequested(false);
+    setToast(`${roommate.name} 已匹配，Deal Room 已更新`);
   }
 
   function handleRejectRoommate() {
     setSkippedCount((current) => current + 1);
+    setTourRequested(false);
     setToast(`已跳过 ${roommate.name}`);
     cycleRoommate(1);
   }
 
-  function handleCreateListing(draft: PublishDraft) {
-    const newListing: Listing = {
-      id: allListings.length + 1,
+  function handleLaterRoommate() {
+    setTourRequested(false);
+    setToast(`${roommate.name} 已放入稍后查看`);
+    cycleRoommate(1);
+  }
+
+  function handleRequestGroupTour() {
+    setTourRequested(true);
+    setToast("已发送 Group Tour 请求");
+  }
+
+  async function handleCreateListing(draft: PublishDraft) {
+    if (!token) {
+      setToast("请先用邮箱验证码登录，再发布房源");
+      setActiveSection("Discover");
+      return;
+    }
+
+    const payload = {
       title: draft.title,
       area: draft.area,
       image: listingImages[allListings.length % listingImages.length],
@@ -497,6 +622,7 @@ export default function HomePage() {
       score: 4.8
     };
 
+    const newListing = normalizeListing(await apiPost<ApiListing>("/listings", payload, token));
     setAllListings((current) => [newListing, ...current]);
     setSelectedListing(newListing);
     setActiveSection("Discover");
@@ -509,13 +635,34 @@ export default function HomePage() {
     setToast("交易托管状态已更新");
   }
 
+  const showAuthStrip = activeSection === "Publish";
+
   return (
     <main className="min-h-screen bg-background">
       <AppHeader
         favoriteCount={favoriteIds.size}
         activeSection={activeSection}
         onSectionChange={setActiveSection}
+        user={user}
       />
+      {showAuthStrip ? (
+        <AuthStrip
+          token={token}
+          user={user}
+          apiError={apiError}
+          onToken={(nextToken) => {
+            window.localStorage.setItem("sublet_token", nextToken);
+            setToken(nextToken);
+          }}
+          onLogout={() => {
+            window.localStorage.removeItem("sublet_token");
+            setToken(null);
+            setUser(null);
+            setToast("已退出登录");
+          }}
+          onToast={setToast}
+        />
+      ) : null}
       {activeSection === "Discover" ? (
         <DiscoverScreen
           filters={filters}
@@ -539,18 +686,28 @@ export default function HomePage() {
         />
       ) : null}
       {activeSection === "Roommates" ? (
-        <RoommatesScreen
+        <RoommateFirstWorkspace
           roommate={roommate}
-          roommates={roommates}
+          roommates={apiRoommates}
+          listings={allListings}
           groupMembers={groupMembers}
           activeIndex={roommateIndex}
           skippedCount={skippedCount}
+          likedCount={likedRoommateIds.size}
+          favoriteIds={favoriteIds}
+          tourRequested={tourRequested}
           onReject={handleRejectRoommate}
-          onLater={() => {
-            setToast(`${roommate.name} 已放入稍后查看`);
-            cycleRoommate(1);
+          onLater={handleLaterRoommate}
+          onLike={handleAcceptRoommate}
+          onFavoriteListing={handleFavorite}
+          onSelectListing={(listing) => {
+            setSelectedListing(listing);
+            setActiveSection("Discover");
+            setViewMode("map");
+            setToast(`已打开推荐房源：${listing.title}`);
           }}
-          onAccept={handleAcceptRoommate}
+          onRequestTour={handleRequestGroupTour}
+          onOpenDiscover={() => setActiveSection("Discover")}
         />
       ) : null}
       {activeSection === "Groups" ? (
@@ -558,6 +715,7 @@ export default function HomePage() {
           groupBudget={groupBudget}
           members={groupMembers}
           listings={allListings.slice(0, 6)}
+          groups={apiGroups}
           onRemoveMember={(name) => {
             setGroupMembers((current) => current.filter((member) => member.name !== name));
             setToast(`${name} 已移出 Group`);
@@ -575,12 +733,13 @@ export default function HomePage() {
       {activeSection === "Trips" ? (
         <TripsScreen
           listing={selectedListing}
+          trips={apiTrips}
           currentStep={escrowStep}
           onAdvance={advanceEscrow}
         />
       ) : null}
       {activeSection === "Trust" ? (
-        <TrustScreen onToast={setToast} />
+        <TrustScreen queues={apiTrustQueues} onToast={setToast} />
       ) : null}
       <StatusToast message={toast} />
     </main>
@@ -590,11 +749,13 @@ export default function HomePage() {
 function AppHeader({
   favoriteCount,
   activeSection,
-  onSectionChange
+  onSectionChange,
+  user
 }: {
   favoriteCount: number;
   activeSection: AppSection;
   onSectionChange: (section: AppSection) => void;
+  user: SessionUser | null;
 }) {
   return (
     <header className="sticky top-0 z-30 border-b bg-white/95 backdrop-blur">
@@ -631,7 +792,7 @@ function AppHeader({
           </Button>
           <Button variant="outline" size="sm" className="hidden sm:inline-flex">
             <ShieldCheck data-icon="inline-start" />
-            .edu Verified
+            {user ? user.email : ".edu Verified"}
           </Button>
           <Button
             variant="trust"
@@ -663,6 +824,94 @@ function AppHeader({
   );
 }
 
+function AuthStrip({
+  token,
+  user,
+  apiError,
+  onToken,
+  onLogout,
+  onToast
+}: {
+  token: string | null;
+  user: SessionUser | null;
+  apiError: string | null;
+  onToken: (token: string) => void;
+  onLogout: () => void;
+  onToast: (message: string) => void;
+}) {
+  const [email, setEmail] = useState("student@northeastern.edu");
+  const [code, setCode] = useState("");
+  const [pending, setPending] = useState(false);
+
+  async function requestCode() {
+    setPending(true);
+    try {
+      const response = await apiPost<{ devCode?: string }>("/auth/email-code", { email });
+      if (response.devCode) setCode(response.devCode);
+      onToast(response.devCode ? `开发验证码：${response.devCode}` : "验证码已发送");
+    } catch (error) {
+      onToast(error instanceof Error ? error.message : "验证码发送失败");
+    } finally {
+      setPending(false);
+    }
+  }
+
+  async function verifyCode() {
+    setPending(true);
+    try {
+      const response = await apiPost<{ accessToken: string; user: SessionUser }>(
+        "/auth/verify-email",
+        { email, code }
+      );
+      onToken(response.accessToken);
+      onToast(`已登录：${response.user.email}`);
+    } catch (error) {
+      onToast(error instanceof Error ? error.message : "登录失败");
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return (
+    <section className="border-b bg-white">
+      <div className="mx-auto flex max-w-[1500px] flex-col gap-3 px-4 py-3 lg:flex-row lg:items-center lg:justify-between xl:px-6">
+        <div className="min-w-0">
+          <div className="text-sm font-bold text-primary">
+            {user ? `已登录 ${user.email}` : "邮箱验证码登录"}
+          </div>
+          <div className="text-xs font-semibold text-muted-foreground">
+            {apiError ? `API 状态：${apiError}` : "API 已连接时，房源与发布会写入后端"}
+          </div>
+        </div>
+        {token && user ? (
+          <Button variant="outline" size="sm" onClick={onLogout}>
+            退出登录
+          </Button>
+        ) : (
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(220px,1fr)_110px_auto_auto]">
+            <Input
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              placeholder="student@northeastern.edu"
+            />
+            <Input
+              value={code}
+              onChange={(event) => setCode(event.target.value)}
+              placeholder="验证码"
+            />
+            <Button variant="outline" size="sm" onClick={requestCode} disabled={pending}>
+              发送验证码
+            </Button>
+            <Button variant="trust" size="sm" onClick={verifyCode} disabled={pending || code.length !== 6}>
+              登录
+            </Button>
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
 function DiscoverScreen({
   filters,
   listings,
@@ -680,13 +929,13 @@ function DiscoverScreen({
   filters: SearchFilters;
   listings: Listing[];
   selectedListing: Listing;
-  favoriteIds: Set<number>;
+  favoriteIds: Set<string>;
   viewMode: ViewMode;
   onFiltersChange: (filters: SearchFilters) => void;
   onAmenityChange: (value: string) => void;
   onClear: () => void;
   onSelect: (listing: Listing) => void;
-  onFavorite: (id: number) => void;
+  onFavorite: (id: string) => void;
   onViewModeChange: (value: ViewMode) => void;
   onOpenRoommates: () => void;
 }) {
@@ -879,12 +1128,14 @@ function GroupsScreen({
   groupBudget,
   members,
   listings,
+  groups,
   onRemoveMember,
   onSelectListing
 }: {
   groupBudget: string;
   members: Roommate[];
   listings: Listing[];
+  groups: ApiGroup[];
   onRemoveMember: (name: string) => void;
   onSelectListing: (listing: Listing) => void;
 }) {
@@ -898,7 +1149,9 @@ function GroupsScreen({
       <Card className="shadow-panel">
         <CardHeader>
           <CardTitle>Group 推荐房源</CardTitle>
-          <CardDescription>只展示适合多人合租的候选，点击后回到找房页查看详情</CardDescription>
+          <CardDescription>
+            后端已返回 {groups.length} 个 Group；点击房源后回到找房页查看详情
+          </CardDescription>
         </CardHeader>
         <CardContent className="grid grid-cols-1 gap-3 md:grid-cols-2">
           {listings.map((listing) => (
@@ -942,10 +1195,12 @@ function PublishScreen({ onCreate }: { onCreate: (draft: PublishDraft) => void }
 
 function TripsScreen({
   listing,
+  trips,
   currentStep,
   onAdvance
 }: {
   listing: Listing;
+  trips: ApiTrip[];
   currentStep: number;
   onAdvance: () => void;
 }) {
@@ -955,7 +1210,7 @@ function TripsScreen({
       <Card className="shadow-panel">
         <CardHeader>
           <CardTitle>订单与入住</CardTitle>
-          <CardDescription>这里保留交易后动作，不再占用找房首屏</CardDescription>
+          <CardDescription>后端返回 {trips.length} 个订单/入住记录</CardDescription>
         </CardHeader>
         <CardContent className="grid grid-cols-1 gap-3 md:grid-cols-3">
           {[
@@ -975,11 +1230,17 @@ function TripsScreen({
   );
 }
 
-function TrustScreen({ onToast }: { onToast: (message: string) => void }) {
+function TrustScreen({
+  queues,
+  onToast
+}: {
+  queues: ApiTrustQueue[];
+  onToast: (message: string) => void;
+}) {
   return (
     <section className="mx-auto grid w-full max-w-[1280px] grid-cols-1 gap-4 px-4 py-4 lg:grid-cols-[minmax(0,1fr)_420px] xl:px-6">
       <TrustAndRoadmap />
-      <OperationsPanel onToast={onToast} />
+      <OperationsPanel initialQueues={queues} onToast={onToast} />
     </section>
   );
 }
@@ -1323,10 +1584,10 @@ function ListingGrid({
   onFavorite
 }: {
   listings: Listing[];
-  selectedId: number;
-  favoriteIds: Set<number>;
+  selectedId: string;
+  favoriteIds: Set<string>;
   onSelect: (listing: Listing) => void;
-  onFavorite: (id: number) => void;
+  onFavorite: (id: string) => void;
 }) {
   return (
     <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -1845,13 +2106,30 @@ function TrustAndRoadmap() {
   );
 }
 
-function OperationsPanel({ onToast }: { onToast: (message: string) => void }) {
-  const [queues, setQueues] = useState<QueueItem[]>([
+function OperationsPanel({
+  initialQueues,
+  onToast
+}: {
+  initialQueues: ApiTrustQueue[];
+  onToast: (message: string) => void;
+}) {
+  const fallbackQueues: QueueItem[] = [
     { label: "人工认证待审", value: 24, icon: UserCheck, variant: "trust" },
     { label: "房源媒体审核", value: 11, icon: Coffee, variant: "warning" },
     { label: "退款/缺陷工单", value: 3, icon: ShieldCheck, variant: "danger" },
     { label: "信用分重算队列", value: 128, icon: Sparkles, variant: "success" }
-  ]);
+  ];
+  const [queues, setQueues] = useState<QueueItem[]>(
+    initialQueues.length > 0
+      ? initialQueues.map((queue) => ({ ...queue, icon: ShieldCheck }))
+      : fallbackQueues
+  );
+
+  useEffect(() => {
+    if (initialQueues.length > 0) {
+      setQueues(initialQueues.map((queue) => ({ ...queue, icon: ShieldCheck })));
+    }
+  }, [initialQueues]);
 
   function processQueue(label: string) {
     setQueues((current) =>
@@ -1923,6 +2201,8 @@ function OperationsPanel({ onToast }: { onToast: (message: string) => void }) {
 }
 
 function StatusToast({ message }: { message: string }) {
+  if (!message) return null;
+
   return (
     <div className="fixed bottom-4 left-1/2 z-40 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 rounded-md border bg-white/96 px-4 py-3 text-sm font-semibold text-primary shadow-panel backdrop-blur">
       <div className="flex items-center gap-2">

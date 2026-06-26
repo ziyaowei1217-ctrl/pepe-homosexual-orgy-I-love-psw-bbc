@@ -1,6 +1,6 @@
-# Sublet Pipeline Web
+# Sublet Pipeline
 
-Static frontend prototype for a high-trust sublet marketplace and co-living matching product.
+Frontend + backend MVP for a high-trust sublet marketplace and co-living matching product.
 
 ## Stack
 
@@ -10,8 +10,11 @@ Static frontend prototype for a high-trust sublet marketplace and co-living matc
 - Tailwind CSS
 - shadcn/ui-style source components
 - lucide-react icons
+- NestJS API
+- Prisma
+- PostgreSQL
 
-## Run
+## Run Web
 
 Install dependencies with the package manager available on your machine:
 
@@ -22,6 +25,32 @@ pnpm dev
 
 Then open `http://localhost:3000`.
 
+## Run API
+
+Install Docker Desktop or run PostgreSQL locally, then:
+
+```bash
+docker compose up -d db
+cp api/.env.example api/.env
+pnpm --dir api prisma migrate dev --name init
+pnpm --dir api dev
+```
+
+API base URL: `http://localhost:4000/api/v1`.
+
+The frontend uses `NEXT_PUBLIC_API_BASE_URL`; by default it points to `http://localhost:4000/api/v1`.
+
+## Verify
+
+```bash
+pnpm typecheck
+pnpm build
+pnpm --dir api test
+pnpm --dir api typecheck
+pnpm --dir api build
+DATABASE_URL='postgresql://sublet:sublet@localhost:5432/sublet_pipeline?schema=public' pnpm --dir api prisma validate
+```
+
 ## Current Scope
 
-This is a static frontend only. It includes local UI state for filters, listing selection, roommate card cycling, Group workspace preview, escrow status, listing publishing flow, trust roadmap, and admin queue preview. No backend API, auth, payment processing, persistence, or real map SDK is wired yet.
+The API supports email-code login, JWT sessions, listing creation/update, listing reads, and seed read endpoints for roommates, groups, trips, and trust queues. Stripe, Mapbox, real email delivery, Redis queues, and production moderation providers are not wired yet.
