@@ -12,13 +12,33 @@ enum UserRole {
   ADMIN
 }
 
+enum RoommateActionType {
+  LIKE
+  PASS
+  LATER
+}
+
+enum DealRoomStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+enum TourRequestStatus {
+  REQUESTED
+  SCHEDULED
+  CANCELLED
+}
+
 model User {
-  id        String    @id @default(cuid())
-  email     String    @unique
-  role      UserRole  @default(USER)
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  listings  Listing[]
+  id               String            @id @default(cuid())
+  email            String            @unique
+  role             UserRole          @default(USER)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  listings         Listing[]
+  roommateActions  RoommateAction[]
+  ownedDealRooms   DealRoom[]
+  tourRequests     TourRequest[]
 }
 
 model VerificationCode {
@@ -64,16 +84,19 @@ model ListingMedia {
 }
 
 model RoommateProfile {
-  id        String   @id @default(cuid())
-  name      String
-  age       Int
-  role      String
-  image     String
-  match     Int
-  budget    String
-  commute   String
-  tags      String[]
-  createdAt DateTime @default(now())
+  id              String            @id @default(cuid())
+  name            String
+  age             Int
+  role            String
+  image           String
+  match           Int
+  budget          String
+  commute         String
+  tags            String[]
+  createdAt       DateTime          @default(now())
+  actions         RoommateAction[]
+  dealRooms       DealRoom[]
+  dealRoomMembers DealRoomMember[]
 }
 
 model Group {
@@ -101,4 +124,66 @@ model TrustQueueItem {
   variant   String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model RoommateAction {
+  id                 String              @id @default(cuid())
+  userId             String
+  user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  roommateProfileId  String
+  roommateProfile    RoommateProfile     @relation(fields: [roommateProfileId], references: [id], onDelete: Cascade)
+  action             RoommateActionType
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+
+  @@unique([userId, roommateProfileId])
+  @@index([userId])
+  @@index([roommateProfileId])
+}
+
+model DealRoom {
+  id                 String              @id @default(cuid())
+  ownerId            String
+  owner              User                @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  roommateProfileId  String
+  roommateProfile    RoommateProfile     @relation(fields: [roommateProfileId], references: [id], onDelete: Cascade)
+  status             DealRoomStatus      @default(ACTIVE)
+  recommendedHomes   Json
+  pipeline           Json
+  trustChecklist     Json
+  members            DealRoomMember[]
+  tourRequest        TourRequest?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+
+  @@unique([ownerId, roommateProfileId])
+  @@index([ownerId, status, updatedAt])
+  @@index([roommateProfileId])
+}
+
+model DealRoomMember {
+  id                 String          @id @default(cuid())
+  dealRoomId         String
+  dealRoom           DealRoom        @relation(fields: [dealRoomId], references: [id], onDelete: Cascade)
+  roommateProfileId  String
+  roommateProfile    RoommateProfile @relation(fields: [roommateProfileId], references: [id], onDelete: Cascade)
+  snapshot           Json
+  createdAt          DateTime        @default(now())
+
+  @@unique([dealRoomId, roommateProfileId])
+  @@index([dealRoomId])
+  @@index([roommateProfileId])
+}
+
+model TourRequest {
+  id          String            @id @default(cuid())
+  dealRoomId  String            @unique
+  dealRoom    DealRoom          @relation(fields: [dealRoomId], references: [id], onDelete: Cascade)
+  requesterId String
+  requester   User              @relation(fields: [requesterId], references: [id], onDelete: Cascade)
+  status      TourRequestStatus @default(REQUESTED)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  @@index([requesterId, status, createdAt])
 }

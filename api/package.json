@@ -5,10 +5,10 @@
   "type": "commonjs",
   "scripts": {
     "dev": "nest start --watch",
-    "build": "nest build",
+    "build": "prisma generate && nest build",
     "start": "node dist/main.js",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "prisma generate && tsc --noEmit",
     "prisma": "prisma"
   },
   "dependencies": {
