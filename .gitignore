@@ -2,6 +2,7 @@ node_modules/
 api/node_modules/
 api/dist/
 .next/
+.tmp-tests/
 *.tsbuildinfo
 .env
 api/.env
