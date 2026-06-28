@@ -101,3 +101,37 @@ test("builds a deal room with group members, recommendations, messages, and pipe
   assert.equal(dealRoom.primaryCta, "Request group tour");
   assert.ok(dealRoom.messages[0].body.includes("Back Bay"));
 });
+
+test("locks group tour until the current roommate has been liked", () => {
+  const lockedDealRoom = (buildDealRoom as any)(roommate, listings, groupMembers, { readyForTour: false });
+
+  assert.equal(lockedDealRoom.canRequestTour, false);
+  assert.equal(lockedDealRoom.primaryCta, "Like to unlock group tour");
+  assert.equal(lockedDealRoom.pipeline[2].status, "idle");
+  assert.equal(lockedDealRoom.pipeline[2].detail, "Like first");
+});
+
+test("unlocks group tour and derives commercial copy from live match data", () => {
+  const partner: DemoRoommate = {
+    ...groupMembers[0],
+    id: "roommate-3",
+    name: "Priya"
+  };
+  const readyDealRoom = (buildDealRoom as any)(roommate, listings, [partner], { readyForTour: true });
+
+  assert.equal(readyDealRoom.canRequestTour, true);
+  assert.equal(readyDealRoom.primaryCta, "Request group tour");
+  assert.equal(readyDealRoom.messages[1].author, "Priya");
+  assert.equal(readyDealRoom.mapFocusLabel, "Back Bay focus");
+});
+
+test("uses viewer copy when the liked roommate is the only matched member", () => {
+  const readyDealRoom = (buildDealRoom as any)(roommate, listings, [roommate], {
+    readyForTour: true,
+    viewerName: "You"
+  });
+
+  assert.equal(readyDealRoom.messages[1].author, "You");
+  assert.equal(readyDealRoom.trustChecklist[0].detail, "Both verified");
+  assert.equal(readyDealRoom.trustChecklist[2].detail, "Both clear");
+});

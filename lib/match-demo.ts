@@ -7,6 +7,7 @@ export type DemoRoommate = {
   match: number;
   budget: string;
   commute: string;
+  origin?: string;
   tags: string[];
 };
 
@@ -67,7 +68,14 @@ export type DealRoom = {
   messages: DealRoomMessage[];
   pipeline: DealPipelineStep[];
   trustChecklist: Array<{ label: string; detail: string; complete: boolean }>;
-  primaryCta: "Request group tour";
+  canRequestTour: boolean;
+  mapFocusLabel: string;
+  primaryCta: "Request group tour" | "Like to unlock group tour";
+};
+
+export type BuildDealRoomOptions = {
+  readyForTour?: boolean;
+  viewerName?: string;
 };
 
 const currency = new Intl.NumberFormat("en-US", {
@@ -168,16 +176,26 @@ export function recommendListingsForRoommate(
 export function buildDealRoom(
   roommate: DemoRoommate,
   listings: DemoListing[],
-  groupMembers: DemoRoommate[]
+  groupMembers: DemoRoommate[],
+  options: BuildDealRoomOptions = {}
 ): DealRoom {
   const members = mergeMembers(groupMembers, roommate);
   const recommendedHomes = recommendListingsForRoommate(roommate, listings, groupMembers).slice(0, 3);
   const topHome = recommendedHomes[0];
+  const canRequestTour = options.readyForTour ?? true;
+  const roommateKey = roommate.id ?? roommate.name;
+  const replyAuthor =
+    groupMembers.find((member) => (member.id ?? member.name) !== roommateKey)?.name ?? options.viewerName ?? "You";
+  const mapFocusLabel = topHome ? `${getAreaShortName(topHome.area)} focus` : "Shared commute focus";
+  const groupTrustDetail = canRequestTour || members.length > 1 ? "Both verified" : "Profile verified";
+  const backgroundDetail = canRequestTour || members.length > 1 ? "Both clear" : "Ready after match";
 
   return {
     members,
     matchFit: buildMatchFit(roommate, listings, groupMembers),
     recommendedHomes,
+    canRequestTour,
+    mapFocusLabel,
     messages: [
       {
         author: roommate.name,
@@ -188,7 +206,7 @@ export function buildDealRoom(
         align: "left"
       },
       {
-        author: "Alex",
+        author: replyAuthor,
         body: "Weekday evenings work for me. How about Tue or Wed?",
         time: "10:27 AM",
         align: "right"
@@ -197,17 +215,17 @@ export function buildDealRoom(
     pipeline: [
       { label: "Match", status: "active", detail: "You're here" },
       { label: "Shortlist", status: recommendedHomes.length > 0 ? "ready" : "idle", detail: `${recommendedHomes.length} homes` },
-      { label: "Tour", status: "idle", detail: "Not scheduled" },
+      { label: "Tour", status: canRequestTour ? "ready" : "idle", detail: canRequestTour ? "Ready to schedule" : "Like first" },
       { label: "Apply", status: "idle", detail: "Not started" }
     ],
     trustChecklist: [
-      { label: "ID verified", detail: "Both verified", complete: true },
-      { label: "University verified", detail: "Both verified", complete: true },
-      { label: "Background check", detail: "Both clear", complete: true },
+      { label: "ID verified", detail: groupTrustDetail, complete: true },
+      { label: "University verified", detail: groupTrustDetail, complete: true },
+      { label: "Background check", detail: backgroundDetail, complete: true },
       { label: "Payment history", detail: "On track", complete: true },
       { label: "References", detail: `${Math.max(2, members.length)} shared`, complete: true }
     ],
-    primaryCta: "Request group tour"
+    primaryCta: canRequestTour ? "Request group tour" : "Like to unlock group tour"
   };
 }
 

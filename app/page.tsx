@@ -85,6 +85,7 @@ type Roommate = {
   match: number;
   budget: string;
   commute: string;
+  origin?: string;
   tags: string[];
 };
 
@@ -149,16 +150,16 @@ const seedListings: Listing[] = [
   },
   {
     id: "3",
-    title: "Jersey City 河景 Studio",
-    area: "NYC · Newport",
+    title: "Allston 阳光 Studio",
+    area: "Boston · Allston",
     image:
       "https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?auto=format&fit=crop&w=1200&q=80",
-    price: 2180,
-    originalPrice: 2450,
+    price: 1980,
+    originalPrice: 2250,
     beds: 1,
     baths: 1,
-    commute: "PATH 16 分钟到 WTC",
-    transit: "步行 6 分钟到 Newport",
+    commute: "绿线 16 分钟到 BU",
+    transit: "步行 6 分钟到 Packards Corner",
     trust: "企业邮箱认证 · 首日保障",
     tags: ["健身房", "门卫", "可短租"],
     score: 4.84
@@ -181,14 +182,14 @@ const listingImages = [
 const listingAreas = [
   "Boston · Fenway",
   "Cambridge · Central",
-  "NYC · Newport",
-  "Brooklyn · Downtown",
-  "Seattle · South Lake Union",
-  "San Francisco · Mission Bay",
-  "Los Angeles · Koreatown",
-  "Chicago · River North",
-  "Austin · Downtown",
-  "Toronto · U of T"
+  "Boston · Allston",
+  "Boston · Back Bay",
+  "Boston · Mission Hill",
+  "Boston · Seaport",
+  "Cambridge · Kendall",
+  "Somerville · Davis",
+  "Brookline · Coolidge Corner",
+  "Boston · South End"
 ];
 
 const listingTitles = [
@@ -225,13 +226,13 @@ const commuteTargets = [
   "Northeastern",
   "MIT",
   "Harvard",
-  "NYU",
-  "Columbia",
-  "Amazon HQ",
-  "Google Office",
-  "Meta Campus",
-  "UCLA",
-  "University of Toronto"
+  "BU",
+  "Berklee",
+  "MGH",
+  "Longwood Medical",
+  "Tufts",
+  "Boston College",
+  "Seaport Office"
 ];
 
 function createListings(): Listing[] {
@@ -341,12 +342,12 @@ const roommateRoles = [
   "实习生 · Seaport",
   "Northeastern Co-op",
   "MIT MEng · Robotics",
-  "NYU Stern · Exchange",
-  "Google SWE Intern",
   "Harvard GSD · Studio",
-  "Amazon PM Intern",
-  "UCLA Data Science",
-  "Columbia SIPA · Fall"
+  "Kendall SWE Intern",
+  "Berklee Music Business",
+  "Seaport PM Intern",
+  "BU Data Science",
+  "Tufts Fletcher · Fall"
 ];
 
 const roommateTagSets = [
@@ -443,7 +444,7 @@ export default function HomePage() {
     amenity: "Wi-Fi"
   });
   const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set(["1"]));
-  const [groupMembers, setGroupMembers] = useState<Roommate[]>(roommates.slice(1, 2));
+  const [groupMembers, setGroupMembers] = useState<Roommate[]>([]);
   const [likedRoommateIds, setLikedRoommateIds] = useState<Set<string>>(new Set());
   const [skippedCount, setSkippedCount] = useState(0);
   const [tourRequested, setTourRequested] = useState(false);
@@ -475,7 +476,7 @@ export default function HomePage() {
         setAllListings(normalizedListings);
         setSelectedListing((current) => normalizedListings.find((listing) => listing.id === current.id) ?? normalizedListings[0] ?? current);
         setApiRoommates(normalizedRoommates);
-        setGroupMembers(normalizedRoommates.slice(1, 2));
+        setGroupMembers([]);
         setApiGroups(apiGroupData);
         setApiTrips(apiTripData);
         setApiTrustQueues(apiQueueData);
@@ -506,6 +507,8 @@ export default function HomePage() {
   }, [token]);
 
   const roommate = apiRoommates[roommateIndex] ?? apiRoommates[0] ?? roommates[0];
+  const roommateKey = roommate.id ?? roommate.name;
+  const canRequestTour = likedRoommateIds.has(roommateKey);
   const filteredListings = useMemo(
     () =>
       allListings.filter((listing) => {
@@ -572,8 +575,7 @@ export default function HomePage() {
   }
 
   function handleAcceptRoommate() {
-    const memberKey = roommate.id ?? roommate.name;
-    setLikedRoommateIds((current) => new Set(current).add(memberKey));
+    setLikedRoommateIds((current) => new Set(current).add(roommateKey));
     setGroupMembers((current) => {
       if (current.some((member) => member.name === roommate.name)) return current;
       return [...current, roommate].slice(-4);
@@ -596,6 +598,11 @@ export default function HomePage() {
   }
 
   function handleRequestGroupTour() {
+    if (!canRequestTour) {
+      setToast("先 Like 室友，再发起 Group Tour");
+      return;
+    }
+
     setTourRequested(true);
     setToast("已发送 Group Tour 请求");
   }
@@ -695,6 +702,7 @@ export default function HomePage() {
           skippedCount={skippedCount}
           likedCount={likedRoommateIds.size}
           favoriteIds={favoriteIds}
+          canRequestTour={canRequestTour}
           tourRequested={tourRequested}
           onReject={handleRejectRoommate}
           onLater={handleLaterRoommate}
@@ -1284,7 +1292,7 @@ function SearchPanel({
               onChange={(event) =>
                 onFiltersChange({ ...filters, query: event.target.value })
               }
-              placeholder="Northeastern / MIT / NYC"
+              placeholder="Northeastern / MIT / BU"
             />
           </div>
         </label>

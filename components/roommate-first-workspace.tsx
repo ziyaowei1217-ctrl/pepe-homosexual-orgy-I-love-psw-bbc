@@ -44,6 +44,7 @@ type RoommateFirstWorkspaceProps = {
   skippedCount: number;
   likedCount: number;
   favoriteIds: Set<string>;
+  canRequestTour: boolean;
   tourRequested: boolean;
   onReject: () => void;
   onLater: () => void;
@@ -76,6 +77,7 @@ export function RoommateFirstWorkspace({
   skippedCount,
   likedCount,
   favoriteIds,
+  canRequestTour,
   tourRequested,
   onReject,
   onLater,
@@ -86,8 +88,8 @@ export function RoommateFirstWorkspace({
   onOpenDiscover
 }: RoommateFirstWorkspaceProps) {
   const dealRoom = useMemo(
-    () => buildDealRoom(roommate, listings, groupMembers),
-    [groupMembers, listings, roommate]
+    () => buildDealRoom(roommate, listings, groupMembers, { readyForTour: canRequestTour, viewerName: "You" }),
+    [canRequestTour, groupMembers, listings, roommate]
   );
   const activeHomes = dealRoom.recommendedHomes.slice(0, 3);
 
@@ -105,9 +107,14 @@ export function RoommateFirstWorkspace({
             <Home data-icon="inline-start" />
             Browse homes
           </Button>
-          <Button variant="trust" size="sm" onClick={onRequestTour}>
+          <Button
+            variant={dealRoom.canRequestTour ? "trust" : "outline"}
+            size="sm"
+            onClick={onRequestTour}
+            disabled={!dealRoom.canRequestTour}
+          >
             <CalendarDays data-icon="inline-start" />
-            {tourRequested ? "Tour requested" : dealRoom.primaryCta}
+            {tourRequested && dealRoom.canRequestTour ? "Tour requested" : dealRoom.primaryCta}
           </Button>
         </div>
       </div>
@@ -127,8 +134,10 @@ export function RoommateFirstWorkspace({
           <RecommendedHomesPanel
             homes={activeHomes}
             favoriteIds={favoriteIds}
+            focusLabel={dealRoom.mapFocusLabel}
             onFavoriteListing={onFavoriteListing}
             onSelectListing={onSelectListing}
+            onOpenFilters={onOpenDiscover}
           />
           <DealPipeline steps={dealRoom.pipeline} />
         </div>
@@ -139,7 +148,9 @@ export function RoommateFirstWorkspace({
           targetBudget={dealRoom.matchFit.targetBudgetLabel}
           messages={dealRoom.messages}
           trustChecklist={dealRoom.trustChecklist}
+          canRequestTour={dealRoom.canRequestTour}
           tourRequested={tourRequested}
+          primaryCta={dealRoom.primaryCta}
           onRequestTour={onRequestTour}
         />
       </div>
@@ -188,7 +199,7 @@ function RoommateSwipeCard({
 
       <CardContent className="flex flex-col gap-4 p-5">
         <div className="grid grid-cols-1 gap-2 text-sm font-semibold text-primary sm:grid-cols-3 xl:grid-cols-1 2xl:grid-cols-3">
-          <ProfileSignal icon={MapPin} label="From Singapore" />
+          <ProfileSignal icon={MapPin} label={roommate.origin ?? roommate.commute} />
           <ProfileSignal icon={Sparkles} label={roommate.tags[0] ?? "Verified"} />
           <ProfileSignal icon={WalletCards} label={roommate.budget} />
         </div>
@@ -301,19 +312,23 @@ function MatchFitPanel({
 function RecommendedHomesPanel({
   homes,
   favoriteIds,
+  focusLabel,
   onFavoriteListing,
-  onSelectListing
+  onSelectListing,
+  onOpenFilters
 }: {
   homes: RecommendedListing[];
   favoriteIds: Set<string>;
+  focusLabel: string;
   onFavoriteListing: (id: string) => void;
   onSelectListing: (listing: DemoListing) => void;
+  onOpenFilters: () => void;
 }) {
   return (
     <Card className="overflow-hidden shadow-panel">
       <CardHeader className="flex-row items-center justify-between gap-3">
         <CardTitle>Recommended homes</CardTitle>
-        <Button variant="outline" size="sm">
+        <Button variant="outline" size="sm" onClick={onOpenFilters}>
           <SlidersHorizontal data-icon="inline-start" />
           Filters
         </Button>
@@ -340,7 +355,7 @@ function RecommendedHomesPanel({
           <div className="absolute bottom-4 left-4 rounded-md border bg-white/95 p-3 shadow-card">
             <div className="flex items-center gap-2 text-sm font-bold text-primary">
               <Navigation className="size-4 text-trust-sky" aria-hidden="true" />
-              Back Bay focus
+              {focusLabel}
             </div>
             <div className="mt-1 text-xs font-semibold text-muted-foreground">
               Shortlist homes around shared commute
@@ -432,12 +447,16 @@ function DealRoomRail({
   targetBudget,
   messages,
   trustChecklist,
+  canRequestTour,
   tourRequested,
+  primaryCta,
   onRequestTour
 }: Pick<ReturnType<typeof buildDealRoom>, "members" | "messages" | "trustChecklist"> & {
   sharedBudget: string;
   targetBudget: string;
+  canRequestTour: boolean;
   tourRequested: boolean;
+  primaryCta: ReturnType<typeof buildDealRoom>["primaryCta"];
   onRequestTour: () => void;
 }) {
   return (
@@ -445,7 +464,9 @@ function DealRoomRail({
       <Card className="shadow-panel">
         <CardHeader className="flex-row items-center justify-between gap-3">
           <CardTitle>Deal Room</CardTitle>
-          <Badge variant="trust">{members.length} slots filled</Badge>
+          <Badge variant={canRequestTour ? "trust" : "warning"}>
+            {canRequestTour ? `${members.length} slots filled` : "Pending match"}
+          </Badge>
         </CardHeader>
         <CardContent className="flex flex-col gap-3 p-5 pt-0">
           {members.map((member) => (
@@ -519,9 +540,15 @@ function DealRoomRail({
             </div>
           ))}
           <Separator />
-          <Button variant="trust" size="lg" className="w-full" onClick={onRequestTour}>
+          <Button
+            variant={canRequestTour ? "trust" : "outline"}
+            size="lg"
+            className="w-full"
+            onClick={onRequestTour}
+            disabled={!canRequestTour}
+          >
             <CalendarDays data-icon="inline-start" />
-            {tourRequested ? "Group tour requested" : "Request group tour"}
+            {tourRequested && canRequestTour ? "Group tour requested" : primaryCta}
           </Button>
         </CardContent>
       </Card>
