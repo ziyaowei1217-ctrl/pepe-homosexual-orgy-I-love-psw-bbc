@@ -47,6 +47,8 @@ export class AuthService {
     const code = generateEmailCode();
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
 
+    await this.emailSender.sendVerificationCode({ email, code });
+
     await this.prisma.verificationCode.updateMany({
       where: {
         email,
@@ -65,8 +67,6 @@ export class AuthService {
         attemptCount: 0
       }
     });
-
-    await this.emailSender.sendVerificationCode({ email, code });
 
     const response: { email: string; expiresAt: Date; devCode?: string } = {
       email,

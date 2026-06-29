@@ -137,6 +137,35 @@ describe("AuthService", () => {
     expect(prisma.verificationCode.state.codes.at(-1)?.codeHash).not.toBe(sender.sentCodes[0].code);
   });
 
+  it("leaves stored codes unchanged when sending fails", async () => {
+    const prisma = createPrismaMock();
+    const jwt = new JwtService({ secret: "test-secret" });
+    const sender = createEmailSenderMock();
+    const service = createAuthService(prisma, jwt, {
+      nodeEnv: "development",
+      emailSender: sender,
+      codeRequestCooldownMs: 0
+    });
+    await service.requestEmailCode("student@northeastern.edu");
+    const existingCode = prisma.verificationCode.state.codes[0];
+
+    const failingSender: EmailSender = {
+      async sendVerificationCode() {
+        throw new Error("email send failed");
+      }
+    };
+    const failingService = createAuthService(prisma, jwt, {
+      nodeEnv: "production",
+      emailSender: failingSender,
+      codeRequestCooldownMs: 0
+    });
+
+    await expect(failingService.requestEmailCode("student@northeastern.edu")).rejects.toThrow("email send failed");
+
+    expect(prisma.verificationCode.state.codes).toEqual([existingCode]);
+    expect(existingCode.consumedAt).toBeNull();
+  });
+
   it("fails production requests when the default production sender is not configured", async () => {
     const prisma = createPrismaMock();
     const jwt = new JwtService({ secret: "test-secret" });
