@@ -10,7 +10,7 @@ describe("AuthService", () => {
     const prisma = createPrismaMock();
     const jwt = new JwtService({ secret: "test-secret" });
     const sender = createEmailSenderMock();
-    const service = new AuthService(prisma as never, jwt, { nodeEnv: "development", emailSender: sender });
+    const service = createAuthService(prisma, jwt, { nodeEnv: "development", emailSender: sender });
 
     const request = await service.requestEmailCode("Student@Northeastern.edu ");
     const devCode = request.devCode;
@@ -35,7 +35,7 @@ describe("AuthService", () => {
     const prisma = createPrismaMock();
     const jwt = new JwtService({ secret: "test-secret" });
     const sender = createEmailSenderMock();
-    const service = new AuthService(prisma as never, jwt, { nodeEnv: "production", emailSender: sender });
+    const service = createAuthService(prisma, jwt, { nodeEnv: "production", emailSender: sender });
 
     const request = await service.requestEmailCode("student@northeastern.edu");
 
@@ -49,7 +49,7 @@ describe("AuthService", () => {
     const prisma = createPrismaMock();
     const jwt = new JwtService({ secret: "test-secret" });
     const sender = createEmailSenderMock();
-    const service = new AuthService(prisma as never, jwt, { nodeEnv: "development", emailSender: sender });
+    const service = createAuthService(prisma, jwt, { nodeEnv: "development", emailSender: sender });
 
     await service.requestEmailCode("student@northeastern.edu");
 
@@ -62,6 +62,7 @@ describe("AuthService", () => {
       ).rejects.toBeInstanceOf(UnauthorizedException);
     }
 
+    expect(sender.sentCodes).toHaveLength(1);
     await expect(
       service.verifyEmailCode({
         email: "student@northeastern.edu",
@@ -75,7 +76,7 @@ describe("AuthService", () => {
     const prisma = createPrismaMock();
     const jwt = new JwtService({ secret: "test-secret" });
     const sender = createEmailSenderMock();
-    const service = new AuthService(prisma as never, jwt, {
+    const service = createAuthService(prisma, jwt, {
       nodeEnv: "development",
       emailSender: sender,
       codeRequestCooldownMs: 60_000
@@ -91,15 +92,17 @@ describe("AuthService", () => {
     const prisma = createPrismaMock();
     const jwt = new JwtService({ secret: "test-secret" });
     const sender = createEmailSenderMock();
-    const service = new AuthService(prisma as never, jwt, {
+    const service = createAuthService(prisma, jwt, {
       nodeEnv: "development",
       emailSender: sender,
       codeRequestCooldownMs: 0
     });
 
     await service.requestEmailCode("student@northeastern.edu");
+    expect(sender.sentCodes).toHaveLength(1);
     const oldCode = sender.sentCodes[0].code;
     await service.requestEmailCode("student@northeastern.edu");
+    expect(sender.sentCodes).toHaveLength(2);
     const newCode = sender.sentCodes[1].code;
 
     await expect(
@@ -121,7 +124,7 @@ describe("AuthService", () => {
     const prisma = createPrismaMock();
     const jwt = new JwtService({ secret: "test-secret" });
     const sender = createEmailSenderMock();
-    const service = new AuthService(prisma as never, jwt, { nodeEnv: "production", emailSender: sender });
+    const service = createAuthService(prisma, jwt, { nodeEnv: "production", emailSender: sender });
 
     const request = await service.requestEmailCode("student@northeastern.edu");
 
@@ -137,7 +140,7 @@ describe("AuthService", () => {
   it("fails production requests when the default production sender is not configured", async () => {
     const prisma = createPrismaMock();
     const jwt = new JwtService({ secret: "test-secret" });
-    const service = new AuthService(prisma as never, jwt, { nodeEnv: "production" });
+    const service = createAuthService(prisma, jwt, { nodeEnv: "production" });
 
     await expect(service.requestEmailCode("student@northeastern.edu")).rejects.toThrow(
       "Production email sender is not configured"
@@ -171,6 +174,19 @@ function createEmailSenderMock(): EmailSender & { sentCodes: Array<{ email: stri
       this.sentCodes.push(input);
     }
   };
+}
+
+type AuthServiceTestOptions = ConstructorParameters<typeof AuthService>[2] & {
+  emailSender?: EmailSender;
+  codeRequestCooldownMs?: number;
+};
+
+function createAuthService(
+  prisma: ReturnType<typeof createPrismaMock>,
+  jwt: JwtService,
+  options: AuthServiceTestOptions
+) {
+  return new AuthService(prisma as never, jwt, options);
 }
 
 function createPrismaMock() {
