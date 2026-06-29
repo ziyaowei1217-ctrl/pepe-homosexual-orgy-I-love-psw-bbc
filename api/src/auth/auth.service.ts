@@ -1,19 +1,25 @@
 import { BadRequestException, Injectable, UnauthorizedException } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 
+import { createEmailSender, EmailSender } from "../email/email-sender";
 import { PrismaService } from "../prisma/prisma.service";
 import { generateEmailCode, hashEmailCode, normalizeEmail, verifyEmailCodeHash } from "./code-security";
 import { VerifyEmailDto } from "./dto";
 
 type AuthServiceOptions = {
   nodeEnv?: string;
+  emailSender?: EmailSender;
+  codeRequestCooldownMs?: number;
 };
 
 const maxVerificationAttempts = 5;
+const defaultCodeRequestCooldownMs = 60_000;
 
 @Injectable()
 export class AuthService {
   private readonly nodeEnv: string;
+  private readonly emailSender: EmailSender;
+  private readonly codeRequestCooldownMs: number;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -21,14 +27,35 @@ export class AuthService {
     options: AuthServiceOptions = {}
   ) {
     this.nodeEnv = options.nodeEnv ?? process.env.NODE_ENV ?? "development";
+    this.emailSender = options.emailSender ?? createEmailSender({ nodeEnv: this.nodeEnv });
+    this.codeRequestCooldownMs = options.codeRequestCooldownMs ?? defaultCodeRequestCooldownMs;
   }
 
   async requestEmailCode(emailInput: string) {
     const email = normalizeEmail(emailInput);
     if (!email) throw new BadRequestException("Email is required");
 
+    const latestCode = await this.prisma.verificationCode.findFirst({
+      where: { email },
+      orderBy: { createdAt: "desc" }
+    });
+
+    if (latestCode && Date.now() - latestCode.createdAt.getTime() < this.codeRequestCooldownMs) {
+      throw new BadRequestException("Please wait before requesting another code");
+    }
+
     const code = generateEmailCode();
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+
+    await this.prisma.verificationCode.updateMany({
+      where: {
+        email,
+        consumedAt: null
+      },
+      data: {
+        consumedAt: new Date()
+      }
+    });
 
     await this.prisma.verificationCode.create({
       data: {
@@ -39,9 +66,7 @@ export class AuthService {
       }
     });
 
-    if (this.nodeEnv !== "production") {
-      console.log(`[dev email code] ${email}: ${code}`);
-    }
+    await this.emailSender.sendVerificationCode({ email, code });
 
     const response: { email: string; expiresAt: Date; devCode?: string } = {
       email,

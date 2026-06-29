@@ -213,6 +213,16 @@ function createPrismaMock() {
 
         Object.assign(code, data);
         return code;
+      },
+      updateMany: async ({ where, data }: { where: { email: string; consumedAt: null }; data: { consumedAt: Date } }) => {
+        let count = 0;
+        for (const code of state.codes) {
+          if (code.email === where.email && code.consumedAt === where.consumedAt) {
+            code.consumedAt = data.consumedAt;
+            count += 1;
+          }
+        }
+        return { count };
       }
     },
     user: {
