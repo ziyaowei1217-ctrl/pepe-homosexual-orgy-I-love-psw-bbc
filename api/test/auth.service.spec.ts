@@ -88,6 +88,27 @@ describe("AuthService", () => {
     expect(sender.sentCodes).toHaveLength(1);
   });
 
+  it("keeps cooldown active after a code is consumed", async () => {
+    const prisma = createPrismaMock();
+    const jwt = new JwtService({ secret: "test-secret" });
+    const sender = createEmailSenderMock();
+    const service = createAuthService(prisma, jwt, {
+      nodeEnv: "development",
+      emailSender: sender,
+      codeRequestCooldownMs: 60_000
+    });
+
+    const request = await service.requestEmailCode("student@northeastern.edu");
+    if (!request.devCode) throw new Error("Expected development verification code");
+    await service.verifyEmailCode({
+      email: "student@northeastern.edu",
+      code: request.devCode
+    });
+
+    await expect(service.requestEmailCode("student@northeastern.edu")).rejects.toBeInstanceOf(BadRequestException);
+    expect(sender.sentCodes).toHaveLength(1);
+  });
+
   it("invalidates older active codes when issuing a newer code after cooldown", async () => {
     const prisma = createPrismaMock();
     const jwt = new JwtService({ secret: "test-secret" });
@@ -166,6 +187,19 @@ describe("AuthService", () => {
     expect(existingCode.consumedAt).toBeNull();
   });
 
+  it("does not send a code when storing the code fails", async () => {
+    const prisma = createPrismaMock();
+    const jwt = new JwtService({ secret: "test-secret" });
+    const sender = createEmailSenderMock();
+    const service = createAuthService(prisma, jwt, { nodeEnv: "development", emailSender: sender });
+    prisma.verificationCode.state.failCreate = true;
+
+    await expect(service.requestEmailCode("student@northeastern.edu")).rejects.toThrow("create failed");
+
+    expect(sender.sentCodes).toHaveLength(0);
+    expect(prisma.verificationCode.state.codes).toHaveLength(0);
+  });
+
   it("fails production requests when the default production sender is not configured", async () => {
     const prisma = createPrismaMock();
     const jwt = new JwtService({ secret: "test-secret" });
@@ -221,6 +255,7 @@ function createAuthService(
 function createPrismaMock() {
   const state = {
     codes: [] as VerificationCodeRecord[],
+    failCreate: false,
     get code() {
       return this.codes.at(-1);
     },
@@ -232,6 +267,8 @@ function createPrismaMock() {
       state,
       updateCalls: [] as Array<{ where: { id: string }; data: VerificationCodeUpdateData }>,
       create: async ({ data }: { data: { email: string; codeHash?: string; expiresAt: Date; attemptCount?: number } }) => {
+        if (state.failCreate) throw new Error("create failed");
+
         const created = {
           id: `code-${state.codes.length + 1}`,
           email: data.email,
@@ -277,10 +314,26 @@ function createPrismaMock() {
         mock.verificationCode.updateCalls.push(args);
         return code;
       },
-      updateMany: async ({ where, data }: { where: { email: string; consumedAt: null }; data: { consumedAt: Date } }) => {
+      delete: async ({ where }: { where: { id: string } }) => {
+        const index = state.codes.findIndex((record) => record.id === where.id);
+        if (index === -1) return null;
+        const [deleted] = state.codes.splice(index, 1);
+        return deleted;
+      },
+      updateMany: async ({
+        where,
+        data
+      }: {
+        where: { email: string; consumedAt: null; id?: { not: string } };
+        data: { consumedAt: Date };
+      }) => {
         let count = 0;
         for (const code of state.codes) {
-          if (code.email === where.email && code.consumedAt === where.consumedAt) {
+          if (
+            code.email === where.email &&
+            code.consumedAt === where.consumedAt &&
+            code.id !== where.id?.not
+          ) {
             code.consumedAt = data.consumedAt;
             count += 1;
           }

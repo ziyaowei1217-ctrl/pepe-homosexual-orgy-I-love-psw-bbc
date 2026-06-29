@@ -47,24 +47,30 @@ export class AuthService {
     const code = generateEmailCode();
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
 
-    await this.emailSender.sendVerificationCode({ email, code });
-
-    await this.prisma.verificationCode.updateMany({
-      where: {
-        email,
-        consumedAt: null
-      },
-      data: {
-        consumedAt: new Date()
-      }
-    });
-
-    await this.prisma.verificationCode.create({
+    const record = await this.prisma.verificationCode.create({
       data: {
         email,
         codeHash: hashEmailCode(email, code),
         expiresAt,
         attemptCount: 0
+      }
+    });
+
+    try {
+      await this.emailSender.sendVerificationCode({ email, code });
+    } catch (error) {
+      await this.prisma.verificationCode.delete({ where: { id: record.id } });
+      throw error;
+    }
+
+    await this.prisma.verificationCode.updateMany({
+      where: {
+        email,
+        consumedAt: null,
+        id: { not: record.id }
+      },
+      data: {
+        consumedAt: new Date()
       }
     });
 

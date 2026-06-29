@@ -193,15 +193,26 @@ function createPrismaMock() {
         state.codes.push(created);
         return created;
       },
-      findFirst: async ({ where }: { where: { email: string; consumedAt: null; expiresAt: { gt: Date } } }) =>
-        state.codes
-          .filter(
-            (code) =>
-              code.email === where.email &&
-              code.consumedAt === where.consumedAt &&
-              code.expiresAt > where.expiresAt.gt
-          )
-          .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0] ?? null,
+      findFirst: async ({
+        where,
+        orderBy
+      }: {
+        where: { email: string; consumedAt?: null; expiresAt?: { gt: Date } };
+        orderBy?: { createdAt: "desc" };
+      }) => {
+        const matches = state.codes.filter((code) => {
+          if (code.email !== where.email) return false;
+          if ("consumedAt" in where && code.consumedAt !== where.consumedAt) return false;
+          if (where.expiresAt && code.expiresAt <= where.expiresAt.gt) return false;
+          return true;
+        });
+
+        if (orderBy?.createdAt === "desc") {
+          return matches.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0] ?? null;
+        }
+
+        return matches[0] ?? null;
+      },
       update: async ({ where, data }: { where: { id: string }; data: VerificationCodeUpdateData }) => {
         const code = state.codes.find((record) => record.id === where.id);
         if (!code) return null;
@@ -214,10 +225,26 @@ function createPrismaMock() {
         Object.assign(code, data);
         return code;
       },
-      updateMany: async ({ where, data }: { where: { email: string; consumedAt: null }; data: { consumedAt: Date } }) => {
+      delete: async ({ where }: { where: { id: string } }) => {
+        const index = state.codes.findIndex((record) => record.id === where.id);
+        if (index === -1) return null;
+        const [deleted] = state.codes.splice(index, 1);
+        return deleted;
+      },
+      updateMany: async ({
+        where,
+        data
+      }: {
+        where: { email: string; consumedAt: null; id?: { not: string } };
+        data: { consumedAt: Date };
+      }) => {
         let count = 0;
         for (const code of state.codes) {
-          if (code.email === where.email && code.consumedAt === where.consumedAt) {
+          if (
+            code.email === where.email &&
+            code.consumedAt === where.consumedAt &&
+            code.id !== where.id?.not
+          ) {
             code.consumedAt = data.consumedAt;
             count += 1;
           }
