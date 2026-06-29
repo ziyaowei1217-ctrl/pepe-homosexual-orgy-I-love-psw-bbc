@@ -12,6 +12,13 @@ enum UserRole {
   ADMIN
 }
 
+enum ListingStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  REJECTED
+}
+
 enum RoommateActionType {
   LIKE
   PASS
@@ -69,9 +76,17 @@ model Listing {
   trust         String
   tags          String[]
   score         Float          @default(4.8)
+  status        ListingStatus  @default(DRAFT)
+  submittedAt   DateTime?
+  reviewedAt    DateTime?
+  reviewerId    String?
+  rejectionReason String?
   media         ListingMedia[]
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
+
+  @@index([status, createdAt])
+  @@index([ownerId, status, updatedAt])
 }
 
 model ListingMedia {

@@ -13,6 +13,12 @@ export class ListingsController {
     return this.listings.findAll();
   }
 
+  @UseGuards(AuthGuard)
+  @Get("mine")
+  findMine(@Req() request: AuthenticatedRequest) {
+    return this.listings.findMine(request.user.id);
+  }
+
   @Get(":id")
   findOne(@Param("id") id: string) {
     return this.listings.findOne(id);
@@ -22,6 +28,12 @@ export class ListingsController {
   @Post()
   create(@Req() request: AuthenticatedRequest, @Body() dto: ListingDto) {
     return this.listings.create(request.user.id, dto);
+  }
+
+  @UseGuards(AuthGuard)
+  @Post(":id/submit")
+  submit(@Req() request: AuthenticatedRequest, @Param("id") id: string) {
+    return this.listings.submit(request.user.id, id);
   }
 
   @UseGuards(AuthGuard)

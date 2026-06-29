@@ -45,3 +45,8 @@ export class ListingDto {
   @Max(5)
   score?: number;
 }
+
+export class RejectListingDto {
+  @IsString()
+  reason!: string;
+}

@@ -5,6 +5,9 @@ CREATE SCHEMA IF NOT EXISTS "public";
 CREATE TYPE "UserRole" AS ENUM ('USER', 'ADMIN');
 
 -- CreateEnum
+CREATE TYPE "ListingStatus" AS ENUM ('DRAFT', 'SUBMITTED', 'APPROVED', 'REJECTED');
+
+-- CreateEnum
 CREATE TYPE "RoommateActionType" AS ENUM ('LIKE', 'PASS', 'LATER');
 
 -- CreateEnum
@@ -53,6 +56,11 @@ CREATE TABLE "Listing" (
     "trust" TEXT NOT NULL,
     "tags" TEXT[],
     "score" DOUBLE PRECISION NOT NULL DEFAULT 4.8,
+    "status" "ListingStatus" NOT NULL DEFAULT 'DRAFT',
+    "submittedAt" TIMESTAMP(3),
+    "reviewedAt" TIMESTAMP(3),
+    "reviewerId" TEXT,
+    "rejectionReason" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
@@ -180,6 +188,12 @@ CREATE UNIQUE INDEX "User_email_key" ON "User"("email");
 CREATE INDEX "VerificationCode_email_consumedAt_expiresAt_idx" ON "VerificationCode"("email", "consumedAt", "expiresAt");
 
 -- CreateIndex
+CREATE INDEX "Listing_status_createdAt_idx" ON "Listing"("status", "createdAt");
+
+-- CreateIndex
+CREATE INDEX "Listing_ownerId_status_updatedAt_idx" ON "Listing"("ownerId", "status", "updatedAt");
+
+-- CreateIndex
 CREATE INDEX "RoommateAction_userId_idx" ON "RoommateAction"("userId");
 
 -- CreateIndex
@@ -241,4 +255,3 @@ ALTER TABLE "TourRequest" ADD CONSTRAINT "TourRequest_dealRoomId_fkey" FOREIGN K
 
 -- AddForeignKey
 ALTER TABLE "TourRequest" ADD CONSTRAINT "TourRequest_requesterId_fkey" FOREIGN KEY ("requesterId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
