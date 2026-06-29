@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { getJwtSecret } from "../src/config/env";
 import { ConsoleEmailSender, createEmailSender, MissingProductionEmailSender } from "../src/email/email-sender";
@@ -24,6 +24,27 @@ describe("email sender config", () => {
   it("uses console sender outside production", () => {
     expect(createEmailSender({ nodeEnv: "development", emailSender: "console" })).toBeInstanceOf(ConsoleEmailSender);
     expect(createEmailSender({ nodeEnv: "test" })).toBeInstanceOf(ConsoleEmailSender);
+  });
+
+  it("logs verification codes with the development email format", async () => {
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
+
+    try {
+      await new ConsoleEmailSender().sendVerificationCode({
+        email: "student@northeastern.edu",
+        code: "123456"
+      });
+
+      expect(logSpy.mock.calls).toEqual([["[dev email code] student@northeastern.edu: 123456"]]);
+    } finally {
+      logSpy.mockRestore();
+    }
+  });
+
+  it("uses missing production sender for non-console sender outside production", () => {
+    expect(createEmailSender({ nodeEnv: "development", emailSender: "external" })).toBeInstanceOf(
+      MissingProductionEmailSender
+    );
   });
 
   it("fails fast for production sender created by the default factory", async () => {
