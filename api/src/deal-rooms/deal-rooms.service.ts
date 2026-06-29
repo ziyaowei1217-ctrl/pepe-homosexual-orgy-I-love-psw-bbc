@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { Inject, Injectable, NotFoundException } from "@nestjs/common";
 
 import { PrismaService } from "../prisma/prisma.service";
 import { seedListings, seedRoommates } from "../seed-data";
@@ -39,7 +39,7 @@ type ListingSnapshot = {
 
 @Injectable()
 export class DealRoomsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
 
   async recordRoommateAction(input: RecordRoommateActionInput) {
     const roommate = await this.resolveRoommateProfile(input.roommateProfileId);

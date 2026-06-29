@@ -51,6 +51,17 @@ pnpm --dir api build
 DATABASE_URL='postgresql://sublet:sublet@localhost:5432/sublet_pipeline?schema=public' pnpm --dir api prisma validate
 ```
 
+## Launch Readiness
+
+From `api`:
+
+```bash
+npm run launch:check
+RUN_DB_SMOKE=1 DATABASE_URL='postgresql://sublet:sublet@localhost:5432/sublet_pipeline?schema=public' npm run launch:smoke
+```
+
+`launch:check` runs the non-database pre-release checks. `launch:smoke` requires a migrated PostgreSQL database and exercises the core HTTP flow against real Prisma.
+
 ## Current Scope
 
 The API supports email-code login, JWT sessions, listing creation/update, listing reads, roommate actions, active deal rooms, idempotent group-tour requests, and seed read endpoints for groups, trips, and trust queues. Stripe, Mapbox, real email delivery, Redis queues, and production moderation providers are not wired yet.

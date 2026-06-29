@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Post, Req, UseGuards } from "@nestjs/common";
+import { Controller, Get, Inject, Param, Post, Req, UseGuards } from "@nestjs/common";
 
 import { AuthGuard, AuthenticatedRequest } from "../auth/auth.guard";
 import { DealRoomsService } from "./deal-rooms.service";
@@ -6,7 +6,7 @@ import { DealRoomsService } from "./deal-rooms.service";
 @UseGuards(AuthGuard)
 @Controller("deal-rooms")
 export class DealRoomsController {
-  constructor(private readonly dealRooms: DealRoomsService) {}
+  constructor(@Inject(DealRoomsService) private readonly dealRooms: DealRoomsService) {}
 
   @Get("active")
   active(@Req() request: AuthenticatedRequest) {

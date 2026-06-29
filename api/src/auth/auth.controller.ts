@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, Req, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Inject, Post, Req, UseGuards } from "@nestjs/common";
 
 import { AuthGuard, AuthenticatedRequest } from "./auth.guard";
 import { AuthService } from "./auth.service";
@@ -6,7 +6,7 @@ import { EmailCodeDto, VerifyEmailDto } from "./dto";
 
 @Controller("auth")
 export class AuthController {
-  constructor(private readonly auth: AuthService) {}
+  constructor(@Inject(AuthService) private readonly auth: AuthService) {}
 
   @Post("email-code")
   requestEmailCode(@Body() dto: EmailCodeDto) {

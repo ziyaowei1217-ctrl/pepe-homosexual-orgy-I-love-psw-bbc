@@ -1,3 +1,4 @@
+import "reflect-metadata";
 import { Module } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
 import { JwtModule } from "@nestjs/jwt";
@@ -6,6 +7,7 @@ import { AuthModule } from "./auth/auth.module";
 import { getJwtSecret } from "./config/env";
 import { DealRoomsModule } from "./deal-rooms/deal-rooms.module";
 import { GroupsModule } from "./groups/groups.module";
+import { HealthModule } from "./health/health.module";
 import { ListingsModule } from "./listings/listings.module";
 import { PrismaModule } from "./prisma/prisma.module";
 import { RoommatesModule } from "./roommates/roommates.module";
@@ -23,6 +25,7 @@ import { UsersModule } from "./users/users.module";
     }),
     PrismaModule,
     AuthModule,
+    HealthModule,
     DealRoomsModule,
     UsersModule,
     ListingsModule,

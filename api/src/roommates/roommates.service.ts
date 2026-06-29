@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Inject, Injectable } from "@nestjs/common";
 
 import { DealRoomsService } from "../deal-rooms/deal-rooms.service";
 import { PrismaService } from "../prisma/prisma.service";
@@ -8,8 +8,8 @@ import { RoommateActionDtoValue } from "./dto";
 @Injectable()
 export class RoommatesService {
   constructor(
-    private readonly prisma: PrismaService,
-    private readonly dealRooms: DealRoomsService
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(DealRoomsService) private readonly dealRooms: DealRoomsService
   ) {}
 
   async findAll() {

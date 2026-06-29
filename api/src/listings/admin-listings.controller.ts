@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Req, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Inject, Param, Post, Req, UseGuards } from "@nestjs/common";
 
 import { AdminGuard } from "../auth/admin.guard";
 import { AuthGuard, AuthenticatedRequest } from "../auth/auth.guard";
@@ -8,7 +8,7 @@ import { ListingsService } from "./listings.service";
 @UseGuards(AuthGuard, AdminGuard)
 @Controller("admin/listings")
 export class AdminListingsController {
-  constructor(private readonly listings: ListingsService) {}
+  constructor(@Inject(ListingsService) private readonly listings: ListingsService) {}
 
   @Get("review-queue")
   findReviewQueue() {

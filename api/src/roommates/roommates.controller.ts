@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Req, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Inject, Param, Post, Req, UseGuards } from "@nestjs/common";
 
 import { AuthGuard, AuthenticatedRequest } from "../auth/auth.guard";
 import { RoommateActionDto } from "./dto";
@@ -6,7 +6,7 @@ import { RoommatesService } from "./roommates.service";
 
 @Controller("roommates")
 export class RoommatesController {
-  constructor(private readonly roommates: RoommatesService) {}
+  constructor(@Inject(RoommatesService) private readonly roommates: RoommatesService) {}
 
   @Get()
   findAll() {

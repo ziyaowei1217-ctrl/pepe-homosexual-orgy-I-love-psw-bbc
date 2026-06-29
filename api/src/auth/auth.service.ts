@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, UnauthorizedException } from "@nestjs/common";
+import { BadRequestException, Inject, Injectable, Optional, UnauthorizedException } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 
 import { createEmailSender, EmailSender } from "../email/email-sender";
@@ -22,8 +22,9 @@ export class AuthService {
   private readonly codeRequestCooldownMs: number;
 
   constructor(
-    private readonly prisma: PrismaService,
-    private readonly jwt: JwtService,
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(JwtService) private readonly jwt: JwtService,
+    @Optional()
     options: AuthServiceOptions = {}
   ) {
     this.nodeEnv = options.nodeEnv ?? process.env.NODE_ENV ?? "development";
