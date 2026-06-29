@@ -3,6 +3,7 @@ import { ConfigModule } from "@nestjs/config";
 import { JwtModule } from "@nestjs/jwt";
 
 import { AuthModule } from "./auth/auth.module";
+import { getJwtSecret } from "./config/env";
 import { DealRoomsModule } from "./deal-rooms/deal-rooms.module";
 import { GroupsModule } from "./groups/groups.module";
 import { ListingsModule } from "./listings/listings.module";
@@ -17,7 +18,7 @@ import { UsersModule } from "./users/users.module";
     ConfigModule.forRoot({ isGlobal: true }),
     JwtModule.register({
       global: true,
-      secret: process.env.JWT_SECRET ?? "dev-change-me",
+      secret: getJwtSecret(),
       signOptions: { expiresIn: "7d" }
     }),
     PrismaModule,

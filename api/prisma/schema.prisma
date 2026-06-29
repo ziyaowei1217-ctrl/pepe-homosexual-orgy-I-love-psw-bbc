@@ -44,12 +44,13 @@ model User {
 model VerificationCode {
   id         String    @id @default(cuid())
   email      String
-  code       String
+  codeHash   String
+  attemptCount Int     @default(0)
   expiresAt  DateTime
   consumedAt DateTime?
   createdAt  DateTime  @default(now())
 
-  @@index([email, code, consumedAt])
+  @@index([email, consumedAt, expiresAt])
 }
 
 model Listing {
