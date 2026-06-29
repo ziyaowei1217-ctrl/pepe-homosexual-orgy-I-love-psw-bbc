@@ -1,14 +1,16 @@
-import { UnauthorizedException } from "@nestjs/common";
+import { BadRequestException, UnauthorizedException } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { describe, expect, it } from "vitest";
 
 import { AuthService } from "../src/auth/auth.service";
+import type { EmailSender } from "../src/email/email-sender";
 
 describe("AuthService", () => {
   it("stores hashed verification codes and verifies them into JWT sessions", async () => {
     const prisma = createPrismaMock();
     const jwt = new JwtService({ secret: "test-secret" });
-    const service = new AuthService(prisma as never, jwt, { nodeEnv: "development" });
+    const sender = createEmailSenderMock();
+    const service = new AuthService(prisma as never, jwt, { nodeEnv: "development", emailSender: sender });
 
     const request = await service.requestEmailCode("Student@Northeastern.edu ");
     const devCode = request.devCode;
@@ -32,7 +34,8 @@ describe("AuthService", () => {
   it("does not return dev codes in production", async () => {
     const prisma = createPrismaMock();
     const jwt = new JwtService({ secret: "test-secret" });
-    const service = new AuthService(prisma as never, jwt, { nodeEnv: "production" });
+    const sender = createEmailSenderMock();
+    const service = new AuthService(prisma as never, jwt, { nodeEnv: "production", emailSender: sender });
 
     const request = await service.requestEmailCode("student@northeastern.edu");
 
@@ -45,7 +48,8 @@ describe("AuthService", () => {
   it("rejects verification after five failed attempts", async () => {
     const prisma = createPrismaMock();
     const jwt = new JwtService({ secret: "test-secret" });
-    const service = new AuthService(prisma as never, jwt, { nodeEnv: "development" });
+    const sender = createEmailSenderMock();
+    const service = new AuthService(prisma as never, jwt, { nodeEnv: "development", emailSender: sender });
 
     await service.requestEmailCode("student@northeastern.edu");
 
@@ -61,10 +65,83 @@ describe("AuthService", () => {
     await expect(
       service.verifyEmailCode({
         email: "student@northeastern.edu",
-        code: prisma.verificationCode.state.devCode!
+        code: sender.sentCodes[0].code
       })
     ).rejects.toBeInstanceOf(UnauthorizedException);
     expect(prisma.verificationCode.state.code?.attemptCount).toBe(5);
+  });
+
+  it("rejects a second code request inside the cooldown window", async () => {
+    const prisma = createPrismaMock();
+    const jwt = new JwtService({ secret: "test-secret" });
+    const sender = createEmailSenderMock();
+    const service = new AuthService(prisma as never, jwt, {
+      nodeEnv: "development",
+      emailSender: sender,
+      codeRequestCooldownMs: 60_000
+    });
+
+    await service.requestEmailCode("student@northeastern.edu");
+
+    await expect(service.requestEmailCode("student@northeastern.edu")).rejects.toBeInstanceOf(BadRequestException);
+    expect(sender.sentCodes).toHaveLength(1);
+  });
+
+  it("invalidates older active codes when issuing a newer code after cooldown", async () => {
+    const prisma = createPrismaMock();
+    const jwt = new JwtService({ secret: "test-secret" });
+    const sender = createEmailSenderMock();
+    const service = new AuthService(prisma as never, jwt, {
+      nodeEnv: "development",
+      emailSender: sender,
+      codeRequestCooldownMs: 0
+    });
+
+    await service.requestEmailCode("student@northeastern.edu");
+    const oldCode = sender.sentCodes[0].code;
+    await service.requestEmailCode("student@northeastern.edu");
+    const newCode = sender.sentCodes[1].code;
+
+    await expect(
+      service.verifyEmailCode({
+        email: "student@northeastern.edu",
+        code: oldCode
+      })
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+
+    const session = await service.verifyEmailCode({
+      email: "student@northeastern.edu",
+      code: newCode
+    });
+
+    expect(session.user.email).toBe("student@northeastern.edu");
+  });
+
+  it("sends production codes through the configured sender without returning devCode", async () => {
+    const prisma = createPrismaMock();
+    const jwt = new JwtService({ secret: "test-secret" });
+    const sender = createEmailSenderMock();
+    const service = new AuthService(prisma as never, jwt, { nodeEnv: "production", emailSender: sender });
+
+    const request = await service.requestEmailCode("student@northeastern.edu");
+
+    expect(request.devCode).toBeUndefined();
+    expect(sender.sentCodes).toHaveLength(1);
+    expect(sender.sentCodes[0]).toEqual({
+      email: "student@northeastern.edu",
+      code: expect.stringMatching(/^\d{6}$/)
+    });
+    expect(prisma.verificationCode.state.codes.at(-1)?.codeHash).not.toBe(sender.sentCodes[0].code);
+  });
+
+  it("fails production requests when the default production sender is not configured", async () => {
+    const prisma = createPrismaMock();
+    const jwt = new JwtService({ secret: "test-secret" });
+    const service = new AuthService(prisma as never, jwt, { nodeEnv: "production" });
+
+    await expect(service.requestEmailCode("student@northeastern.edu")).rejects.toThrow(
+      "Production email sender is not configured"
+    );
   });
 });
 
@@ -87,10 +164,21 @@ type VerificationCodeAttemptUpdate = {
 
 type VerificationCodeUpdateData = Partial<VerificationCodeRecord> | VerificationCodeAttemptUpdate;
 
+function createEmailSenderMock(): EmailSender & { sentCodes: Array<{ email: string; code: string }> } {
+  return {
+    sentCodes: [],
+    async sendVerificationCode(input) {
+      this.sentCodes.push(input);
+    }
+  };
+}
+
 function createPrismaMock() {
   const state = {
-    code: undefined as VerificationCodeRecord | undefined,
-    devCode: undefined as string | undefined,
+    codes: [] as VerificationCodeRecord[],
+    get code() {
+      return this.codes.at(-1);
+    },
     user: undefined as { id: string; email: string; role: string; createdAt: Date } | undefined
   };
 
@@ -98,38 +186,61 @@ function createPrismaMock() {
     verificationCode: {
       state,
       updateCalls: [] as Array<{ where: { id: string }; data: VerificationCodeUpdateData }>,
-      create: async ({ data }: { data: { email: string; code?: string; codeHash?: string; expiresAt: Date; attemptCount?: number } }) => {
-        if (data.code) state.devCode = data.code;
-        state.code = {
-          id: "code-1",
+      create: async ({ data }: { data: { email: string; codeHash?: string; expiresAt: Date; attemptCount?: number } }) => {
+        const created = {
+          id: `code-${state.codes.length + 1}`,
           email: data.email,
-          code: data.code,
           codeHash: data.codeHash,
           attemptCount: data.attemptCount ?? 0,
           expiresAt: data.expiresAt,
           consumedAt: null,
-          createdAt: new Date()
+          createdAt: new Date(Date.now() + state.codes.length)
         };
-        return state.code;
+        state.codes.push(created);
+        return created;
       },
-      findFirst: async ({ where }: { where: { email: string; consumedAt: null; expiresAt: { gt: Date } } }) => {
-        if (!state.code) return null;
-        if (state.code.email !== where.email) return null;
-        if (state.code.consumedAt !== where.consumedAt) return null;
-        if (state.code.expiresAt <= where.expiresAt.gt) return null;
-        return state.code;
+      findFirst: async ({
+        where,
+        orderBy
+      }: {
+        where: { email: string; consumedAt?: null; expiresAt?: { gt: Date } };
+        orderBy?: { createdAt: "desc" };
+      }) => {
+        const matches = state.codes.filter((code) => {
+          if (code.email !== where.email) return false;
+          if ("consumedAt" in where && code.consumedAt !== where.consumedAt) return false;
+          if (where.expiresAt && code.expiresAt <= where.expiresAt.gt) return false;
+          return true;
+        });
+
+        if (orderBy?.createdAt === "desc") {
+          return matches.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0] ?? null;
+        }
+
+        return matches[0] ?? null;
       },
       update: async (args: { where: { id: string }; data: VerificationCodeUpdateData }) => {
-        if (!state.code || state.code.id !== args.where.id) return null;
+        const code = state.codes.find((record) => record.id === args.where.id);
+        if (!code) return null;
 
         if (isAttemptIncrement(args.data)) {
-          state.code.attemptCount = (state.code.attemptCount ?? 0) + args.data.attemptCount.increment;
+          code.attemptCount = (code.attemptCount ?? 0) + args.data.attemptCount.increment;
         } else {
-          state.code = { ...state.code, ...args.data };
+          Object.assign(code, args.data);
         }
 
         mock.verificationCode.updateCalls.push(args);
-        return state.code;
+        return code;
+      },
+      updateMany: async ({ where, data }: { where: { email: string; consumedAt: null }; data: { consumedAt: Date } }) => {
+        let count = 0;
+        for (const code of state.codes) {
+          if (code.email === where.email && code.consumedAt === where.consumedAt) {
+            code.consumedAt = data.consumedAt;
+            count += 1;
+          }
+        }
+        return { count };
       }
     },
     user: {
