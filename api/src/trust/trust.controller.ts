@@ -1,11 +1,13 @@
-import { Controller, Get } from "@nestjs/common";
+import { Controller, Get, Inject } from "@nestjs/common";
 
-import { seedTrustQueues } from "../seed-data";
+import { TrustService } from "./trust.service";
 
 @Controller("trust")
 export class TrustController {
+  constructor(@Inject(TrustService) private readonly trust: TrustService) {}
+
   @Get("queues")
   queues() {
-    return seedTrustQueues;
+    return this.trust.queues();
   }
 }

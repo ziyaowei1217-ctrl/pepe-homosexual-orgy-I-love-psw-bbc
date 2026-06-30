@@ -1,8 +1,10 @@
 import { Module } from "@nestjs/common";
 
 import { TrustController } from "./trust.controller";
+import { TrustService } from "./trust.service";
 
 @Module({
-  controllers: [TrustController]
+  controllers: [TrustController],
+  providers: [TrustService]
 })
 export class TrustModule {}

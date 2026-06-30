@@ -97,6 +97,33 @@ type TourRequestRecord = {
   updatedAt: Date;
 };
 
+type GroupRecord = {
+  id: string;
+  name: string;
+  budget: string;
+  members: unknown;
+  createdAt: Date;
+};
+
+type BookingRecord = {
+  id: string;
+  listingId: string;
+  title: string;
+  amount: number;
+  status: string;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+type TrustQueueItemRecord = {
+  id: string;
+  label: string;
+  value: number;
+  variant: string;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
 type VerificationCodeWhere = {
   email: string;
   consumedAt?: null;
@@ -125,7 +152,10 @@ export function createLaunchPrismaMock() {
     actions: [] as RoommateActionRecord[],
     rooms: [] as DealRoomRecord[],
     members: [] as DealRoomMemberRecord[],
-    tours: [] as TourRequestRecord[]
+    tours: [] as TourRequestRecord[],
+    groups: [] as GroupRecord[],
+    bookings: [] as BookingRecord[],
+    trustQueueItems: [] as TrustQueueItemRecord[]
   };
 
   const mock = {
@@ -378,6 +408,18 @@ export function createLaunchPrismaMock() {
         state.tours.push(created);
         return created;
       }
+    },
+    group: {
+      findMany: async ({ orderBy }: { orderBy?: { createdAt?: "asc" | "desc" } } = {}) =>
+        sortByDate(state.groups, "createdAt", orderBy?.createdAt)
+    },
+    booking: {
+      findMany: async ({ orderBy }: { orderBy?: { createdAt?: "asc" | "desc" } } = {}) =>
+        sortByDate(state.bookings, "createdAt", orderBy?.createdAt)
+    },
+    trustQueueItem: {
+      findMany: async ({ orderBy }: { orderBy?: { updatedAt?: "asc" | "desc" } } = {}) =>
+        sortByDate(state.trustQueueItems, "updatedAt", orderBy?.updatedAt)
     }
   };
 
@@ -430,4 +472,12 @@ function withDealRoomIncludes(
     ...(include.members ? { members: members.filter((member) => member.dealRoomId === room.id) } : {}),
     ...(include.tourRequest ? { tourRequest: tours.find((tour) => tour.dealRoomId === room.id) ?? null } : {})
   };
+}
+
+function sortByDate<T extends Record<K, Date>, K extends keyof T>(records: T[], field: K, direction: "asc" | "desc" = "desc") {
+  return [...records].sort((first, second) => {
+    const firstTime = first[field].getTime();
+    const secondTime = second[field].getTime();
+    return direction === "asc" ? firstTime - secondTime : secondTime - firstTime;
+  });
 }

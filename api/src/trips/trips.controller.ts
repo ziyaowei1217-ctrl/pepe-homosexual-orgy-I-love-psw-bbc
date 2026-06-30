@@ -1,11 +1,13 @@
-import { Controller, Get } from "@nestjs/common";
+import { Controller, Get, Inject } from "@nestjs/common";
 
-import { seedTrips } from "../seed-data";
+import { TripsService } from "./trips.service";
 
 @Controller("trips")
 export class TripsController {
+  constructor(@Inject(TripsService) private readonly trips: TripsService) {}
+
   @Get()
   findAll() {
-    return seedTrips;
+    return this.trips.findAll();
   }
 }

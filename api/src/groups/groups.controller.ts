@@ -1,11 +1,13 @@
-import { Controller, Get } from "@nestjs/common";
+import { Controller, Get, Inject } from "@nestjs/common";
 
-import { seedGroups } from "../seed-data";
+import { GroupsService } from "./groups.service";
 
 @Controller("groups")
 export class GroupsController {
+  constructor(@Inject(GroupsService) private readonly groups: GroupsService) {}
+
   @Get()
   findAll() {
-    return seedGroups;
+    return this.groups.findAll();
   }
 }
