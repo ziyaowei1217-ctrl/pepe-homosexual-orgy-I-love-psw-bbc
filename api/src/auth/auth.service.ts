@@ -87,6 +87,9 @@ export class AuthService {
 
   async verifyEmailCode(dto: VerifyEmailDto) {
     const email = normalizeEmail(dto.email);
+    const code = dto.code.trim();
+    if (!/^\d{6}$/.test(code)) throw new BadRequestException("Verification code must be 6 digits");
+
     const record = await this.prisma.verificationCode.findFirst({
       where: {
         email,
@@ -101,7 +104,7 @@ export class AuthService {
       throw new UnauthorizedException("Invalid or expired verification code");
     }
 
-    if (!verifyEmailCodeHash(email, dto.code, record.codeHash)) {
+    if (!verifyEmailCodeHash(email, code, record.codeHash)) {
       await this.prisma.verificationCode.update({
         where: { id: record.id },
         data: { attemptCount: { increment: 1 } }

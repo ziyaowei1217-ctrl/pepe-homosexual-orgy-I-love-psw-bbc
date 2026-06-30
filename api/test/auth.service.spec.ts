@@ -72,6 +72,25 @@ describe("AuthService", () => {
     expect(prisma.verificationCode.state.code?.attemptCount).toBe(5);
   });
 
+  it("rejects malformed direct verification codes without consuming attempts", async () => {
+    const prisma = createPrismaMock();
+    const jwt = new JwtService({ secret: "test-secret" });
+    const sender = createEmailSenderMock();
+    const service = createAuthService(prisma, jwt, { nodeEnv: "development", emailSender: sender });
+
+    await service.requestEmailCode("student@northeastern.edu");
+
+    await expect(
+      service.verifyEmailCode({
+        email: "student@northeastern.edu",
+        code: "abc123"
+      })
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(prisma.verificationCode.state.code?.attemptCount).toBe(0);
+    expect(prisma.verificationCode.updateCalls).toHaveLength(0);
+  });
+
   it("rejects a second code request inside the cooldown window", async () => {
     const prisma = createPrismaMock();
     const jwt = new JwtService({ secret: "test-secret" });
