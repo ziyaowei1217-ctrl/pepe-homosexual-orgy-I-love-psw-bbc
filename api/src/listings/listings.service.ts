@@ -2,7 +2,7 @@ import { BadRequestException, Inject, Injectable, NotFoundException } from "@nes
 
 import { PrismaService } from "../prisma/prisma.service";
 import { seedListings } from "../seed-data";
-import { ListingDto } from "./dto";
+import { CreateListingDto, UpdateListingDto } from "./dto";
 
 const editableListingStatuses = new Set(["DRAFT", "REJECTED"]);
 
@@ -30,7 +30,7 @@ export class ListingsService {
     return seeded;
   }
 
-  async create(ownerId: string, dto: ListingDto) {
+  async create(ownerId: string, dto: CreateListingDto) {
     return this.prisma.listing.create({
       data: {
         ownerId,
@@ -58,16 +58,21 @@ export class ListingsService {
     });
   }
 
-  async update(ownerId: string, id: string, dto: Partial<ListingDto>) {
+  async update(ownerId: string, id: string, dto: UpdateListingDto) {
     const listing = await this.prisma.listing.findUnique({ where: { id } });
     if (!listing || listing.ownerId !== ownerId) throw new NotFoundException("Listing not found");
     if (!editableListingStatuses.has(listing.status)) {
       throw new BadRequestException("Listing cannot be edited in its current status");
     }
 
+    const data = listingUpdateData(dto);
+    if (Object.keys(data).length === 0) {
+      throw new BadRequestException("At least one editable listing field is required");
+    }
+
     return this.prisma.listing.update({
       where: { id },
-      data: listingUpdateData(dto)
+      data
     });
   }
 
@@ -137,8 +142,8 @@ export class ListingsService {
   }
 }
 
-function listingUpdateData(dto: Partial<ListingDto>) {
-  return {
+function listingUpdateData(dto: UpdateListingDto) {
+  return definedData({
     title: dto.title,
     area: dto.area,
     image: dto.image,
@@ -151,5 +156,9 @@ function listingUpdateData(dto: Partial<ListingDto>) {
     trust: dto.trust,
     tags: dto.tags,
     score: dto.score
-  };
+  });
+}
+
+function definedData<T extends Record<string, unknown>>(data: T) {
+  return Object.fromEntries(Object.entries(data).filter(([, value]) => value !== undefined));
 }

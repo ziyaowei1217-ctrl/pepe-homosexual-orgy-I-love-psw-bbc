@@ -188,6 +188,15 @@ describe("ListingsService", () => {
     await expect(service.update("owner-2", "listing-1", { title: "Updated title" })).rejects.toThrow(NotFoundException);
   });
 
+  it("rejects empty direct service updates before calling Prisma", async () => {
+    const prisma = createPrismaMock({
+      listings: [listingRecord({ id: "listing-1", ownerId: "owner-1", status: "DRAFT" })]
+    });
+    const service = new ListingsService(prisma as never);
+
+    await expect(service.update("owner-1", "listing-1", {})).rejects.toThrow(BadRequestException);
+  });
+
   it.each(["DRAFT", "REJECTED"] as const)("allows owners to submit %s listings", async (status) => {
     const prisma = createPrismaMock({
       listings: [
