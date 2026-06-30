@@ -1,0 +1,94 @@
+import { ExecutionContext, UnauthorizedException } from "@nestjs/common";
+import { JwtService } from "@nestjs/jwt";
+import { describe, expect, it } from "vitest";
+
+import { AuthenticatedRequest, AuthGuard } from "../src/auth/auth.guard";
+
+describe("AuthGuard", () => {
+  it("rejects missing bearer tokens", async () => {
+    const guard = new AuthGuard(new JwtService({ secret: "test-secret" }), createPrismaMock() as never);
+
+    await expect(guard.canActivate(contextWithHeader(undefined))).rejects.toBeInstanceOf(UnauthorizedException);
+  });
+
+  it("rejects invalid bearer tokens", async () => {
+    const guard = new AuthGuard(new JwtService({ secret: "test-secret" }), createPrismaMock() as never);
+
+    await expect(guard.canActivate(contextWithHeader("Bearer nope"))).rejects.toBeInstanceOf(UnauthorizedException);
+  });
+
+  it("rejects valid tokens when the user no longer exists", async () => {
+    const jwt = new JwtService({ secret: "test-secret" });
+    const token = await jwt.signAsync({ sub: "missing-user", email: "old@example.com", role: "ADMIN" });
+    const guard = new AuthGuard(jwt, createPrismaMock() as never);
+
+    await expect(guard.canActivate(contextWithHeader(`Bearer ${token}`))).rejects.toBeInstanceOf(UnauthorizedException);
+  });
+
+  it("attaches the current database user to the request", async () => {
+    const jwt = new JwtService({ secret: "test-secret" });
+    const token = await jwt.signAsync({ sub: "user-1", email: "old@example.com", role: "ADMIN" });
+    const prisma = createPrismaMock({
+      users: [{ id: "user-1", email: "current@example.com", role: "USER" }]
+    });
+    const request = requestWithHeader(`Bearer ${token}`);
+    const guard = new AuthGuard(jwt, prisma as never);
+
+    await expect(guard.canActivate(contextForRequest(request))).resolves.toBe(true);
+
+    expect(request.user).toEqual({
+      id: "user-1",
+      email: "current@example.com",
+      role: "USER"
+    });
+  });
+
+  it("uses the current database role instead of a stale admin token role", async () => {
+    const jwt = new JwtService({ secret: "test-secret" });
+    const token = await jwt.signAsync({ sub: "user-1", email: "admin@example.com", role: "ADMIN" });
+    const prisma = createPrismaMock({
+      users: [{ id: "user-1", email: "admin@example.com", role: "USER" }]
+    });
+    const request = requestWithHeader(`Bearer ${token}`);
+    const guard = new AuthGuard(jwt, prisma as never);
+
+    await guard.canActivate(contextForRequest(request));
+
+    expect(request.user.role).toBe("USER");
+  });
+});
+
+type TestUser = {
+  id: string;
+  email: string;
+  role: string;
+};
+
+function createPrismaMock({ users = [] }: { users?: TestUser[] } = {}) {
+  return {
+    user: {
+      findUnique: async ({ where }: { where: { id: string } }) => users.find((user) => user.id === where.id) ?? null
+    }
+  };
+}
+
+function requestWithHeader(authorization?: string): AuthenticatedRequest {
+  return {
+    headers: {
+      ...(authorization ? { authorization } : {})
+    },
+    user: undefined as never
+  };
+}
+
+function contextWithHeader(authorization?: string): ExecutionContext {
+  return contextForRequest(requestWithHeader(authorization));
+}
+
+function contextForRequest(request: AuthenticatedRequest): ExecutionContext {
+  return {
+    switchToHttp: () => ({
+      getRequest: () => request
+    })
+  } as unknown as ExecutionContext;
+}

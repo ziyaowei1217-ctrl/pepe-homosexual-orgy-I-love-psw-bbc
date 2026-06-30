@@ -186,6 +186,8 @@ export function createLaunchPrismaMock() {
       }
     },
     user: {
+      findUnique: async ({ where }: { where: { id: string } }) =>
+        state.users.find((user) => user.id === where.id) ?? null,
       upsert: async ({ where, create }: { where: { email: string }; create: { email: string } }) => {
         const existing = state.users.find((user) => user.email === where.email);
         if (existing) return existing;
