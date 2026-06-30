@@ -38,6 +38,8 @@ const maxShortTextLength = 140;
 const maxLongTextLength = 280;
 const maxTags = 12;
 const maxTagLength = 40;
+const maxMediaKindLength = 40;
+const maxMediaSortOrder = 10_000;
 const maxRejectionReasonLength = 500;
 
 type EditableListingField = (typeof editableListingFields)[number];
@@ -237,6 +239,27 @@ export class UpdateListingDto {
 }
 
 export class ListingDto extends CreateListingDto {}
+
+export class CreateListingMediaDto {
+  @Trim()
+  @IsString()
+  @IsNotEmpty()
+  @IsUrl()
+  @MaxLength(maxLongTextLength)
+  url!: string;
+
+  @Trim()
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(maxMediaKindLength)
+  kind!: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(maxMediaSortOrder)
+  sortOrder?: number;
+}
 
 export class RejectListingDto {
   @Trim()

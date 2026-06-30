@@ -64,4 +64,4 @@ RUN_DB_SMOKE=1 DATABASE_URL='postgresql://sublet:sublet@localhost:5432/sublet_pi
 
 ## Current Scope
 
-The API supports email-code login, JWT sessions, listing creation/update, listing reads, roommate actions, active deal rooms, idempotent group-tour requests, and database-backed reads with seed fallback for groups, trips, and trust queues. Stripe, Mapbox, real email delivery, Redis queues, and production moderation providers are not wired yet.
+The API supports email-code login, JWT sessions, listing creation/update, listing media metadata, listing reads, roommate actions, active deal rooms, idempotent group-tour requests, and database-backed reads with seed fallback for groups, trips, and trust queues. Stripe, Mapbox, real email delivery, Redis queues, and production moderation providers are not wired yet.

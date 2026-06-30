@@ -139,6 +139,87 @@ describe("listing HTTP validation", () => {
         expect(body.rejectionReason).toBe("Needs clearer bedroom photos");
       });
   });
+
+  it("validates listing media payloads and stores owner media", async () => {
+    const http = request(app.getHttpServer());
+    const created = await createListing(http, token);
+
+    await http
+      .post(`/api/v1/listings/${created.id}/media`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({
+        url: "not-a-url",
+        kind: "bedroom"
+      })
+      .expect(400);
+
+    await http
+      .post(`/api/v1/listings/${created.id}/media`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({
+        url: "https://example.com/bedroom.jpg",
+        kind: "   "
+      })
+      .expect(400);
+
+    await http
+      .post(`/api/v1/listings/${created.id}/media`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({
+        url: "https://example.com/bedroom.jpg",
+        kind: "bedroom",
+        extra: true
+      })
+      .expect(400);
+
+    await http
+      .post(`/api/v1/listings/${created.id}/media`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({
+        url: "https://example.com/bedroom.jpg",
+        kind: "bedroom",
+        sortOrder: 1.5
+      })
+      .expect(400);
+
+    await http
+      .post(`/api/v1/listings/${created.id}/media`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({
+        url: " https://example.com/bedroom.jpg ",
+        kind: " bedroom ",
+        sortOrder: 2
+      })
+      .expect(201)
+      .expect(({ body }: { body: Record<string, unknown> }) => {
+        expect(body).toMatchObject({
+          listingId: created.id,
+          url: "https://example.com/bedroom.jpg",
+          kind: "bedroom",
+          sortOrder: 2
+        });
+      });
+  });
+
+  it("hides listing media creation from non-owners and blocks submitted listings", async () => {
+    const http = request(app.getHttpServer());
+    const created = await createListing(http, token);
+    const otherToken = await signIn(app, "other@example.com");
+
+    await http
+      .post(`/api/v1/listings/${created.id}/media`)
+      .set("Authorization", `Bearer ${otherToken}`)
+      .send(mediaPayload())
+      .expect(404);
+
+    await http.post(`/api/v1/listings/${created.id}/submit`).set("Authorization", `Bearer ${token}`).expect(201);
+
+    await http
+      .post(`/api/v1/listings/${created.id}/media`)
+      .set("Authorization", `Bearer ${token}`)
+      .send(mediaPayload())
+      .expect(400);
+  });
 });
 
 async function signIn(app: INestApplication, email: string) {
@@ -170,5 +251,13 @@ function listingPayload() {
     trust: ".edu verified",
     tags: ["video tour", "verified"],
     score: 4.9
+  };
+}
+
+function mediaPayload() {
+  return {
+    url: "https://example.com/bedroom.jpg",
+    kind: "bedroom",
+    sortOrder: 1
   };
 }

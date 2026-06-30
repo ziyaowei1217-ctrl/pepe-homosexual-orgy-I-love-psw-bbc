@@ -46,6 +46,15 @@ type ListingRecord = {
   updatedAt: Date;
 };
 
+type ListingMediaRecord = {
+  id: string;
+  listingId: string;
+  url: string;
+  kind: string;
+  sortOrder: number;
+  createdAt: Date;
+};
+
 type RoommateRecord = {
   id: string;
   name: string;
@@ -143,11 +152,20 @@ type ListingOrderBy = {
   score?: "asc" | "desc";
 };
 
+type ListingInclude = {
+  media?: {
+    orderBy?: {
+      sortOrder?: "asc" | "desc";
+    };
+  };
+};
+
 export function createLaunchPrismaMock() {
   const state = {
     codes: [] as VerificationCodeRecord[],
     users: [] as UserRecord[],
     listings: [] as ListingRecord[],
+    listingMedia: [] as ListingMediaRecord[],
     roommates: [] as RoommateRecord[],
     actions: [] as RoommateActionRecord[],
     rooms: [] as DealRoomRecord[],
@@ -234,13 +252,26 @@ export function createLaunchPrismaMock() {
       }
     },
     listing: {
-      findMany: async ({ where, orderBy, take }: { where?: ListingWhere; orderBy?: ListingOrderBy; take?: number } = {}) => {
+      findMany: async ({
+        where,
+        orderBy,
+        take,
+        include
+      }: {
+        where?: ListingWhere;
+        orderBy?: ListingOrderBy;
+        take?: number;
+        include?: ListingInclude;
+      } = {}) => {
         const filtered = state.listings.filter((listing) => matchesListing(listing, where));
         const sorted = sortListings(filtered, orderBy);
-        return typeof take === "number" ? sorted.slice(0, take) : sorted;
+        const records = typeof take === "number" ? sorted.slice(0, take) : sorted;
+        return records.map((listing) => withListingIncludes(listing, state.listingMedia, include));
       },
-      findUnique: async ({ where }: { where: { id: string } }) =>
-        state.listings.find((listing) => listing.id === where.id) ?? null,
+      findUnique: async ({ where, include }: { where: { id: string }; include?: ListingInclude }) => {
+        const listing = state.listings.find((record) => record.id === where.id);
+        return listing ? withListingIncludes(listing, state.listingMedia, include) : null;
+      },
       create: async ({ data }: { data: Omit<Partial<ListingRecord>, "id" | "createdAt" | "updatedAt"> & Pick<ListingRecord, "ownerId" | "title"> }) => {
         const created: ListingRecord = {
           id: `listing-${state.listings.length + 1}`,
@@ -274,6 +305,21 @@ export function createLaunchPrismaMock() {
 
         Object.assign(listing, definedData(data), { updatedAt: new Date() });
         return listing;
+      }
+    },
+    listingMedia: {
+      create: async ({
+        data
+      }: {
+        data: Pick<ListingMediaRecord, "listingId" | "url" | "kind" | "sortOrder">;
+      }) => {
+        const created: ListingMediaRecord = {
+          id: `media-${state.listingMedia.length + 1}`,
+          ...data,
+          createdAt: new Date()
+        };
+        state.listingMedia.push(created);
+        return created;
       }
     },
     roommateProfile: {
@@ -451,6 +497,12 @@ function sortListings(listings: ListingRecord[], orderBy: ListingOrderBy = {}) {
   });
 }
 
+function sortListingMedia(media: ListingMediaRecord[], direction: "asc" | "desc" = "asc") {
+  return [...media].sort((first, second) =>
+    direction === "desc" ? second.sortOrder - first.sortOrder : first.sortOrder - second.sortOrder
+  );
+}
+
 function orderValue(value: unknown) {
   if (value instanceof Date) return value.getTime();
   if (typeof value === "number") return value;
@@ -471,6 +523,18 @@ function withDealRoomIncludes(
     ...room,
     ...(include.members ? { members: members.filter((member) => member.dealRoomId === room.id) } : {}),
     ...(include.tourRequest ? { tourRequest: tours.find((tour) => tour.dealRoomId === room.id) ?? null } : {})
+  };
+}
+
+function withListingIncludes(listing: ListingRecord, media: ListingMediaRecord[], include: ListingInclude = {}) {
+  if (!include.media) return listing;
+
+  return {
+    ...listing,
+    media: sortListingMedia(
+      media.filter((item) => item.listingId === listing.id),
+      include.media.orderBy?.sortOrder
+    )
   };
 }
 

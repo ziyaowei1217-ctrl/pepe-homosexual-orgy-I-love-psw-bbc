@@ -2,9 +2,16 @@ import { BadRequestException, Inject, Injectable, NotFoundException } from "@nes
 
 import { PrismaService } from "../prisma/prisma.service";
 import { seedListings } from "../seed-data";
-import { CreateListingDto, UpdateListingDto } from "./dto";
+import { CreateListingDto, CreateListingMediaDto, UpdateListingDto } from "./dto";
 
 const editableListingStatuses = new Set(["DRAFT", "REJECTED"]);
+const listingMediaInclude = {
+  media: {
+    orderBy: {
+      sortOrder: "asc" as const
+    }
+  }
+};
 
 @Injectable()
 export class ListingsService {
@@ -20,7 +27,7 @@ export class ListingsService {
   }
 
   async findOne(id: string) {
-    const record = await this.prisma.listing.findUnique({ where: { id } });
+    const record = await this.prisma.listing.findUnique({ where: { id }, include: listingMediaInclude });
     if (record?.status === "APPROVED") return record;
     if (record) throw new NotFoundException("Listing not found");
 
@@ -54,7 +61,25 @@ export class ListingsService {
   async findMine(ownerId: string) {
     return this.prisma.listing.findMany({
       where: { ownerId },
-      orderBy: { updatedAt: "desc" }
+      orderBy: { updatedAt: "desc" },
+      include: listingMediaInclude
+    });
+  }
+
+  async addMedia(ownerId: string, id: string, dto: CreateListingMediaDto) {
+    const listing = await this.prisma.listing.findUnique({ where: { id } });
+    if (!listing || listing.ownerId !== ownerId) throw new NotFoundException("Listing not found");
+    if (!editableListingStatuses.has(listing.status)) {
+      throw new BadRequestException("Listing cannot accept media in its current status");
+    }
+
+    return this.prisma.listingMedia.create({
+      data: {
+        listingId: id,
+        url: dto.url.trim(),
+        kind: dto.kind.trim(),
+        sortOrder: dto.sortOrder ?? 0
+      }
     });
   }
 
@@ -98,7 +123,8 @@ export class ListingsService {
   async findReviewQueue() {
     return this.prisma.listing.findMany({
       where: { status: "SUBMITTED" },
-      orderBy: { submittedAt: "asc" }
+      orderBy: { submittedAt: "asc" },
+      include: listingMediaInclude
     });
   }
 

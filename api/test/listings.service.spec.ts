@@ -31,6 +31,15 @@ type ListingRecord = {
   updatedAt: Date;
 };
 
+type ListingMediaRecord = {
+  id: string;
+  listingId: string;
+  url: string;
+  kind: string;
+  sortOrder: number;
+  createdAt: Date;
+};
+
 type ListingWhere = {
   id?: string;
   ownerId?: string;
@@ -43,15 +52,25 @@ type ListingOrderBy = {
   submittedAt?: "asc" | "desc";
 };
 
+type ListingInclude = {
+  media?: {
+    orderBy?: {
+      sortOrder?: "asc" | "desc";
+    };
+  };
+};
+
 type ListingFindManyArgs = {
   where?: ListingWhere;
   orderBy?: ListingOrderBy;
+  include?: ListingInclude;
 };
 
 type ListingFindUniqueArgs = {
   where: {
     id: string;
   };
+  include?: ListingInclude;
 };
 
 type ListingCreateArgs = {
@@ -63,6 +82,10 @@ type ListingUpdateArgs = {
     id: string;
   };
   data: Partial<ListingRecord>;
+};
+
+type ListingMediaCreateArgs = {
+  data: Pick<ListingMediaRecord, "listingId" | "url" | "kind" | "sortOrder">;
 };
 
 describe("ListingsService", () => {
@@ -94,6 +117,25 @@ describe("ListingsService", () => {
     const service = new ListingsService(prisma as never);
 
     await expect(service.findOne("approved")).resolves.toMatchObject({ id: "approved" });
+  });
+
+  it("returns approved detail reads with media sorted by sort order", async () => {
+    const prisma = createPrismaMock({
+      listings: [listingRecord({ id: "approved", ownerId: "owner-1", status: "APPROVED" })],
+      media: [
+        mediaRecord({ id: "media-2", listingId: "approved", sortOrder: 2 }),
+        mediaRecord({ id: "media-1", listingId: "approved", sortOrder: 1 })
+      ]
+    });
+    const service = new ListingsService(prisma as never);
+
+    await expect(service.findOne("approved")).resolves.toMatchObject({
+      id: "approved",
+      media: [{ id: "media-1" }, { id: "media-2" }]
+    });
+    expect(prisma.listing.findUniqueCalls[0]?.include).toEqual({
+      media: { orderBy: { sortOrder: "asc" } }
+    });
   });
 
   it("hides non-approved database listings from public detail reads", async () => {
@@ -145,6 +187,79 @@ describe("ListingsService", () => {
     const service = new ListingsService(prisma as never);
 
     await expect(service.findMine("owner-1")).resolves.toMatchObject([{ id: "newer" }, { id: "older" }]);
+  });
+
+  it("lists current-user listings with sorted media", async () => {
+    const prisma = createPrismaMock({
+      listings: [listingRecord({ id: "listing-1", ownerId: "owner-1", status: "DRAFT" })],
+      media: [
+        mediaRecord({ id: "media-2", listingId: "listing-1", sortOrder: 2 }),
+        mediaRecord({ id: "media-1", listingId: "listing-1", sortOrder: 1 })
+      ]
+    });
+    const service = new ListingsService(prisma as never);
+
+    await expect(service.findMine("owner-1")).resolves.toMatchObject([
+      {
+        id: "listing-1",
+        media: [{ id: "media-1" }, { id: "media-2" }]
+      }
+    ]);
+    expect(prisma.listing.findManyCalls[0]?.include).toEqual({
+      media: { orderBy: { sortOrder: "asc" } }
+    });
+  });
+
+  it.each(["DRAFT", "REJECTED"] as const)("allows owners to add media to %s listings", async (status) => {
+    const prisma = createPrismaMock({ listings: [listingRecord({ id: "listing-1", ownerId: "owner-1", status })] });
+    const service = new ListingsService(prisma as never);
+
+    const media = await service.addMedia("owner-1", "listing-1", {
+      url: "https://example.com/bedroom.jpg",
+      kind: "bedroom",
+      sortOrder: 2
+    });
+
+    expect(media).toMatchObject({
+      listingId: "listing-1",
+      url: "https://example.com/bedroom.jpg",
+      kind: "bedroom",
+      sortOrder: 2
+    });
+    expect(prisma.listingMedia.createCalls[0]?.data).toEqual({
+      listingId: "listing-1",
+      url: "https://example.com/bedroom.jpg",
+      kind: "bedroom",
+      sortOrder: 2
+    });
+  });
+
+  it("returns not found when a non-owner adds media", async () => {
+    const prisma = createPrismaMock({
+      listings: [listingRecord({ id: "listing-1", ownerId: "owner-1", status: "DRAFT" })]
+    });
+    const service = new ListingsService(prisma as never);
+
+    await expect(
+      service.addMedia("owner-2", "listing-1", {
+        url: "https://example.com/bedroom.jpg",
+        kind: "bedroom",
+        sortOrder: 1
+      })
+    ).rejects.toThrow(NotFoundException);
+  });
+
+  it.each(["SUBMITTED", "APPROVED"] as const)("blocks owners from adding media to %s listings", async (status) => {
+    const prisma = createPrismaMock({ listings: [listingRecord({ id: "listing-1", ownerId: "owner-1", status })] });
+    const service = new ListingsService(prisma as never);
+
+    await expect(
+      service.addMedia("owner-1", "listing-1", {
+        url: "https://example.com/bedroom.jpg",
+        kind: "bedroom",
+        sortOrder: 1
+      })
+    ).rejects.toThrow(BadRequestException);
   });
 
   it.each(["DRAFT", "REJECTED"] as const)("allows owners to update %s listings", async (status) => {
@@ -255,6 +370,27 @@ describe("ListingsService", () => {
     await expect(service.findReviewQueue()).resolves.toMatchObject([{ id: "older" }, { id: "newer" }]);
   });
 
+  it("returns submitted listings for review with sorted media", async () => {
+    const prisma = createPrismaMock({
+      listings: [listingRecord({ id: "submitted", status: "SUBMITTED" })],
+      media: [
+        mediaRecord({ id: "media-2", listingId: "submitted", sortOrder: 2 }),
+        mediaRecord({ id: "media-1", listingId: "submitted", sortOrder: 1 })
+      ]
+    });
+    const service = new ListingsService(prisma as never);
+
+    await expect(service.findReviewQueue()).resolves.toMatchObject([
+      {
+        id: "submitted",
+        media: [{ id: "media-1" }, { id: "media-2" }]
+      }
+    ]);
+    expect(prisma.listing.findManyCalls[0]?.include).toEqual({
+      media: { orderBy: { sortOrder: "asc" } }
+    });
+  });
+
   it("approves submitted listings and records reviewer metadata", async () => {
     const prisma = createPrismaMock({ listings: [listingRecord({ id: "listing-1", status: "SUBMITTED" })] });
     const service = new ListingsService(prisma as never);
@@ -342,16 +478,36 @@ function listingRecord(overrides: Partial<ListingRecord> = {}): ListingRecord {
   };
 }
 
-function createPrismaMock({ listings = [] }: { listings?: ListingRecord[] } = {}) {
+function mediaRecord(overrides: Partial<ListingMediaRecord> = {}): ListingMediaRecord {
+  return {
+    id: "media-1",
+    listingId: "listing-1",
+    url: "https://example.com/bedroom.jpg",
+    kind: "bedroom",
+    sortOrder: 1,
+    createdAt: new Date("2026-01-01T00:00:00.000Z"),
+    ...overrides
+  };
+}
+
+function createPrismaMock({ listings = [], media = [] }: { listings?: ListingRecord[]; media?: ListingMediaRecord[] } = {}) {
   const records = listings.map((listing) => ({ ...listing }));
+  const mediaRecords = media.map((item) => ({ ...item }));
   const mock = {
     listing: {
       createCalls: [] as ListingCreateArgs[],
+      findManyCalls: [] as ListingFindManyArgs[],
+      findUniqueCalls: [] as ListingFindUniqueArgs[],
       findMany: async (args: ListingFindManyArgs = {}) => {
+        mock.listing.findManyCalls.push(args);
         const filtered = records.filter((listing) => matchesWhere(listing, args.where));
-        return sortListings(filtered, args.orderBy);
+        return sortListings(filtered, args.orderBy).map((listing) => withListingIncludes(listing, mediaRecords, args.include));
       },
-      findUnique: async (args: ListingFindUniqueArgs) => records.find((listing) => listing.id === args.where.id) ?? null,
+      findUnique: async (args: ListingFindUniqueArgs) => {
+        mock.listing.findUniqueCalls.push(args);
+        const listing = records.find((record) => record.id === args.where.id);
+        return listing ? withListingIncludes(listing, mediaRecords, args.include) : null;
+      },
       create: async (args: ListingCreateArgs) => {
         mock.listing.createCalls.push(args);
         const record = listingRecord({
@@ -375,6 +531,19 @@ function createPrismaMock({ listings = [] }: { listings?: ListingRecord[] } = {}
         };
         records[index] = updated;
         return updated;
+      }
+    },
+    listingMedia: {
+      createCalls: [] as ListingMediaCreateArgs[],
+      create: async (args: ListingMediaCreateArgs) => {
+        mock.listingMedia.createCalls.push(args);
+        const created = mediaRecord({
+          id: `media-${mediaRecords.length + 1}`,
+          createdAt: new Date(),
+          ...args.data
+        });
+        mediaRecords.push(created);
+        return created;
       }
     }
   };
@@ -402,4 +571,19 @@ function sortListings(listings: ListingRecord[], orderBy: ListingOrderBy = {}) {
 
 function dateValue(value: unknown) {
   return value instanceof Date ? value.getTime() : 0;
+}
+
+function withListingIncludes(listing: ListingRecord, media: ListingMediaRecord[], include?: ListingInclude) {
+  if (!include?.media) return listing;
+
+  const sortedMedia = [...media]
+    .filter((item) => item.listingId === listing.id)
+    .sort((first, second) =>
+      include.media?.orderBy?.sortOrder === "desc" ? second.sortOrder - first.sortOrder : first.sortOrder - second.sortOrder
+    );
+
+  return {
+    ...listing,
+    media: sortedMedia
+  };
 }
