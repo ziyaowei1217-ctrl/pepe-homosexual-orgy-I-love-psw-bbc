@@ -64,6 +64,44 @@ describe("DealRoomsService", () => {
     expect(prisma.dealRoom.createCalls).toHaveLength(0);
   });
 
+  it("recommends only approved database listings when creating a deal room", async () => {
+    const prisma = createPrismaMock({
+      listings: [
+        listingRecord({ id: "draft-listing", status: "DRAFT", score: 5 }),
+        listingRecord({ id: "approved-listing", status: "APPROVED", score: 4.5 })
+      ]
+    });
+    const service = new DealRoomsService(prisma as never);
+
+    const result = await service.recordRoommateAction({
+      userId: "user-1",
+      roommateProfileId: "roommate-1",
+      action: "LIKE"
+    });
+
+    expect(prisma.listing.findManyCalls[0].where).toEqual({ status: "APPROVED" });
+    expect(result.dealRoom?.recommendedHomes).toMatchObject([{ id: "approved-listing" }]);
+    expect(JSON.stringify(result.dealRoom?.recommendedHomes)).not.toContain("draft-listing");
+  });
+
+  it("keeps seed fallback when no approved database listings exist", async () => {
+    const prisma = createPrismaMock({
+      listings: [listingRecord({ id: "draft-listing", status: "DRAFT" })]
+    });
+    const service = new DealRoomsService(prisma as never);
+
+    const result = await service.recordRoommateAction({
+      userId: "user-1",
+      roommateProfileId: "roommate-1",
+      action: "LIKE"
+    });
+
+    expect(prisma.listing.findManyCalls[0].where).toEqual({ status: "APPROVED" });
+    expect(result.dealRoom?.recommendedHomes).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: expect.stringMatching(/^seed-/) })])
+    );
+  });
+
   it("creates a tour request for an owned deal room idempotently", async () => {
     const prisma = createPrismaMock();
     const service = new DealRoomsService(prisma as never);
@@ -122,7 +160,10 @@ type ListingRecord = {
   trust: string;
   tags: string[];
   score: number;
+  status: ListingStatus;
 };
+
+type ListingStatus = "DRAFT" | "SUBMITTED" | "APPROVED" | "REJECTED";
 
 type DealRoomRecord = {
   id: string;
@@ -136,7 +177,7 @@ type DealRoomRecord = {
   updatedAt: Date;
 };
 
-function createPrismaMock() {
+function createPrismaMock({ listings = [listingRecord()] }: { listings?: ListingRecord[] } = {}) {
   const state = {
     actions: [] as Array<{ id: string; userId: string; roommateProfileId: string; action: string; createdAt: Date; updatedAt: Date }>,
     rooms: [] as DealRoomRecord[],
@@ -156,28 +197,30 @@ function createPrismaMock() {
     tags: ["早睡", "安静"],
     createdAt: new Date("2026-01-01T00:00:00.000Z")
   };
-  const listing: ListingRecord = {
-    id: "listing-1",
-    title: "Fenway verified sublet",
-    area: "Boston · Fenway",
-    image: "https://example.com/home.jpg",
-    price: 1420,
-    originalPrice: 1680,
-    beds: 1,
-    baths: 1,
-    commute: "步行 12 分钟到 Northeastern",
-    transit: "地铁 18 分钟到 Back Bay",
-    trust: ".edu 已认证 · 房东知情",
-    tags: ["独卫", "视频验房"],
-    score: 4.92
-  };
-
   const mock = {
     roommateProfile: {
       findUnique: async ({ where }: { where: { id: string } }) => (where.id === roommate.id ? roommate : null)
     },
     listing: {
-      findMany: async () => [listing]
+      findManyCalls: [] as Array<{
+        where?: { status?: ListingStatus };
+        orderBy?: { score?: "asc" | "desc" };
+        take?: number;
+      }>,
+      findMany: async (
+        args: {
+          where?: { status?: ListingStatus };
+          orderBy?: { score?: "asc" | "desc" };
+          take?: number;
+        } = {}
+      ) => {
+        mock.listing.findManyCalls.push(args);
+        const filtered = listings.filter((listing) => !args.where?.status || listing.status === args.where.status);
+        const sorted = [...filtered].sort((first, second) =>
+          args.orderBy?.score === "desc" ? second.score - first.score : 0
+        );
+        return typeof args.take === "number" ? sorted.slice(0, args.take) : sorted;
+      }
     },
     roommateAction: {
       upsertCalls: [] as Array<{ where: { userId_roommateProfileId: { userId: string; roommateProfileId: string } }; create: unknown; update: unknown }>,
@@ -276,4 +319,24 @@ function createPrismaMock() {
   };
 
   return mock;
+}
+
+function listingRecord(overrides: Partial<ListingRecord> = {}): ListingRecord {
+  return {
+    id: "listing-1",
+    title: "Fenway verified sublet",
+    area: "Boston - Fenway",
+    image: "https://example.com/home.jpg",
+    price: 1420,
+    originalPrice: 1680,
+    beds: 2,
+    baths: 1,
+    commute: "12 minute walk to Northeastern",
+    transit: "18 minutes to Back Bay",
+    trust: ".edu verified",
+    tags: ["Group friendly", "video tour"],
+    score: 4.92,
+    status: "APPROVED",
+    ...overrides
+  };
 }

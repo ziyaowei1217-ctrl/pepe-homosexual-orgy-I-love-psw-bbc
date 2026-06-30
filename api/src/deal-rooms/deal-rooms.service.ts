@@ -195,6 +195,9 @@ export class DealRoomsService {
 
   private async buildRecommendedHomes(roommate: RoommateSnapshot): Promise<ListingSnapshot[]> {
     const records = await this.prisma.listing.findMany({
+      where: {
+        status: "APPROVED"
+      },
       orderBy: {
         score: "desc"
       },
