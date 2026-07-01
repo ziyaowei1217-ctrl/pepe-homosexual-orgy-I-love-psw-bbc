@@ -1,5 +1,4 @@
-import test from "node:test";
-import assert from "node:assert/strict";
+import { describe, expect, it } from "vitest";
 
 import {
   buildDealRoom,
@@ -14,11 +13,11 @@ const roommate: DemoRoommate = {
   id: "roommate-1",
   name: "Jasmine",
   age: 23,
-  role: "Northeastern University - MS Data Science",
+  role: "UCLA - MS Data Science",
   image: "https://example.com/jasmine.jpg",
   match: 89,
   budget: "$1,600/月",
-  commute: "Back Bay / Fenway",
+  commute: "Westwood / Sawtelle",
   tags: ["Clean", "Early riser", "No smoking", "Study focused"]
 };
 
@@ -27,11 +26,11 @@ const groupMembers: DemoRoommate[] = [
     id: "roommate-2",
     name: "Alex",
     age: 24,
-    role: "Northeastern University - MS Data Science",
+    role: "UCLA - MS Data Science",
     image: "https://example.com/alex.jpg",
     match: 92,
     budget: "$1,400/月",
-    commute: "Back Bay",
+    commute: "Westwood",
     tags: ["Clean", "Study focused", "Gym 3-4x/week"]
   }
 ];
@@ -39,15 +38,15 @@ const groupMembers: DemoRoommate[] = [
 const listings: DemoListing[] = [
   {
     id: "listing-1",
-    title: "Back Bay 2B1B Furnished",
-    area: "Boston - Back Bay",
-    image: "https://example.com/back-bay.jpg",
+    title: "Westwood 2B1B Furnished",
+    area: "Los Angeles - Westwood",
+    image: "https://example.com/westwood.jpg",
     price: 1550,
     originalPrice: 1800,
     beds: 2,
     baths: 1,
-    commute: "8 min walk to T",
-    transit: "Back Bay station",
+    commute: "8 min walk to campus",
+    transit: "Westwood transit center",
     trust: "Verified listing - landlord aware",
     tags: ["Group 推荐", "视频验房", "房东知情"],
     score: 4.9
@@ -55,7 +54,7 @@ const listings: DemoListing[] = [
   {
     id: "listing-2",
     title: "Luxury Studio",
-    area: "Boston - Seaport",
+    area: "Los Angeles - Santa Monica",
     image: "https://example.com/studio.jpg",
     price: 3100,
     originalPrice: 3300,
@@ -69,69 +68,70 @@ const listings: DemoListing[] = [
   }
 ];
 
-test("parses roommate budget strings into monthly numbers", () => {
-  assert.equal(getBudgetNumber(roommate), 1600);
-});
-
-test("builds match fit with budget, commute, lifestyle, and trust scores", () => {
-  const fit = buildMatchFit(roommate, listings, groupMembers);
-
-  assert.equal(fit.overall, 89);
-  assert.equal(fit.sharedBudgetLabel, "$1,400 - $1,600 / person");
-  assert.equal(
-    fit.metrics.map((metric) => metric.label).join(","),
-    "Budget overlap,Commute overlap,Lifestyle compatibility,Trust status"
-  );
-  assert.ok(fit.metrics.every((metric) => metric.score >= 80));
-});
-
-test("recommends group-suitable homes before poor fits", () => {
-  const recommended = recommendListingsForRoommate(roommate, listings, groupMembers);
-
-  assert.equal(recommended[0].id, "listing-1");
-  assert.equal(recommended[0].fitLabel, "Best match");
-});
-
-test("builds a deal room with group members, recommendations, messages, and pipeline", () => {
-  const dealRoom = buildDealRoom(roommate, listings, groupMembers);
-
-  assert.deepEqual(dealRoom.members.map((member) => member.name), ["Alex", "Jasmine"]);
-  assert.equal(dealRoom.recommendedHomes[0].id, "listing-1");
-  assert.equal(dealRoom.pipeline[0].status, "active");
-  assert.equal(dealRoom.primaryCta, "Request group tour");
-  assert.ok(dealRoom.messages[0].body.includes("Back Bay"));
-});
-
-test("locks group tour until the current roommate has been liked", () => {
-  const lockedDealRoom = (buildDealRoom as any)(roommate, listings, groupMembers, { readyForTour: false });
-
-  assert.equal(lockedDealRoom.canRequestTour, false);
-  assert.equal(lockedDealRoom.primaryCta, "Like to unlock group tour");
-  assert.equal(lockedDealRoom.pipeline[2].status, "idle");
-  assert.equal(lockedDealRoom.pipeline[2].detail, "Like first");
-});
-
-test("unlocks group tour and derives commercial copy from live match data", () => {
-  const partner: DemoRoommate = {
-    ...groupMembers[0],
-    id: "roommate-3",
-    name: "Priya"
-  };
-  const readyDealRoom = (buildDealRoom as any)(roommate, listings, [partner], { readyForTour: true });
-
-  assert.equal(readyDealRoom.canRequestTour, true);
-  assert.equal(readyDealRoom.primaryCta, "Request group tour");
-  assert.equal(readyDealRoom.messages[1].author, "Priya");
-  assert.equal(readyDealRoom.mapFocusLabel, "Back Bay focus");
-});
-
-test("uses viewer copy when the liked roommate is the only matched member", () => {
-  const readyDealRoom = (buildDealRoom as any)(roommate, listings, [roommate], {
-    readyForTour: true,
-    viewerName: "You"
+describe("match demo", () => {
+  it("parses roommate budget strings into monthly numbers", () => {
+    expect(getBudgetNumber(roommate)).toBe(1600);
   });
 
-  assert.equal(readyDealRoom.messages[1].author, "You");
-  assert.equal(readyDealRoom.trustChecklist[0].detail, "Both verified");
-  assert.equal(readyDealRoom.trustChecklist[2].detail, "Both clear");
+  it("builds match fit with budget, commute, lifestyle, and trust scores", () => {
+    const fit = buildMatchFit(roommate, listings, groupMembers);
+
+    expect(fit.overall).toBe(89);
+    expect(fit.sharedBudgetLabel).toBe("$1,400 - $1,600 / person");
+    expect(fit.metrics.map((metric) => metric.label).join(",")).toBe(
+      "Budget overlap,Commute overlap,Lifestyle compatibility,Trust status"
+    );
+    expect(fit.metrics.every((metric) => metric.score >= 80)).toBe(true);
+  });
+
+  it("recommends group-suitable homes before poor fits", () => {
+    const recommended = recommendListingsForRoommate(roommate, listings, groupMembers);
+
+    expect(recommended[0].id).toBe("listing-1");
+    expect(recommended[0].fitLabel).toBe("Best match");
+  });
+
+  it("builds a deal room with group members, recommendations, messages, and pipeline", () => {
+    const dealRoom = buildDealRoom(roommate, listings, groupMembers);
+
+    expect(dealRoom.members.map((member) => member.name)).toEqual(["Alex", "Jasmine"]);
+    expect(dealRoom.recommendedHomes[0].id).toBe("listing-1");
+    expect(dealRoom.pipeline[0].status).toBe("active");
+    expect(dealRoom.primaryCta).toBe("Request group tour");
+    expect(dealRoom.messages[0].body).toContain("Westwood");
+  });
+
+  it("locks group tour until the current roommate has been liked", () => {
+    const lockedDealRoom = buildDealRoom(roommate, listings, groupMembers, { readyForTour: false });
+
+    expect(lockedDealRoom.canRequestTour).toBe(false);
+    expect(lockedDealRoom.primaryCta).toBe("Like to unlock group tour");
+    expect(lockedDealRoom.pipeline[2].status).toBe("idle");
+    expect(lockedDealRoom.pipeline[2].detail).toBe("Like first");
+  });
+
+  it("unlocks group tour and derives commercial copy from live match data", () => {
+    const partner: DemoRoommate = {
+      ...groupMembers[0],
+      id: "roommate-3",
+      name: "Priya"
+    };
+    const readyDealRoom = buildDealRoom(roommate, listings, [partner], { readyForTour: true });
+
+    expect(readyDealRoom.canRequestTour).toBe(true);
+    expect(readyDealRoom.primaryCta).toBe("Request group tour");
+    expect(readyDealRoom.messages[1].author).toBe("Priya");
+    expect(readyDealRoom.mapFocusLabel).toBe("Westwood focus");
+  });
+
+  it("uses viewer copy when the liked roommate is the only matched member", () => {
+    const readyDealRoom = buildDealRoom(roommate, listings, [roommate], {
+      readyForTour: true,
+      viewerName: "You"
+    });
+
+    expect(readyDealRoom.messages[1].author).toBe("You");
+    expect(readyDealRoom.trustChecklist[0].detail).toBe("Both verified");
+    expect(readyDealRoom.trustChecklist[2].detail).toBe("Both clear");
+  });
 });

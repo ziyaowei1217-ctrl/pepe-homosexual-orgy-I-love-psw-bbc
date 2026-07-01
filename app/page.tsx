@@ -50,15 +50,19 @@ import { Separator } from "@/components/ui/separator";
 import {
   apiGet,
   apiPost,
+  type ApiDealRoom,
   type ApiGroup,
   type ApiListing,
   type ApiRoommate,
+  type ApiRoommateActionResponse,
   type ApiTrip,
   type ApiTrustQueue,
   type SessionUser
 } from "@/lib/api";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
+import { getVisibleSelectedListing } from "@/lib/listing-selection";
+import { getListingStatusMeta, sortOwnerListings, type ListingStatus } from "@/lib/landlord-listings";
 
 type Listing = {
   id: string;
@@ -115,56 +119,7 @@ type QueueItem = {
   variant: "trust" | "warning" | "danger" | "success";
 };
 
-const seedListings: Listing[] = [
-  {
-    id: "1",
-    title: "Fenway 高层主卧短租",
-    area: "Boston · Fenway",
-    image:
-      "https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?auto=format&fit=crop&w=1200&q=80",
-    price: 1420,
-    originalPrice: 1680,
-    beds: 1,
-    baths: 1,
-    commute: "步行 12 分钟到 Northeastern",
-    transit: "地铁 18 分钟到 Back Bay",
-    trust: ".edu 已认证 · 房东知情",
-    tags: ["独卫", "电梯", "可 6/18 入住"],
-    score: 4.92
-  },
-  {
-    id: "2",
-    title: "Cambridge 三室整租 Group 优选",
-    area: "Cambridge · Central",
-    image:
-      "https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?auto=format&fit=crop&w=1200&q=80",
-    price: 3480,
-    originalPrice: 3900,
-    beds: 3,
-    baths: 2,
-    commute: "骑行 9 分钟到 MIT",
-    transit: "红线 14 分钟到 Harvard",
-    trust: "三方协议模板 · 视频验房",
-    tags: ["整租", "宠物友好", "Group 推荐"],
-    score: 4.88
-  },
-  {
-    id: "3",
-    title: "Allston 阳光 Studio",
-    area: "Boston · Allston",
-    image:
-      "https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?auto=format&fit=crop&w=1200&q=80",
-    price: 1980,
-    originalPrice: 2250,
-    beds: 1,
-    baths: 1,
-    commute: "绿线 16 分钟到 BU",
-    transit: "步行 6 分钟到 Packards Corner",
-    trust: "企业邮箱认证 · 首日保障",
-    tags: ["健身房", "门卫", "可短租"],
-    score: 4.84
-  }
-];
+const seedListings: Listing[] = [];
 
 const listingImages = [
   "https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?auto=format&fit=crop&w=1200&q=80",
@@ -180,33 +135,53 @@ const listingImages = [
 ];
 
 const listingAreas = [
-  "Boston · Fenway",
-  "Cambridge · Central",
-  "Boston · Allston",
-  "Boston · Back Bay",
-  "Boston · Mission Hill",
-  "Boston · Seaport",
-  "Cambridge · Kendall",
-  "Somerville · Davis",
-  "Brookline · Coolidge Corner",
-  "Boston · South End"
+  "Los Angeles · Westwood",
+  "Los Angeles · Koreatown",
+  "Los Angeles · Culver City",
+  "Los Angeles · Santa Monica",
+  "Los Angeles · Silver Lake",
+  "Los Angeles · Pasadena",
+  "Los Angeles · DTLA",
+  "Los Angeles · USC North",
+  "Los Angeles · Hollywood",
+  "Los Angeles · Burbank",
+  "Los Angeles · Sawtelle",
+  "Los Angeles · Glendale",
+  "Los Angeles · Mar Vista",
+  "Los Angeles · Echo Park",
+  "Los Angeles · Playa Vista",
+  "Los Angeles · North Hollywood",
+  "Los Angeles · Los Feliz",
+  "Los Angeles · Brentwood",
+  "Los Angeles · Arts District",
+  "Los Angeles · El Segundo"
 ];
 
 const listingTitles = [
-  "采光主卧短租",
-  "高层 Studio 转租",
-  "三室整租 Group 优选",
-  "近校区次卧",
-  "河景公寓短租",
+  "UCLA 步行圈阳光主卧",
+  "地铁口 2B2B 合租",
   "实习通勤友好 1B1B",
-  "宠物友好合租房",
-  "电梯公寓主卧",
-  "暑期短租精选",
-  "地铁口安静卧室"
+  "海边 Studio 转租",
+  "安静次卧短租",
+  "Caltech 附近主卧",
+  "高层 Loft",
+  "3B2B Group 优选",
+  "景观 1B",
+  "影视实习友好次卧",
+  "日系街区主卧",
+  "安全小区 2B1B",
+  "采光 Studio",
+  "湖边合租房",
+  "科技园 1B1B",
+  "地铁旁 2B",
+  "复古公寓主卧",
+  "明亮 1B 转租",
+  "工业风 Loft",
+  "海边通勤 2B2B"
 ];
 
 const listingTagSets = [
-  ["独卫", "电梯", "可 6/18 入住"],
+  ["独卫", "电梯", "可 8/20 入住"],
   ["整租", "宠物友好", "Group 推荐"],
   ["健身房", "门卫", "可短租"],
   ["近地铁", "洗烘", "视频验房"],
@@ -223,24 +198,25 @@ const trustLabels = [
 ];
 
 const commuteTargets = [
-  "Northeastern",
-  "MIT",
-  "Harvard",
-  "BU",
-  "Berklee",
-  "MGH",
-  "Longwood Medical",
-  "Tufts",
-  "Boston College",
-  "Seaport Office"
+  "UCLA",
+  "USC",
+  "Santa Monica",
+  "Culver City",
+  "Caltech",
+  "DTLA",
+  "Burbank Studios",
+  "Silicon Beach",
+  "Hollywood",
+  "LAX"
 ];
 
 function createListings(): Listing[] {
-  const generated = Array.from({ length: 100 }, (_, index) => {
+  const generated = Array.from({ length: 20 }, (_, index) => {
     if (seedListings[index]) return seedListings[index];
 
     const area = listingAreas[index % listingAreas.length];
-    const title = `${area.split(" · ")[0]} ${listingTitles[index % listingTitles.length]}`;
+    const neighborhood = area.split(" · ")[1];
+    const title = `${neighborhood} ${listingTitles[index % listingTitles.length]}`;
     const beds = (index % 4) + 1;
     const baths = Math.min(3, Math.max(1, beds - (index % 2)));
     const price = 980 + ((index * 137) % 3100);
@@ -258,8 +234,8 @@ function createListings(): Listing[] {
       originalPrice,
       beds,
       baths,
-      commute: `${index % 3 === 0 ? "步行" : index % 3 === 1 ? "地铁" : "骑行"} ${commuteMinutes} 分钟到 ${target}`,
-      transit: `公共交通 ${transitMinutes} 分钟 · ${area.split(" · ")[1]}`,
+      commute: `${index % 3 === 0 ? "步行" : index % 3 === 1 ? "轻轨" : "骑行"} ${commuteMinutes} 分钟到 ${target}`,
+      transit: `公共交通 ${transitMinutes} 分钟 · ${neighborhood}`,
       trust: trustLabels[index % trustLabels.length],
       tags: listingTagSets[index % listingTagSets.length],
       score: Number((4.62 + ((index * 7) % 37) / 100).toFixed(2))
@@ -269,41 +245,7 @@ function createListings(): Listing[] {
   return generated;
 }
 
-const seedRoommates: Roommate[] = [
-  {
-    name: "Mia Chen",
-    age: 22,
-    role: "BU MSBA · 秋季入学",
-    image:
-      "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=900&q=80",
-    match: 94,
-    budget: "$1,450/月",
-    commute: "Fenway / Back Bay",
-    tags: ["早睡", "少做饭", "无宠物", "安静"]
-  },
-  {
-    name: "Ethan Liu",
-    age: 24,
-    role: "实习生 · Seaport",
-    image:
-      "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=900&q=80",
-    match: 89,
-    budget: "$1,650/月",
-    commute: "红线 30 分钟内",
-    tags: ["可合租", "周末社交", "爱干净", "健身"]
-  },
-  {
-    name: "Ava Zhang",
-    age: 23,
-    role: "Northeastern Co-op",
-    image:
-      "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=900&q=80",
-    match: 91,
-    budget: "$1,520/月",
-    commute: "步行到校区",
-    tags: ["会做饭", "猫友好", "不抽烟", "稳定"]
-  }
-];
+const seedRoommates: Roommate[] = [];
 
 const roommateImages = [
   "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=900&q=80",
@@ -334,20 +276,34 @@ const roommateNames = [
   "Emily Zhao",
   "Aaron Sun",
   "Claire Guo",
-  "Victor Tan"
+  "Victor Tan",
+  "Olivia Park",
+  "Mark Chen",
+  "Selina Ho",
+  "Brian Ma"
 ];
 
 const roommateRoles = [
-  "BU MSBA · 秋季入学",
-  "实习生 · Seaport",
-  "Northeastern Co-op",
-  "MIT MEng · Robotics",
-  "Harvard GSD · Studio",
-  "Kendall SWE Intern",
-  "Berklee Music Business",
-  "Seaport PM Intern",
-  "BU Data Science",
-  "Tufts Fletcher · Fall"
+  "UCLA MSBA · 秋季入学",
+  "Culver City Product Intern",
+  "USC Viterbi · CS",
+  "Caltech Research Assistant",
+  "Otis Design · Junior",
+  "Burbank Studio Intern",
+  "UCLA Extension · Film",
+  "DTLA Finance Analyst",
+  "USC Marshall · Fall",
+  "Santa Monica SWE",
+  "LMU MBA · Evening",
+  "Glendale Animation Intern",
+  "Pasadena ArtCenter",
+  "El Segundo Aerospace PM",
+  "Koreatown Healthcare Admin",
+  "North Hollywood Editor",
+  "UCLA Public Health",
+  "Arts District Designer",
+  "USC Annenberg",
+  "Silver Lake Startup Ops"
 ];
 
 const roommateTagSets = [
@@ -360,7 +316,18 @@ const roommateTagSets = [
 ];
 
 function createRoommates(): Roommate[] {
-  return Array.from({ length: 50 }, (_, index) => {
+  const commuteZones = [
+    "Westwood / Sawtelle",
+    "Culver City / Santa Monica",
+    "USC North / DTLA",
+    "Pasadena / Glendale",
+    "Playa Vista / Culver City",
+    "Burbank / Hollywood",
+    "DTLA / Arts District",
+    "Koreatown / USC"
+  ];
+
+  return Array.from({ length: 20 }, (_, index) => {
     if (seedRoommates[index]) return seedRoommates[index];
 
     const budget = 1150 + ((index * 73) % 950);
@@ -372,7 +339,7 @@ function createRoommates(): Roommate[] {
       image: roommateImages[index % roommateImages.length],
       match: 82 + ((index * 3) % 17),
       budget: `$${budget.toLocaleString()}/月`,
-      commute: index % 2 === 0 ? "25 分钟通勤圈" : "步行/地铁优先",
+      commute: commuteZones[index % commuteZones.length],
       tags: roommateTagSets[index % roommateTagSets.length]
     };
   });
@@ -428,6 +395,21 @@ function normalizeRoommate(roommate: ApiRoommate): Roommate {
   };
 }
 
+function getRoommatesFromDealRooms(dealRooms: ApiDealRoom[]): Roommate[] {
+  const seen = new Set<string>();
+  const members = dealRooms.flatMap((room) => room.members ?? []);
+
+  return members.flatMap((member) => {
+    if (!member.snapshot) return [];
+    const roommate = normalizeRoommate(member.snapshot);
+    const key = roommate.id ?? roommate.name;
+    if (seen.has(key)) return [];
+    seen.add(key);
+
+    return [roommate];
+  });
+}
+
 export default function HomePage() {
   const [allListings, setAllListings] = useState(listings);
   const [selectedListing, setSelectedListing] = useState(listings[0]);
@@ -439,8 +421,8 @@ export default function HomePage() {
   const [activeSection, setActiveSection] = useState<AppSection>("Roommates");
   const [viewMode, setViewMode] = useState<ViewMode>("map");
   const [filters, setFilters] = useState<SearchFilters>({
-    query: "Northeastern University",
-    budget: 2200,
+    query: "Los Angeles",
+    budget: 4200,
     amenity: "Wi-Fi"
   });
   const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set(["1"]));
@@ -453,6 +435,9 @@ export default function HomePage() {
   const [apiError, setApiError] = useState<string | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [user, setUser] = useState<SessionUser | null>(null);
+  const [activeDealRoomId, setActiveDealRoomId] = useState<string | null>(null);
+  const [myListings, setMyListings] = useState<ApiListing[]>([]);
+  const [isPublishing, setIsPublishing] = useState(false);
 
   useEffect(() => {
     const storedToken = window.localStorage.getItem("sublet_token");
@@ -506,6 +491,37 @@ export default function HomePage() {
     void loadMe();
   }, [token]);
 
+  useEffect(() => {
+    async function loadAuthenticatedWorkspace() {
+      if (!token) {
+        setMyListings([]);
+        setActiveDealRoomId(null);
+        return;
+      }
+
+      try {
+        const [ownedListings, dealRooms] = await Promise.all([
+          apiGet<ApiListing[]>("/listings/mine", token),
+          apiGet<ApiDealRoom[]>("/deal-rooms/active", token)
+        ]);
+        const sortedListings = sortOwnerListings(
+          ownedListings.filter((listing): listing is ApiListing & { status: ListingStatus } => Boolean(listing.status))
+        );
+        const dealRoomMembers = getRoommatesFromDealRooms(dealRooms);
+
+        setMyListings(sortedListings);
+        setActiveDealRoomId(dealRooms[0]?.id ?? null);
+        setLikedRoommateIds(new Set(dealRooms.map((room) => room.roommateProfileId)));
+        if (dealRoomMembers.length > 0) setGroupMembers(dealRoomMembers.slice(-4));
+        setTourRequested(dealRooms.some((room) => room.tourRequest?.status === "REQUESTED"));
+      } catch (error) {
+        setToast(error instanceof Error ? error.message : "登录工作台加载失败");
+      }
+    }
+
+    void loadAuthenticatedWorkspace();
+  }, [token]);
+
   const roommate = apiRoommates[roommateIndex] ?? apiRoommates[0] ?? roommates[0];
   const roommateKey = roommate.id ?? roommate.name;
   const canRequestTour = likedRoommateIds.has(roommateKey);
@@ -523,7 +539,7 @@ export default function HomePage() {
         ]
           .join(" ")
           .toLowerCase();
-        const matchesQuery = !query || haystack.includes(query) || query.includes("northeastern");
+        const matchesQuery = !query || haystack.includes(query) || query === "la";
         const matchesBudget = listing.price <= filters.budget || listing.tags.includes("Group 推荐");
         const matchesAmenity =
           filters.amenity === "Wi-Fi" ||
@@ -537,6 +553,7 @@ export default function HomePage() {
     [allListings, filters]
   );
   const visibleListings = filteredListings;
+  const visibleSelectedListing = getVisibleSelectedListing(selectedListing, visibleListings);
   const groupBudget = useMemo(() => {
     const total = groupMembers.reduce((sum, member) => {
       const amount = Number(member.budget.replace(/[^0-9]/g, ""));
@@ -545,6 +562,10 @@ export default function HomePage() {
 
     return `$${total.toLocaleString()}/月`;
   }, [groupMembers]);
+
+  useEffect(() => {
+    window.scrollTo({ left: 0, top: 0 });
+  }, [activeSection]);
 
   function cycleRoommate(direction: 1 | -1) {
     setRoommateIndex((current) => {
@@ -574,32 +595,81 @@ export default function HomePage() {
     });
   }
 
-  function handleAcceptRoommate() {
+  async function handleAcceptRoommate() {
     setLikedRoommateIds((current) => new Set(current).add(roommateKey));
     setGroupMembers((current) => {
       if (current.some((member) => member.name === roommate.name)) return current;
       return [...current, roommate].slice(-4);
     });
     setTourRequested(false);
-    setToast(`${roommate.name} 已匹配，Deal Room 已更新`);
+    if (!token || !roommate.id) {
+      setToast(`${roommate.name} 已匹配，Deal Room 已更新`);
+      return;
+    }
+
+    try {
+      const response = await apiPost<ApiRoommateActionResponse>(
+        `/roommates/${roommate.id}/actions`,
+        { action: "LIKE" },
+        token
+      );
+      setActiveDealRoomId(response.dealRoom?.id ?? null);
+      setToast(`${roommate.name} 已匹配，Deal Room 已同步`);
+    } catch (error) {
+      setToast(error instanceof Error ? `本地已匹配，后端同步失败：${error.message}` : "本地已匹配，后端同步失败");
+    }
   }
 
-  function handleRejectRoommate() {
+  async function handleRejectRoommate() {
+    const rejectedRoommate = roommate;
     setSkippedCount((current) => current + 1);
     setTourRequested(false);
-    setToast(`已跳过 ${roommate.name}`);
+    setToast(`已跳过 ${rejectedRoommate.name}`);
     cycleRoommate(1);
+
+    if (!token || !rejectedRoommate.id) return;
+
+    try {
+      await apiPost(`/roommates/${rejectedRoommate.id}/actions`, { action: "PASS" }, token);
+    } catch (error) {
+      setToast(error instanceof Error ? `跳过已保留，本地同步成功；后端失败：${error.message}` : "跳过已保留，本地同步成功；后端失败");
+    }
   }
 
-  function handleLaterRoommate() {
+  async function handleLaterRoommate() {
+    const laterRoommate = roommate;
     setTourRequested(false);
-    setToast(`${roommate.name} 已放入稍后查看`);
+    setToast(`${laterRoommate.name} 已放入稍后查看`);
     cycleRoommate(1);
+
+    if (!token || !laterRoommate.id) return;
+
+    try {
+      await apiPost(`/roommates/${laterRoommate.id}/actions`, { action: "LATER" }, token);
+    } catch (error) {
+      setToast(error instanceof Error ? `稍后查看已保留，本地同步成功；后端失败：${error.message}` : "稍后查看已保留，本地同步成功；后端失败");
+    }
   }
 
-  function handleRequestGroupTour() {
+  async function handleRequestGroupTour() {
     if (!canRequestTour) {
       setToast("先 Like 室友，再发起 Group Tour");
+      return;
+    }
+
+    if (token) {
+      if (!activeDealRoomId) {
+        setToast("Deal Room 还在同步，请稍后再发起 Group Tour");
+        return;
+      }
+
+      try {
+        await apiPost(`/deal-rooms/${activeDealRoomId}/tour-requests`, {}, token);
+        setTourRequested(true);
+        setToast("已发送 Group Tour 请求");
+      } catch (error) {
+        setToast(error instanceof Error ? error.message : "Group Tour 请求失败");
+      }
       return;
     }
 
@@ -614,6 +684,7 @@ export default function HomePage() {
       return;
     }
 
+    setIsPublishing(true);
     const payload = {
       title: draft.title,
       area: draft.area,
@@ -622,19 +693,35 @@ export default function HomePage() {
       originalPrice: draft.price + 320,
       beds: draft.beds,
       baths: draft.baths,
-      commute: "步行 15 分钟到 Northeastern",
+      commute: "步行 15 分钟到 UCLA",
       transit: "地铁 22 分钟 · 新发布房源",
       trust: "房东知情 · 待审核",
       tags: ["新发布", "视频验房", "房东知情"],
       score: 4.8
     };
 
-    const newListing = normalizeListing(await apiPost<ApiListing>("/listings", payload, token));
-    setAllListings((current) => [newListing, ...current]);
-    setSelectedListing(newListing);
-    setActiveSection("Discover");
-    setViewMode("list");
-    setToast(`${draft.title} 已创建并进入发布审核`);
+    try {
+      const createdListing = await apiPost<ApiListing>("/listings", payload, token);
+
+      try {
+        await apiPost<ApiListing>(`/listings/${createdListing.id}/submit`, {}, token);
+        setToast(`${draft.title} 已创建并提交审核`);
+      } catch (error) {
+        setToast(error instanceof Error ? `${draft.title} 已创建为草稿，提交审核失败：${error.message}` : `${draft.title} 已创建为草稿，提交审核失败`);
+      }
+
+      const ownedListings = await apiGet<ApiListing[]>("/listings/mine", token);
+      setMyListings(
+        sortOwnerListings(
+          ownedListings.filter((listing): listing is ApiListing & { status: ListingStatus } => Boolean(listing.status))
+        )
+      );
+      setActiveSection("Publish");
+    } catch (error) {
+      setToast(error instanceof Error ? error.message : "房源创建失败");
+    } finally {
+      setIsPublishing(false);
+    }
   }
 
   function advanceEscrow() {
@@ -674,7 +761,7 @@ export default function HomePage() {
         <DiscoverScreen
           filters={filters}
           listings={visibleListings}
-          selectedListing={selectedListing}
+          selectedListing={visibleSelectedListing}
           favoriteIds={favoriteIds}
           viewMode={viewMode}
           onFiltersChange={setFilters}
@@ -736,7 +823,12 @@ export default function HomePage() {
         />
       ) : null}
       {activeSection === "Publish" ? (
-        <PublishScreen onCreate={handleCreateListing} />
+        <PublishScreen
+          isPublishing={isPublishing}
+          listings={myListings}
+          user={user}
+          onCreate={handleCreateListing}
+        />
       ) : null}
       {activeSection === "Trips" ? (
         <TripsScreen
@@ -847,7 +939,7 @@ function AuthStrip({
   onLogout: () => void;
   onToast: (message: string) => void;
 }) {
-  const [email, setEmail] = useState("student@northeastern.edu");
+  const [email, setEmail] = useState("student@ucla.edu");
   const [code, setCode] = useState("");
   const [pending, setPending] = useState(false);
 
@@ -900,7 +992,7 @@ function AuthStrip({
             <Input
               value={email}
               onChange={(event) => setEmail(event.target.value)}
-              placeholder="student@northeastern.edu"
+              placeholder="student@ucla.edu"
             />
             <Input
               value={code}
@@ -1032,16 +1124,16 @@ function SearchHero({
           </label>
           <label className="flex flex-col gap-2 text-sm font-semibold">
             入住
-            <Button variant="outline" className="h-11 justify-start">
-              <CalendarDays data-icon="inline-start" />
-              6/18
+              <Button variant="outline" className="h-11 justify-start">
+                <CalendarDays data-icon="inline-start" />
+              8/20
             </Button>
           </label>
           <label className="flex flex-col gap-2 text-sm font-semibold">
             搬出
-            <Button variant="outline" className="h-11 justify-start">
-              <CalendarDays data-icon="inline-start" />
-              9/05
+              <Button variant="outline" className="h-11 justify-start">
+                <CalendarDays data-icon="inline-start" />
+              11/30
             </Button>
           </label>
           <label className="flex flex-col gap-2 text-sm font-semibold">
@@ -1193,12 +1285,94 @@ function GroupsScreen({
   );
 }
 
-function PublishScreen({ onCreate }: { onCreate: (draft: PublishDraft) => void }) {
+function PublishScreen({
+  isPublishing,
+  listings,
+  user,
+  onCreate
+}: {
+  isPublishing: boolean;
+  listings: ApiListing[];
+  user: SessionUser | null;
+  onCreate: (draft: PublishDraft) => void;
+}) {
   return (
     <section className="mx-auto w-full max-w-[1100px] px-4 py-4 xl:px-6">
-      <PublishingFlow onCreate={onCreate} />
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
+        <PublishingFlow isPublishing={isPublishing} onCreate={onCreate} />
+        <LandlordListingsPanel listings={listings} user={user} />
+      </div>
     </section>
   );
+}
+
+function LandlordListingsPanel({
+  listings,
+  user
+}: {
+  listings: ApiListing[];
+  user: SessionUser | null;
+}) {
+  return (
+    <Card className="h-fit shadow-panel">
+      <CardHeader>
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <CardTitle>我的房源</CardTitle>
+            <CardDescription>
+              {user ? `${user.email} · ${listings.length} 套房源` : "登录后显示发布状态"}
+            </CardDescription>
+          </div>
+          <Badge variant={user ? "trust" : "secondary"}>{user ? "Owner" : "Guest"}</Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        {!user ? (
+          <div className="rounded-md border bg-secondary p-4 text-sm font-semibold text-primary">
+            先用邮箱验证码登录，再创建房源并查看审核状态。
+          </div>
+        ) : listings.length === 0 ? (
+          <div className="rounded-md border bg-white p-4 text-sm font-semibold text-muted-foreground">
+            还没有发布记录。创建后会先进入审核中，审核通过才会出现在租客 Discover。
+          </div>
+        ) : (
+          listings.map((listing) => {
+            const status = normalizeListingStatus(listing.status);
+            const meta = getListingStatusMeta(status);
+
+            return (
+              <div key={listing.id} className="rounded-md border bg-white p-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-extrabold text-primary">{listing.title}</div>
+                    <div className="mt-1 truncate text-xs font-semibold text-muted-foreground">
+                      {listing.area}
+                    </div>
+                  </div>
+                  <Badge variant={meta.variant}>{meta.label}</Badge>
+                </div>
+                <div className="mt-3 flex items-center justify-between text-sm font-bold text-primary">
+                  <span>${listing.price.toLocaleString()}/月</span>
+                  <span>{listing.media?.length ?? 0} media</span>
+                </div>
+                <p className="mt-2 text-xs font-semibold text-muted-foreground">{meta.description}</p>
+                {status === "REJECTED" && listing.rejectionReason ? (
+                  <p className="mt-2 rounded-md bg-secondary p-2 text-xs font-semibold text-primary">
+                    {listing.rejectionReason}
+                  </p>
+                ) : null}
+              </div>
+            );
+          })
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function normalizeListingStatus(status: ApiListing["status"]): ListingStatus {
+  if (status === "SUBMITTED" || status === "APPROVED" || status === "REJECTED") return status;
+  return "DRAFT";
 }
 
 function TripsScreen({
@@ -1223,7 +1397,7 @@ function TripsScreen({
         <CardContent className="grid grid-cols-1 gap-3 md:grid-cols-3">
           {[
             ["定金", `$${listing.price.toLocaleString()}`, "Stripe Connect 托管"],
-            ["入住", "6/18", "首日缺陷可介入"],
+            ["入住", "8/20", "首日缺陷可介入"],
             ["评价", "待完成", "入住后开放"]
           ].map(([label, value, detail]) => (
             <div key={label} className="rounded-md border bg-white p-4">
@@ -1292,7 +1466,7 @@ function SearchPanel({
               onChange={(event) =>
                 onFiltersChange({ ...filters, query: event.target.value })
               }
-              placeholder="Northeastern / MIT / BU"
+              placeholder="Los Angeles / UCLA / USC"
             />
           </div>
         </label>
@@ -1300,16 +1474,16 @@ function SearchPanel({
         <div className="grid grid-cols-[repeat(2,minmax(0,1fr))] gap-3">
           <label className="flex flex-col gap-2 text-sm font-semibold">
             入住
-            <Button variant="outline" className="w-full min-w-0 justify-start">
-              <CalendarDays data-icon="inline-start" />
-              6/18
+              <Button variant="outline" className="w-full min-w-0 justify-start">
+                <CalendarDays data-icon="inline-start" />
+              8/20
             </Button>
           </label>
           <label className="flex flex-col gap-2 text-sm font-semibold">
             搬出
-            <Button variant="outline" className="w-full min-w-0 justify-start">
-              <CalendarDays data-icon="inline-start" />
-              9/05
+              <Button variant="outline" className="w-full min-w-0 justify-start">
+                <CalendarDays data-icon="inline-start" />
+              11/30
             </Button>
           </label>
         </div>
@@ -1442,7 +1616,7 @@ function MarketToolbar({
     <Card className="shadow-panel">
       <CardContent className="flex flex-col gap-4 p-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-primary">Boston 短租发现</h1>
+          <h1 className="text-2xl font-bold text-primary">Los Angeles 短租发现</h1>
           <p className="text-sm font-medium text-muted-foreground">
             {listingCount} 套可匹配房源 · {favoriteCount} 个收藏 · 主页专注找房
           </p>
@@ -1842,7 +2016,7 @@ function GroupPanel({
         <div className="flex items-center justify-between gap-3">
           <div>
             <CardTitle>Group 工作台</CardTitle>
-            <CardDescription>{members.length} 人合租战队 · Cambridge 优先</CardDescription>
+            <CardDescription>{members.length} 人合租战队 · Westside 优先</CardDescription>
           </div>
           <Users className="size-5 text-trust-sky" aria-hidden="true" />
         </div>
@@ -1971,11 +2145,17 @@ function EscrowPanel({
   );
 }
 
-function PublishingFlow({ onCreate }: { onCreate: (draft: PublishDraft) => void }) {
+function PublishingFlow({
+  isPublishing,
+  onCreate
+}: {
+  isPublishing: boolean;
+  onCreate: (draft: PublishDraft) => void;
+}) {
   const [step, setStep] = useState(0);
   const [draft, setDraft] = useState<PublishDraft>({
     title: "新发布主卧短租",
-    area: "Boston · Fenway",
+    area: "Los Angeles · Westwood",
     price: 1580,
     beds: 1,
     baths: 1
@@ -1995,9 +2175,9 @@ function PublishingFlow({ onCreate }: { onCreate: (draft: PublishDraft) => void 
             <CardTitle>发房静态流程</CardTitle>
             <CardDescription>分类相册、净价补贴、房东知情承诺、发布审核</CardDescription>
           </div>
-          <Button variant="trust" size="sm" onClick={() => onCreate(draft)}>
+          <Button variant="trust" size="sm" onClick={() => onCreate(draft)} disabled={isPublishing}>
             <Building2 data-icon="inline-start" />
-            创建房源
+            {isPublishing ? "提交中" : "创建并提交"}
           </Button>
         </div>
       </CardHeader>

@@ -15,6 +15,17 @@ export type ApiListing = {
   tags: string[];
   score: number;
   ownerId?: string;
+  status?: "DRAFT" | "SUBMITTED" | "APPROVED" | "REJECTED";
+  submittedAt?: string | null;
+  reviewedAt?: string | null;
+  rejectionReason?: string | null;
+  updatedAt?: string;
+  media?: Array<{
+    id: string;
+    url: string;
+    kind: string;
+    sortOrder: number;
+  }>;
 };
 
 export type ApiRoommate = {
@@ -55,6 +66,25 @@ export type SessionUser = {
   id: string;
   email: string;
   role: string;
+};
+
+export type ApiDealRoom = {
+  id: string;
+  roommateProfileId: string;
+  status: string;
+  members?: Array<{
+    snapshot?: ApiRoommate;
+  }>;
+  tourRequest?: {
+    status: string;
+  } | null;
+};
+
+export type ApiRoommateActionResponse = {
+  action: {
+    action: "LIKE" | "PASS" | "LATER";
+  };
+  dealRoom: ApiDealRoom | null;
 };
 
 export async function apiGet<T>(path: string, token?: string) {
