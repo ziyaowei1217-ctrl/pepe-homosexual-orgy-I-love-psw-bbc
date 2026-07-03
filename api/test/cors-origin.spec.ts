@@ -4,7 +4,12 @@ import { getCorsOrigins } from "../src/config/cors";
 
 describe("CORS origin config", () => {
   it("allows common local frontend fallback ports by default", () => {
-    expect(getCorsOrigins()).toEqual(["http://localhost:3000", "http://localhost:3001"]);
+    expect(getCorsOrigins()).toEqual([
+      "http://localhost:3000",
+      "http://127.0.0.1:3000",
+      "http://localhost:3001",
+      "http://127.0.0.1:3001"
+    ]);
   });
 
   it("parses explicit comma-separated origins", () => {

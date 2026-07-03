@@ -14,11 +14,13 @@ import {
   DoorOpen,
   Heart,
   Home,
+  LocateFixed,
   MapPin,
   MessageCircle,
   Minus,
   Navigation,
   PawPrint,
+  Plus,
   Search,
   ShieldCheck,
   SlidersHorizontal,
@@ -32,7 +34,7 @@ import {
   X
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { RoommateFirstWorkspace } from "@/components/roommate-first-workspace";
@@ -61,8 +63,33 @@ import {
 } from "@/lib/api";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
+import {
+  applyFlexibleStay,
+  buildCalendarMonths,
+  compareIsoDates,
+  countNights,
+  formatDateRangeLabel,
+  formatShortDate,
+  selectDateRange,
+  type DateRange
+} from "@/lib/date-range";
 import { getVisibleSelectedListing } from "@/lib/listing-selection";
+import {
+  buildListingDetail,
+  buildListingGallery,
+  getGalleryIndex,
+  getListingFlowStatus
+} from "@/lib/listing-detail";
 import { getListingStatusMeta, sortOwnerListings, type ListingStatus } from "@/lib/landlord-listings";
+import { buildSearchInsight } from "@/lib/search-insights";
+import {
+  getListingCoordinates,
+  getMapCenterForListings,
+  getMapMarkers,
+  getMapTiles,
+  type MapSize,
+  type MapPoint
+} from "@/lib/listing-map";
 
 type Listing = {
   id: string;
@@ -93,12 +120,14 @@ type Roommate = {
   tags: string[];
 };
 
-type AppSection = "Discover" | "Roommates" | "Groups" | "Publish" | "Trips" | "Trust";
+type AppSection = "Discover" | "ListingDetail" | "Roommates" | "Groups" | "Publish" | "Trips" | "Trust";
 
 type ViewMode = "map" | "list";
 
 type SearchFilters = {
   query: string;
+  checkIn: string;
+  checkOut: string;
   budget: number;
   amenity: string;
 };
@@ -363,6 +392,19 @@ const amenities = [
   { label: "近地铁", icon: TrainFront }
 ];
 
+const defaultSearchFilters: SearchFilters = {
+  query: "Los Angeles",
+  checkIn: "2026-08-20",
+  checkOut: "2026-11-30",
+  budget: 4200,
+  amenity: "Wi-Fi"
+};
+
+const defaultMapViewportSize = {
+  width: 420,
+  height: 360
+};
+
 function normalizeListing(listing: ApiListing): Listing {
   return {
     id: String(listing.id),
@@ -420,12 +462,11 @@ export default function HomePage() {
   const [roommateIndex, setRoommateIndex] = useState(0);
   const [activeSection, setActiveSection] = useState<AppSection>("Roommates");
   const [viewMode, setViewMode] = useState<ViewMode>("map");
-  const [filters, setFilters] = useState<SearchFilters>({
-    query: "Los Angeles",
-    budget: 4200,
-    amenity: "Wi-Fi"
-  });
+  const [filters, setFilters] = useState<SearchFilters>(defaultSearchFilters);
   const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set(["1"]));
+  const [contactedListingIds, setContactedListingIds] = useState<Set<string>>(new Set());
+  const [tourRequestedListingIds, setTourRequestedListingIds] = useState<Set<string>>(new Set());
+  const [appliedListingId, setAppliedListingId] = useState<string | null>(null);
   const [groupMembers, setGroupMembers] = useState<Roommate[]>([]);
   const [likedRoommateIds, setLikedRoommateIds] = useState<Set<string>>(new Set());
   const [skippedCount, setSkippedCount] = useState(0);
@@ -593,6 +634,30 @@ export default function HomePage() {
       }
       return next;
     });
+  }
+
+  function openListingDetail(listing: Listing) {
+    setSelectedListing(listing);
+    setActiveSection("ListingDetail");
+    setToast(`正在查看房源详情：${listing.title}`);
+  }
+
+  function handleContactListing(listing: Listing) {
+    setContactedListingIds((current) => new Set(current).add(listing.id));
+    setToast(`已联系房东：${listing.title}`);
+  }
+
+  function handleRequestListingTour(listing: Listing) {
+    setTourRequestedListingIds((current) => new Set(current).add(listing.id));
+    setToast(`已预约看房：${listing.title}`);
+  }
+
+  function handleStartApplication(listing: Listing) {
+    setAppliedListingId(listing.id);
+    setSelectedListing(listing);
+    setEscrowStep(0);
+    setActiveSection("Trips");
+    setToast(`已为 ${listing.title} 开始申请流程`);
   }
 
   async function handleAcceptRoommate() {
@@ -767,15 +832,32 @@ export default function HomePage() {
           onFiltersChange={setFilters}
           onAmenityChange={handleAmenityChange}
           onClear={() => {
-            setFilters({ query: "", budget: 4200, amenity: "Wi-Fi" });
+            setFilters({ ...defaultSearchFilters, query: "" });
             setToast("筛选条件已重置");
           }}
           onSelect={(listing) => {
-            setSelectedListing(listing);
-            setToast(`已选中：${listing.title}`);
+            openListingDetail(listing);
           }}
           onFavorite={handleFavorite}
           onViewModeChange={setViewMode}
+          onOpenRoommates={() => setActiveSection("Roommates")}
+        />
+      ) : null}
+      {activeSection === "ListingDetail" ? (
+        <ListingDetailScreen
+          listing={selectedListing}
+          filters={filters}
+          favoriteIds={favoriteIds}
+          contactedIds={contactedListingIds}
+          tourRequestedIds={tourRequestedListingIds}
+          appliedListingId={appliedListingId}
+          groupMembers={groupMembers}
+          roommate={roommate}
+          onBack={() => setActiveSection("Discover")}
+          onFavorite={handleFavorite}
+          onContact={handleContactListing}
+          onRequestTour={handleRequestListingTour}
+          onApply={handleStartApplication}
           onOpenRoommates={() => setActiveSection("Roommates")}
         />
       ) : null}
@@ -796,10 +878,7 @@ export default function HomePage() {
           onLike={handleAcceptRoommate}
           onFavoriteListing={handleFavorite}
           onSelectListing={(listing) => {
-            setSelectedListing(listing);
-            setActiveSection("Discover");
-            setViewMode("map");
-            setToast(`已打开推荐房源：${listing.title}`);
+            openListingDetail(listing);
           }}
           onRequestTour={handleRequestGroupTour}
           onOpenDiscover={() => setActiveSection("Discover")}
@@ -816,9 +895,7 @@ export default function HomePage() {
             setToast(`${name} 已移出 Group`);
           }}
           onSelectListing={(listing) => {
-            setSelectedListing(listing);
-            setActiveSection("Discover");
-            setToast(`已打开 Group 推荐房源：${listing.title}`);
+            openListingDetail(listing);
           }}
         />
       ) : null}
@@ -1061,10 +1138,11 @@ function DiscoverScreen({
             viewMode={viewMode}
             onViewModeChange={onViewModeChange}
             favoriteCount={favoriteIds.size}
+            dateRangeLabel={formatDateRangeLabel(filters)}
             onOpenRoommates={onOpenRoommates}
           />
           {listings.length === 0 ? (
-            <EmptyResults onClear={onClear} />
+            <EmptyResults filters={filters} onClear={onClear} />
           ) : (
             <ListingGrid
               listings={listings.slice(0, 24)}
@@ -1104,10 +1182,12 @@ function SearchHero({
   onAmenityChange: (value: string) => void;
   onClear: () => void;
 }) {
+  const insight = buildSearchInsight(filters, resultCount);
+
   return (
     <Card className="shadow-panel">
       <CardContent className="flex flex-col gap-4 p-4">
-        <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(260px,1.2fr)_150px_150px_minmax(220px,0.8fr)_auto] lg:items-end">
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(260px,1.2fr)_minmax(320px,0.9fr)_minmax(220px,0.8fr)_auto] lg:items-end">
           <label className="flex flex-col gap-2 text-sm font-semibold">
             目的地
             <div className="relative">
@@ -1122,20 +1202,10 @@ function SearchHero({
               />
             </div>
           </label>
-          <label className="flex flex-col gap-2 text-sm font-semibold">
-            入住
-              <Button variant="outline" className="h-11 justify-start">
-                <CalendarDays data-icon="inline-start" />
-              8/20
-            </Button>
-          </label>
-          <label className="flex flex-col gap-2 text-sm font-semibold">
-            搬出
-              <Button variant="outline" className="h-11 justify-start">
-                <CalendarDays data-icon="inline-start" />
-              11/30
-            </Button>
-          </label>
+          <DateRangePicker
+            range={filters}
+            onChange={(range) => onFiltersChange({ ...filters, ...range })}
+          />
           <label className="flex flex-col gap-2 text-sm font-semibold">
             预算上限 ${filters.budget.toLocaleString()}
             <input
@@ -1184,8 +1254,169 @@ function SearchHero({
             当前命中 <span className="text-primary">{resultCount}</span> 套房源
           </div>
         </div>
+
+        <div
+          className={cn(
+            "grid grid-cols-1 gap-3 rounded-md border p-3 lg:grid-cols-[180px_minmax(0,1fr)_minmax(240px,0.8fr)] lg:items-center",
+            insight.status === "healthy" && "border-trust-green/20 bg-trust-green/5",
+            insight.status === "tight" && "border-trust-amber/25 bg-trust-amber/5",
+            insight.status === "empty" && "border-trust-red/20 bg-trust-red/5"
+          )}
+        >
+          <div className="flex items-center gap-2">
+            <Sparkles
+              className={cn(
+                "size-4",
+                insight.status === "healthy" && "text-trust-green",
+                insight.status === "tight" && "text-trust-amber",
+                insight.status === "empty" && "text-trust-red"
+              )}
+              aria-hidden="true"
+            />
+            <span className="text-sm font-extrabold text-primary">{insight.headline}</span>
+          </div>
+          <div className="flex min-w-0 flex-wrap gap-2">
+            {insight.chips.map((chip) => (
+              <Badge key={chip} variant="secondary" className="max-w-full truncate">
+                {chip}
+              </Badge>
+            ))}
+          </div>
+          <p className="text-sm font-semibold text-muted-foreground">{insight.suggestion}</p>
+        </div>
       </CardContent>
     </Card>
+  );
+}
+
+function DateRangePicker({
+  range,
+  onChange
+}: {
+  range: DateRange;
+  onChange: (range: DateRange) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [activeField, setActiveField] = useState<"checkIn" | "checkOut">("checkIn");
+  const months = useMemo(() => buildCalendarMonths(range.checkIn || defaultSearchFilters.checkIn, 4), [range.checkIn]);
+  const nights = countNights(range);
+  const flexibleStays = [
+    { label: "周末", nights: 2 },
+    { label: "一周", nights: 7 },
+    { label: "一个月", nights: 30 }
+  ];
+
+  function handleDateClick(isoDate: string) {
+    const nextRange =
+      activeField === "checkOut" && range.checkIn && compareIsoDates(isoDate, range.checkIn) > 0
+        ? { ...range, checkOut: isoDate }
+        : selectDateRange(range, isoDate);
+
+    onChange(nextRange);
+    setActiveField(nextRange.checkOut ? "checkIn" : "checkOut");
+  }
+
+  return (
+    <div className="relative flex flex-col gap-2 text-sm font-semibold">
+      日期
+      <div className="grid grid-cols-2 gap-2">
+        <Button
+          variant={activeField === "checkIn" && open ? "secondary" : "outline"}
+          className="h-11 justify-start"
+          onClick={() => {
+            setActiveField("checkIn");
+            setOpen((current) => !current || activeField !== "checkIn");
+          }}
+        >
+          <CalendarDays data-icon="inline-start" />
+          {range.checkIn ? formatShortDate(range.checkIn) : "入住"}
+        </Button>
+        <Button
+          variant={activeField === "checkOut" && open ? "secondary" : "outline"}
+          className="h-11 justify-start"
+          onClick={() => {
+            setActiveField("checkOut");
+            setOpen((current) => !current || activeField !== "checkOut");
+          }}
+        >
+          <CalendarDays data-icon="inline-start" />
+          {range.checkOut ? formatShortDate(range.checkOut) : "搬出"}
+        </Button>
+      </div>
+      {open ? (
+        <div className="absolute left-0 right-0 top-[calc(100%+0.5rem)] z-40 rounded-lg border bg-white p-4 shadow-panel lg:right-auto lg:w-[720px]">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <div className="text-base font-extrabold text-primary">{formatDateRangeLabel(range)}</div>
+              <div className="text-xs font-semibold text-muted-foreground">
+                {nights > 0 ? "先选入住，再选搬出；结果会自动更新。" : "请选择入住和搬出日期。"}
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {flexibleStays.map((stay) => (
+                <Button
+                  key={stay.label}
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => {
+                    onChange(applyFlexibleStay(range, stay.nights));
+                    setActiveField("checkIn");
+                  }}
+                >
+                  {stay.label}
+                </Button>
+              ))}
+            </div>
+          </div>
+          <div className="mt-4 grid max-h-[420px] grid-cols-1 gap-4 overflow-y-auto pr-1 sm:grid-cols-2">
+            {months.map((month) => (
+              <div key={month.key} className="min-w-0">
+                <div className="text-sm font-extrabold text-primary">{month.label}</div>
+                <div className="mt-3 grid grid-cols-7 gap-1 text-center text-[11px] font-bold text-muted-foreground">
+                  {["一", "二", "三", "四", "五", "六", "日"].map((day) => (
+                    <div key={day}>{day}</div>
+                  ))}
+                </div>
+                <div className="mt-1 grid grid-cols-7 gap-1">
+                  {month.days.map((day) => {
+                    const isStart = day.iso === range.checkIn;
+                    const isEnd = day.iso === range.checkOut;
+                    const inRange =
+                      range.checkIn &&
+                      range.checkOut &&
+                      compareIsoDates(day.iso, range.checkIn) > 0 &&
+                      compareIsoDates(day.iso, range.checkOut) < 0;
+
+                    return (
+                      <button
+                        key={day.iso}
+                        className={cn(
+                          "flex aspect-square min-h-9 items-center justify-center rounded-md text-sm font-bold transition-colors",
+                          !day.inCurrentMonth && "text-muted-foreground/45",
+                          inRange && "bg-trust-sky/10 text-primary",
+                          (isStart || isEnd) && "bg-primary text-white",
+                          day.inCurrentMonth && !isStart && !isEnd && "hover:bg-secondary"
+                        )}
+                        type="button"
+                        onClick={() => handleDateClick(day.iso)}
+                        aria-label={`${day.iso}${isStart ? " 入住" : isEnd ? " 搬出" : ""}`}
+                      >
+                        {day.day}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="mt-4 flex justify-end">
+            <Button variant="trust" size="sm" onClick={() => setOpen(false)}>
+              完成
+            </Button>
+          </div>
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -1412,6 +1643,230 @@ function TripsScreen({
   );
 }
 
+function ListingDetailScreen({
+  listing,
+  filters,
+  favoriteIds,
+  contactedIds,
+  tourRequestedIds,
+  appliedListingId,
+  groupMembers,
+  roommate,
+  onBack,
+  onFavorite,
+  onContact,
+  onRequestTour,
+  onApply,
+  onOpenRoommates
+}: {
+  listing: Listing;
+  filters: SearchFilters;
+  favoriteIds: Set<string>;
+  contactedIds: Set<string>;
+  tourRequestedIds: Set<string>;
+  appliedListingId: string | null;
+  groupMembers: Roommate[];
+  roommate: Roommate;
+  onBack: () => void;
+  onFavorite: (id: string) => void;
+  onContact: (listing: Listing) => void;
+  onRequestTour: (listing: Listing) => void;
+  onApply: (listing: Listing) => void;
+  onOpenRoommates: () => void;
+}) {
+  const detail = buildListingDetail(listing, filters);
+  const flow = getListingFlowStatus(listing.id, {
+    favoriteIds,
+    contactedIds,
+    tourRequestedIds,
+    appliedListingId
+  });
+  const roommateCount = Math.max(1, groupMembers.length || 1);
+  const perPersonPrice = Math.round(listing.price / roommateCount);
+
+  return (
+    <section className="mx-auto flex w-full max-w-[1280px] flex-col gap-4 px-4 py-4 xl:px-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <Button variant="outline" className="w-fit" onClick={onBack}>
+          <ArrowRight className="rotate-180" data-icon="inline-start" />
+          返回房源
+        </Button>
+        <div className="flex flex-wrap gap-2">
+          {flow.isContacted ? <Badge variant="success">已联系</Badge> : null}
+          {flow.isTourRequested ? <Badge variant="trust">已预约看房</Badge> : null}
+          {flow.isApplied ? <Badge variant="warning">申请中</Badge> : null}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="flex min-w-0 flex-col gap-4">
+          <Card className="overflow-hidden shadow-panel">
+            <div className="grid grid-cols-1 gap-1 md:grid-cols-[1.5fr_1fr]">
+              <div
+                className="min-h-[320px] bg-cover bg-center md:min-h-[440px]"
+                style={{ backgroundImage: `url(${detail.gallery[0]})` }}
+              />
+              <div className="grid grid-cols-3 gap-1 md:grid-cols-1">
+                {detail.gallery.slice(1).map((image, index) => (
+                  <div
+                    key={image}
+                    className="min-h-28 bg-cover bg-center md:min-h-0"
+                    style={{ backgroundImage: `url(${image})` }}
+                    aria-label={`房源照片 ${index + 2}`}
+                  />
+                ))}
+              </div>
+            </div>
+            <CardContent className="flex flex-col gap-5 p-5">
+              <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant="trust">{detail.neighborhood}</Badge>
+                    <Badge variant="success">{listing.score} 分</Badge>
+                    <Badge variant="secondary">{detail.stayLabel}</Badge>
+                  </div>
+                  <h1 className="mt-3 text-3xl font-extrabold text-primary">{listing.title}</h1>
+                  <p className="mt-2 flex items-center gap-2 text-sm font-semibold text-muted-foreground">
+                    <MapPin className="size-4" aria-hidden="true" />
+                    {listing.area}
+                  </p>
+                </div>
+                <div className="text-left md:text-right">
+                  <div className="text-3xl font-extrabold text-primary">${listing.price.toLocaleString()}</div>
+                  <div className="text-sm font-semibold text-muted-foreground">
+                    <span className="line-through">${listing.originalPrice.toLocaleString()}</span>
+                    <span> / 月</span>
+                  </div>
+                  <div className="mt-1 text-sm font-bold text-trust-green">
+                    省 ${detail.monthlySavings.toLocaleString()}/月
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                <Metric icon={BedDouble} label="卧室" value={`${listing.beds} Bed`} />
+                <Metric icon={Bath} label="卫浴" value={`${listing.baths} Bath`} />
+                <Metric icon={Clock3} label="通勤" value={listing.commute} />
+                <Metric icon={ShieldCheck} label="信任" value={listing.trust} />
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                <DetailList title="房源亮点" items={detail.sections.highlights} />
+                <DetailList title="入住规则" items={detail.sections.houseRules} />
+                <DetailList title="下一步" items={detail.sections.moveIn} />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="shadow-panel">
+            <CardHeader>
+              <CardTitle>动态匹配</CardTitle>
+              <CardDescription>根据当前室友、收藏和日期实时更新</CardDescription>
+            </CardHeader>
+            <CardContent className="grid grid-cols-1 gap-3 md:grid-cols-3">
+              <div className="rounded-md border bg-white p-4">
+                <div className="text-xs font-bold text-muted-foreground">当前室友</div>
+                <div className="mt-2 text-lg font-extrabold text-primary">{roommate.name}</div>
+                <div className="mt-1 text-sm font-semibold text-muted-foreground">{roommate.match}% Match</div>
+              </div>
+              <div className="rounded-md border bg-white p-4">
+                <div className="text-xs font-bold text-muted-foreground">Group 人均</div>
+                <div className="mt-2 text-lg font-extrabold text-primary">${perPersonPrice.toLocaleString()}/月</div>
+                <div className="mt-1 text-sm font-semibold text-muted-foreground">{roommateCount} 人预算估算</div>
+              </div>
+              <div className="rounded-md border bg-white p-4">
+                <div className="text-xs font-bold text-muted-foreground">流程状态</div>
+                <div className="mt-2 text-lg font-extrabold text-primary">
+                  {flow.isApplied ? "申请中" : flow.isTourRequested ? "待看房" : flow.isContacted ? "沟通中" : "可立即推进"}
+                </div>
+                <div className="mt-1 text-sm font-semibold text-muted-foreground">操作会即时同步到本页</div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        <aside className="flex min-w-0 flex-col gap-4">
+          <Card className="sticky top-24 shadow-panel">
+            <CardHeader>
+              <CardTitle>申请流程</CardTitle>
+              <CardDescription>{detail.stayLabel}</CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-3">
+              <Button
+                variant={flow.isFavorite ? "accept" : "outline"}
+                className="w-full justify-between"
+                onClick={() => onFavorite(listing.id)}
+              >
+                {flow.isFavorite ? "已收藏" : "收藏房源"}
+                <Heart className={cn(flow.isFavorite && "fill-current")} data-icon="inline-end" />
+              </Button>
+              <Button
+                variant={flow.isContacted ? "secondary" : "outline"}
+                className="w-full justify-between"
+                onClick={() => onContact(listing)}
+              >
+                {flow.isContacted ? "继续沟通" : "联系房东"}
+                <MessageCircle data-icon="inline-end" />
+              </Button>
+              <Button
+                variant={flow.isTourRequested ? "secondary" : "trust"}
+                className="w-full justify-between"
+                onClick={() => onRequestTour(listing)}
+              >
+                {flow.isTourRequested ? "看房已预约" : "预约看房"}
+                <CalendarDays data-icon="inline-end" />
+              </Button>
+              <Button
+                variant="trust"
+                className="w-full justify-between"
+                onClick={() => onApply(listing)}
+              >
+                {flow.primaryCta}
+                <ArrowRight data-icon="inline-end" />
+              </Button>
+              <Separator />
+              <Button variant="outline" className="w-full justify-between" onClick={onOpenRoommates}>
+                找室友一起租
+                <Users data-icon="inline-end" />
+              </Button>
+              <div className="rounded-md bg-secondary p-3 text-sm font-semibold text-primary">
+                <div className="flex justify-between">
+                  <span>月租</span>
+                  <span>${listing.price.toLocaleString()}</span>
+                </div>
+                <div className="mt-2 flex justify-between text-muted-foreground">
+                  <span>预计押金</span>
+                  <span>${Math.round(listing.price * 0.5).toLocaleString()}</span>
+                </div>
+                <div className="mt-2 flex justify-between text-muted-foreground">
+                  <span>服务费</span>
+                  <span>${Math.round(listing.price * 0.035).toLocaleString()}</span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </aside>
+      </div>
+    </section>
+  );
+}
+
+function DetailList({ title, items }: { title: string; items: string[] }) {
+  return (
+    <div className="rounded-md border bg-white p-4">
+      <h2 className="text-sm font-extrabold text-primary">{title}</h2>
+      <div className="mt-3 flex flex-col gap-2">
+        {items.map((item) => (
+          <div key={item} className="flex gap-2 text-sm font-semibold text-muted-foreground">
+            <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-trust-green" aria-hidden="true" />
+            <span>{item}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function TrustScreen({
   queues,
   onToast
@@ -1604,12 +2059,14 @@ function MarketToolbar({
   viewMode,
   onViewModeChange,
   favoriteCount,
+  dateRangeLabel,
   onOpenRoommates
 }: {
   listingCount: number;
   viewMode: ViewMode;
   onViewModeChange: (value: ViewMode) => void;
   favoriteCount: number;
+  dateRangeLabel: string;
   onOpenRoommates: () => void;
 }) {
   return (
@@ -1620,6 +2077,7 @@ function MarketToolbar({
           <p className="text-sm font-medium text-muted-foreground">
             {listingCount} 套可匹配房源 · {favoriteCount} 个收藏 · 主页专注找房
           </p>
+          <p className="mt-1 text-xs font-bold text-trust-blue">{dateRangeLabel}</p>
         </div>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
           <Button variant="outline" size="sm" onClick={onOpenRoommates}>
@@ -1653,57 +2111,155 @@ function MapCanvas({
   selectedListing: Listing;
   onSelect: (listing: Listing) => void;
 }) {
-  const markerPositions = [
-    "left-[17%] top-[24%]",
-    "left-[58%] top-[34%]",
-    "left-[38%] top-[58%]",
-    "left-[72%] top-[60%]",
-    "left-[24%] top-[67%]",
-    "left-[48%] top-[18%]"
-  ];
+  const mapListings = useMemo(() => listings.slice(0, 12), [listings]);
+  const defaultCenter = useMemo(() => getMapCenterForListings(mapListings), [mapListings]);
+  const mapRef = useRef<HTMLDivElement | null>(null);
+  const [mapSize, setMapSize] = useState<MapSize>(defaultMapViewportSize);
+  const [mapCenter, setMapCenter] = useState<MapPoint>(defaultCenter);
+  const [zoom, setZoom] = useState(11);
+  const tiles = useMemo(() => getMapTiles(mapCenter, zoom, mapSize), [mapCenter, mapSize, zoom]);
+  const markers = useMemo(() => getMapMarkers(mapListings, mapCenter, zoom, mapSize), [mapCenter, mapListings, mapSize, zoom]);
+
+  useEffect(() => {
+    setMapCenter(defaultCenter);
+  }, [defaultCenter]);
+
+  useEffect(() => {
+    const element = mapRef.current;
+    if (!element) return;
+    const measuredElement = element;
+
+    function updateMapSize() {
+      const rect = measuredElement.getBoundingClientRect();
+      const width = Math.round(rect.width);
+      const height = Math.round(rect.height);
+
+      if (width <= 0 || height <= 0) return;
+
+      setMapSize((current) =>
+        current.width === width && current.height === height
+          ? current
+          : { width, height }
+      );
+    }
+
+    updateMapSize();
+    const observer = new ResizeObserver(updateMapSize);
+    observer.observe(measuredElement);
+
+    return () => observer.disconnect();
+  }, []);
+
+  function resetMap() {
+    setMapCenter(defaultCenter);
+    setZoom(11);
+  }
 
   return (
     <Card className={cn("overflow-hidden shadow-panel", className)}>
       <div className="grid min-h-[520px] grid-cols-1">
-        <div className="relative min-h-[330px] overflow-hidden bg-[#E7EEF3]">
-          <div className="absolute inset-0 opacity-70 [background-image:linear-gradient(rgba(0,34,68,0.08)_1px,transparent_1px),linear-gradient(90deg,rgba(0,34,68,0.08)_1px,transparent_1px)] [background-size:46px_46px]" />
-          <div className="absolute left-[16%] top-[22%] h-[2px] w-[58%] -rotate-6 bg-trust-sky/45" />
-          <div className="absolute left-[32%] top-[28%] h-[2px] w-[46%] rotate-[18deg] bg-trust-slate/35" />
-          {listings.slice(0, 6).map((listing, index) => (
+        <div ref={mapRef} className="relative min-h-[360px] overflow-hidden bg-[#DCE7EA]">
+          <div className="absolute inset-0">
+            {tiles.map((tile) => (
+              <div
+                key={tile.id}
+                className="absolute size-64 select-none bg-cover bg-center"
+                style={{ backgroundImage: `url(${tile.url})`, left: tile.x, top: tile.y }}
+              />
+            ))}
+          </div>
+          <div className="absolute left-3 top-3 flex flex-col gap-2">
+            <Button
+              variant="outline"
+              size="icon"
+              className="bg-white/95"
+              aria-label="放大地图"
+              onClick={() => setZoom((current) => Math.min(13, current + 1))}
+            >
+              <Plus />
+            </Button>
+            <Button
+              variant="outline"
+              size="icon"
+              className="bg-white/95"
+              aria-label="缩小地图"
+              onClick={() => setZoom((current) => Math.max(9, current - 1))}
+            >
+              <Minus />
+            </Button>
+            <Button
+              variant="outline"
+              size="icon"
+              className="bg-white/95"
+              aria-label="重置地图"
+              onClick={resetMap}
+            >
+              <LocateFixed />
+            </Button>
+          </div>
+          {markers.map((marker) => (
             <MapMarker
-              key={listing.id}
-              className={markerPositions[index]}
-              label={`$${listing.price.toLocaleString()}`}
-              active={listing.id === selectedListing.id}
-              onClick={() => onSelect(listing)}
+              key={marker.id}
+              label={marker.label}
+              active={marker.id === selectedListing.id}
+              left={marker.x}
+              top={marker.y}
+              onClick={() => {
+                const listing = mapListings.find((item) => item.id === marker.id);
+                if (!listing) return;
+
+                setMapCenter({ lat: marker.lat, lng: marker.lng });
+                onSelect(listing);
+              }}
             />
           ))}
-          <div className="absolute bottom-5 left-5 rounded-md border bg-white/94 p-3 shadow-card">
-            <div className="flex items-center gap-2 text-sm font-bold text-primary">
-              <Navigation className="size-4 text-trust-sky" aria-hidden="true" />
-              {selectedListing.commute}
+          {mapListings.length === 0 ? (
+            <div className="absolute inset-x-6 top-1/2 -translate-y-1/2 rounded-md border bg-white/95 p-4 text-center shadow-card">
+              <div className="text-sm font-extrabold text-primary">当前地图没有可显示房源</div>
+              <p className="mt-1 text-xs font-semibold text-muted-foreground">
+                放宽预算、设施或地点后，地图会重新显示价格标记。
+              </p>
             </div>
-            <div className="mt-1 text-xs font-semibold text-muted-foreground">
-              {selectedListing.transit}
-            </div>
+          ) : null}
+          <div className="absolute bottom-2 right-3 rounded bg-white/90 px-2 py-1 text-[10px] font-semibold text-muted-foreground">
+            © OpenStreetMap contributors
           </div>
+          {mapListings.length > 0 ? (
+            <div className="absolute bottom-5 left-5 rounded-md border bg-white/94 p-3 shadow-card">
+              <div className="flex items-center gap-2 text-sm font-bold text-primary">
+                <Navigation className="size-4 text-trust-sky" aria-hidden="true" />
+                {selectedListing.commute}
+              </div>
+              <div className="mt-1 text-xs font-semibold text-muted-foreground">
+                {selectedListing.transit}
+              </div>
+            </div>
+          ) : null}
         </div>
         <div className="flex flex-col justify-between gap-4 border-t bg-white p-5">
-          <div>
-            <Badge variant="trust">地标通勤</Badge>
-            <h2 className="mt-3 text-xl font-bold text-primary">
-              {selectedListing.title}
-            </h2>
-            <p className="mt-1 text-sm font-medium text-muted-foreground">
-              {selectedListing.area}
-            </p>
-          </div>
-          <div className="grid grid-cols-[repeat(2,minmax(0,1fr))] gap-3">
-            <Metric icon={Clock3} label="通勤" value={selectedListing.commute} />
-            <Metric icon={DollarSign} label="净租金" value={`$${selectedListing.price}/月`} />
-            <Metric icon={BedDouble} label="卧室" value={`${selectedListing.beds} Bed`} />
-            <Metric icon={ShieldCheck} label="信任" value={selectedListing.trust} />
-          </div>
+          {mapListings.length > 0 ? (
+            <>
+              <div>
+                <Badge variant="trust">地标通勤</Badge>
+                <h2 className="mt-3 text-xl font-bold text-primary">
+                  {selectedListing.title}
+                </h2>
+                <p className="mt-1 text-sm font-medium text-muted-foreground">
+                  {selectedListing.area}
+                </p>
+              </div>
+              <div className="grid grid-cols-[repeat(2,minmax(0,1fr))] gap-3">
+                <Metric icon={Clock3} label="通勤" value={selectedListing.commute} />
+                <Metric icon={DollarSign} label="净租金" value={`$${selectedListing.price}/月`} />
+                <Metric icon={BedDouble} label="卧室" value={`${selectedListing.beds} Bed`} />
+                <Metric icon={ShieldCheck} label="信任" value={selectedListing.trust} />
+              </div>
+            </>
+          ) : (
+            <div className="rounded-md border bg-secondary p-4 text-sm font-semibold text-primary">
+              地图会跟随筛选条件更新。当前没有价格标记时，先回到左侧调整关键词、预算或设施。
+            </div>
+          )}
         </div>
       </div>
     </Card>
@@ -1711,26 +2267,28 @@ function MapCanvas({
 }
 
 function MapMarker({
-  className,
   label,
   active,
+  left,
+  top,
   onClick
 }: {
-  className?: string;
   label: string;
   active?: boolean;
+  left: number;
+  top: number;
   onClick: () => void;
 }) {
   return (
     <button
       className={cn(
-        "absolute rounded-full border px-3 py-1 text-sm font-bold shadow-card transition-transform hover:scale-105",
+        "absolute -translate-x-1/2 -translate-y-1/2 rounded-full border px-3 py-1 text-sm font-bold shadow-card transition-transform hover:scale-105",
         active
           ? "border-primary bg-primary text-primary-foreground"
-          : "border-white bg-white text-primary",
-        className
+          : "border-white bg-white text-primary"
       )}
       onClick={onClick}
+      style={{ left, top }}
       type="button"
     >
       {label}
@@ -1774,75 +2332,140 @@ function ListingGrid({
   return (
     <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
       {listings.map((listing) => (
-        <article
+        <ListingCard
           key={listing.id}
-          className={cn(
-            "overflow-hidden rounded-lg border bg-white text-left shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-card",
-            selectedId === listing.id ? "border-trust-sky ring-2 ring-trust-sky/20" : "border-border"
-          )}
-        >
-          <div className="relative">
-            <button
-              className="block h-44 w-full bg-cover bg-center"
-              style={{ backgroundImage: `url(${listing.image})` }}
-              type="button"
-              onClick={() => onSelect(listing)}
-              aria-label={`查看 ${listing.title}`}
-            />
-            <Button
-              variant={favoriteIds.has(listing.id) ? "accept" : "outline"}
-              size="icon"
-              className="absolute right-3 top-3 bg-white/95"
-              aria-label={favoriteIds.has(listing.id) ? "取消收藏" : "收藏房源"}
-              onClick={() => onFavorite(listing.id)}
-            >
-              <Heart className={cn(favoriteIds.has(listing.id) && "fill-current")} />
-            </Button>
-          </div>
-          <div className="flex flex-col gap-3 p-4">
-            <div className="flex items-start justify-between gap-3">
-              <button className="min-w-0 text-left" type="button" onClick={() => onSelect(listing)}>
-                <div className="text-base font-bold text-primary">{listing.title}</div>
-                <div className="mt-1 flex items-center gap-1 text-sm font-semibold text-muted-foreground">
-                  <MapPin className="size-4" aria-hidden="true" />
-                  {listing.area}
-                </div>
-              </button>
-              <div className="flex items-center gap-1 text-sm font-bold text-primary">
-                <Star className="size-4 fill-current text-trust-amber" aria-hidden="true" />
-                {listing.score}
-              </div>
-            </div>
-            <div className="flex items-baseline gap-2">
-              <span className="text-xl font-extrabold text-primary">${listing.price}</span>
-              <span className="text-sm font-semibold text-muted-foreground line-through">
-                ${listing.originalPrice}
-              </span>
-              <span className="text-sm font-semibold text-muted-foreground">/月</span>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {listing.tags.map((tag) => (
-                <Badge key={tag} variant={tag.includes("Group") ? "success" : "secondary"}>
-                  {tag}
-                </Badge>
-              ))}
-            </div>
-            <Button
-              variant={selectedId === listing.id ? "trust" : "outline"}
-              className="w-full justify-between"
-              onClick={() => onSelect(listing)}
-            >
-              {selectedId === listing.id ? "正在查看" : "查看详情"}
-              <ArrowRight data-icon="inline-end" />
-            </Button>
-          </div>
-        </article>
+          listing={listing}
+          selected={selectedId === listing.id}
+          favorite={favoriteIds.has(listing.id)}
+          onSelect={onSelect}
+          onFavorite={onFavorite}
+        />
       ))}
     </div>
   );
 }
 
-function EmptyResults({ onClear }: { onClear: () => void }) {
+function ListingCard({
+  listing,
+  selected,
+  favorite,
+  onSelect,
+  onFavorite
+}: {
+  listing: Listing;
+  selected: boolean;
+  favorite: boolean;
+  onSelect: (listing: Listing) => void;
+  onFavorite: (id: string) => void;
+}) {
+  const gallery = useMemo(() => buildListingGallery(listing), [listing]);
+  const [galleryIndex, setGalleryIndex] = useState(0);
+  const currentImage = gallery[galleryIndex] ?? listing.image;
+
+  function moveGallery(direction: -1 | 1) {
+    setGalleryIndex((current) => getGalleryIndex(current, direction, gallery.length));
+  }
+
+  return (
+    <article
+      className={cn(
+        "overflow-hidden rounded-lg border bg-white text-left shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-card",
+        selected ? "border-trust-sky ring-2 ring-trust-sky/20" : "border-border"
+      )}
+    >
+      <div className="relative">
+        <button
+          className="block h-44 w-full bg-cover bg-center"
+          style={{ backgroundImage: `url(${currentImage})` }}
+          type="button"
+          onClick={() => onSelect(listing)}
+          aria-label={`查看 ${listing.title}`}
+        />
+        <div className="absolute inset-x-3 top-1/2 flex -translate-y-1/2 items-center justify-between">
+          <Button
+            variant="outline"
+            size="icon"
+            className="size-8 bg-white/95"
+            aria-label={`上一张照片：${listing.title}`}
+            onClick={() => moveGallery(-1)}
+          >
+            <ArrowRight className="rotate-180" />
+          </Button>
+          <Button
+            variant="outline"
+            size="icon"
+            className="size-8 bg-white/95"
+            aria-label={`下一张照片：${listing.title}`}
+            onClick={() => moveGallery(1)}
+          >
+            <ArrowRight />
+          </Button>
+        </div>
+        <div className="absolute bottom-3 left-1/2 flex -translate-x-1/2 gap-1">
+          {gallery.map((image, index) => (
+            <span
+              key={image}
+              className={cn(
+                "size-1.5 rounded-full border border-white/80",
+                index === galleryIndex ? "bg-white" : "bg-white/45"
+              )}
+            />
+          ))}
+        </div>
+        <Button
+          variant={favorite ? "accept" : "outline"}
+          size="icon"
+          className="absolute right-3 top-3 bg-white/95"
+          aria-label={favorite ? "取消收藏" : "收藏房源"}
+          onClick={() => onFavorite(listing.id)}
+        >
+          <Heart className={cn(favorite && "fill-current")} />
+        </Button>
+      </div>
+      <div className="flex flex-col gap-3 p-4">
+        <div className="flex items-start justify-between gap-3">
+          <button className="min-w-0 text-left" type="button" onClick={() => onSelect(listing)}>
+            <div className="text-base font-bold text-primary">{listing.title}</div>
+            <div className="mt-1 flex items-center gap-1 text-sm font-semibold text-muted-foreground">
+              <MapPin className="size-4" aria-hidden="true" />
+              {listing.area}
+            </div>
+          </button>
+          <div className="flex items-center gap-1 text-sm font-bold text-primary">
+            <Star className="size-4 fill-current text-trust-amber" aria-hidden="true" />
+            {listing.score}
+          </div>
+        </div>
+        <div className="flex items-baseline gap-2">
+          <span className="text-xl font-extrabold text-primary">${listing.price}</span>
+          <span className="text-sm font-semibold text-muted-foreground line-through">
+            ${listing.originalPrice}
+          </span>
+          <span className="text-sm font-semibold text-muted-foreground">/月</span>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {listing.tags.map((tag) => (
+            <Badge key={tag} variant={tag.includes("Group") ? "success" : "secondary"}>
+              {tag}
+            </Badge>
+          ))}
+        </div>
+        <Button
+          variant={selected ? "trust" : "outline"}
+          className="w-full justify-between"
+          onClick={() => onSelect(listing)}
+        >
+          {selected ? "正在查看" : "查看详情"}
+          <ArrowRight data-icon="inline-end" />
+        </Button>
+      </div>
+    </article>
+  );
+}
+
+function EmptyResults({ filters, onClear }: { filters: SearchFilters; onClear: () => void }) {
+  const insight = buildSearchInsight(filters, 0);
+
   return (
     <Card className="shadow-panel">
       <CardContent className="flex min-h-[240px] flex-col items-center justify-center gap-4 p-8 text-center">
@@ -1852,8 +2475,15 @@ function EmptyResults({ onClear }: { onClear: () => void }) {
         <div>
           <h2 className="text-xl font-bold text-primary">没有命中的房源</h2>
           <p className="mt-2 max-w-md text-sm font-medium text-muted-foreground">
-            可以放宽预算、清空地标关键词，或切换设施偏好。Group 推荐会在后端接入后继续做交集排序。
+            {insight.suggestion}
           </p>
+        </div>
+        <div className="flex max-w-2xl flex-wrap justify-center gap-2">
+          {insight.chips.map((chip) => (
+            <Badge key={chip} variant="secondary">
+              {chip}
+            </Badge>
+          ))}
         </div>
         <Button variant="trust" onClick={onClear}>
           重置筛选
@@ -2172,7 +2802,7 @@ function PublishingFlow({
       <CardHeader>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <CardTitle>发房静态流程</CardTitle>
+            <CardTitle>发布房源流程</CardTitle>
             <CardDescription>分类相册、净价补贴、房东知情承诺、发布审核</CardDescription>
           </div>
           <Button variant="trust" size="sm" onClick={() => onCreate(draft)} disabled={isPublishing}>

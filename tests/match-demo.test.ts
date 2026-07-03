@@ -3,7 +3,9 @@ import { describe, expect, it } from "vitest";
 import {
   buildDealRoom,
   buildMatchFit,
+  getDecisionFeedback,
   getBudgetNumber,
+  getMatchMomentum,
   recommendListingsForRoommate,
   type DemoListing,
   type DemoRoommate
@@ -133,5 +135,23 @@ describe("match demo", () => {
     expect(readyDealRoom.messages[1].author).toBe("You");
     expect(readyDealRoom.trustChecklist[0].detail).toBe("Both verified");
     expect(readyDealRoom.trustChecklist[2].detail).toBe("Both clear");
+  });
+
+  it("builds lightweight Tinder-style decision feedback", () => {
+    expect(getDecisionFeedback("like", "Jasmine")).toEqual({
+      label: "MATCH",
+      tone: "like",
+      detail: "Jasmine 已加入 Deal Room"
+    });
+    expect(getDecisionFeedback("later", "Jasmine").label).toBe("LATER");
+    expect(getDecisionFeedback("pass", "Jasmine").tone).toBe("pass");
+  });
+
+  it("summarizes match queue momentum", () => {
+    expect(getMatchMomentum(2, 1, 5)).toEqual({
+      label: "3/5 reviewed",
+      detail: "2 liked · 1 passed",
+      progress: 60
+    });
   });
 });

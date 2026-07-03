@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Sublet Pipeline">
+  <rect width="64" height="64" rx="14" fill="#183A37" />
+  <path d="M16 33.5 32 18l16 15.5V50H38V38H26v12H16V33.5Z" fill="#F8FAF7" />
+  <path d="M22 26.5 32 17l10 9.5" fill="none" stroke="#6EC6B8" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" />
+  <circle cx="46" cy="18" r="7" fill="#F0B84F" />
+</svg>
