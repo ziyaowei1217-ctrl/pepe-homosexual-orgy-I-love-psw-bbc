@@ -19,7 +19,7 @@ import {
   WalletCards,
   X
 } from "lucide-react";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -30,8 +30,12 @@ import {
   buildDealRoom,
   type DemoListing,
   type DemoRoommate,
+  type DecisionFeedback,
   type MatchMetric,
-  type RecommendedListing
+  type RecommendedListing,
+  getDecisionFeedback,
+  getMatchMomentum,
+  type RoommateDecision
 } from "@/lib/match-demo";
 import { cn } from "@/lib/utils";
 
@@ -68,6 +72,11 @@ const mapPositions = [
   "left-[36%] top-[64%]"
 ];
 
+type DecisionFeedbackState = {
+  targetKey: string;
+  feedback: DecisionFeedback;
+};
+
 export function RoommateFirstWorkspace({
   roommate,
   roommates,
@@ -87,20 +96,47 @@ export function RoommateFirstWorkspace({
   onRequestTour,
   onOpenDiscover
 }: RoommateFirstWorkspaceProps) {
+  const [decisionFeedbackState, setDecisionFeedbackState] = useState<DecisionFeedbackState | null>(null);
   const dealRoom = useMemo(
     () => buildDealRoom(roommate, listings, groupMembers, { readyForTour: canRequestTour, viewerName: "You" }),
     [canRequestTour, groupMembers, listings, roommate]
   );
+  const momentum = getMatchMomentum(likedCount, skippedCount, roommates.length);
   const activeHomes = dealRoom.recommendedHomes.slice(0, 3);
+  const roommateKey = roommate.id ?? roommate.name;
+  const visibleDecisionFeedback =
+    decisionFeedbackState?.targetKey === roommateKey ? decisionFeedbackState.feedback : null;
+
+  function handleDecision(decision: RoommateDecision, action: () => void) {
+    setDecisionFeedbackState({
+      targetKey: roommateKey,
+      feedback: getDecisionFeedback(decision, roommate.name)
+    });
+    action();
+  }
 
   return (
     <section className="mx-auto flex w-full max-w-[1540px] flex-col gap-4 px-4 py-4 xl:px-6">
-      <div className="flex flex-col gap-3 rounded-lg border bg-white p-3 shadow-sm lg:flex-row lg:items-center lg:justify-between">
-        <div className="min-w-0">
-          <h1 className="text-2xl font-extrabold text-primary">Roommate Match</h1>
-          <p className="mt-1 text-sm font-semibold text-muted-foreground">
-            {roommates.length} verified profiles · {likedCount} liked · {skippedCount} passed
-          </p>
+      <div className="flex flex-col gap-4 rounded-lg border bg-white p-3 shadow-sm lg:flex-row lg:items-center lg:justify-between">
+        <div className="grid min-w-0 flex-1 grid-cols-1 gap-3 lg:grid-cols-[minmax(220px,0.8fr)_minmax(260px,1fr)] lg:items-center">
+          <div className="min-w-0">
+            <h1 className="text-2xl font-extrabold text-primary">Roommate Match</h1>
+            <p className="mt-1 text-sm font-semibold text-muted-foreground">
+              {roommates.length} verified profiles · {momentum.detail}
+            </p>
+          </div>
+          <div className="rounded-md bg-secondary p-3">
+            <div className="flex items-center justify-between gap-3 text-xs font-bold text-muted-foreground">
+              <span>{momentum.label}</span>
+              <span>{momentum.progress}%</span>
+            </div>
+            <div className="mt-2 h-2 rounded-full bg-white">
+              <div
+                className="h-2 rounded-full bg-trust-sky transition-all"
+                style={{ width: `${momentum.progress}%` }}
+              />
+            </div>
+          </div>
         </div>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
           <Button variant="outline" size="sm" onClick={onOpenDiscover}>
@@ -124,9 +160,10 @@ export function RoommateFirstWorkspace({
           roommate={roommate}
           activeIndex={activeIndex}
           total={roommates.length}
-          onReject={onReject}
-          onLater={onLater}
-          onLike={onLike}
+          decisionFeedback={visibleDecisionFeedback}
+          onReject={() => handleDecision("pass", onReject)}
+          onLater={() => handleDecision("later", onLater)}
+          onLike={() => handleDecision("like", onLike)}
         />
 
         <div className="flex min-w-0 flex-col gap-4">
@@ -162,6 +199,7 @@ function RoommateSwipeCard({
   roommate,
   activeIndex,
   total,
+  decisionFeedback,
   onReject,
   onLater,
   onLike
@@ -169,6 +207,7 @@ function RoommateSwipeCard({
   roommate: DemoRoommate;
   activeIndex: number;
   total: number;
+  decisionFeedback: DecisionFeedback | null;
   onReject: () => void;
   onLater: () => void;
   onLike: () => void;
@@ -186,6 +225,18 @@ function RoommateSwipeCard({
             {activeIndex + 1}/{total}
           </Badge>
         </div>
+        {decisionFeedback ? (
+          <div
+            className={cn(
+              "absolute right-5 top-20 rotate-6 rounded-md border-2 bg-white/92 px-4 py-2 text-2xl font-black shadow-card",
+              decisionFeedback.tone === "like" && "border-trust-green text-trust-green",
+              decisionFeedback.tone === "later" && "border-trust-amber text-trust-amber",
+              decisionFeedback.tone === "pass" && "border-trust-red text-trust-red"
+            )}
+          >
+            {decisionFeedback.label}
+          </div>
+        ) : null}
         <div className="absolute bottom-0 left-0 right-0 p-5 text-white">
           <div className="flex items-center gap-2">
             <h2 className="text-3xl font-extrabold tracking-normal">
@@ -211,6 +262,23 @@ function RoommateSwipeCard({
             </Badge>
           ))}
         </div>
+
+        {decisionFeedback ? (
+          <div
+            className={cn(
+              "rounded-md border p-3 text-sm font-bold",
+              decisionFeedback.tone === "like" && "border-trust-green/20 bg-trust-green/10 text-trust-green",
+              decisionFeedback.tone === "later" && "border-trust-amber/20 bg-trust-amber/10 text-trust-amber",
+              decisionFeedback.tone === "pass" && "border-trust-red/20 bg-trust-red/10 text-trust-red"
+            )}
+          >
+            {decisionFeedback.detail}
+          </div>
+        ) : (
+          <div className="rounded-md border bg-secondary p-3 text-sm font-semibold text-primary">
+            看照片和三条信号先做决定；喜欢后右侧 Deal Room 会解锁组队看房。
+          </div>
+        )}
 
         <div className="grid grid-cols-3 gap-3">
           <SwipeButton label="Pass" variant="reject" icon={X} onClick={onReject} />
@@ -389,6 +457,17 @@ function RecommendedHomesPanel({
                   <span>{home.baths} bath</span>
                   <span>{home.tags[0]}</span>
                 </div>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  <span className="rounded-full bg-secondary px-2 py-0.5 text-[11px] font-bold text-primary">
+                    {home.fitScore}% fit
+                  </span>
+                  <span className="rounded-full bg-trust-sky/10 px-2 py-0.5 text-[11px] font-bold text-trust-blue">
+                    {home.commute}
+                  </span>
+                  <span className="rounded-full bg-trust-green/10 px-2 py-0.5 text-[11px] font-bold text-trust-green">
+                    {home.trust.includes("房东") || home.trust.includes("Verified") ? "trust ready" : "verify next"}
+                  </span>
+                </div>
                 <div className="mt-2 text-lg font-extrabold text-primary">
                   ${home.perPersonPrice.toLocaleString()}
                   <span className="text-xs font-semibold text-muted-foreground"> / person</span>
@@ -484,6 +563,18 @@ function DealRoomRail({
               </div>
             </div>
           ))}
+          <div
+            className={cn(
+              "rounded-md border p-3 text-sm font-semibold",
+              canRequestTour
+                ? "border-trust-green/20 bg-trust-green/10 text-trust-green"
+                : "border-trust-amber/20 bg-trust-amber/10 text-trust-amber"
+            )}
+          >
+            {canRequestTour
+              ? "It's a match. You can request a group tour or continue the chat preview below."
+              : "Like this roommate to unlock shared tours and application steps."}
+          </div>
         </CardContent>
       </Card>
 

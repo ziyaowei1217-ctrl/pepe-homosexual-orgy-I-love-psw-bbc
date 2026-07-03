@@ -6,11 +6,12 @@
   "scripts": {
     "dev": "nest start --watch",
     "build": "prisma generate && nest build",
-    "start": "node dist/main.js",
+    "start": "node dist/src/main.js",
     "test": "vitest run",
     "typecheck": "prisma generate && tsc --noEmit",
     "launch:check": "npm run test && npm run typecheck && npm run build && DATABASE_URL=\"${DATABASE_URL:-postgresql://sublet:sublet@localhost:5432/sublet_pipeline?schema=public}\" prisma validate",
     "launch:smoke": "RUN_DB_SMOKE=1 vitest run test/launch-smoke.spec.ts",
+    "seed:la": "DATABASE_URL=\"${DATABASE_URL:-postgresql://sublet:sublet@localhost:5432/sublet_pipeline?schema=public}\" ts-node -r tsconfig-paths/register src/seed-los-angeles.ts",
     "prisma": "prisma"
   },
   "dependencies": {

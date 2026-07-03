@@ -4,6 +4,7 @@ import { ConfigService } from "@nestjs/config";
 import { NestFactory } from "@nestjs/core";
 
 import { AppModule } from "./app.module";
+import { getCorsOrigins } from "./config/cors";
 
 type SecurityHeaderResponse = {
   setHeader(name: string, value: string): unknown;
@@ -12,7 +13,7 @@ type SecurityHeaderResponse = {
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   const config = app.get(ConfigService);
-  const webOrigin = config.get<string>("WEB_ORIGIN") ?? "http://localhost:3000";
+  const webOrigins = getCorsOrigins(config.get<string>("WEB_ORIGIN"));
 
   app.use((_request: unknown, response: SecurityHeaderResponse, next: () => void) => {
     response.setHeader("X-Content-Type-Options", "nosniff");
@@ -22,7 +23,7 @@ async function bootstrap() {
     next();
   });
   app.enableCors({
-    origin: webOrigin,
+    origin: webOrigins,
     credentials: true
   });
   app.setGlobalPrefix("api/v1");

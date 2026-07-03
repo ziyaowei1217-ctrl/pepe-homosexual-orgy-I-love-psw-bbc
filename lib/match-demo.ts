@@ -73,6 +73,14 @@ export type DealRoom = {
   primaryCta: "Request group tour" | "Like to unlock group tour";
 };
 
+export type RoommateDecision = "pass" | "later" | "like";
+
+export type DecisionFeedback = {
+  label: "NOPE" | "LATER" | "MATCH";
+  tone: RoommateDecision;
+  detail: string;
+};
+
 export type BuildDealRoomOptions = {
   readyForTour?: boolean;
   viewerName?: string;
@@ -89,6 +97,43 @@ const trustWords = ["verified", "认证", "房东知情", "视频", "保障", "l
 export function getBudgetNumber(roommate: Pick<DemoRoommate, "budget">) {
   const parsed = Number(roommate.budget.replace(/[^0-9]/g, ""));
   return Number.isFinite(parsed) ? parsed : 0;
+}
+
+export function getDecisionFeedback(
+  decision: RoommateDecision,
+  roommateName: string
+): DecisionFeedback {
+  if (decision === "like") {
+    return {
+      label: "MATCH",
+      tone: "like",
+      detail: `${roommateName} 已加入 Deal Room`
+    };
+  }
+
+  if (decision === "later") {
+    return {
+      label: "LATER",
+      tone: "later",
+      detail: `${roommateName} 已放入稍后比较`
+    };
+  }
+
+  return {
+    label: "NOPE",
+    tone: "pass",
+    detail: `${roommateName} 已跳过`
+  };
+}
+
+export function getMatchMomentum(likedCount: number, skippedCount: number, total: number) {
+  const reviewed = Math.min(total, likedCount + skippedCount);
+
+  return {
+    label: `${reviewed}/${total} reviewed`,
+    detail: `${likedCount} liked · ${skippedCount} passed`,
+    progress: total > 0 ? Math.round((reviewed / total) * 100) : 0
+  };
 }
 
 export function buildMatchFit(
