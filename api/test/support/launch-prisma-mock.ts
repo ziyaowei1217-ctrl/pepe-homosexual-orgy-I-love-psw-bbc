@@ -3,6 +3,8 @@ type ListingStatus = "DRAFT" | "SUBMITTED" | "APPROVED" | "REJECTED";
 type RoommateActionType = "LIKE" | "PASS" | "LATER";
 type DealRoomStatus = "ACTIVE" | "ARCHIVED";
 type TourRequestStatus = "REQUESTED" | "SCHEDULED" | "CANCELLED";
+type ViewingMode = "IN_PERSON" | "VIDEO";
+type ViewingRequestStatus = "REQUESTED" | "CONFIRMED" | "COMPLETED" | "CANCELLED";
 
 type VerificationCodeRecord = {
   id: string;
@@ -106,6 +108,46 @@ type TourRequestRecord = {
   updatedAt: Date;
 };
 
+type DealThreadRecord = {
+  id: string;
+  ownerId: string;
+  dealRoomId: string | null;
+  listingId: string;
+  listingTitle: string;
+  area: string;
+  contactName: string;
+  participantNames: string[];
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+type DealMessageRecord = {
+  id: string;
+  threadId: string;
+  senderId: string | null;
+  senderName: string;
+  body: string;
+  align: string;
+  status: string;
+  createdAt: Date;
+};
+
+type ViewingRequestRecord = {
+  id: string;
+  threadId: string;
+  requesterId: string;
+  listingId: string;
+  listingTitle: string;
+  area: string;
+  timeLabel: string;
+  iso: Date;
+  mode: ViewingMode;
+  participantNames: string[];
+  status: ViewingRequestStatus;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
 type GroupRecord = {
   id: string;
   name: string;
@@ -129,6 +171,79 @@ type TrustQueueItemRecord = {
   label: string;
   value: number;
   variant: string;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+type ProfileRecord = {
+  id: string;
+  email: string;
+  displayName: string | null;
+  avatarUrl: string | null;
+  school: string | null;
+  city: string | null;
+  role: string;
+  eduEmailVerified: boolean;
+  phoneVerified: boolean;
+  wechat: string | null;
+  instagram: string | null;
+  bio: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+type RoommateMatchingProfileRecord = {
+  id: string;
+  userId: string;
+  school: string | null;
+  city: string | null;
+  budgetMin: number | null;
+  budgetMax: number | null;
+  moveInDate: Date | null;
+  moveOutDate: Date | null;
+  preferredNeighborhoods: string[];
+  roomType: string | null;
+  cleanliness: string | null;
+  sleepSchedule: string | null;
+  smoking: string | null;
+  pets: string | null;
+  guests: string | null;
+  intro: string | null;
+  lookingFor: string | null;
+  status: string;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+type HousingListingRecord = {
+  id: string;
+  ownerId: string;
+  title: string;
+  listingType: string;
+  propertyType: string;
+  roomType: string;
+  priceMonthly: number;
+  depositAmount: number | null;
+  city: string;
+  neighborhood: string | null;
+  schoolNearby: string | null;
+  addressApprox: string | null;
+  lat: number | null;
+  lng: number | null;
+  moveInDate: Date;
+  moveOutDate: Date | null;
+  flexibleDates: boolean;
+  bedrooms: number;
+  bathrooms: number;
+  furnished: boolean;
+  utilitiesIncluded: boolean;
+  laundry: boolean;
+  parking: boolean;
+  petsAllowed: boolean;
+  leaseApproved: boolean;
+  description: string | null;
+  photoUrls: string[];
+  status: string;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -160,6 +275,19 @@ type ListingInclude = {
   };
 };
 
+type DealThreadInclude = {
+  messages?: {
+    orderBy?: {
+      createdAt?: "asc" | "desc";
+    };
+  };
+  viewingRequests?: {
+    orderBy?: {
+      createdAt?: "asc" | "desc";
+    };
+  };
+};
+
 export function createLaunchPrismaMock() {
   const state = {
     codes: [] as VerificationCodeRecord[],
@@ -171,9 +299,15 @@ export function createLaunchPrismaMock() {
     rooms: [] as DealRoomRecord[],
     members: [] as DealRoomMemberRecord[],
     tours: [] as TourRequestRecord[],
+    dealThreads: [] as DealThreadRecord[],
+    dealMessages: [] as DealMessageRecord[],
+    viewingRequests: [] as ViewingRequestRecord[],
     groups: [] as GroupRecord[],
     bookings: [] as BookingRecord[],
-    trustQueueItems: [] as TrustQueueItemRecord[]
+    trustQueueItems: [] as TrustQueueItemRecord[],
+    profiles: [] as ProfileRecord[],
+    roommateMatchingProfiles: [] as RoommateMatchingProfileRecord[],
+    housingListings: [] as HousingListingRecord[]
   };
 
   const mock = {
@@ -249,6 +383,145 @@ export function createLaunchPrismaMock() {
         };
         state.users.push(created);
         return created;
+      }
+    },
+    profile: {
+      findUnique: async ({ where }: { where: { id?: string; email?: string } }) =>
+        state.profiles.find((profile) => profile.id === where.id || profile.email === where.email) ?? null,
+      upsert: async ({
+        where,
+        create,
+        update
+      }: {
+        where: { email: string };
+        create: Pick<ProfileRecord, "email"> & Partial<ProfileRecord>;
+        update: Partial<ProfileRecord>;
+      }) => {
+        const existing = state.profiles.find((profile) => profile.email === where.email);
+        if (existing) {
+          Object.assign(existing, definedData(update), { updatedAt: new Date() });
+          return existing;
+        }
+
+        const created: ProfileRecord = {
+          id: `profile-${state.profiles.length + 1}`,
+          email: create.email,
+          displayName: create.displayName ?? null,
+          avatarUrl: create.avatarUrl ?? null,
+          school: create.school ?? null,
+          city: create.city ?? null,
+          role: create.role ?? "renter",
+          eduEmailVerified: create.eduEmailVerified ?? false,
+          phoneVerified: create.phoneVerified ?? false,
+          wechat: create.wechat ?? null,
+          instagram: create.instagram ?? null,
+          bio: create.bio ?? null,
+          createdAt: new Date(),
+          updatedAt: new Date()
+        };
+        state.profiles.push(created);
+        return created;
+      },
+      update: async ({ where, data }: { where: { id: string }; data: Partial<ProfileRecord> }) => {
+        const profile = state.profiles.find((record) => record.id === where.id);
+        if (!profile) throw new Error(`Missing profile ${where.id}`);
+
+        Object.assign(profile, definedData(data), { updatedAt: new Date() });
+        return profile;
+      }
+    },
+    roommateMatchingProfile: {
+      create: async ({
+        data
+      }: {
+        data: Pick<RoommateMatchingProfileRecord, "userId"> & Partial<RoommateMatchingProfileRecord>;
+      }) => {
+        const created: RoommateMatchingProfileRecord = {
+          id: `roommate-profile-${state.roommateMatchingProfiles.length + 1}`,
+          userId: data.userId,
+          school: data.school ?? null,
+          city: data.city ?? null,
+          budgetMin: data.budgetMin ?? null,
+          budgetMax: data.budgetMax ?? null,
+          moveInDate: data.moveInDate ?? null,
+          moveOutDate: data.moveOutDate ?? null,
+          preferredNeighborhoods: data.preferredNeighborhoods ?? [],
+          roomType: data.roomType ?? null,
+          cleanliness: data.cleanliness ?? null,
+          sleepSchedule: data.sleepSchedule ?? null,
+          smoking: data.smoking ?? null,
+          pets: data.pets ?? null,
+          guests: data.guests ?? null,
+          intro: data.intro ?? null,
+          lookingFor: data.lookingFor ?? null,
+          status: data.status ?? "active",
+          createdAt: new Date(),
+          updatedAt: new Date()
+        };
+        state.roommateMatchingProfiles.push(created);
+        return created;
+      },
+      findMany: async ({ where }: { where?: Partial<RoommateMatchingProfileRecord> } = {}) =>
+        state.roommateMatchingProfiles.filter((profile) => matchesPartial(profile, where)),
+      findFirst: async ({ where }: { where: Partial<RoommateMatchingProfileRecord> }) =>
+        state.roommateMatchingProfiles.find((profile) => matchesPartial(profile, where)) ?? null,
+      update: async ({ where, data }: { where: { id: string }; data: Partial<RoommateMatchingProfileRecord> }) => {
+        const profile = state.roommateMatchingProfiles.find((record) => record.id === where.id);
+        if (!profile) throw new Error(`Missing roommate matching profile ${where.id}`);
+
+        Object.assign(profile, definedData(data), { updatedAt: new Date() });
+        return profile;
+      }
+    },
+    housingListing: {
+      create: async ({ data }: { data: Pick<HousingListingRecord, "ownerId" | "title"> & Partial<HousingListingRecord> }) => {
+        const created: HousingListingRecord = {
+          id: `housing-listing-${state.housingListings.length + 1}`,
+          ownerId: data.ownerId,
+          title: data.title,
+          listingType: data.listingType ?? "sublet",
+          propertyType: data.propertyType ?? "apartment",
+          roomType: data.roomType ?? "private_room",
+          priceMonthly: data.priceMonthly ?? 1,
+          depositAmount: data.depositAmount ?? null,
+          city: data.city ?? "",
+          neighborhood: data.neighborhood ?? null,
+          schoolNearby: data.schoolNearby ?? null,
+          addressApprox: data.addressApprox ?? null,
+          lat: data.lat ?? null,
+          lng: data.lng ?? null,
+          moveInDate: data.moveInDate ?? new Date(),
+          moveOutDate: data.moveOutDate ?? null,
+          flexibleDates: data.flexibleDates ?? false,
+          bedrooms: data.bedrooms ?? 0,
+          bathrooms: data.bathrooms ?? 0,
+          furnished: data.furnished ?? false,
+          utilitiesIncluded: data.utilitiesIncluded ?? false,
+          laundry: data.laundry ?? false,
+          parking: data.parking ?? false,
+          petsAllowed: data.petsAllowed ?? false,
+          leaseApproved: data.leaseApproved ?? false,
+          description: data.description ?? null,
+          photoUrls: data.photoUrls ?? [],
+          status: data.status ?? "draft",
+          createdAt: new Date(),
+          updatedAt: new Date()
+        };
+        state.housingListings.push(created);
+        return created;
+      },
+      findMany: async ({ where }: { where?: Partial<HousingListingRecord> } = {}) =>
+        state.housingListings.filter((listing) => matchesPartial(listing, where)),
+      findUnique: async ({ where }: { where: { id: string } }) =>
+        state.housingListings.find((listing) => listing.id === where.id) ?? null,
+      findFirst: async ({ where }: { where: Partial<HousingListingRecord> }) =>
+        state.housingListings.find((listing) => matchesPartial(listing, where)) ?? null,
+      update: async ({ where, data }: { where: { id: string }; data: Partial<HousingListingRecord> }) => {
+        const listing = state.housingListings.find((record) => record.id === where.id);
+        if (!listing) throw new Error(`Missing housing listing ${where.id}`);
+
+        Object.assign(listing, definedData(data), { updatedAt: new Date() });
+        return listing;
       }
     },
     listing: {
@@ -455,6 +728,146 @@ export function createLaunchPrismaMock() {
         return created;
       }
     },
+    dealThread: {
+      upsert: async ({
+        where,
+        create,
+        update,
+        include
+      }: {
+        where: { ownerId_listingId: { ownerId: string; listingId: string } };
+        create: Pick<DealThreadRecord, "ownerId" | "listingId" | "listingTitle" | "area" | "contactName"> &
+          Partial<Pick<DealThreadRecord, "dealRoomId" | "participantNames">>;
+        update: Partial<Pick<DealThreadRecord, "dealRoomId" | "listingTitle" | "area" | "contactName" | "participantNames">>;
+        include?: DealThreadInclude;
+      }) => {
+        const existing = state.dealThreads.find(
+          (thread) =>
+            thread.ownerId === where.ownerId_listingId.ownerId && thread.listingId === where.ownerId_listingId.listingId
+        );
+        if (existing) {
+          Object.assign(existing, definedData(update), { updatedAt: new Date() });
+          return withDealThreadIncludes(existing, state.dealMessages, state.viewingRequests, include);
+        }
+
+        const created: DealThreadRecord = {
+          id: `deal-thread-${state.dealThreads.length + 1}`,
+          ownerId: create.ownerId,
+          dealRoomId: create.dealRoomId ?? null,
+          listingId: create.listingId,
+          listingTitle: create.listingTitle,
+          area: create.area,
+          contactName: create.contactName,
+          participantNames: create.participantNames ?? [],
+          createdAt: new Date(),
+          updatedAt: new Date()
+        };
+        state.dealThreads.push(created);
+        return withDealThreadIncludes(created, state.dealMessages, state.viewingRequests, include);
+      },
+      findFirst: async ({
+        where,
+        include
+      }: {
+        where: { id?: string; ownerId?: string };
+        include?: DealThreadInclude;
+      }) => {
+        const thread =
+          state.dealThreads.find(
+            (record) =>
+              (where.id === undefined || record.id === where.id) &&
+              (where.ownerId === undefined || record.ownerId === where.ownerId)
+          ) ?? null;
+        return thread ? withDealThreadIncludes(thread, state.dealMessages, state.viewingRequests, include) : null;
+      },
+      findMany: async ({
+        where,
+        include,
+        orderBy
+      }: {
+        where?: { ownerId?: string };
+        include?: DealThreadInclude;
+        orderBy?: { updatedAt?: "asc" | "desc" };
+      } = {}) => {
+        const filtered = state.dealThreads.filter(
+          (thread) => where?.ownerId === undefined || thread.ownerId === where.ownerId
+        );
+        return sortByDate(filtered, "updatedAt", orderBy?.updatedAt).map((thread) =>
+          withDealThreadIncludes(thread, state.dealMessages, state.viewingRequests, include)
+        );
+      }
+    },
+    dealMessage: {
+      create: async ({
+        data
+      }: {
+        data: Omit<DealMessageRecord, "id" | "createdAt">;
+      }) => {
+        const created: DealMessageRecord = {
+          id: `deal-message-${state.dealMessages.length + 1}`,
+          ...data,
+          senderId: data.senderId ?? null,
+          align: data.align ?? "right",
+          status: data.status ?? "sent",
+          createdAt: new Date()
+        };
+        state.dealMessages.push(created);
+        const thread = state.dealThreads.find((record) => record.id === data.threadId);
+        if (thread) thread.updatedAt = new Date();
+        return created;
+      }
+    },
+    viewingRequest: {
+      findFirst: async ({
+        where,
+        orderBy
+      }: {
+        where: { threadId?: string; status?: { in?: ViewingRequestStatus[] } };
+        orderBy?: { updatedAt?: "asc" | "desc"; createdAt?: "asc" | "desc" };
+      }) => {
+        const matches = state.viewingRequests.filter(
+          (request) =>
+            (where.threadId === undefined || request.threadId === where.threadId) &&
+            (where.status?.in === undefined || where.status.in.includes(request.status))
+        );
+        const sorted = orderBy?.updatedAt
+          ? sortByDate(matches, "updatedAt", orderBy.updatedAt)
+          : sortByDate(matches, "createdAt", orderBy?.createdAt);
+
+        return sorted[0] ?? null;
+      },
+      create: async ({
+        data
+      }: {
+        data: Omit<ViewingRequestRecord, "id" | "createdAt" | "updatedAt">;
+      }) => {
+        const created: ViewingRequestRecord = {
+          id: `viewing-request-${state.viewingRequests.length + 1}`,
+          ...data,
+          createdAt: new Date(),
+          updatedAt: new Date()
+        };
+        state.viewingRequests.push(created);
+        const thread = state.dealThreads.find((record) => record.id === data.threadId);
+        if (thread) thread.updatedAt = new Date();
+        return created;
+      },
+      update: async ({
+        where,
+        data
+      }: {
+        where: { id: string };
+        data: Partial<Omit<ViewingRequestRecord, "id" | "createdAt" | "updatedAt">>;
+      }) => {
+        const request = state.viewingRequests.find((record) => record.id === where.id);
+        if (!request) throw new Error(`Missing viewing request ${where.id}`);
+
+        Object.assign(request, definedData(data), { updatedAt: new Date() });
+        const thread = state.dealThreads.find((record) => record.id === request.threadId);
+        if (thread) thread.updatedAt = new Date();
+        return request;
+      }
+    },
     group: {
       findMany: async ({ orderBy }: { orderBy?: { createdAt?: "asc" | "desc" } } = {}) =>
         sortByDate(state.groups, "createdAt", orderBy?.createdAt)
@@ -513,6 +926,10 @@ function definedData<T extends Record<string, unknown>>(data: T) {
   return Object.fromEntries(Object.entries(data).filter(([, value]) => value !== undefined));
 }
 
+function matchesPartial<T extends Record<string, unknown>>(record: T, where: Partial<T> = {}) {
+  return Object.entries(where).every(([key, value]) => value === undefined || record[key] === value);
+}
+
 function withDealRoomIncludes(
   room: DealRoomRecord,
   members: DealRoomMemberRecord[],
@@ -523,6 +940,35 @@ function withDealRoomIncludes(
     ...room,
     ...(include.members ? { members: members.filter((member) => member.dealRoomId === room.id) } : {}),
     ...(include.tourRequest ? { tourRequest: tours.find((tour) => tour.dealRoomId === room.id) ?? null } : {})
+  };
+}
+
+function withDealThreadIncludes(
+  thread: DealThreadRecord,
+  messages: DealMessageRecord[],
+  viewingRequests: ViewingRequestRecord[],
+  include: DealThreadInclude = {}
+) {
+  return {
+    ...thread,
+    ...(include.messages
+      ? {
+          messages: sortByDate(
+            messages.filter((message) => message.threadId === thread.id),
+            "createdAt",
+            include.messages.orderBy?.createdAt
+          )
+        }
+      : {}),
+    ...(include.viewingRequests
+      ? {
+          viewingRequests: sortByDate(
+            viewingRequests.filter((request) => request.threadId === thread.id),
+            "createdAt",
+            include.viewingRequests.orderBy?.createdAt
+          )
+        }
+      : {})
   };
 }
 

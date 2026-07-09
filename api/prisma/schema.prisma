@@ -36,57 +36,133 @@ enum TourRequestStatus {
   CANCELLED
 }
 
+enum ViewingMode {
+  IN_PERSON
+  VIDEO
+}
+
+enum ViewingRequestStatus {
+  REQUESTED
+  CONFIRMED
+  COMPLETED
+  CANCELLED
+}
+
 model User {
-  id               String            @id @default(cuid())
-  email            String            @unique
-  role             UserRole          @default(USER)
-  createdAt        DateTime          @default(now())
-  updatedAt        DateTime          @updatedAt
-  listings         Listing[]
-  roommateActions  RoommateAction[]
-  ownedDealRooms   DealRoom[]
-  tourRequests     TourRequest[]
+  id              String           @id @default(cuid())
+  email           String           @unique
+  role            UserRole         @default(USER)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  listings        Listing[]
+  roommateActions RoommateAction[]
+  ownedDealRooms  DealRoom[]
+  tourRequests    TourRequest[]
+  dealThreads     DealThread[]
+  dealMessages    DealMessage[]
+  viewingRequests ViewingRequest[]
+}
+
+model Profile {
+  id               String                    @id @default(uuid()) @db.Uuid
+  email            String                    @unique
+  displayName      String?                   @map("display_name")
+  avatarUrl        String?                   @map("avatar_url")
+  school           String?
+  city             String?
+  role             String                    @default("renter")
+  eduEmailVerified Boolean                   @default(false) @map("edu_email_verified")
+  phoneVerified    Boolean                   @default(false) @map("phone_verified")
+  wechat           String?
+  instagram        String?
+  bio              String?
+  createdAt        DateTime                  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime                  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  roommateProfiles RoommateMatchingProfile[]
+  housingListings  HousingListing[]
+
+  @@index([school, city])
+  @@map("profiles")
 }
 
 model VerificationCode {
-  id         String    @id @default(cuid())
-  email      String
-  codeHash   String
-  attemptCount Int     @default(0)
-  expiresAt  DateTime
-  consumedAt DateTime?
-  createdAt  DateTime  @default(now())
+  id           String    @id @default(cuid())
+  email        String
+  codeHash     String
+  attemptCount Int       @default(0)
+  expiresAt    DateTime
+  consumedAt   DateTime?
+  createdAt    DateTime  @default(now())
 
   @@index([email, consumedAt, expiresAt])
 }
 
 model Listing {
-  id            String         @id @default(cuid())
-  ownerId       String
-  owner         User           @relation(fields: [ownerId], references: [id])
-  title         String
-  area          String
-  image         String
-  price         Int
-  originalPrice Int
-  beds          Int
-  baths         Int
-  commute       String
-  transit       String
-  trust         String
-  tags          String[]
-  score         Float          @default(4.8)
-  status        ListingStatus  @default(DRAFT)
-  submittedAt   DateTime?
-  reviewedAt    DateTime?
-  reviewerId    String?
+  id              String         @id @default(cuid())
+  ownerId         String
+  owner           User           @relation(fields: [ownerId], references: [id])
+  title           String
+  area            String
+  image           String
+  price           Int
+  originalPrice   Int
+  beds            Int
+  baths           Int
+  commute         String
+  transit         String
+  trust           String
+  tags            String[]
+  score           Float          @default(4.8)
+  status          ListingStatus  @default(DRAFT)
+  submittedAt     DateTime?
+  reviewedAt      DateTime?
+  reviewerId      String?
   rejectionReason String?
-  media         ListingMedia[]
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
+  media           ListingMedia[]
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
 
   @@index([status, createdAt])
   @@index([ownerId, status, updatedAt])
+}
+
+model HousingListing {
+  id                String    @id @default(uuid()) @db.Uuid
+  ownerId           String    @map("owner_id") @db.Uuid
+  owner             Profile   @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  title             String
+  listingType       String    @map("listing_type")
+  propertyType      String    @map("property_type")
+  roomType          String    @map("room_type")
+  priceMonthly      Int       @map("price_monthly")
+  depositAmount     Int?      @map("deposit_amount")
+  city              String
+  neighborhood      String?
+  schoolNearby      String?   @map("school_nearby")
+  addressApprox     String?   @map("address_approx")
+  lat               Decimal?  @db.Decimal(9, 6)
+  lng               Decimal?  @db.Decimal(9, 6)
+  moveInDate        DateTime  @map("move_in_date") @db.Date
+  moveOutDate       DateTime? @map("move_out_date") @db.Date
+  flexibleDates     Boolean   @default(false) @map("flexible_dates")
+  bedrooms          Decimal   @db.Decimal(4, 1)
+  bathrooms         Decimal   @db.Decimal(4, 1)
+  furnished         Boolean   @default(false)
+  utilitiesIncluded Boolean   @default(false) @map("utilities_included")
+  laundry           Boolean   @default(false)
+  parking           Boolean   @default(false)
+  petsAllowed       Boolean   @default(false) @map("pets_allowed")
+  leaseApproved     Boolean   @default(false) @map("lease_approved")
+  description       String?
+  photoUrls         String[]  @default([]) @map("photo_urls")
+  status            String    @default("draft")
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([ownerId, status, updatedAt])
+  @@index([city, neighborhood, priceMonthly])
+  @@index([listingType, roomType, status])
+  @@map("listings")
 }
 
 model ListingMedia {
@@ -100,7 +176,7 @@ model ListingMedia {
 }
 
 model RoommateProfile {
-  id              String            @id @default(cuid())
+  id              String           @id @default(cuid())
   name            String
   age             Int
   role            String
@@ -109,10 +185,39 @@ model RoommateProfile {
   budget          String
   commute         String
   tags            String[]
-  createdAt       DateTime          @default(now())
+  createdAt       DateTime         @default(now())
   actions         RoommateAction[]
   dealRooms       DealRoom[]
   dealRoomMembers DealRoomMember[]
+}
+
+model RoommateMatchingProfile {
+  id                     String    @id @default(uuid()) @db.Uuid
+  userId                 String    @map("user_id") @db.Uuid
+  user                   Profile   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  school                 String?
+  city                   String?
+  budgetMin              Int?      @map("budget_min")
+  budgetMax              Int?      @map("budget_max")
+  moveInDate             DateTime? @map("move_in_date") @db.Date
+  moveOutDate            DateTime? @map("move_out_date") @db.Date
+  preferredNeighborhoods String[]  @default([]) @map("preferred_neighborhoods")
+  roomType               String?   @map("room_type")
+  cleanliness            String?
+  sleepSchedule          String?   @map("sleep_schedule")
+  smoking                String?
+  pets                   String?
+  guests                 String?
+  intro                  String?
+  lookingFor             String?   @map("looking_for")
+  status                 String    @default("active")
+  createdAt              DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt              DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([userId, status])
+  @@index([city, school, status])
+  @@index([budgetMin, budgetMax])
+  @@map("roommate_profiles")
 }
 
 model Group {
@@ -143,14 +248,14 @@ model TrustQueueItem {
 }
 
 model RoommateAction {
-  id                 String              @id @default(cuid())
-  userId             String
-  user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
-  roommateProfileId  String
-  roommateProfile    RoommateProfile     @relation(fields: [roommateProfileId], references: [id], onDelete: Cascade)
-  action             RoommateActionType
-  createdAt          DateTime            @default(now())
-  updatedAt          DateTime            @updatedAt
+  id                String             @id @default(cuid())
+  userId            String
+  user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  roommateProfileId String
+  roommateProfile   RoommateProfile    @relation(fields: [roommateProfileId], references: [id], onDelete: Cascade)
+  action            RoommateActionType
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
 
   @@unique([userId, roommateProfileId])
   @@index([userId])
@@ -158,19 +263,20 @@ model RoommateAction {
 }
 
 model DealRoom {
-  id                 String              @id @default(cuid())
-  ownerId            String
-  owner              User                @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  roommateProfileId  String
-  roommateProfile    RoommateProfile     @relation(fields: [roommateProfileId], references: [id], onDelete: Cascade)
-  status             DealRoomStatus      @default(ACTIVE)
-  recommendedHomes   Json
-  pipeline           Json
-  trustChecklist     Json
-  members            DealRoomMember[]
-  tourRequest        TourRequest?
-  createdAt          DateTime            @default(now())
-  updatedAt          DateTime            @updatedAt
+  id                String           @id @default(cuid())
+  ownerId           String
+  owner             User             @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  roommateProfileId String
+  roommateProfile   RoommateProfile  @relation(fields: [roommateProfileId], references: [id], onDelete: Cascade)
+  status            DealRoomStatus   @default(ACTIVE)
+  recommendedHomes  Json
+  pipeline          Json
+  trustChecklist    Json
+  members           DealRoomMember[]
+  tourRequest       TourRequest?
+  threads           DealThread[]
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
 
   @@unique([ownerId, roommateProfileId])
   @@index([ownerId, status, updatedAt])
@@ -178,13 +284,13 @@ model DealRoom {
 }
 
 model DealRoomMember {
-  id                 String          @id @default(cuid())
-  dealRoomId         String
-  dealRoom           DealRoom        @relation(fields: [dealRoomId], references: [id], onDelete: Cascade)
-  roommateProfileId  String
-  roommateProfile    RoommateProfile @relation(fields: [roommateProfileId], references: [id], onDelete: Cascade)
-  snapshot           Json
-  createdAt          DateTime        @default(now())
+  id                String          @id @default(cuid())
+  dealRoomId        String
+  dealRoom          DealRoom        @relation(fields: [dealRoomId], references: [id], onDelete: Cascade)
+  roommateProfileId String
+  roommateProfile   RoommateProfile @relation(fields: [roommateProfileId], references: [id], onDelete: Cascade)
+  snapshot          Json
+  createdAt         DateTime        @default(now())
 
   @@unique([dealRoomId, roommateProfileId])
   @@index([dealRoomId])
@@ -202,4 +308,63 @@ model TourRequest {
   updatedAt   DateTime          @updatedAt
 
   @@index([requesterId, status, createdAt])
+}
+
+model DealThread {
+  id              String           @id @default(cuid())
+  ownerId         String
+  owner           User             @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  dealRoomId      String?
+  dealRoom        DealRoom?        @relation(fields: [dealRoomId], references: [id], onDelete: SetNull)
+  listingId       String
+  listingTitle    String
+  area            String
+  contactName     String
+  participantNames String[]        @default([])
+  messages        DealMessage[]
+  viewingRequests ViewingRequest[]
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  @@unique([ownerId, listingId])
+  @@index([ownerId, updatedAt])
+  @@index([dealRoomId])
+}
+
+model DealMessage {
+  id         String     @id @default(cuid())
+  threadId   String
+  thread     DealThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  senderId   String?
+  sender     User?      @relation(fields: [senderId], references: [id], onDelete: SetNull)
+  senderName String
+  body       String
+  align      String     @default("right")
+  status     String     @default("sent")
+  createdAt  DateTime   @default(now())
+
+  @@index([threadId, createdAt])
+  @@index([senderId])
+}
+
+model ViewingRequest {
+  id               String               @id @default(cuid())
+  threadId         String
+  thread           DealThread           @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  requesterId      String
+  requester        User                 @relation(fields: [requesterId], references: [id], onDelete: Cascade)
+  listingId        String
+  listingTitle     String
+  area             String
+  timeLabel        String
+  iso              DateTime
+  mode             ViewingMode
+  participantNames String[]             @default([])
+  status           ViewingRequestStatus @default(REQUESTED)
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+
+  @@index([threadId, createdAt])
+  @@index([requesterId, status, createdAt])
+  @@index([listingId, status, createdAt])
 }

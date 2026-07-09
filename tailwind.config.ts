@@ -41,8 +41,8 @@ const config: Config = {
         },
         trust: {
           navy: "#002244",
-          blue: "#004B87",
-          sky: "#0076A8",
+          blue: "#0D4599",
+          sky: "#006AFF",
           green: "#107C41",
           amber: "#B45309",
           red: "#D9381E",

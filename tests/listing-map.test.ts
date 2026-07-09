@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { getListingCoordinates, getMapCenterForListings, getMapMarkers, getMapTiles, osmTileUrl } from "../lib/listing-map";
+import {
+  getListingCoordinates,
+  getMapCenterForListings,
+  getMapMarkers,
+  getMapSummary,
+  getMapTiles,
+  osmTileUrl
+} from "../lib/listing-map";
 
 describe("listing map", () => {
   it("resolves Los Angeles neighborhood coordinates", () => {
@@ -47,5 +54,25 @@ describe("listing map", () => {
 
     expect(tiles.length).toBeGreaterThan(4);
     expect(tiles[0].url).toBe(osmTileUrl(tiles[0].xTile, tiles[0].yTile, 11));
+  });
+
+  it("summarizes visible listing prices for the map header", () => {
+    expect(
+      getMapSummary([
+        { id: "westwood", area: "Los Angeles · Westwood", price: 1800 },
+        { id: "dtla", area: "Los Angeles · DTLA", price: 2600 },
+        { id: "usc", area: "Los Angeles · USC North", price: 1400 }
+      ])
+    ).toEqual({
+      count: 3,
+      averagePrice: 1933,
+      minimumPrice: 1400
+    });
+
+    expect(getMapSummary([])).toEqual({
+      count: 0,
+      averagePrice: 0,
+      minimumPrice: 0
+    });
   });
 });

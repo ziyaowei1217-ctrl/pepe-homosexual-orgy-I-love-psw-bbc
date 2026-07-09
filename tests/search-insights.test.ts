@@ -9,7 +9,8 @@ describe("search insights", () => {
         query: "Los Angeles",
         checkIn: "2026-08-20",
         checkOut: "2026-11-30",
-        budget: 4200,
+        priceMin: 1200,
+        priceMax: 4200,
         amenity: "Wi-Fi"
       },
       20
@@ -19,7 +20,7 @@ describe("search insights", () => {
     expect(insight.chips).toEqual([
       "Los Angeles",
       "8月20日 - 11月30日 · 102 晚",
-      "$4,200 以内",
+      "$1,200 - $4,200",
       "Wi-Fi"
     ]);
     expect(insight.suggestion).toContain("地图");
@@ -31,7 +32,8 @@ describe("search insights", () => {
         query: "UCLA",
         checkIn: "2026-09-10",
         checkOut: "2026-09-19",
-        budget: 1200,
+        priceMin: 0,
+        priceMax: 1200,
         amenity: "独卫"
       },
       2
@@ -48,7 +50,8 @@ describe("search insights", () => {
         query: "Impossible block",
         checkIn: "",
         checkOut: "",
-        budget: 900,
+        priceMin: 0,
+        priceMax: 900,
         amenity: "宠物"
       },
       0

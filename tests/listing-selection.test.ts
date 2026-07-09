@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { getVisibleSelectedListing } from "../lib/listing-selection";
+import { getVisibleSelectedListing, isSelectedListing } from "../lib/listing-selection";
 
 describe("listing selection", () => {
   it("keeps the current listing when it is still visible", () => {
@@ -15,6 +15,11 @@ describe("listing selection", () => {
     const firstVisible = listing("usc");
 
     expect(getVisibleSelectedListing(current, [firstVisible, listing("glendale")])).toBe(firstVisible);
+  });
+
+  it("uses the same selected listing id for list cards and map markers", () => {
+    expect(isSelectedListing("westwood", listing("westwood"))).toBe(true);
+    expect(isSelectedListing("westwood", listing("koreatown"))).toBe(false);
   });
 });
 

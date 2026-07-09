@@ -1,8 +1,9 @@
 import { formatDateRangeLabel, type DateRange } from "./date-range";
+import { formatPriceRangeLabel, type PriceRangeFilter } from "./price-filter";
 
-export type SearchInsightFilters = DateRange & {
+export type SearchInsightFilters = DateRange &
+  PriceRangeFilter & {
   query: string;
-  budget: number;
   amenity: string;
 };
 
@@ -20,7 +21,7 @@ export function buildSearchInsight(
   const chips = [
     filters.query.trim() || "全洛杉矶",
     formatDateRangeLabel(filters),
-    `$${filters.budget.toLocaleString()} 以内`,
+    formatPriceRangeLabel(filters),
     filters.amenity
   ];
 

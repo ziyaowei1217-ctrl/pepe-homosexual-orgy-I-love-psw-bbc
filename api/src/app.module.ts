@@ -5,10 +5,12 @@ import { JwtModule } from "@nestjs/jwt";
 
 import { AuthModule } from "./auth/auth.module";
 import { getJwtSecret } from "./config/env";
+import { DealThreadsModule } from "./deal-threads/deal-threads.module";
 import { DealRoomsModule } from "./deal-rooms/deal-rooms.module";
 import { GroupsModule } from "./groups/groups.module";
 import { HealthModule } from "./health/health.module";
 import { ListingsModule } from "./listings/listings.module";
+import { MarketplaceModule } from "./marketplace/marketplace.module";
 import { PrismaModule } from "./prisma/prisma.module";
 import { RoommatesModule } from "./roommates/roommates.module";
 import { TripsModule } from "./trips/trips.module";
@@ -26,8 +28,10 @@ import { UsersModule } from "./users/users.module";
     PrismaModule,
     AuthModule,
     HealthModule,
+    DealThreadsModule,
     DealRoomsModule,
     UsersModule,
+    MarketplaceModule,
     ListingsModule,
     RoommatesModule,
     GroupsModule,

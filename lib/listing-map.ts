@@ -12,6 +12,7 @@ export type MappableListing = {
   id: string;
   area: string;
   price: number;
+  title?: string;
 };
 
 export type MapMarkerPosition = MappableListing &
@@ -29,6 +30,12 @@ export type MapTile = {
   xTile: number;
   yTile: number;
   zoom: number;
+};
+
+export type MapSummary = {
+  count: number;
+  averagePrice: number;
+  minimumPrice: number;
 };
 
 const tileSize = 256;
@@ -122,6 +129,24 @@ export function getMapTiles(center: MapPoint, zoom: number, size: MapSize): MapT
   }
 
   return tiles;
+}
+
+export function getMapSummary(listings: MappableListing[]): MapSummary {
+  if (listings.length === 0) {
+    return {
+      count: 0,
+      averagePrice: 0,
+      minimumPrice: 0
+    };
+  }
+
+  const prices = listings.map((listing) => listing.price);
+
+  return {
+    count: listings.length,
+    averagePrice: Math.round(average(prices)),
+    minimumPrice: Math.min(...prices)
+  };
 }
 
 export function osmTileUrl(xTile: number, yTile: number, zoom: number) {

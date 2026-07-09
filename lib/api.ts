@@ -68,6 +68,43 @@ export type SessionUser = {
   role: string;
 };
 
+export type ApiProfile = {
+  id: string;
+  email: string;
+  displayName: string | null;
+  avatarUrl: string | null;
+  school: string | null;
+  city: string | null;
+  role: "renter" | "lister" | "both";
+  eduEmailVerified: boolean;
+  phoneVerified: boolean;
+  wechat: string | null;
+  instagram: string | null;
+  bio: string | null;
+};
+
+export type UpdateProfileInput = {
+  displayName?: string;
+  avatarUrl?: string;
+  school?: string;
+  city?: string;
+  role?: "renter" | "lister" | "both";
+  wechat?: string;
+  instagram?: string;
+  bio?: string;
+};
+
+export type EmailCodeResponse = {
+  email: string;
+  expiresAt: string;
+  devCode?: string;
+};
+
+export type VerifyEmailResponse = {
+  accessToken: string;
+  user: SessionUser;
+};
+
 export type ApiDealRoom = {
   id: string;
   roommateProfileId: string;
@@ -85,6 +122,64 @@ export type ApiRoommateActionResponse = {
     action: "LIKE" | "PASS" | "LATER";
   };
   dealRoom: ApiDealRoom | null;
+};
+
+export type ApiDealMessage = {
+  id: string;
+  threadId: string;
+  senderId?: string | null;
+  senderName: string;
+  body: string;
+  align: "left" | "right";
+  status: "received" | "sent";
+  createdAt: string;
+};
+
+export type ApiViewingRequest = {
+  id: string;
+  threadId: string;
+  requesterId: string;
+  listingId: string;
+  listingTitle: string;
+  area: string;
+  timeLabel: string;
+  iso: string;
+  mode: "in-person" | "video";
+  participantNames: string[];
+  status: "REQUESTED" | "CONFIRMED" | "COMPLETED" | "CANCELLED";
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ApiDealThread = {
+  id: string;
+  ownerId: string;
+  dealRoomId?: string | null;
+  listingId: string;
+  listingTitle: string;
+  area: string;
+  contactName: string;
+  participantNames: string[];
+  messages: ApiDealMessage[];
+  viewingRequests: ApiViewingRequest[];
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type CreateDealThreadInput = {
+  listingId: string;
+  listingTitle: string;
+  area: string;
+  contactName: string;
+  participantNames: string[];
+  dealRoomId?: string;
+};
+
+export type CreateViewingRequestInput = {
+  timeLabel: string;
+  iso: string;
+  mode: "in-person" | "video";
+  participantNames: string[];
 };
 
 export async function apiGet<T>(path: string, token?: string) {
@@ -111,6 +206,26 @@ export async function apiPatch<T>(path: string, body: unknown, token?: string) {
     },
     token
   );
+}
+
+export function requestEmailCode(email: string) {
+  return apiPost<EmailCodeResponse>("/auth/email-code", { email });
+}
+
+export function verifyEmailCode(email: string, code: string) {
+  return apiPost<VerifyEmailResponse>("/auth/verify-email", { email, code });
+}
+
+export function getSessionUser(token: string) {
+  return apiGet<SessionUser>("/auth/me", token);
+}
+
+export function getMyProfile(token: string) {
+  return apiGet<ApiProfile>("/profiles/me", token);
+}
+
+export function updateMyProfile(token: string, profile: UpdateProfileInput) {
+  return apiPatch<ApiProfile>("/profiles/me", profile, token);
 }
 
 async function apiRequest<T>(path: string, init: RequestInit, token?: string): Promise<T> {
