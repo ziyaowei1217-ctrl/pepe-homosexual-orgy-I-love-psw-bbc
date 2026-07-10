@@ -63,7 +63,6 @@ import {
   verifyEmailCode,
   type ApiProfile,
   type ApiDealRoom,
-  type ApiGroup,
   type ApiListing,
   type ApiRoommate,
   type ApiRoommateActionResponse,
@@ -93,7 +92,7 @@ import {
   selectDateRange,
   type DateRange
 } from "@/lib/date-range";
-import { getVisibleSelectedListing, isSelectedListing } from "@/lib/listing-selection";
+import { getListingCardDomId, getVisibleSelectedListing, isSelectedListing } from "@/lib/listing-selection";
 import {
   buildListingDetail,
   buildListingGallery,
@@ -112,8 +111,16 @@ import {
   type ViewingSlot
 } from "@/lib/deal-workflow";
 import { getListingStatusMeta, sortOwnerListings, type ListingStatus } from "@/lib/landlord-listings";
+import {
+  getActiveInboxContact,
+  getInboxContactKey,
+  getInboxSelection,
+  mergeInboxContacts,
+  type InboxContact
+} from "@/lib/message-inbox";
 import { buildSearchInsight } from "@/lib/search-insights";
 import {
+  getRoommateDeckCandidates,
   rankRoommatesByPreference,
   type RankedRoommate,
   type RoommateGender,
@@ -123,6 +130,8 @@ import {
 import {
   canOpenRoommateDm,
   canSendRoommateIntro,
+  getAccessibleRoommateDmId,
+  getRoommateMatchStateAfterLike,
   getRoommateConnectionStatus,
   type RoommateConnectionState,
   type RoommateConnectionStatus
@@ -528,6 +537,7 @@ const navIcons: Record<AppSection, LucideIcon> = {
   Discover: Home,
   ListingDetail: Home,
   Roommates: Users,
+  LikeQueue: Heart,
   Messages: MessageCircle,
   Publish: DoorOpen,
   Trips: CalendarDays,
@@ -755,7 +765,11 @@ function apiThreadToDealThread(apiThread: ApiDealThread, fallback: DealThread): 
     listingId: apiThread.listingId,
     subject: apiThread.listingTitle,
     participants: Array.from(new Set([apiThread.contactName, ...apiThread.participantNames])),
-    messages
+    messages,
+    lastActivityAt:
+      apiThread.messages.length > 0
+        ? Math.max(...apiThread.messages.map((message) => new Date(message.createdAt).getTime()))
+        : fallback.lastActivityAt
   };
 }
 
@@ -797,7 +811,6 @@ export default function HomePage({
   const [allListings, setAllListings] = useState(listings);
   const [selectedListing, setSelectedListing] = useState(listings[0]);
   const [apiRoommates, setApiRoommates] = useState<Roommate[]>(roommates);
-  const [apiGroups, setApiGroups] = useState<ApiGroup[]>([]);
   const [apiTrips, setApiTrips] = useState<ApiTrip[]>([]);
   const [apiTrustQueues, setApiTrustQueues] = useState<ApiTrustQueue[]>([]);
   const [roommateIndex, setRoommateIndex] = useState(0);
@@ -887,11 +900,10 @@ export default function HomePage({
   useEffect(() => {
     async function loadApiData() {
       try {
-        const [apiListings, apiRoommateData, apiGroupData, apiTripData, apiQueueData] =
+        const [apiListings, apiRoommateData, apiTripData, apiQueueData] =
           await Promise.all([
             apiGet<ApiListing[]>("/listings"),
             apiGet<ApiRoommate[]>("/roommates"),
-            apiGet<ApiGroup[]>("/groups"),
             apiGet<ApiTrip[]>("/trips"),
             apiGet<ApiTrustQueue[]>("/trust/queues")
           ]);
@@ -912,7 +924,6 @@ export default function HomePage({
         setSelectedListing((current) => hydratedListings.find((listing) => listing.id === current.id) ?? hydratedListings[0] ?? current);
         setApiRoommates(normalizedRoommates);
         setLikedMeRoommateIds((current) => new Set([...Array.from(current), ...Array.from(getSeededLikedMeRoommateIds(normalizedRoommates))]));
-        setApiGroups(apiGroupData);
         setApiTrips(apiTripData);
         setApiTrustQueues(apiQueueData);
         setApiError(null);
@@ -1014,21 +1025,6 @@ export default function HomePage({
     }),
     [introSentRoommateIds, likedMeRoommateIds, likedRoommateIds, roommateMemberIds]
   );
-  const activeRoommateDm = useMemo(
-    () => (activeRoommateDmId ? apiRoommates.find((candidate) => getRoommateKey(candidate) === activeRoommateDmId) ?? null : null),
-    [activeRoommateDmId, apiRoommates]
-  );
-  const activeRoommateDmThread = useMemo<RoommateDmThread | null>(() => {
-    if (!activeRoommateDm) return null;
-
-    const targetKey = getRoommateKey(activeRoommateDm);
-    return buildRoommateDmThread({
-      roommateId: targetKey,
-      roommateName: activeRoommateDm.name,
-      roommateRole: activeRoommateDm.role,
-      storedMessages: roommateDmThreads[targetKey]?.messages
-    });
-  }, [activeRoommateDm, roommateDmThreads]);
   const canRequestTour = groupMembers.length > 0;
   const filteredListings = useMemo(
     () =>
@@ -1059,14 +1055,6 @@ export default function HomePage({
   );
   const visibleListings = filteredListings;
   const visibleSelectedListing = getVisibleSelectedListing(selectedListing, visibleListings);
-  const groupBudget = useMemo(() => {
-    const total = groupMembers.reduce((sum, member) => {
-      const amount = Number(member.budget.replace(/[^0-9]/g, ""));
-      return sum + amount;
-    }, 0);
-
-    return `$${total.toLocaleString()}/月`;
-  }, [groupMembers]);
   const viewingSlots = useMemo(
     () => buildViewingSlots(filters.checkIn || defaultSearchFilters.checkIn),
     [filters.checkIn]
@@ -1087,13 +1075,103 @@ export default function HomePage({
       return listing ? [listing] : [];
     });
   }, [allListings, contactedListingIds, dealThreads, selectedListing]);
-  const activeMessageListing = useMemo(() => {
-    const requestedListing = activeMessageListingId
-      ? messageListings.find((listing) => listing.id === activeMessageListingId)
-      : null;
+  const messageRoommates = useMemo(
+    () => apiRoommates.filter((candidate) => canOpenRoommateDm(getRoommateKey(candidate), roommateConnectionState)),
+    [apiRoommates, roommateConnectionState]
+  );
+  const listingInboxContacts = useMemo<InboxContact[]>(
+    () =>
+      messageListings.map((listing) => {
+        const thread = dealThreads[listing.id] ?? buildThreadForListing(listing, roommate, groupMembers);
+        const latestMessage = thread.messages.at(-1);
 
-    return requestedListing ?? messageListings[0] ?? null;
-  }, [activeMessageListingId, messageListings]);
+        return {
+          kind: "listing",
+          targetId: listing.id,
+          contactName: getHostContactName(listing),
+          contextLabel: listing.title,
+          preview: latestMessage?.body ?? "围绕这套房和房东沟通",
+          time: latestMessage?.time ?? "",
+          image: listing.image,
+          activityOrder: thread.lastActivityAt
+        };
+      }),
+    [dealThreads, groupMembers, messageListings, roommate]
+  );
+  const roommateInboxContacts = useMemo<InboxContact[]>(
+    () =>
+      messageRoommates.map((candidate) => {
+        const targetKey = getRoommateKey(candidate);
+        const thread = buildRoommateDmThread({
+          roommateId: targetKey,
+          roommateName: candidate.name,
+          roommateRole: candidate.role,
+          storedMessages: roommateDmThreads[targetKey]?.messages,
+          lastActivityAt: roommateDmThreads[targetKey]?.lastActivityAt
+        });
+        const latestMessage = thread.messages.at(-1);
+
+        return {
+          kind: "roommate",
+          targetId: targetKey,
+          contactName: candidate.name,
+          contextLabel: candidate.role,
+          preview: latestMessage?.body ?? "Roommate DM",
+          time: latestMessage?.time ?? "",
+          image: candidate.image,
+          activityOrder: thread.lastActivityAt
+        };
+      }),
+    [messageRoommates, roommateDmThreads]
+  );
+  const inboxContacts = useMemo(
+    () => mergeInboxContacts(listingInboxContacts, roommateInboxContacts),
+    [listingInboxContacts, roommateInboxContacts]
+  );
+  const requestedInboxTarget = useMemo(
+    () => {
+      const accessibleRoommateDmId = roommateStorageHydrated
+        ? getAccessibleRoommateDmId(activeRoommateDmId, roommateConnectionState)
+        : null;
+
+      return accessibleRoommateDmId
+        ? { kind: "roommate" as const, targetId: accessibleRoommateDmId }
+        : activeMessageListingId
+          ? { kind: "listing" as const, targetId: activeMessageListingId }
+          : null;
+    },
+    [activeMessageListingId, activeRoommateDmId, roommateConnectionState, roommateStorageHydrated]
+  );
+  const activeInboxContact = useMemo(
+    () => getActiveInboxContact(inboxContacts, requestedInboxTarget),
+    [inboxContacts, requestedInboxTarget]
+  );
+  const activeMessageListing = useMemo(
+    () =>
+      activeInboxContact?.kind === "listing"
+        ? messageListings.find((listing) => listing.id === activeInboxContact.targetId) ?? null
+        : null,
+    [activeInboxContact, messageListings]
+  );
+  const activeRoommateDm = useMemo(
+    () =>
+      activeInboxContact?.kind === "roommate"
+        ? messageRoommates.find((candidate) => getRoommateKey(candidate) === activeInboxContact.targetId) ?? null
+        : null,
+    [activeInboxContact, messageRoommates]
+  );
+  const activeRoommateDmThread = useMemo<RoommateDmThread | null>(() => {
+    if (!activeRoommateDm) return null;
+
+    const targetKey = getRoommateKey(activeRoommateDm);
+    return buildRoommateDmThread({
+      roommateId: targetKey,
+      roommateName: activeRoommateDm.name,
+      roommateRole: activeRoommateDm.role,
+      storedMessages: roommateDmThreads[targetKey]?.messages,
+      lastActivityAt: roommateDmThreads[targetKey]?.lastActivityAt
+    });
+  }, [activeRoommateDm, roommateDmThreads]);
   const activeMessageThread = useMemo(
     () =>
       activeMessageListing
@@ -1118,6 +1196,19 @@ export default function HomePage({
     setActiveSection(section);
     const route = routeForSection(section);
     if (route !== pathname) router.push(route);
+  }
+
+  function handleSelectInboxContact(contact: InboxContact) {
+    selectInboxTarget({ kind: contact.kind, targetId: contact.targetId });
+
+    setActiveSection("Messages");
+    router.push(dmRouteForTarget({ kind: contact.kind, id: contact.targetId }));
+  }
+
+  function selectInboxTarget(target: { kind: "listing" | "roommate"; targetId: string }) {
+    const selection = getInboxSelection(target);
+    setActiveMessageListingId(selection.activeMessageListingId);
+    setActiveRoommateDmId(selection.activeRoommateDmId);
   }
 
   function cycleRoommate(direction: 1 | -1) {
@@ -1156,7 +1247,7 @@ export default function HomePage({
 
   async function handleContactListing(listing: Listing) {
     setSelectedListing(listing);
-    setActiveMessageListingId(listing.id);
+    selectInboxTarget({ kind: "listing", targetId: listing.id });
     router.push(dmRouteForTarget({ kind: "listing", id: listing.id }));
     setActiveSection("Messages");
     setContactedListingIds((current) => new Set(current).add(listing.id));
@@ -1217,7 +1308,7 @@ export default function HomePage({
 
   async function handleSendDealMessage(listing: Listing, body: string) {
     setSelectedListing(listing);
-    setActiveMessageListingId(listing.id);
+    selectInboxTarget({ kind: "listing", targetId: listing.id });
     setContactedListingIds((current) => new Set(current).add(listing.id));
     setDealThreads((current) => {
       const thread = current[listing.id] ?? buildThreadForListing(listing, roommate, groupMembers);
@@ -1273,7 +1364,7 @@ export default function HomePage({
     });
 
     setSelectedListing(listing);
-    setActiveMessageListingId(listing.id);
+    selectInboxTarget({ kind: "listing", targetId: listing.id });
     setContactedListingIds((current) => new Set(current).add(listing.id));
     setTourRequestedListingIds((current) => new Set(current).add(listing.id));
     setViewingRequests((current) => [...current.filter((item) => item.listingId !== listing.id), request]);
@@ -1333,7 +1424,13 @@ export default function HomePage({
 
   async function handleAcceptRoommate(targetRoommate = roommate) {
     const targetKey = getRoommateKey(targetRoommate);
-    setLikedRoommateIds((current) => new Set(current).add(targetKey));
+    const nextStoredMatchState = getRoommateMatchStateAfterLike(targetKey, {
+      likedByMeIds: likedRoommateIds,
+      introSentIds: introSentRoommateIds,
+      roommateIds: groupMembers.map(getRoommateKey)
+    });
+    setLikedRoommateIds(new Set(nextStoredMatchState.likedByMeIds));
+    writeStoredRoommateMatchState(nextStoredMatchState);
     setTourRequested(false);
     const matchedBack = likedMeRoommateIds.has(targetKey);
     if (matchedBack) {
@@ -1347,9 +1444,9 @@ export default function HomePage({
             roommateRole: targetRoommate.role
           })
       }));
-      setActiveRoommateDmId(targetKey);
+      selectInboxTarget({ kind: "roommate", targetId: targetKey });
       router.push(dmRouteForTarget({ kind: "roommate", id: targetKey }));
-      setActiveSection("Roommates");
+      setActiveSection("Messages");
     }
 
     if (!token || !targetRoommate.id) {
@@ -1406,9 +1503,9 @@ export default function HomePage({
           roommateRole: targetRoommate.role
         })
     }));
-    setActiveRoommateDmId(targetKey);
+    selectInboxTarget({ kind: "roommate", targetId: targetKey });
     router.push(dmRouteForTarget({ kind: "roommate", id: targetKey }));
-    setActiveSection("Roommates");
+    setActiveSection("Messages");
     setToast(`${targetRoommate.name} 的室友私信已打开`);
   }
 
@@ -1424,7 +1521,8 @@ export default function HomePage({
         roommateId: targetKey,
         roommateName: targetRoommate.name,
         roommateRole: targetRoommate.role,
-        storedMessages: current[targetKey]?.messages
+        storedMessages: current[targetKey]?.messages,
+        lastActivityAt: current[targetKey]?.lastActivityAt
       });
       const nextThread = appendRoommateDmMessage(baseThread, {
         body,
@@ -1435,12 +1533,13 @@ export default function HomePage({
         ...current,
         [targetKey]: {
           roommateId: targetKey,
-          messages: nextThread.messages
+          messages: nextThread.messages,
+          lastActivityAt: nextThread.lastActivityAt
         }
       };
     });
-    setActiveRoommateDmId(targetKey);
-    setToast("Roommate DM 已发送");
+    selectInboxTarget({ kind: "roommate", targetId: targetKey });
+    setToast("Roommate DM 已保存到本地 Demo");
   }
 
   async function handleDecideRoommate(targetRoommate: Roommate) {
@@ -1704,52 +1803,49 @@ export default function HomePage({
           likedRoommateIds={likedRoommateIds}
           likedMeRoommateIds={likedMeRoommateIds}
           introSentRoommateIds={introSentRoommateIds}
-          activeRoommateDm={activeRoommateDm}
-          activeRoommateDmThread={activeRoommateDmThread}
           skippedCount={skippedCount}
-          tourRequested={tourRequested}
           onLike={handleAcceptRoommate}
           onLater={handleLaterRoommate}
           onPass={handleRejectRoommate}
           onSendIntro={handleSendRoommateIntro}
           onOpenDm={handleOpenRoommateDm}
-          onSendRoommateDm={handleSendRoommateDm}
+          onDecideRoommate={handleDecideRoommate}
+          onOpenDiscover={() => navigateToSection("Discover")}
+          onOpenLikeQueue={() => navigateToSection("LikeQueue")}
+        />
+      ) : null}
+      {activeSection === "LikeQueue" ? (
+        <LikeQueueScreen
+          roommates={apiRoommates}
+          members={groupMembers}
+          likedRoommateIds={likedRoommateIds}
+          likedMeRoommateIds={likedMeRoommateIds}
+          introSentRoommateIds={introSentRoommateIds}
+          tourRequested={tourRequested}
+          onOpenRoommates={() => navigateToSection("Roommates")}
+          onOpenMessages={() => navigateToSection("Messages")}
+          onOpenDm={handleOpenRoommateDm}
           onDecideRoommate={handleDecideRoommate}
           onRequestTour={handleRequestGroupTour}
-          onOpenDiscover={() => navigateToSection("Discover")}
-          onOpenDealRoom={() => navigateToSection("Messages")}
         />
       ) : null}
       {activeSection === "Messages" ? (
         <MessagesScreen
-          groupBudget={groupBudget}
-          members={groupMembers}
-          groupCount={apiGroups.length}
-          listings={messageListings}
-          allListings={allListings}
+          contacts={inboxContacts}
+          activeContact={activeInboxContact}
           selectedListing={activeMessageListing}
-          selectedListingId={activeMessageListing?.id ?? null}
-          dealThreads={dealThreads}
-          roommate={roommate}
+          selectedRoommate={activeRoommateDm}
+          roommateThread={activeRoommateDmThread}
           dealStage={activeMessageStage}
           dealThread={activeMessageThread}
           latestViewingRequest={activeMessageViewingRequest}
           viewingSlots={viewingSlots}
           onSendMessage={handleSendDealMessage}
+          onSendRoommateMessage={handleSendRoommateDm}
           onRequestTour={handleRequestListingTour}
-          onRemoveMember={(name) => {
-            setGroupMembers((current) => current.filter((member) => member.name !== name));
-            setToast(`${name} 已移出 Group`);
-          }}
-          onSelectListing={(listing) => {
-            setSelectedListing(listing);
-            setActiveMessageListingId(listing.id);
-          }}
+          onSelectContact={handleSelectInboxContact}
           onOpenListing={(listing) => {
             openListingDetail(listing);
-          }}
-          onStartConversation={(listing) => {
-            void handleContactListing(listing);
           }}
         />
       ) : null}
@@ -1823,7 +1919,7 @@ function AppHeader({
                 size="default"
                 className={cn(
                   "relative h-12 rounded-[18px] px-4 text-base font-extrabold text-muted-foreground hover:bg-blue-50 hover:text-primary",
-                  activeSection === item.section &&
+                  (activeSection === item.section || (activeSection === "LikeQueue" && item.section === "Roommates")) &&
                     "bg-blue-50 text-[#006AFF] shadow-[inset_0_0_0_1px_rgba(0,106,255,0.10)] after:absolute after:-bottom-[15px] after:left-4 after:right-4 after:h-1 after:rounded-full after:bg-[#006AFF]"
                 )}
                 onClick={() => onSectionChange(item.section)}
@@ -1882,7 +1978,7 @@ function AppHeader({
             return (
               <Button
                 key={item.section}
-                variant={activeSection === item.section ? "secondary" : "ghost"}
+                variant={activeSection === item.section || (activeSection === "LikeQueue" && item.section === "Roommates") ? "secondary" : "ghost"}
                 size="sm"
                 className="shrink-0"
                 onClick={() => onSectionChange(item.section)}
@@ -2147,20 +2243,15 @@ function RoommatesMarketplaceScreen({
   likedRoommateIds,
   likedMeRoommateIds,
   introSentRoommateIds,
-  activeRoommateDm,
-  activeRoommateDmThread,
   skippedCount,
-  tourRequested,
   onLike,
   onLater,
   onPass,
   onSendIntro,
   onOpenDm,
-  onSendRoommateDm,
   onDecideRoommate,
-  onRequestTour,
   onOpenDiscover,
-  onOpenDealRoom
+  onOpenLikeQueue
 }: {
   roommates: Roommate[];
   activeRoommate: Roommate;
@@ -2168,20 +2259,15 @@ function RoommatesMarketplaceScreen({
   likedRoommateIds: Set<string>;
   likedMeRoommateIds: Set<string>;
   introSentRoommateIds: Set<string>;
-  activeRoommateDm: Roommate | null;
-  activeRoommateDmThread: RoommateDmThread | null;
   skippedCount: number;
-  tourRequested: boolean;
   onLike: (roommate: Roommate) => void;
   onLater: (roommate: Roommate) => void;
   onPass: (roommate: Roommate) => void;
   onSendIntro: (roommate: Roommate) => void;
   onOpenDm: (roommate: Roommate) => void;
-  onSendRoommateDm: (roommate: Roommate, body: string) => void;
   onDecideRoommate: (roommate: Roommate) => void;
-  onRequestTour: () => void;
   onOpenDiscover: () => void;
-  onOpenDealRoom: () => void;
+  onOpenLikeQueue: () => void;
 }) {
   const [preference, setPreference] = useState<RoommatePreference>(defaultRoommatePreference);
   const [sortMode, setSortMode] = useState<"Preference" | "Budget">("Preference");
@@ -2192,7 +2278,7 @@ function RoommatesMarketplaceScreen({
     () => rankedRoommates.filter((candidate) => matchesRoommatePreference(candidate, preference)),
     [preference, rankedRoommates]
   );
-  const displayRoommates = exactPreferenceMatches.length > 0 ? exactPreferenceMatches : rankedRoommates;
+  const displayRoommates = getRoommateDeckCandidates(rankedRoommates);
   const fallbackRoommate = useMemo(
     () => rankRoommatesByPreference([activeRoommate], preference)[0],
     [activeRoommate, preference]
@@ -2213,7 +2299,6 @@ function RoommatesMarketplaceScreen({
   const nextDeckRoommate =
     sortedRoommates.length > 1 ? sortedRoommates[(deckPosition + 1) % sortedRoommates.length] : undefined;
   const visibleRoommates = sortedRoommates.slice(0, 5);
-  const likedMembers = rankedRoommates.filter((candidate) => likedRoommateIds.has(getRoommateKey(candidate)));
   const roommateMemberIds = useMemo(() => new Set(groupMembers.map(getRoommateKey)), [groupMembers]);
   const connectionState = useMemo<RoommateConnectionState>(
     () => ({
@@ -2224,11 +2309,6 @@ function RoommatesMarketplaceScreen({
     }),
     [introSentRoommateIds, likedMeRoommateIds, likedRoommateIds, roommateMemberIds]
   );
-  const mutualMembers = rankedRoommates.filter((candidate) => canOpenRoommateDm(getRoommateKey(candidate), connectionState));
-  const queueMembers = groupMembers;
-  const queueReady = groupMembers.length > 0;
-  const totalBudget = queueMembers.reduce((sum, member) => sum + getRoommateBudgetValue(member), 0);
-  const averageBudget = queueMembers.length > 0 ? Math.round(totalBudget / queueMembers.length) : 0;
   const reviewedCount = Math.min(roommates.length, likedRoommateIds.size + skippedCount);
   const activeRoommateKey = getRoommateKey(activeDeckRoommate);
   const activeConnectionStatus = getRoommateConnectionStatus(activeRoommateKey, connectionState);
@@ -2320,6 +2400,10 @@ function RoommatesMarketplaceScreen({
               </p>
             </div>
             <div className="flex flex-wrap gap-2 lg:justify-end">
+              <Button variant="secondary" className="rounded-full font-bold" onClick={onOpenLikeQueue}>
+                <Heart data-icon="inline-start" />
+                Like Queue · {likedRoommateIds.size}
+              </Button>
               <Button variant="outline" className="rounded-full font-bold" onClick={onOpenDiscover}>
                 <Home data-icon="inline-start" />
                 Browse stays
@@ -2363,7 +2447,7 @@ function RoommatesMarketplaceScreen({
         </CardContent>
       </Card>
 
-      <div className="relative z-10 grid grid-cols-1 gap-6 xl:grid-cols-[360px_minmax(0,1fr)_390px]">
+      <div className="relative z-10 grid grid-cols-1 gap-6 xl:grid-cols-[360px_minmax(0,1fr)]">
         <RoommatePreferencePanel
           preference={preference}
           fitScore={activeDeckRoommate.preferenceFit.score}
@@ -2416,26 +2500,6 @@ function RoommatesMarketplaceScreen({
           />
         </div>
 
-        <MatchQueuePanel
-          members={queueMembers}
-          likedMembers={likedMembers}
-          mutualMembers={mutualMembers}
-          activeRoommate={activeDeckRoommate}
-          activeRoommateDm={activeRoommateDm}
-          activeRoommateDmThread={activeRoommateDmThread}
-          activeConnectionStatus={activeConnectionStatus}
-          totalBudget={totalBudget}
-          averageBudget={averageBudget}
-          ready={queueReady}
-          tourRequested={tourRequested}
-          connectionState={connectionState}
-          onSendIntro={onSendIntro}
-          onOpenDm={onOpenDm}
-          onSendRoommateDm={onSendRoommateDm}
-          onDecideRoommate={onDecideRoommate}
-          onRequestTour={onRequestTour}
-          onOpenDealRoom={onOpenDealRoom}
-        />
       </div>
     </section>
   );
@@ -2953,224 +3017,164 @@ function PreferenceMatchRail({
   );
 }
 
-function MatchQueuePanel({
+function LikeQueueScreen({
+  roommates,
   members,
-  likedMembers,
-  mutualMembers,
-  activeRoommate,
-  activeRoommateDm,
-  activeRoommateDmThread,
-  activeConnectionStatus,
-  totalBudget,
-  averageBudget,
-  ready,
+  likedRoommateIds,
+  likedMeRoommateIds,
+  introSentRoommateIds,
   tourRequested,
-  connectionState,
-  onSendIntro,
+  onOpenRoommates,
+  onOpenMessages,
   onOpenDm,
-  onSendRoommateDm,
   onDecideRoommate,
-  onRequestTour,
-  onOpenDealRoom
+  onRequestTour
 }: {
+  roommates: Roommate[];
   members: Roommate[];
-  likedMembers: Array<RankedRoommate<Roommate>>;
-  mutualMembers: Array<RankedRoommate<Roommate>>;
-  activeRoommate: RankedRoommate<Roommate>;
-  activeRoommateDm: Roommate | null;
-  activeRoommateDmThread: RoommateDmThread | null;
-  activeConnectionStatus: RoommateConnectionStatus;
-  totalBudget: number;
-  averageBudget: number;
-  ready: boolean;
+  likedRoommateIds: Set<string>;
+  likedMeRoommateIds: Set<string>;
+  introSentRoommateIds: Set<string>;
   tourRequested: boolean;
-  connectionState: RoommateConnectionState;
-  onSendIntro: (roommate: Roommate) => void;
+  onOpenRoommates: () => void;
+  onOpenMessages: () => void;
   onOpenDm: (roommate: Roommate) => void;
-  onSendRoommateDm: (roommate: Roommate, body: string) => void;
   onDecideRoommate: (roommate: Roommate) => void;
   onRequestTour: () => void;
-  onOpenDealRoom: () => void;
 }) {
-  const progress = ready ? Math.min(92, 34 + members.length * 18) : 18;
-  const likedPreview = likedMembers.slice(0, 4);
-  const mutualPreview = mutualMembers.slice(0, 4);
+  const memberIds = useMemo(() => new Set(members.map(getRoommateKey)), [members]);
+  const connectionState = useMemo<RoommateConnectionState>(
+    () => ({
+      likedByMeIds: likedRoommateIds,
+      likedMeIds: likedMeRoommateIds,
+      introSentIds: introSentRoommateIds,
+      roommateIds: memberIds
+    }),
+    [introSentRoommateIds, likedMeRoommateIds, likedRoommateIds, memberIds]
+  );
+  const likedMembers = roommates.filter((candidate) => likedRoommateIds.has(getRoommateKey(candidate)));
+  const mutualMembers = roommates.filter((candidate) => canOpenRoommateDm(getRoommateKey(candidate), connectionState));
+  const totalBudget = members.reduce((sum, member) => sum + getRoommateBudgetValue(member), 0);
+  const averageBudget = members.length > 0 ? Math.round(totalBudget / members.length) : 0;
+  const ready = members.length > 0;
 
   return (
-    <aside className="min-w-0">
-      <Card className="glass-panel sticky top-24 overflow-hidden rounded-[32px] border-blue-100 bg-white shadow-sm">
-        <CardHeader className="border-b border-blue-100 bg-white">
-          <div className="flex items-center justify-between gap-3">
+    <section className="mx-auto flex w-full max-w-[1380px] flex-col gap-5 px-4 py-5 xl:px-6">
+      <Card className="overflow-hidden rounded-[32px] border-blue-100 shadow-panel">
+        <CardContent className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
+          <div>
             <div className="flex items-center gap-2">
-              <CardTitle className="text-display text-2xl font-black">Like Queue</CardTitle>
-              <Badge className="border-[#006AFF]/20 bg-blue-50 text-[#006AFF]">{likedMembers.length}</Badge>
+              <Heart className="size-6 fill-[#006AFF] text-[#006AFF]" aria-hidden="true" />
+              <h1 className="text-display text-3xl font-black text-primary">Like Queue</h1>
             </div>
-            <Button variant="ghost" size="sm" className="rounded-full font-bold" onClick={onOpenDealRoom}>
+            <p className="mt-1 text-sm font-semibold text-muted-foreground">
+              {likedMembers.length} liked · {mutualMembers.length} mutual · {members.length} roommates
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" className="rounded-full font-bold" onClick={onOpenRoommates}>
+              <Users data-icon="inline-start" />
+              Back to matching
+            </Button>
+            <Button className="rounded-full bg-[#006AFF] font-bold text-white hover:bg-[#0D4599]" onClick={onOpenMessages}>
+              <MessageCircle data-icon="inline-start" />
               Messages
             </Button>
           </div>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-5 p-5">
-          <div className="rounded-[24px] border border-blue-100 bg-blue-50/70 p-4">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <div className="text-sm font-black text-primary">Current card</div>
-                <div className="mt-1 text-xs font-bold text-muted-foreground">{getRoommateStatusDescription(activeConnectionStatus)}</div>
-              </div>
-              <Badge variant={activeConnectionStatus === "mutual" || activeConnectionStatus === "roommate" ? "trust" : "secondary"}>
-                {getRoommateStatusLabel(activeConnectionStatus)}
-              </Badge>
-            </div>
-            <div className="mt-3 grid grid-cols-2 gap-2">
-              {canOpenRoommateDm(getRoommateKey(activeRoommate), connectionState) ? (
-                <Button size="sm" className="rounded-full bg-[#006AFF] font-extrabold text-white hover:bg-[#0D4599]" onClick={() => onOpenDm(activeRoommate)}>
-                  DM
-                </Button>
-              ) : (
-                <Button
-                  size="sm"
-                  variant={canSendRoommateIntro(getRoommateKey(activeRoommate), connectionState) ? "outline" : "secondary"}
-                  className="rounded-full font-extrabold"
-                  disabled={!canSendRoommateIntro(getRoommateKey(activeRoommate), connectionState)}
-                  onClick={() => onSendIntro(activeRoommate)}
-                >
-                  {activeConnectionStatus === "intro-sent" ? "Intro sent" : "Send intro"}
-                </Button>
-              )}
-              <Button
-                size="sm"
-                variant={activeConnectionStatus === "mutual" || activeConnectionStatus === "roommate" ? "trust" : "secondary"}
-                className="rounded-full font-extrabold"
-                disabled={activeConnectionStatus !== "mutual" && activeConnectionStatus !== "roommate"}
-                onClick={() => onDecideRoommate(activeRoommate)}
-              >
-                {activeConnectionStatus === "roommate" ? "Roommate" : "Decide"}
-              </Button>
-            </div>
-          </div>
+        </CardContent>
+      </Card>
 
-          {activeRoommateDm && activeRoommateDmThread ? (
-            <RoommateDmPanel
-              roommate={activeRoommateDm}
-              thread={activeRoommateDmThread}
-              onSendMessage={(body) => onSendRoommateDm(activeRoommateDm, body)}
-            />
-          ) : null}
+      <div className="grid gap-5 lg:grid-cols-3">
+        <QueueColumn title="Liked by me" description="Waiting for a like back" count={likedMembers.length}>
+          {likedMembers.length > 0 ? (
+            likedMembers.map((member) => (
+              <RoommateConnectionRow
+                key={getRoommateKey(member)}
+                roommate={member}
+                state={connectionState}
+                onOpenDm={onOpenDm}
+                onDecideRoommate={onDecideRoommate}
+              />
+            ))
+          ) : (
+            <QueueEmptyState>Like someone to save them here.</QueueEmptyState>
+          )}
+        </QueueColumn>
 
-          <div>
-            <div className="mb-3 flex items-center justify-between gap-3">
-              <div>
-                <div className="text-sm font-extrabold text-primary">Liked by me</div>
-                <div className="text-xs font-bold text-muted-foreground">Stored until they like you back</div>
-              </div>
-              <Badge variant="secondary">{likedMembers.length}</Badge>
-            </div>
-            <div className="flex flex-col gap-3">
-              {likedPreview.length > 0 ? (
-                likedPreview.map((member) => (
-                  <RoommateConnectionRow
-                    key={getRoommateKey(member)}
-                    roommate={member}
-                    state={connectionState}
-                    onOpenDm={onOpenDm}
-                    onDecideRoommate={onDecideRoommate}
-                  />
-                ))
-              ) : (
-                <div className="rounded-[22px] border border-dashed border-blue-200 bg-white p-3 text-xs font-semibold text-muted-foreground">
-                  Like someone to save them here.
+        <QueueColumn title="Mutual matches" description="Private DM is unlocked" count={mutualMembers.length}>
+          {mutualMembers.length > 0 ? (
+            mutualMembers.map((member) => (
+              <RoommateConnectionRow
+                key={getRoommateKey(member)}
+                roommate={member}
+                state={connectionState}
+                onOpenDm={onOpenDm}
+                onDecideRoommate={onDecideRoommate}
+              />
+            ))
+          ) : (
+            <QueueEmptyState>Mutual likes will appear here.</QueueEmptyState>
+          )}
+        </QueueColumn>
+
+        <QueueColumn title="Roommate group" description={ready ? `$${averageBudget.toLocaleString()} per person` : "Decide as roommates first"} count={members.length}>
+          <div className="text-3xl font-extrabold text-primary">{ready ? `$${totalBudget.toLocaleString()} / mo` : "Locked"}</div>
+          {members.length > 0 ? (
+            members.map((member) => (
+              <div key={getRoommateKey(member)} className="flex items-center gap-3 rounded-[22px] border border-blue-100 bg-white p-3">
+                <Avatar className="size-11">
+                  <AvatarImage src={member.image} alt="" />
+                  <AvatarFallback>{member.name.slice(0, 1)}</AvatarFallback>
+                </Avatar>
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-sm font-extrabold text-primary">{member.name}</div>
+                  <div className="truncate text-xs font-semibold text-muted-foreground">{member.role}</div>
                 </div>
-              )}
-            </div>
-          </div>
-
-          <div>
-            <div className="mb-3 flex items-center justify-between gap-3">
-              <div>
-                <div className="text-sm font-extrabold text-primary">Mutual matches</div>
-                <div className="text-xs font-bold text-muted-foreground">Private DM is unlocked here</div>
+                <UserCheck className="size-5 text-[#006AFF]" aria-hidden="true" />
               </div>
-              <Badge variant={mutualMembers.length > 0 ? "trust" : "secondary"}>{mutualMembers.length}</Badge>
-            </div>
-            <div className="flex flex-col gap-3">
-              {mutualPreview.length > 0 ? (
-                mutualPreview.map((member) => (
-                  <RoommateConnectionRow
-                    key={getRoommateKey(member)}
-                    roommate={member}
-                    state={connectionState}
-                    onOpenDm={onOpenDm}
-                    onDecideRoommate={onDecideRoommate}
-                  />
-                ))
-              ) : (
-                <div className="rounded-[22px] border border-dashed border-blue-200 bg-white p-3 text-xs font-semibold text-muted-foreground">
-                  Mutual likes will appear here before group tour unlocks.
-                </div>
-              )}
-            </div>
-          </div>
-
-          <Separator />
-
-          <div>
-            <div className="flex items-center justify-between gap-3">
-              <div className="text-sm font-bold text-muted-foreground">Roommate group</div>
-              <Button variant="ghost" size="sm" className="rounded-full font-bold" onClick={onOpenDealRoom}>
-                Edit
-              </Button>
-            </div>
-            <div className="mt-2 text-3xl font-extrabold text-primary">
-              {ready ? `$${totalBudget.toLocaleString()} / mo` : "Locked"}
-            </div>
-            <div className="mt-1 text-sm font-semibold text-muted-foreground">
-              {ready ? `$${averageBudget.toLocaleString()} per person` : "Mutual like + decide as roommates first"}
-            </div>
-            <div className="mt-3 h-2 rounded-full bg-blue-100">
-              <div className="h-2 rounded-full bg-gradient-to-r from-[#006AFF] to-[#0D4599]" style={{ width: `${progress}%` }} />
-            </div>
-            <div className="mt-4 flex flex-col gap-3">
-              {members.length > 0 ? (
-                members.slice(0, 4).map((member) => (
-                  <div key={getRoommateKey(member)} className="grid min-w-0 grid-cols-[1fr_auto] items-center gap-3 rounded-[24px] border border-blue-100 bg-white p-3 shadow-sm">
-                    <div className="flex min-w-0 items-center gap-3">
-                      <Avatar className="size-12 ring-2 ring-blue-100">
-                        <AvatarImage src={member.image} alt="" />
-                        <AvatarFallback>{member.name.slice(0, 1)}</AvatarFallback>
-                      </Avatar>
-                      <div className="min-w-0 flex-1">
-                        <div className="truncate text-sm font-extrabold text-primary">
-                          {member.name}, {member.age}
-                        </div>
-                        <div className="mt-1 truncate text-xs font-semibold text-muted-foreground">{member.role}</div>
-                      </div>
-                    </div>
-                    <UserCheck className="size-5 text-[#006AFF]" aria-hidden="true" />
-                  </div>
-                ))
-              ) : (
-                <div className="rounded-[22px] border border-dashed border-blue-200 bg-white p-3 text-xs font-semibold text-muted-foreground">
-                  No roommate group yet.
-                </div>
-              )}
-            </div>
-          </div>
-
-          <Button
-            className="h-12 rounded-full bg-gradient-to-r from-[#006AFF] to-[#0D4599] text-base font-extrabold text-white hover:brightness-95"
-            onClick={onRequestTour}
-            disabled={!ready}
-          >
+            ))
+          ) : (
+            <QueueEmptyState>No roommate group yet.</QueueEmptyState>
+          )}
+          <Button className="mt-auto h-11 rounded-full bg-[#006AFF] font-extrabold text-white hover:bg-[#0D4599]" disabled={!ready} onClick={onRequestTour}>
             <CalendarDays data-icon="inline-start" />
             {tourRequested && ready ? "Group tour requested" : "Request group tour"}
           </Button>
-          <p className="text-center text-xs font-semibold text-muted-foreground">
-            {ready ? "Roommate group is ready for tour coordination." : "Group tour unlocks after a mutual match becomes a roommate."}
-          </p>
-        </CardContent>
-      </Card>
-    </aside>
+        </QueueColumn>
+      </div>
+    </section>
   );
+}
+
+function QueueColumn({
+  title,
+  description,
+  count,
+  children
+}: {
+  title: string;
+  description: string;
+  count: number;
+  children: ReactNode;
+}) {
+  return (
+    <Card className="min-h-[520px] rounded-[30px] border-blue-100 shadow-panel">
+      <CardHeader>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <CardTitle>{title}</CardTitle>
+            <CardDescription>{description}</CardDescription>
+          </div>
+          <Badge variant={count > 0 ? "trust" : "secondary"}>{count}</Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="flex h-[420px] flex-col gap-3 overflow-y-auto app-scrollbar">{children}</CardContent>
+    </Card>
+  );
+}
+
+function QueueEmptyState({ children }: { children: ReactNode }) {
+  return <div className="rounded-[22px] border border-dashed border-blue-200 bg-white p-4 text-sm font-semibold text-muted-foreground">{children}</div>;
 }
 
 function RoommateDmPanel({
@@ -3197,59 +3201,63 @@ function RoommateDmPanel({
   }
 
   return (
-    <div className="rounded-[24px] border border-[#006AFF]/20 bg-white p-4 shadow-sm" data-testid="roommate-dm-panel">
-      <div className="flex items-start gap-3">
-        <Avatar className="size-12 ring-2 ring-blue-100">
-          <AvatarImage src={roommate.image} alt="" />
-          <AvatarFallback>{roommate.name.slice(0, 1)}</AvatarFallback>
-        </Avatar>
-        <div className="min-w-0 flex-1">
-          <div className="text-sm font-black text-primary">Roommate DM</div>
-          <div className="truncate text-xs font-bold text-muted-foreground">{roommate.name} · {roommate.role}</div>
-        </div>
-        <Badge variant="trust">Unlocked</Badge>
-      </div>
-      <div className="mt-4 grid max-h-[260px] gap-2 overflow-y-auto rounded-[20px] bg-blue-50/70 p-3 text-sm app-scrollbar">
-        {visibleMessages.map((message) => (
-          <div
-            key={message.id}
-            className={cn(
-              "max-w-[88%] rounded-[18px] px-3 py-2 font-semibold",
-              message.align === "right"
-                ? "ml-auto bg-[#006AFF] text-white"
-                : "mr-auto border border-blue-100 bg-white text-primary"
-            )}
-          >
-            <div className={cn("mb-1 flex items-center justify-between gap-3 text-[10px] font-black", message.align === "right" ? "text-white/80" : "text-muted-foreground")}>
-              <span>{message.author}</span>
-              <span>{message.time}</span>
-            </div>
-            {message.body}
+    <Card className="shadow-panel" data-testid="roommate-dm-panel">
+      <CardHeader>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <CardTitle>DM & Roommate fit</CardTitle>
+            <CardDescription>{roommate.name} · {roommate.role}</CardDescription>
           </div>
-        ))}
-      </div>
-      <div className="mt-3 flex flex-wrap gap-2">
-        {quickReplies.map((reply) => (
-          <Button key={reply} variant="secondary" size="sm" className="rounded-full" onClick={() => submitMessage(reply)}>
-            {reply}
-          </Button>
-        ))}
-      </div>
-      <div className="mt-3 grid grid-cols-[minmax(0,1fr)_44px] gap-2">
-        <Input
+          <Badge variant="trust">Mutual</Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-4">
+        <div className="flex max-h-[420px] flex-col gap-3 overflow-y-auto rounded-[24px] border border-blue-100 bg-blue-50/50 p-3 app-scrollbar">
+          {visibleMessages.map((message) => (
+            <div
+              key={message.id}
+              className={cn(
+                "max-w-[88%] rounded-[22px] border px-3 py-2 text-sm shadow-sm",
+                message.align === "right"
+                  ? "ml-auto border-[#006AFF]/20 bg-[#006AFF] text-white"
+                  : "border-blue-100 bg-white text-primary"
+              )}
+            >
+              <div className={cn("flex items-center justify-between gap-3 text-[11px] font-black", message.align === "right" ? "text-white/80" : "text-muted-foreground")}>
+                <span>{message.author}</span>
+                <span>{message.time}</span>
+              </div>
+              <p className="mt-1 font-semibold leading-5">{message.body}</p>
+            </div>
+          ))}
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {quickReplies.map((reply) => (
+            <Button key={reply} variant="secondary" size="sm" className="rounded-full" onClick={() => submitMessage(reply)}>
+              {reply}
+            </Button>
+          ))}
+        </div>
+        <div className="grid grid-cols-[minmax(0,1fr)_56px] items-stretch gap-2">
+          <textarea
+            className="min-h-20 resize-none rounded-[22px] border border-blue-100 bg-white px-4 py-3 text-sm font-semibold text-primary shadow-sm outline-none transition-colors placeholder:text-muted-foreground focus:border-[#006AFF]"
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
           placeholder={`给 ${roommate.name} 发私信`}
           onKeyDown={(event) => {
-            if (event.key === "Enter") submitMessage();
+            if (event.key === "Enter" && !event.shiftKey) {
+              event.preventDefault();
+              submitMessage();
+            }
           }}
-        />
-        <Button size="icon" className="rounded-full bg-[#006AFF] text-white hover:bg-[#0D4599]" onClick={() => submitMessage()}>
-          <Send className="size-4" aria-hidden="true" />
-          <span className="sr-only">发送 roommate DM</span>
-        </Button>
-      </div>
-    </div>
+          />
+          <Button className="h-20 rounded-[22px] bg-[#006AFF] px-4 text-white hover:bg-[#0D4599]" onClick={() => submitMessage()}>
+            <Send aria-hidden="true" />
+            <span className="sr-only">发送 roommate DM</span>
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -3324,6 +3332,17 @@ function DiscoverScreen({
   onViewModeChange: (value: ViewMode) => void;
   onOpenRoommates: () => void;
 }) {
+  function handleMapSelect(listing: Listing) {
+    onPreview(listing);
+    window.requestAnimationFrame(() => {
+      document.getElementById(getListingCardDomId(listing.id))?.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+        inline: "nearest"
+      });
+    });
+  }
+
   return (
     <section className="mx-auto flex w-full max-w-[1500px] flex-col gap-5 px-4 py-5 xl:px-6">
       <SearchHero
@@ -3369,7 +3388,7 @@ function DiscoverScreen({
               className="sticky top-24"
               listings={listings}
               selectedListing={selectedListing}
-              onSelect={onPreview}
+              onSelect={handleMapSelect}
             />
           </aside>
         ) : null}
@@ -3686,109 +3705,95 @@ function DateRangePicker({
 }
 
 function MessagesScreen({
-  groupBudget,
-  members,
-  groupCount,
-  listings,
-  allListings,
+  contacts,
+  activeContact,
   selectedListing,
-  selectedListingId,
-  dealThreads,
-  roommate,
+  selectedRoommate,
+  roommateThread,
   dealStage,
   dealThread,
   latestViewingRequest,
   viewingSlots,
   onSendMessage,
+  onSendRoommateMessage,
   onRequestTour,
-  onRemoveMember,
-  onSelectListing,
-  onOpenListing,
-  onStartConversation
+  onSelectContact,
+  onOpenListing
 }: {
-  groupBudget: string;
-  members: Roommate[];
-  groupCount: number;
-  listings: Listing[];
-  allListings: Listing[];
+  contacts: InboxContact[];
+  activeContact: InboxContact | null;
   selectedListing: Listing | null;
-  selectedListingId: string | null;
-  dealThreads: Record<string, DealThread>;
-  roommate: Roommate;
+  selectedRoommate: Roommate | null;
+  roommateThread: RoommateDmThread | null;
   dealStage: string;
   dealThread: DealThread | null;
   latestViewingRequest: ViewingRequest | null;
   viewingSlots: ViewingSlot[];
   onSendMessage: (listing: Listing, body: string) => void;
+  onSendRoommateMessage: (roommate: Roommate, body: string) => void;
   onRequestTour: (listing: Listing, slot?: ViewingSlot) => void;
-  onRemoveMember: (name: string) => void;
-  onSelectListing: (listing: Listing) => void;
+  onSelectContact: (contact: InboxContact) => void;
   onOpenListing: (listing: Listing) => void;
-  onStartConversation: (listing: Listing) => void;
 }) {
-  const starterListings = allListings.slice(0, 4);
-
   return (
-    <section className="mx-auto grid w-full max-w-[1280px] grid-cols-1 gap-4 px-4 py-4 lg:grid-cols-[360px_minmax(0,1fr)] xl:px-6">
-      <aside className="flex min-w-0 flex-col gap-4">
-        <Card className="shadow-panel">
+    <section className="mx-auto grid min-h-[calc(100vh-76px)] w-full max-w-[1380px] grid-cols-1 gap-4 px-4 py-4 lg:grid-cols-[360px_minmax(0,1fr)] xl:px-6">
+      <aside className="min-w-0">
+        <Card className="h-full min-h-[640px] overflow-hidden shadow-panel">
           <CardHeader>
             <div className="flex items-start justify-between gap-3">
               <div>
                 <CardTitle>Messages</CardTitle>
-                <CardDescription>
-                  {listings.length > 0 ? `${listings.length} 个房源会话 · ${groupCount} 个 Messages 已同步` : "联系房东后，会话会出现在这里"}
-                </CardDescription>
+                <CardDescription>房东和室友联系人按最近消息排列</CardDescription>
               </div>
-              <Badge variant={listings.length > 0 ? "trust" : "secondary"}>{listings.length}</Badge>
+              <Badge variant={contacts.length > 0 ? "trust" : "secondary"}>{contacts.length}</Badge>
             </div>
           </CardHeader>
-          <CardContent className="flex flex-col gap-2">
-            {listings.length > 0 ? (
-              listings.map((listing) => {
-                const thread = dealThreads[listing.id] ?? buildThreadForListing(listing, roommate, members);
-                const latestMessage = thread.messages.at(-1);
-                const selected = selectedListingId === listing.id;
+          <CardContent className="flex max-h-[calc(100vh-190px)] flex-col gap-2 overflow-y-auto app-scrollbar">
+            {contacts.length > 0 ? (
+              contacts.map((contact) => {
+                const selected = activeContact ? getInboxContactKey(activeContact) === getInboxContactKey(contact) : false;
 
                 return (
                   <button
-                    key={listing.id}
+                    key={getInboxContactKey(contact)}
                     className={cn(
-                      "grid grid-cols-[64px_minmax(0,1fr)] gap-3 rounded-lg border p-2 text-left transition-all hover:-translate-y-0.5 hover:shadow-card",
-                      selected ? "border-[#006AFF] bg-blue-50" : "border-blue-100 bg-white"
+                      "grid grid-cols-[52px_minmax(0,1fr)] gap-3 rounded-[22px] border p-3 text-left transition-all hover:bg-blue-50",
+                      selected ? "border-[#006AFF] bg-blue-50 shadow-sm" : "border-blue-100 bg-white"
                     )}
                     type="button"
-                    onClick={() => onSelectListing(listing)}
+                    onClick={() => onSelectContact(contact)}
                   >
-                    <div className="h-16 rounded-md bg-cover bg-center" style={{ backgroundImage: `url(${listing.image})` }} />
-                    <div className="min-w-0 py-0.5">
+                    <Avatar className="size-12">
+                      <AvatarImage src={contact.image} alt="" />
+                      <AvatarFallback>{contact.contactName.slice(0, 1)}</AvatarFallback>
+                    </Avatar>
+                    <div className="min-w-0">
                       <div className="flex items-center justify-between gap-2">
-                        <div className="truncate text-sm font-extrabold text-primary">{getHostContactName(listing)}</div>
-                        <span className="shrink-0 text-[11px] font-black text-muted-foreground">{latestMessage?.time}</span>
+                        <div className="truncate text-sm font-extrabold text-primary">{contact.contactName}</div>
+                        <span className="shrink-0 text-[10px] font-black text-muted-foreground">{contact.time}</span>
                       </div>
-                      <div className="mt-1 truncate text-xs font-bold text-muted-foreground">{listing.title}</div>
-                      <div className="mt-1 truncate text-xs font-semibold text-muted-foreground">{latestMessage?.body}</div>
+                      <div className="mt-1 flex items-center gap-2">
+                        <Badge variant={contact.kind === "roommate" ? "trust" : "secondary"} className="shrink-0">
+                          {contact.kind === "roommate" ? "室友" : "房东"}
+                        </Badge>
+                        <span className="truncate text-xs font-bold text-muted-foreground">{contact.contextLabel}</span>
+                      </div>
+                      <div className="mt-2 truncate text-xs font-semibold text-muted-foreground">{contact.preview}</div>
                     </div>
                   </button>
                 );
               })
             ) : (
               <div className="rounded-lg border border-dashed border-blue-200 bg-blue-50/50 p-4 text-sm font-semibold text-muted-foreground">
-                还没有 DM。去房源详情点“联系房东”，会直接跳到这里继续沟通。
+                还没有联系人。联系房东或与室友互相 Like 后，会话会出现在这里。
               </div>
             )}
           </CardContent>
         </Card>
-
-        <GroupPanel
-          groupBudget={groupBudget}
-          members={members}
-          onRemoveMember={onRemoveMember}
-        />
       </aside>
 
       <div className="flex min-w-0 flex-col gap-4">
-        {selectedListing && dealThread ? (
+        {activeContact?.kind === "listing" && selectedListing && dealThread ? (
           <>
             <Card className="overflow-hidden shadow-panel">
               <div className="grid grid-cols-1 md:grid-cols-[220px_minmax(0,1fr)_auto]">
@@ -3823,40 +3828,46 @@ function MessagesScreen({
               onRequestTour={onRequestTour}
             />
           </>
+        ) : activeContact?.kind === "roommate" && selectedRoommate && roommateThread ? (
+          <>
+            <Card className="overflow-hidden shadow-panel">
+              <CardContent className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex min-w-0 items-center gap-4">
+                  <Avatar className="size-16 ring-2 ring-blue-100">
+                    <AvatarImage src={selectedRoommate.image} alt="" />
+                    <AvatarFallback>{selectedRoommate.name.slice(0, 1)}</AvatarFallback>
+                  </Avatar>
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge variant="trust">室友</Badge>
+                      <Badge variant="secondary">Mutual match</Badge>
+                    </div>
+                    <div className="mt-2 truncate text-xl font-extrabold text-primary">{selectedRoommate.name}</div>
+                    <div className="truncate text-sm font-semibold text-muted-foreground">{selectedRoommate.role}</div>
+                  </div>
+                </div>
+                <div className="text-sm font-bold text-muted-foreground">{selectedRoommate.budget} · {selectedRoommate.commute}</div>
+              </CardContent>
+            </Card>
+            <RoommateDmPanel
+              key={roommateThread.id}
+              roommate={selectedRoommate}
+              thread={roommateThread}
+              onSendMessage={(body) => onSendRoommateMessage(selectedRoommate, body)}
+            />
+          </>
         ) : (
           <Card className="shadow-panel">
             <CardHeader>
-              <CardTitle>开始一条对话</CardTitle>
-              <CardDescription>像 Airbnb 一样，先选房源，再围绕这套房和房东沟通。</CardDescription>
+              <CardTitle>选择联系人</CardTitle>
+              <CardDescription>从左侧选择房东或室友，右侧会打开对应的 DM。</CardDescription>
             </CardHeader>
-            <CardContent className="grid grid-cols-1 gap-3 md:grid-cols-2">
-              {starterListings.map((listing) => (
-              <button
-                key={listing.id}
-                className="overflow-hidden rounded-lg border bg-white text-left transition-all hover:-translate-y-0.5 hover:shadow-card"
-                type="button"
-                onClick={() => onStartConversation(listing)}
-              >
-                <div
-                  className="h-40 bg-cover bg-center"
-                  style={{ backgroundImage: `url(${listing.image})` }}
-                />
-                <div className="p-4">
-                  <div className="font-bold text-primary">{listing.title}</div>
-                  <div className="mt-1 text-sm font-semibold text-muted-foreground">
-                    {listing.area}
-                  </div>
-                  <div className="mt-3 flex items-center justify-between">
-                    <span className="text-lg font-extrabold text-primary">
-                      ${listing.price}/月
-                    </span>
-                    <Badge variant="trust">联系房东</Badge>
-                  </div>
-                </div>
-              </button>
-            ))}
-          </CardContent>
-        </Card>
+            <CardContent>
+              <div className="rounded-[24px] border border-dashed border-blue-200 bg-blue-50/50 p-8 text-center text-sm font-semibold text-muted-foreground">
+                联系房东，或先与室友互相 Like 解锁私信。
+              </div>
+            </CardContent>
+          </Card>
         )}
       </div>
     </section>
@@ -4796,8 +4807,9 @@ function ListingCard({
 
   return (
     <article
+      id={getListingCardDomId(listing.id)}
       className={cn(
-        "group overflow-hidden rounded-[30px] border bg-white text-left shadow-[0_14px_50px_rgba(15,23,42,0.06)] transition-all hover:-translate-y-1 hover:shadow-[0_24px_70px_rgba(0,106,255,0.14)]",
+        "group scroll-mt-24 overflow-hidden rounded-[30px] border bg-white text-left shadow-[0_14px_50px_rgba(15,23,42,0.06)] transition-all hover:-translate-y-1 hover:shadow-[0_24px_70px_rgba(0,106,255,0.14)]",
         selected ? "border-[#006AFF] ring-4 ring-[#006AFF]/10" : "border-blue-100"
       )}
     >
@@ -4926,80 +4938,6 @@ function EmptyResults({ filters, onClear }: { filters: SearchFilters; onClear: (
         <Button variant="trust" onClick={onClear}>
           重置筛选
         </Button>
-      </CardContent>
-    </Card>
-  );
-}
-
-function GroupPanel({
-  groupBudget,
-  members,
-  onRemoveMember
-}: {
-  groupBudget: string;
-  members: Roommate[];
-  onRemoveMember: (name: string) => void;
-}) {
-  return (
-    <Card className="shadow-panel">
-      <CardHeader>
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <CardTitle>Group 工作台</CardTitle>
-            <CardDescription>{members.length} 人合租战队 · Westside 优先</CardDescription>
-          </div>
-          <Users className="size-5 text-trust-sky" aria-hidden="true" />
-        </div>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-4">
-        <div className="flex items-center justify-between gap-3 rounded-md bg-secondary p-3">
-          <div className="flex">
-            {members.map((member, index) => (
-              <Avatar
-                key={member.name}
-                className={cn("border-2 border-white", index > 0 && "-ml-2")}
-              >
-                <AvatarImage src={member.image} alt="" />
-                <AvatarFallback>{member.name.slice(0, 1)}</AvatarFallback>
-              </Avatar>
-            ))}
-          </div>
-          <div className="text-right">
-            <div className="text-xs font-bold text-muted-foreground">总预算</div>
-            <div className="text-lg font-extrabold text-primary">{groupBudget}</div>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-[repeat(2,minmax(0,1fr))] gap-2">
-          <Badge variant="success">无烟</Badge>
-          <Badge variant="trust">2 卫以上</Badge>
-          <Badge variant="secondary">可养猫</Badge>
-          <Badge variant="warning">9 月前入住</Badge>
-        </div>
-
-        <div className="flex flex-col gap-2">
-          {members.map((member) => (
-            <div key={member.name} className="flex items-center justify-between rounded-md border bg-white p-2">
-              <div className="min-w-0">
-                <div className="truncate text-sm font-bold text-primary">{member.name}</div>
-                <div className="truncate text-xs font-semibold text-muted-foreground">{member.budget}</div>
-              </div>
-              <Button variant="ghost" size="icon" aria-label={`移出 ${member.name}`} onClick={() => onRemoveMember(member.name)}>
-                <X />
-              </Button>
-            </div>
-          ))}
-        </div>
-
-        <div className="rounded-md border p-3">
-          <div className="flex items-center justify-between text-sm font-bold">
-            <span>整租推荐命中率</span>
-            <span className="text-trust-green">86%</span>
-          </div>
-          <div className="mt-2 h-2 rounded-full bg-secondary">
-            <div className="h-2 w-[86%] rounded-full bg-trust-green" />
-          </div>
-        </div>
       </CardContent>
     </Card>
   );

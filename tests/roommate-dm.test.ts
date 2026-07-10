@@ -41,6 +41,7 @@ describe("roommate dm", () => {
       body: "我们可以聊一下预算吗？",
       align: "right"
     });
+    expect(sent.lastActivityAt).toBe(new Date("2026-07-10T08:00:00.000Z").getTime());
     expect(unchanged.messages).toHaveLength(sent.messages.length);
   });
 
@@ -48,6 +49,7 @@ describe("roommate dm", () => {
     const stored: StoredRoommateDmThread[] = [
       {
         roommateId: "Mia Chen",
+        lastActivityAt: 42,
         messages: [
           {
             id: "stored-1",
@@ -61,6 +63,7 @@ describe("roommate dm", () => {
     ];
 
     expect(getStoredRoommateDmThreads(stored)["Mia Chen"].messages[0].body).toBe("Budget works for me");
+    expect(getStoredRoommateDmThreads(stored)["Mia Chen"].lastActivityAt).toBe(42);
   });
 
   it("drops malformed stored threads and messages", () => {
@@ -80,6 +83,7 @@ describe("roommate dm", () => {
 
     expect(Object.keys(hydrated)).toEqual(["Mia Chen"]);
     expect(hydrated["Mia Chen"].messages).toEqual([validMessage]);
+    expect(hydrated["Mia Chen"].lastActivityAt).toBe(0);
   });
 
   it("builds a stored thread with default messages when no history exists", () => {

@@ -4,10 +4,38 @@ import {
   canOpenRoommateDm,
   canRequestRoommateGroupTour,
   canSendRoommateIntro,
+  getAccessibleRoommateDmId,
+  getRoommateMatchStateAfterLike,
   getRoommateConnectionStatus
 } from "../lib/roommate-match-flow";
 
 describe("roommate match flow", () => {
+  it("does not let a URL unlock a candidate who only liked me", () => {
+    const oneSidedState = {
+      likedByMeIds: [],
+      likedMeIds: ["grace"],
+      introSentIds: [],
+      roommateIds: []
+    };
+
+    expect(getAccessibleRoommateDmId("grace", oneSidedState)).toBeNull();
+    expect(getAccessibleRoommateDmId("grace", { ...oneSidedState, likedByMeIds: ["grace"] })).toBe("grace");
+  });
+
+  it("builds the persisted match state before navigating to a mutual DM", () => {
+    expect(
+      getRoommateMatchStateAfterLike("mia", {
+        likedByMeIds: ["grace"],
+        introSentIds: ["mia"],
+        roommateIds: []
+      })
+    ).toEqual({
+      likedByMeIds: ["grace", "mia"],
+      introSentIds: ["mia"],
+      roommateMemberIds: []
+    });
+  });
+
   it("keeps one-sided likes from unlocking private DM or group tours", () => {
     const state = {
       likedByMeIds: new Set(["mia"]),

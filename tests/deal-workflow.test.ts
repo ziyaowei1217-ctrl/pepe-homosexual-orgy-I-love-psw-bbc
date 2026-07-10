@@ -56,6 +56,7 @@ describe("deal workflow", () => {
       status: "sent",
       time: "6:30 PM"
     });
+    expect(withMessage.lastActivityAt).toBe(new Date("2026-07-09T18:30:00Z").getTime());
     expect(unchanged.messages).toHaveLength(withMessage.messages.length);
   });
 

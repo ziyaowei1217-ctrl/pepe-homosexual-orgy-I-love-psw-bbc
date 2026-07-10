@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildRoommatePreferenceFit,
+  getRoommateDeckCandidates,
   rankRoommatesByPreference,
   type PreferenceRoommateProfile,
   type RoommatePreference
@@ -43,6 +44,13 @@ const profiles: PreferenceRoommateProfile[] = [
 ];
 
 describe("roommate preferences", () => {
+  it("keeps every ranked candidate in the swipe deck", () => {
+    const ranked = rankRoommatesByPreference(profiles, preference);
+
+    expect(getRoommateDeckCandidates(ranked)).toEqual(ranked);
+    expect(getRoommateDeckCandidates(ranked)).toHaveLength(profiles.length);
+  });
+
   it("ranks roommates by gender comfort, budget, school, and hobbies without hiding candidates", () => {
     const ranked = rankRoommatesByPreference(profiles, preference);
 

@@ -2,6 +2,7 @@ export type RoutedAppSection =
   | "Discover"
   | "ListingDetail"
   | "Roommates"
+  | "LikeQueue"
   | "Messages"
   | "Publish"
   | "Trips"
@@ -11,6 +12,7 @@ const sectionRoutes: Record<RoutedAppSection, string> = {
   Discover: "/",
   ListingDetail: "/",
   Roommates: "/roommates",
+  LikeQueue: "/roommates/likes",
   Messages: "/messages",
   Publish: "/host/listings",
   Trips: "/trips",
@@ -27,13 +29,14 @@ export type DmRouteTarget =
 
 export function dmRouteForTarget(target: DmRouteTarget) {
   const param = target.kind === "listing" ? "listingId" : "roommateId";
-  const route = target.kind === "listing" ? "/messages" : "/roommates";
+  const route = "/messages";
 
   return `${route}?${param}=${encodeURIComponent(target.id)}`;
 }
 
 export function sectionForPathname(pathname: string): RoutedAppSection {
   if (pathname.startsWith("/messages")) return "Messages";
+  if (pathname.startsWith("/roommates/likes")) return "LikeQueue";
   if (pathname.startsWith("/roommates")) return "Roommates";
   if (pathname.startsWith("/host/listings")) return "Publish";
   if (pathname.startsWith("/trips")) return "Trips";

@@ -12,11 +12,13 @@ export type RoommateDmThread = {
   roommateName: string;
   roommateRole: string;
   messages: RoommateDmMessage[];
+  lastActivityAt: number;
 };
 
 export type StoredRoommateDmThread = {
   roommateId: string;
   messages: RoommateDmMessage[];
+  lastActivityAt: number;
 };
 
 export type BuildRoommateDmThreadInput = {
@@ -24,6 +26,7 @@ export type BuildRoommateDmThreadInput = {
   roommateName: string;
   roommateRole: string;
   storedMessages?: RoommateDmMessage[];
+  lastActivityAt?: number;
 };
 
 export function buildRoommateDmThread(input: BuildRoommateDmThreadInput): RoommateDmThread {
@@ -32,6 +35,7 @@ export function buildRoommateDmThread(input: BuildRoommateDmThreadInput): Roomma
     roommateId: input.roommateId,
     roommateName: input.roommateName,
     roommateRole: input.roommateRole,
+    lastActivityAt: input.lastActivityAt ?? 0,
     messages:
       input.storedMessages && input.storedMessages.length > 0
         ? input.storedMessages
@@ -52,7 +56,8 @@ export function buildStoredRoommateDmThread(input: BuildRoommateDmThreadInput): 
 
   return {
     roommateId: thread.roommateId,
-    messages: thread.messages
+    messages: thread.messages,
+    lastActivityAt: thread.lastActivityAt
   };
 }
 
@@ -62,16 +67,18 @@ export function appendRoommateDmMessage(
 ): RoommateDmThread {
   const body = input.body.trim();
   if (!body) return thread;
+  const now = input.now ?? new Date();
 
   return {
     ...thread,
+    lastActivityAt: now.getTime(),
     messages: [
       ...thread.messages,
       {
         id: `${thread.id}-message-${thread.messages.length + 1}`,
         author: "You",
         body,
-        time: formatMessageTime(input.now ?? new Date()),
+        time: formatMessageTime(now),
         align: "right"
       }
     ]
@@ -87,7 +94,10 @@ export function getStoredRoommateDmThreads(storedThreads: unknown) {
       if (!Array.isArray(thread.messages)) return [];
 
       const messages = thread.messages.filter(isRoommateDmMessage);
-      return [[thread.roommateId, { roommateId: thread.roommateId, messages } satisfies StoredRoommateDmThread]];
+      const lastActivityAt = typeof thread.lastActivityAt === "number" && Number.isFinite(thread.lastActivityAt)
+        ? thread.lastActivityAt
+        : 0;
+      return [[thread.roommateId, { roommateId: thread.roommateId, messages, lastActivityAt } satisfies StoredRoommateDmThread]];
     })
   );
 }
