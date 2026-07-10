@@ -128,6 +128,14 @@ import {
   type RoommateConnectionStatus
 } from "@/lib/roommate-match-flow";
 import {
+  appendRoommateDmMessage,
+  buildRoommateDmThread,
+  buildStoredRoommateDmThread,
+  getStoredRoommateDmThreads,
+  type RoommateDmThread,
+  type StoredRoommateDmThread
+} from "@/lib/roommate-dm";
+import {
   filterListingsByPrice,
   formatPriceRangeLabel,
   normalizePriceRange,
@@ -424,6 +432,7 @@ const roommateGenders: RoommateGender[] = [
 const roommateGenderOptions: SharedLivingGenderPreference[] = ["Open", "Women", "Men", "Non-binary"];
 const seededLikedMeRoommateNames = new Set(["Mia Chen", "Grace Xu", "Olivia Park", "Ava Zhang"]);
 const roommateMatchStorageKey = "sublet-roommate-match-flow-v1";
+const roommateDmStorageKey = "sublet-roommate-dm-threads-v1";
 
 type StoredRoommateMatchState = {
   introSentIds: string[];
@@ -649,6 +658,31 @@ function writeStoredRoommateMatchState(state: StoredRoommateMatchState) {
   }
 }
 
+function readStoredRoommateDmThreads() {
+  if (typeof window === "undefined" || typeof window.localStorage === "undefined") return {};
+
+  try {
+    const stored = window.localStorage.getItem(roommateDmStorageKey);
+    if (!stored) return {};
+    const parsed = JSON.parse(stored);
+    if (!Array.isArray(parsed)) return {};
+
+    return getStoredRoommateDmThreads(parsed as StoredRoommateDmThread[]);
+  } catch {
+    return {};
+  }
+}
+
+function writeStoredRoommateDmThreads(threads: Record<string, StoredRoommateDmThread>) {
+  if (typeof window === "undefined" || typeof window.localStorage === "undefined") return;
+
+  try {
+    window.localStorage.setItem(roommateDmStorageKey, JSON.stringify(Object.values(threads)));
+  } catch {
+    // Storage can be unavailable in embedded browsers or private sessions.
+  }
+}
+
 function haveSameRoommateKeys(left: Roommate[], right: Roommate[]) {
   if (left.length !== right.length) return false;
   return left.every((roommate, index) => getRoommateKey(roommate) === getRoommateKey(right[index]));
@@ -782,6 +816,8 @@ export default function HomePage({
   const [appliedListingId, setAppliedListingId] = useState<string | null>(null);
   const [groupMembers, setGroupMembers] = useState<Roommate[]>([]);
   const [activeRoommateDmId, setActiveRoommateDmId] = useState<string | null>(initialRoommateDmId ?? null);
+  const [roommateDmThreads, setRoommateDmThreads] = useState<Record<string, StoredRoommateDmThread>>({});
+  const [roommateDmStorageHydrated, setRoommateDmStorageHydrated] = useState(false);
   const [likedRoommateIds, setLikedRoommateIds] = useState<Set<string>>(new Set());
   const [likedMeRoommateIds, setLikedMeRoommateIds] = useState<Set<string>>(
     () => getSeededLikedMeRoommateIds(roommates)
@@ -815,6 +851,16 @@ export default function HomePage({
     setGroupMembers(roommates.filter((candidate) => storedRoommateState.roommateMemberIds.includes(getRoommateKey(candidate))));
     setRoommateStorageHydrated(true);
   }, []);
+
+  useEffect(() => {
+    setRoommateDmThreads(readStoredRoommateDmThreads());
+    setRoommateDmStorageHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    if (!roommateDmStorageHydrated) return;
+    writeStoredRoommateDmThreads(roommateDmThreads);
+  }, [roommateDmStorageHydrated, roommateDmThreads]);
 
   useEffect(() => {
     if (!roommateStorageHydrated) return;
@@ -973,6 +1019,17 @@ export default function HomePage({
     () => (activeRoommateDmId ? apiRoommates.find((candidate) => getRoommateKey(candidate) === activeRoommateDmId) ?? null : null),
     [activeRoommateDmId, apiRoommates]
   );
+  const activeRoommateDmThread = useMemo<RoommateDmThread | null>(() => {
+    if (!activeRoommateDm) return null;
+
+    const targetKey = getRoommateKey(activeRoommateDm);
+    return buildRoommateDmThread({
+      roommateId: targetKey,
+      roommateName: activeRoommateDm.name,
+      roommateRole: activeRoommateDm.role,
+      storedMessages: roommateDmThreads[targetKey]?.messages
+    });
+  }, [activeRoommateDm, roommateDmThreads]);
   const canRequestTour = groupMembers.length > 0;
   const filteredListings = useMemo(
     () =>
@@ -1280,6 +1337,21 @@ export default function HomePage({
     setLikedRoommateIds((current) => new Set(current).add(targetKey));
     setTourRequested(false);
     const matchedBack = likedMeRoommateIds.has(targetKey);
+    if (matchedBack) {
+      setRoommateDmThreads((current) => ({
+        ...current,
+        [targetKey]:
+          current[targetKey] ??
+          buildStoredRoommateDmThread({
+            roommateId: targetKey,
+            roommateName: targetRoommate.name,
+            roommateRole: targetRoommate.role
+          })
+      }));
+      setActiveRoommateDmId(targetKey);
+      router.push(dmRouteForTarget({ kind: "roommate", id: targetKey }));
+      setActiveSection("Roommates");
+    }
 
     if (!token || !targetRoommate.id) {
       setToast(
@@ -1296,7 +1368,7 @@ export default function HomePage({
         { action: "LIKE" },
         token
       );
-      setActiveDealRoomId(response.dealRoom?.id ?? null);
+      if (matchedBack) setActiveDealRoomId(response.dealRoom?.id ?? null);
       setToast(
         matchedBack
           ? `你和 ${targetRoommate.name} 互相 Like 了，私信已解锁`
@@ -1325,10 +1397,51 @@ export default function HomePage({
       return;
     }
 
+    setRoommateDmThreads((current) => ({
+      ...current,
+      [targetKey]:
+        current[targetKey] ??
+        buildStoredRoommateDmThread({
+          roommateId: targetKey,
+          roommateName: targetRoommate.name,
+          roommateRole: targetRoommate.role
+        })
+    }));
     setActiveRoommateDmId(targetKey);
     router.push(dmRouteForTarget({ kind: "roommate", id: targetKey }));
     setActiveSection("Roommates");
     setToast(`${targetRoommate.name} 的室友私信已打开`);
+  }
+
+  function handleSendRoommateDm(targetRoommate: Roommate, body: string) {
+    const targetKey = getRoommateKey(targetRoommate);
+    if (!canOpenRoommateDm(targetKey, roommateConnectionState)) {
+      setToast(`先互相 Like，才能给 ${targetRoommate.name} 发送私信`);
+      return;
+    }
+
+    setRoommateDmThreads((current) => {
+      const baseThread = buildRoommateDmThread({
+        roommateId: targetKey,
+        roommateName: targetRoommate.name,
+        roommateRole: targetRoommate.role,
+        storedMessages: current[targetKey]?.messages
+      });
+      const nextThread = appendRoommateDmMessage(baseThread, {
+        body,
+        now: new Date()
+      });
+
+      return {
+        ...current,
+        [targetKey]: {
+          roommateId: targetKey,
+          messages: nextThread.messages
+        }
+      };
+    });
+    setActiveRoommateDmId(targetKey);
+    setToast("Roommate DM 已发送");
   }
 
   async function handleDecideRoommate(targetRoommate: Roommate) {
@@ -1593,6 +1706,7 @@ export default function HomePage({
           likedMeRoommateIds={likedMeRoommateIds}
           introSentRoommateIds={introSentRoommateIds}
           activeRoommateDm={activeRoommateDm}
+          activeRoommateDmThread={activeRoommateDmThread}
           skippedCount={skippedCount}
           tourRequested={tourRequested}
           onLike={handleAcceptRoommate}
@@ -1600,6 +1714,7 @@ export default function HomePage({
           onPass={handleRejectRoommate}
           onSendIntro={handleSendRoommateIntro}
           onOpenDm={handleOpenRoommateDm}
+          onSendRoommateDm={handleSendRoommateDm}
           onDecideRoommate={handleDecideRoommate}
           onRequestTour={handleRequestGroupTour}
           onOpenDiscover={() => navigateToSection("Discover")}
@@ -2034,6 +2149,7 @@ function RoommatesMarketplaceScreen({
   likedMeRoommateIds,
   introSentRoommateIds,
   activeRoommateDm,
+  activeRoommateDmThread,
   skippedCount,
   tourRequested,
   onLike,
@@ -2041,6 +2157,7 @@ function RoommatesMarketplaceScreen({
   onPass,
   onSendIntro,
   onOpenDm,
+  onSendRoommateDm,
   onDecideRoommate,
   onRequestTour,
   onOpenDiscover,
@@ -2053,6 +2170,7 @@ function RoommatesMarketplaceScreen({
   likedMeRoommateIds: Set<string>;
   introSentRoommateIds: Set<string>;
   activeRoommateDm: Roommate | null;
+  activeRoommateDmThread: RoommateDmThread | null;
   skippedCount: number;
   tourRequested: boolean;
   onLike: (roommate: Roommate) => void;
@@ -2060,6 +2178,7 @@ function RoommatesMarketplaceScreen({
   onPass: (roommate: Roommate) => void;
   onSendIntro: (roommate: Roommate) => void;
   onOpenDm: (roommate: Roommate) => void;
+  onSendRoommateDm: (roommate: Roommate, body: string) => void;
   onDecideRoommate: (roommate: Roommate) => void;
   onRequestTour: () => void;
   onOpenDiscover: () => void;
@@ -2304,6 +2423,7 @@ function RoommatesMarketplaceScreen({
           mutualMembers={mutualMembers}
           activeRoommate={activeDeckRoommate}
           activeRoommateDm={activeRoommateDm}
+          activeRoommateDmThread={activeRoommateDmThread}
           activeConnectionStatus={activeConnectionStatus}
           totalBudget={totalBudget}
           averageBudget={averageBudget}
@@ -2312,6 +2432,7 @@ function RoommatesMarketplaceScreen({
           connectionState={connectionState}
           onSendIntro={onSendIntro}
           onOpenDm={onOpenDm}
+          onSendRoommateDm={onSendRoommateDm}
           onDecideRoommate={onDecideRoommate}
           onRequestTour={onRequestTour}
           onOpenDealRoom={onOpenDealRoom}
@@ -2839,6 +2960,7 @@ function MatchQueuePanel({
   mutualMembers,
   activeRoommate,
   activeRoommateDm,
+  activeRoommateDmThread,
   activeConnectionStatus,
   totalBudget,
   averageBudget,
@@ -2847,6 +2969,7 @@ function MatchQueuePanel({
   connectionState,
   onSendIntro,
   onOpenDm,
+  onSendRoommateDm,
   onDecideRoommate,
   onRequestTour,
   onOpenDealRoom
@@ -2856,6 +2979,7 @@ function MatchQueuePanel({
   mutualMembers: Array<RankedRoommate<Roommate>>;
   activeRoommate: RankedRoommate<Roommate>;
   activeRoommateDm: Roommate | null;
+  activeRoommateDmThread: RoommateDmThread | null;
   activeConnectionStatus: RoommateConnectionStatus;
   totalBudget: number;
   averageBudget: number;
@@ -2864,6 +2988,7 @@ function MatchQueuePanel({
   connectionState: RoommateConnectionState;
   onSendIntro: (roommate: Roommate) => void;
   onOpenDm: (roommate: Roommate) => void;
+  onSendRoommateDm: (roommate: Roommate, body: string) => void;
   onDecideRoommate: (roommate: Roommate) => void;
   onRequestTour: () => void;
   onOpenDealRoom: () => void;
@@ -2925,7 +3050,13 @@ function MatchQueuePanel({
             </div>
           </div>
 
-          {activeRoommateDm ? <RoommateDmPanel roommate={activeRoommateDm} /> : null}
+          {activeRoommateDm && activeRoommateDmThread ? (
+            <RoommateDmPanel
+              roommate={activeRoommateDm}
+              thread={activeRoommateDmThread}
+              onSendMessage={(body) => onSendRoommateDm(activeRoommateDm, body)}
+            />
+          ) : null}
 
           <div>
             <div className="mb-3 flex items-center justify-between gap-3">
@@ -3043,12 +3174,28 @@ function MatchQueuePanel({
   );
 }
 
-function RoommateDmPanel({ roommate }: { roommate: Roommate }) {
+function RoommateDmPanel({
+  roommate,
+  thread,
+  onSendMessage
+}: {
+  roommate: Roommate;
+  thread: RoommateDmThread;
+  onSendMessage: (body: string) => void;
+}) {
+  const [draft, setDraft] = useState("");
+  const visibleMessages = thread.messages.slice(-5);
   const quickReplies = [
     "你理想入住时间是什么时候？",
     "预算和区域我这边也合适。",
     "我们可以先聊一下作息和做饭频率。"
   ];
+
+  function submitMessage(body = draft) {
+    if (!body.trim()) return;
+    onSendMessage(body);
+    setDraft("");
+  }
 
   return (
     <div className="rounded-[24px] border border-[#006AFF]/20 bg-white p-4 shadow-sm" data-testid="roommate-dm-panel">
@@ -3063,20 +3210,45 @@ function RoommateDmPanel({ roommate }: { roommate: Roommate }) {
         </div>
         <Badge variant="trust">Unlocked</Badge>
       </div>
-      <div className="mt-4 grid gap-2 rounded-[20px] bg-blue-50/70 p-3 text-sm">
-        <div className="mr-8 rounded-[18px] border border-blue-100 bg-white px-3 py-2 font-semibold text-primary">
-          Hey, 我们 match 度很高。你也在看 {roommate.commute} 吗？
-        </div>
-        <div className="ml-8 rounded-[18px] bg-[#006AFF] px-3 py-2 font-semibold text-white">
-          我想先确认预算、作息和入住时间，再决定要不要一起看房。
-        </div>
+      <div className="mt-4 grid max-h-[260px] gap-2 overflow-y-auto rounded-[20px] bg-blue-50/70 p-3 text-sm app-scrollbar">
+        {visibleMessages.map((message) => (
+          <div
+            key={message.id}
+            className={cn(
+              "max-w-[88%] rounded-[18px] px-3 py-2 font-semibold",
+              message.align === "right"
+                ? "ml-auto bg-[#006AFF] text-white"
+                : "mr-auto border border-blue-100 bg-white text-primary"
+            )}
+          >
+            <div className={cn("mb-1 flex items-center justify-between gap-3 text-[10px] font-black", message.align === "right" ? "text-white/80" : "text-muted-foreground")}>
+              <span>{message.author}</span>
+              <span>{message.time}</span>
+            </div>
+            {message.body}
+          </div>
+        ))}
       </div>
       <div className="mt-3 flex flex-wrap gap-2">
         {quickReplies.map((reply) => (
-          <Button key={reply} variant="secondary" size="sm" className="rounded-full">
+          <Button key={reply} variant="secondary" size="sm" className="rounded-full" onClick={() => submitMessage(reply)}>
             {reply}
           </Button>
         ))}
+      </div>
+      <div className="mt-3 grid grid-cols-[minmax(0,1fr)_44px] gap-2">
+        <Input
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+          placeholder={`给 ${roommate.name} 发私信`}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") submitMessage();
+          }}
+        />
+        <Button size="icon" className="rounded-full bg-[#006AFF] text-white hover:bg-[#0D4599]" onClick={() => submitMessage()}>
+          <Send className="size-4" aria-hidden="true" />
+          <span className="sr-only">发送 roommate DM</span>
+        </Button>
       </div>
     </div>
   );
