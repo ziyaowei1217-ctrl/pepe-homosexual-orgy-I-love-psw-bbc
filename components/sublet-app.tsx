@@ -665,9 +665,8 @@ function readStoredRoommateDmThreads() {
     const stored = window.localStorage.getItem(roommateDmStorageKey);
     if (!stored) return {};
     const parsed = JSON.parse(stored);
-    if (!Array.isArray(parsed)) return {};
 
-    return getStoredRoommateDmThreads(parsed as StoredRoommateDmThread[]);
+    return getStoredRoommateDmThreads(parsed);
   } catch {
     return {};
   }

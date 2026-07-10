@@ -63,6 +63,25 @@ describe("roommate dm", () => {
     expect(getStoredRoommateDmThreads(stored)["Mia Chen"].messages[0].body).toBe("Budget works for me");
   });
 
+  it("drops malformed stored threads and messages", () => {
+    const validMessage = {
+      id: "stored-1",
+      author: "You",
+      body: "Budget works for me",
+      time: "9:00 AM",
+      align: "right" as const
+    };
+
+    const hydrated = getStoredRoommateDmThreads([
+      null,
+      { roommateId: "", messages: [validMessage] },
+      { roommateId: "Mia Chen", messages: [validMessage, { body: 42 }] }
+    ]);
+
+    expect(Object.keys(hydrated)).toEqual(["Mia Chen"]);
+    expect(hydrated["Mia Chen"].messages).toEqual([validMessage]);
+  });
+
   it("builds a stored thread with default messages when no history exists", () => {
     const stored = buildStoredRoommateDmThread({
       roommateId: "Mia Chen",

@@ -78,11 +78,32 @@ export function appendRoommateDmMessage(
   };
 }
 
-export function getStoredRoommateDmThreads(storedThreads: StoredRoommateDmThread[]) {
+export function getStoredRoommateDmThreads(storedThreads: unknown) {
+  if (!Array.isArray(storedThreads)) return {};
+
   return Object.fromEntries(
-    storedThreads
-      .filter((thread) => thread.roommateId)
-      .map((thread) => [thread.roommateId, thread])
+    storedThreads.flatMap((thread) => {
+      if (!isRecord(thread) || typeof thread.roommateId !== "string" || !thread.roommateId.trim()) return [];
+      if (!Array.isArray(thread.messages)) return [];
+
+      const messages = thread.messages.filter(isRoommateDmMessage);
+      return [[thread.roommateId, { roommateId: thread.roommateId, messages } satisfies StoredRoommateDmThread]];
+    })
+  );
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function isRoommateDmMessage(value: unknown): value is RoommateDmMessage {
+  return (
+    isRecord(value) &&
+    typeof value.id === "string" &&
+    typeof value.author === "string" &&
+    typeof value.body === "string" &&
+    typeof value.time === "string" &&
+    (value.align === "left" || value.align === "right")
   );
 }
 
