@@ -27,11 +27,11 @@ export type DmRouteTarget =
   | { kind: "listing"; id: string }
   | { kind: "roommate"; id: string };
 
-export function dmRouteForTarget(target: DmRouteTarget) {
+export function dmRouteForTarget(target: DmRouteTarget, options: { tour?: boolean } = {}) {
   const param = target.kind === "listing" ? "listingId" : "roommateId";
   const route = "/messages";
 
-  return `${route}?${param}=${encodeURIComponent(target.id)}`;
+  return `${route}?${param}=${encodeURIComponent(target.id)}${options.tour ? "&tour=1" : ""}`;
 }
 
 export function sectionForPathname(pathname: string): RoutedAppSection {

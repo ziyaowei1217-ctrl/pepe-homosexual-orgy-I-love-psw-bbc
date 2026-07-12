@@ -74,6 +74,7 @@ import {
   type UpdateProfileInput,
   type CreateViewingRequestInput
 } from "@/lib/api";
+import { getApiPresentationState } from "@/lib/api-status";
 import {
   clearStoredAuthSession,
   readStoredAuthSession,
@@ -92,7 +93,7 @@ import {
   selectDateRange,
   type DateRange
 } from "@/lib/date-range";
-import { getListingCardDomId, getVisibleSelectedListing, isSelectedListing } from "@/lib/listing-selection";
+import { filterSavedListings, getListingCardDomId, getVisibleSelectedListing, isSelectedListing } from "@/lib/listing-selection";
 import {
   buildListingDetail,
   buildListingGallery,
@@ -104,13 +105,27 @@ import {
   buildInitialDealThread,
   buildViewingSlots,
   createViewingRequest,
+  getComposerDraftAfterQuickReply,
   getDealWorkflowStage,
   getLatestViewingRequest,
+  upsertViewingRequest,
   type DealThread,
   type ViewingRequest,
   type ViewingSlot
 } from "@/lib/deal-workflow";
 import { getListingStatusMeta, sortOwnerListings, type ListingStatus } from "@/lib/landlord-listings";
+import {
+  addLocalNotification,
+  advanceLocalApplication,
+  applicationStatuses,
+  createLocalApplication,
+  emptyLocalWorkflowState,
+  normalizeLocalWorkflowState,
+  type LocalApplication,
+  type LocalNotification,
+  type LocalWorkflowState
+} from "@/lib/local-workflow";
+import { getUnreadNotificationCount, markNotificationsRead } from "@/lib/notification-center";
 import {
   getActiveInboxContact,
   getInboxContactKey,
@@ -136,6 +151,7 @@ import {
   type RoommateConnectionState,
   type RoommateConnectionStatus
 } from "@/lib/roommate-match-flow";
+import { classifyRoommateQueue } from "@/lib/roommate-queue";
 import {
   appendRoommateDmMessage,
   buildRoommateDmThread,
@@ -442,6 +458,7 @@ const roommateGenderOptions: SharedLivingGenderPreference[] = ["Open", "Women", 
 const seededLikedMeRoommateNames = new Set(["Mia Chen", "Grace Xu", "Olivia Park", "Ava Zhang"]);
 const roommateMatchStorageKey = "sublet-roommate-match-flow-v1";
 const roommateDmStorageKey = "sublet-roommate-dm-threads-v1";
+const localWorkflowStorageKey = "sublet-pipeline-local-workflow-v1";
 
 type StoredRoommateMatchState = {
   introSentIds: string[];
@@ -692,6 +709,25 @@ function writeStoredRoommateDmThreads(threads: Record<string, StoredRoommateDmTh
   }
 }
 
+function readStoredLocalWorkflow() {
+  if (typeof window === "undefined" || typeof window.localStorage === "undefined") return emptyLocalWorkflowState;
+  try {
+    const stored = window.localStorage.getItem(localWorkflowStorageKey);
+    return normalizeLocalWorkflowState(stored ? JSON.parse(stored) : null);
+  } catch {
+    return emptyLocalWorkflowState;
+  }
+}
+
+function writeStoredLocalWorkflow(state: LocalWorkflowState) {
+  if (typeof window === "undefined" || typeof window.localStorage === "undefined") return;
+  try {
+    window.localStorage.setItem(localWorkflowStorageKey, JSON.stringify(state));
+  } catch {
+    // Embedded and private browser sessions may deny storage.
+  }
+}
+
 function haveSameRoommateKeys(left: Roommate[], right: Roommate[]) {
   if (left.length !== right.length) return false;
   return left.every((roommate, index) => getRoommateKey(roommate) === getRoommateKey(right[index]));
@@ -816,6 +852,9 @@ export default function HomePage({
   const [roommateIndex, setRoommateIndex] = useState(0);
   const [activeSection, setActiveSection] = useState<AppSection>(startingSection);
   const [viewMode, setViewMode] = useState<ViewMode>("map");
+  const [savedOnly, setSavedOnly] = useState(false);
+  const [groupTourSelecting, setGroupTourSelecting] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [filters, setFilters] = useState<SearchFilters>(defaultSearchFilters);
   const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set(["1"]));
   const [contactedListingIds, setContactedListingIds] = useState<Set<string>>(
@@ -824,6 +863,9 @@ export default function HomePage({
   const [tourRequestedListingIds, setTourRequestedListingIds] = useState<Set<string>>(new Set());
   const [dealThreads, setDealThreads] = useState<Record<string, DealThread>>({});
   const [viewingRequests, setViewingRequests] = useState<ViewingRequest[]>([]);
+  const [applications, setApplications] = useState<LocalApplication[]>([]);
+  const [notifications, setNotifications] = useState<LocalNotification[]>([]);
+  const [localWorkflowHydrated, setLocalWorkflowHydrated] = useState(false);
   const [activeMessageListingId, setActiveMessageListingId] = useState<string | null>(initialMessageListingId ?? null);
   const [appliedListingId, setAppliedListingId] = useState<string | null>(null);
   const [groupMembers, setGroupMembers] = useState<Roommate[]>([]);
@@ -839,7 +881,6 @@ export default function HomePage({
   const [roommateStorageHydrated, setRoommateStorageHydrated] = useState(false);
   const [skippedCount, setSkippedCount] = useState(0);
   const [tourRequested, setTourRequested] = useState(false);
-  const [escrowStep, setEscrowStep] = useState(2);
   const [toast, setToast] = useState("");
   const [apiError, setApiError] = useState<string | null>(null);
   const [token, setToken] = useState<string | null>(null);
@@ -854,6 +895,32 @@ export default function HomePage({
     const storedSession = readStoredAuthSession();
     if (storedSession) setToken(storedSession.accessToken);
   }, []);
+
+  useEffect(() => {
+    const stored = readStoredLocalWorkflow();
+    setFavoriteIds(new Set(stored.favoriteListingIds));
+    setContactedListingIds(new Set(stored.contactedListingIds));
+    setDealThreads(stored.dealThreads);
+    setViewingRequests(stored.viewingRequests);
+    setApplications(stored.applications);
+    const storedListingId = stored.applications[0]?.listingId ?? stored.viewingRequests[0]?.listingId;
+    if (storedListingId) setSelectedListing(listings.find((listing) => listing.id === storedListingId) ?? listings[0]);
+    setNotifications(stored.notifications);
+    setLocalWorkflowHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    if (!localWorkflowHydrated) return;
+    writeStoredLocalWorkflow({
+      version: 1,
+      favoriteListingIds: Array.from(favoriteIds),
+      contactedListingIds: Array.from(contactedListingIds),
+      dealThreads,
+      viewingRequests,
+      applications,
+      notifications
+    });
+  }, [applications, contactedListingIds, dealThreads, favoriteIds, localWorkflowHydrated, notifications, viewingRequests]);
 
   useEffect(() => {
     const storedRoommateState = readStoredRoommateMatchState();
@@ -1053,7 +1120,7 @@ export default function HomePage({
       }),
     [allListings, filters]
   );
-  const visibleListings = filteredListings;
+  const visibleListings = filterSavedListings(filteredListings, favoriteIds, savedOnly);
   const visibleSelectedListing = getVisibleSelectedListing(selectedListing, visibleListings);
   const viewingSlots = useMemo(
     () => buildViewingSlots(filters.checkIn || defaultSearchFilters.checkIn),
@@ -1245,10 +1312,10 @@ export default function HomePage({
     setToast(`正在查看房源详情：${listing.title}`);
   }
 
-  async function handleContactListing(listing: Listing) {
+  async function handleContactListing(listing: Listing, options: { tour?: boolean } = {}) {
     setSelectedListing(listing);
     selectInboxTarget({ kind: "listing", targetId: listing.id });
-    router.push(dmRouteForTarget({ kind: "listing", id: listing.id }));
+    router.push(dmRouteForTarget({ kind: "listing", id: listing.id }, options));
     setActiveSection("Messages");
     setContactedListingIds((current) => new Set(current).add(listing.id));
     const fallbackThread = buildThreadForListing(listing, roommate, groupMembers);
@@ -1321,6 +1388,14 @@ export default function HomePage({
         })
       };
     });
+    setNotifications((current) => addLocalNotification(current, {
+      id: `dm-${listing.id}-${Date.now()}`,
+      kind: "dm",
+      title: `已发送给 ${getHostContactName(listing)}`,
+      detail: listing.title,
+      createdAt: Date.now(),
+      read: false
+    }));
 
     if (token) {
       try {
@@ -1367,7 +1442,7 @@ export default function HomePage({
     selectInboxTarget({ kind: "listing", targetId: listing.id });
     setContactedListingIds((current) => new Set(current).add(listing.id));
     setTourRequestedListingIds((current) => new Set(current).add(listing.id));
-    setViewingRequests((current) => [...current.filter((item) => item.listingId !== listing.id), request]);
+    setViewingRequests((current) => upsertViewingRequest(current, request));
     setDealThreads((current) => {
       const thread = current[listing.id] ?? buildThreadForListing(listing, roommate, groupMembers);
       return {
@@ -1379,6 +1454,14 @@ export default function HomePage({
         })
       };
     });
+    setNotifications((current) => addLocalNotification(current, {
+      id: `tour-${listing.id}`,
+      kind: "tour",
+      title: hasExistingActiveRequest ? "看房时间已调整" : "看房请求已创建",
+      detail: `${listing.title} · ${request.timeLabel}`,
+      createdAt: Date.now(),
+      read: false
+    }));
 
     if (token) {
       try {
@@ -1415,9 +1498,22 @@ export default function HomePage({
   }
 
   function handleStartApplication(listing: Listing) {
+    const now = new Date();
+    setApplications((current) => createLocalApplication(current, {
+      listingId: listing.id,
+      listingTitle: listing.title,
+      now
+    }));
     setAppliedListingId(listing.id);
     setSelectedListing(listing);
-    setEscrowStep(0);
+    setNotifications((current) => addLocalNotification(current, {
+      id: `application-${listing.id}`,
+      kind: "application",
+      title: "申请已创建",
+      detail: listing.title,
+      createdAt: now.getTime(),
+      read: false
+    }));
     navigateToSection("Trips");
     setToast(`已为 ${listing.title} 开始申请流程`);
   }
@@ -1610,31 +1706,10 @@ export default function HomePage({
       return;
     }
 
-    const slot = viewingSlots[0];
-    if (slot) {
-      handleRequestListingTour(selectedListing, slot);
-    }
-
-    if (token) {
-      if (!activeDealRoomId) {
-        setTourRequested(true);
-        setToast("Group Tour 已先保存在本地，Messages 同步后会继续提交");
-        return;
-      }
-
-      try {
-        await apiPost(`/deal-rooms/${activeDealRoomId}/tour-requests`, {}, token);
-        setTourRequested(true);
-        setToast("已发送 Group Tour 请求");
-      } catch (error) {
-        setTourRequested(true);
-        setToast(error instanceof Error ? `本地已预约，后端同步失败：${error.message}` : "本地已预约，后端同步失败");
-      }
-      return;
-    }
-
-    setTourRequested(true);
-    setToast("已发送 Group Tour 请求");
+    setGroupTourSelecting(true);
+    setSavedOnly(false);
+    navigateToSection("Discover");
+    setToast("请选择一套房源，再到 Messages 明确选择 Group Tour 时间");
   }
 
   async function handleCreateListing(draft: PublishDraft) {
@@ -1684,8 +1759,16 @@ export default function HomePage({
     }
   }
 
-  function advanceEscrow() {
-    setEscrowStep((current) => Math.min(current + 1, 4));
+  function advanceEscrow(applicationId: string) {
+    setApplications((current) => advanceLocalApplication(current, applicationId));
+    setNotifications((current) => addLocalNotification(current, {
+      id: `escrow-${applicationId}-${Date.now()}`,
+      kind: "escrow",
+      title: "交易状态已更新",
+      detail: "可在 Trips 查看最新托管进度",
+      createdAt: Date.now(),
+      read: false
+    }));
     setToast("交易托管状态已更新");
   }
 
@@ -1727,8 +1810,20 @@ export default function HomePage({
     <main className="min-h-screen bg-background">
       <AppHeader
         favoriteCount={favoriteIds.size}
+        savedOnly={savedOnly}
+        notifications={notifications}
+        notificationsOpen={notificationsOpen}
         activeSection={activeSection}
         onSectionChange={navigateToSection}
+        onSavedHomes={() => {
+          setSavedOnly((current) => !current);
+          setActiveSection("Discover");
+          router.push("/");
+        }}
+        onNotifications={() => {
+          setNotificationsOpen((current) => !current);
+          setNotifications((current) => markNotificationsRead(current));
+        }}
         user={user}
         profile={profile}
         onAuthOpen={() => {
@@ -1758,6 +1853,7 @@ export default function HomePage({
           selectedListing={visibleSelectedListing}
           favoriteIds={favoriteIds}
           viewMode={viewMode}
+          listingActionLabel={groupTourSelecting ? "选择用于 Group Tour" : "打开详情"}
           onFiltersChange={setFilters}
           onAmenityChange={handleAmenityChange}
           onClear={() => {
@@ -1769,7 +1865,12 @@ export default function HomePage({
             setToast(`已选中：${listing.title}`);
           }}
           onOpenListing={(listing) => {
-            openListingDetail(listing);
+            if (groupTourSelecting) {
+              setGroupTourSelecting(false);
+              handleContactListing(listing, { tour: true });
+            } else {
+              openListingDetail(listing);
+            }
           }}
           onFavorite={handleFavorite}
           onViewModeChange={setViewMode}
@@ -1790,7 +1891,7 @@ export default function HomePage({
           onBack={() => navigateToSection("Discover")}
           onFavorite={handleFavorite}
           onContact={handleContactListing}
-          onRequestTour={handleRequestListingTour}
+          onRequestTour={(listing) => handleContactListing(listing, { tour: true })}
           onApply={handleStartApplication}
           onOpenRoommates={() => navigateToSection("Roommates")}
         />
@@ -1862,7 +1963,7 @@ export default function HomePage({
           listing={selectedListing}
           trips={apiTrips}
           viewingRequests={viewingRequests}
-          currentStep={escrowStep}
+          applications={applications}
           onAdvance={advanceEscrow}
           onOpenDealRoom={() => navigateToSection("Messages")}
         />
@@ -1877,23 +1978,35 @@ export default function HomePage({
 
 function AppHeader({
   favoriteCount,
+  savedOnly,
+  notifications,
+  notificationsOpen,
   activeSection,
   onSectionChange,
+  onSavedHomes,
+  onNotifications,
   user,
   profile,
   onAuthOpen,
   onLogout
 }: {
   favoriteCount: number;
+  savedOnly: boolean;
+  notifications: LocalNotification[];
+  notificationsOpen: boolean;
   activeSection: AppSection;
   onSectionChange: (section: AppSection) => void;
+  onSavedHomes: () => void;
+  onNotifications: () => void;
   user: SessionUser | null;
   profile: ApiProfile | null;
   onAuthOpen: () => void;
   onLogout: () => void;
 }) {
-  const primaryItems = navItems.slice(0, 3);
-  const secondaryItems = navItems.slice(3);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const primaryItems = navItems.slice(0, 4);
+  const secondaryItems = navItems.slice(4);
+  const unreadCount = getUnreadNotificationCount(notifications);
 
   return (
     <header className="sticky top-0 z-30 border-b border-blue-100/80 bg-white/88 backdrop-blur-xl">
@@ -1932,11 +2045,12 @@ function AppHeader({
         </nav>
 
         <div className="flex min-w-0 shrink-0 items-center justify-end gap-2">
-          <Button variant="ghost" size="icon" className="hidden rounded-full sm:inline-flex" aria-label="Saved homes">
+          <Button variant={savedOnly ? "secondary" : "ghost"} size="icon" className="hidden rounded-full sm:inline-flex" aria-label="Saved homes" onClick={onSavedHomes}>
             <Bookmark className={favoriteCount > 0 ? "fill-current text-primary" : undefined} />
           </Button>
-          <Button variant="ghost" size="icon" className="hidden rounded-full sm:inline-flex" aria-label="Notifications">
+          <Button variant={notificationsOpen ? "secondary" : "ghost"} size="icon" className="relative hidden rounded-full sm:inline-flex" aria-label="Notifications" onClick={onNotifications}>
             <Bell />
+            {unreadCount > 0 ? <span className="absolute right-0 top-0 flex size-4 items-center justify-center rounded-full bg-[#006AFF] text-[10px] font-black text-white">{unreadCount}</span> : null}
           </Button>
           <button
             type="button"
@@ -1965,12 +2079,25 @@ function AppHeader({
             <DoorOpen data-icon="inline-start" />
             Host
           </Button>
-          <Button variant="outline" size="icon" className="rounded-full md:hidden" aria-label="Open menu">
+          <Button variant="outline" size="icon" className="rounded-full md:hidden" aria-label="Open menu" aria-expanded={mobileMenuOpen} onClick={() => setMobileMenuOpen((current) => !current)}>
             <Menu />
           </Button>
         </div>
       </div>
-      <div className="border-t border-blue-100 bg-white md:hidden">
+      {notificationsOpen ? (
+        <div className="absolute right-4 top-[68px] z-50 w-[min(360px,calc(100vw-2rem))] rounded-[24px] border border-blue-100 bg-white p-4 shadow-panel">
+          <div className="text-base font-extrabold text-primary">Notifications</div>
+          <div className="mt-3 grid gap-2">
+            {notifications.length > 0 ? notifications.slice(0, 6).map((notification) => (
+              <div key={notification.id} className="rounded-2xl bg-blue-50/70 p-3">
+                <div className="text-sm font-extrabold text-primary">{notification.title}</div>
+                <div className="mt-1 text-xs font-semibold text-muted-foreground">{notification.detail}</div>
+              </div>
+            )) : <div className="rounded-2xl border border-dashed p-4 text-sm font-semibold text-muted-foreground">暂无通知。完成 Like、DM、预约或申请后会显示在这里。</div>}
+          </div>
+        </div>
+      ) : null}
+      {mobileMenuOpen ? <div className="border-t border-blue-100 bg-white md:hidden">
         <div className="mx-auto flex max-w-[1560px] gap-1 overflow-x-auto px-4 py-2">
           {[...primaryItems, ...secondaryItems].map((item) => {
             const Icon = navIcons[item.section];
@@ -1981,15 +2108,24 @@ function AppHeader({
                 variant={activeSection === item.section || (activeSection === "LikeQueue" && item.section === "Roommates") ? "secondary" : "ghost"}
                 size="sm"
                 className="shrink-0"
-                onClick={() => onSectionChange(item.section)}
+                onClick={() => {
+                  onSectionChange(item.section);
+                  setMobileMenuOpen(false);
+                }}
               >
                 <Icon className="size-3.5" aria-hidden="true" />
                 {item.label}
               </Button>
             );
           })}
+          <Button variant={savedOnly ? "secondary" : "ghost"} size="sm" className="shrink-0" onClick={onSavedHomes}>
+            <Bookmark className="size-3.5" aria-hidden="true" /> Saved
+          </Button>
+          <Button variant={notificationsOpen ? "secondary" : "ghost"} size="sm" className="shrink-0" onClick={onNotifications}>
+            <Bell className="size-3.5" aria-hidden="true" /> Notifications
+          </Button>
         </div>
-      </div>
+      </div> : null}
     </header>
   );
 }
@@ -2017,6 +2153,7 @@ function AuthStrip({
   onClose: () => void;
   onToast: (message: string) => void;
 }) {
+  const apiPresentation = getApiPresentationState(apiError);
   const [email, setEmail] = useState("student@ucla.edu");
   const [code, setCode] = useState("");
   const [pending, setPending] = useState(false);
@@ -2108,7 +2245,7 @@ function AuthStrip({
             ) : null}
           </div>
           <div className="mt-2 text-xs font-semibold text-muted-foreground">
-            {apiError ? `API 状态：${apiError}` : "验证码登录后会同步 profile、发布房源和 roommate match"}
+            {token ? "已登录，资料与发布操作会同步 API" : `${apiPresentation.label}：${apiPresentation.detail}`}
           </div>
           {user ? (
             <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -3052,8 +3189,13 @@ function LikeQueueScreen({
     }),
     [introSentRoommateIds, likedMeRoommateIds, likedRoommateIds, memberIds]
   );
-  const likedMembers = roommates.filter((candidate) => likedRoommateIds.has(getRoommateKey(candidate)));
-  const mutualMembers = roommates.filter((candidate) => canOpenRoommateDm(getRoommateKey(candidate), connectionState));
+  const queue = classifyRoommateQueue(roommates, getRoommateKey, {
+    likedByMeIds: likedRoommateIds,
+    likedMeIds: likedMeRoommateIds,
+    roommateIds: memberIds
+  });
+  const waitingMembers = queue.waiting;
+  const mutualMembers = queue.mutual;
   const totalBudget = members.reduce((sum, member) => sum + getRoommateBudgetValue(member), 0);
   const averageBudget = members.length > 0 ? Math.round(totalBudget / members.length) : 0;
   const ready = members.length > 0;
@@ -3068,7 +3210,7 @@ function LikeQueueScreen({
               <h1 className="text-display text-3xl font-black text-primary">Like Queue</h1>
             </div>
             <p className="mt-1 text-sm font-semibold text-muted-foreground">
-              {likedMembers.length} liked · {mutualMembers.length} mutual · {members.length} roommates
+              {waitingMembers.length} waiting · {mutualMembers.length} mutual · {members.length} roommates
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -3085,9 +3227,9 @@ function LikeQueueScreen({
       </Card>
 
       <div className="grid gap-5 lg:grid-cols-3">
-        <QueueColumn title="Liked by me" description="Waiting for a like back" count={likedMembers.length}>
-          {likedMembers.length > 0 ? (
-            likedMembers.map((member) => (
+        <QueueColumn title="Waiting for a like back" description="Liked by you" count={waitingMembers.length}>
+          {waitingMembers.length > 0 ? (
+            waitingMembers.map((member) => (
               <RoommateConnectionRow
                 key={getRoommateKey(member)}
                 roommate={member}
@@ -3233,7 +3375,7 @@ function RoommateDmPanel({
         </div>
         <div className="flex flex-wrap gap-2">
           {quickReplies.map((reply) => (
-            <Button key={reply} variant="secondary" size="sm" className="rounded-full" onClick={() => submitMessage(reply)}>
+            <Button key={reply} variant="secondary" size="sm" className="rounded-full" onClick={() => setDraft(getComposerDraftAfterQuickReply(draft, reply))}>
               {reply}
             </Button>
           ))}
@@ -3309,6 +3451,7 @@ function DiscoverScreen({
   selectedListing,
   favoriteIds,
   viewMode,
+  listingActionLabel,
   onFiltersChange,
   onAmenityChange,
   onClear,
@@ -3323,6 +3466,7 @@ function DiscoverScreen({
   selectedListing: Listing;
   favoriteIds: Set<string>;
   viewMode: ViewMode;
+  listingActionLabel: string;
   onFiltersChange: (filters: SearchFilters) => void;
   onAmenityChange: (value: string) => void;
   onClear: () => void;
@@ -3378,6 +3522,7 @@ function DiscoverScreen({
               onPreview={onPreview}
               onOpenListing={onOpenListing}
               onFavorite={onFavorite}
+              actionLabel={listingActionLabel}
             />
           )}
         </div>
@@ -3968,22 +4113,31 @@ function TripsScreen({
   listing,
   trips,
   viewingRequests,
-  currentStep,
+  applications,
   onAdvance,
   onOpenDealRoom
 }: {
   listing: Listing;
   trips: ApiTrip[];
   viewingRequests: ViewingRequest[];
-  currentStep: number;
-  onAdvance: () => void;
+  applications: LocalApplication[];
+  onAdvance: (applicationId: string) => void;
   onOpenDealRoom: () => void;
 }) {
   const listingViewingRequests = viewingRequests.filter((request) => request.listingId === listing.id);
+  const application = applications.find((item) => item.listingId === listing.id) ?? applications[0] ?? null;
+  const currentStep = application ? applicationStatuses.indexOf(application.status) : -1;
 
   return (
     <section className="mx-auto grid w-full max-w-[1100px] grid-cols-1 gap-4 px-4 py-4 lg:grid-cols-[360px_minmax(0,1fr)] xl:px-6">
-      <EscrowPanel listing={listing} currentStep={currentStep} onAdvance={onAdvance} />
+      {application ? (
+        <EscrowPanel listing={listing} currentStep={currentStep} onAdvance={() => onAdvance(application.id)} />
+      ) : (
+        <Card className="shadow-panel">
+          <CardHeader><CardTitle>还没有申请</CardTitle><CardDescription>预约看房后，可从房源详情明确开始申请。</CardDescription></CardHeader>
+          <CardContent><Badge variant="secondary">No application</Badge></CardContent>
+        </Card>
+      )}
       <Card className="shadow-panel">
         <CardHeader>
           <div className="flex items-start justify-between gap-3">
@@ -4350,7 +4504,7 @@ function DealCommunicationPanel({
 
         <div className="flex flex-wrap gap-2">
           {quickReplies.map((reply) => (
-            <Button key={reply} variant="secondary" size="sm" className="rounded-full" onClick={() => submitMessage(reply)}>
+            <Button key={reply} variant="secondary" size="sm" className="rounded-full" onClick={() => setDraft(getComposerDraftAfterQuickReply(draft, reply))}>
               {reply}
             </Button>
           ))}
@@ -4756,7 +4910,8 @@ function ListingGrid({
   favoriteIds,
   onPreview,
   onOpenListing,
-  onFavorite
+  onFavorite,
+  actionLabel
 }: {
   listings: Listing[];
   selectedId: string;
@@ -4764,6 +4919,7 @@ function ListingGrid({
   onPreview: (listing: Listing) => void;
   onOpenListing: (listing: Listing) => void;
   onFavorite: (id: string) => void;
+  actionLabel: string;
 }) {
   return (
     <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
@@ -4776,6 +4932,7 @@ function ListingGrid({
           onPreview={onPreview}
           onOpenListing={onOpenListing}
           onFavorite={onFavorite}
+          actionLabel={actionLabel}
         />
       ))}
     </div>
@@ -4788,7 +4945,8 @@ function ListingCard({
   favorite,
   onPreview,
   onOpenListing,
-  onFavorite
+  onFavorite,
+  actionLabel
 }: {
   listing: Listing;
   selected: boolean;
@@ -4796,6 +4954,7 @@ function ListingCard({
   onPreview: (listing: Listing) => void;
   onOpenListing: (listing: Listing) => void;
   onFavorite: (id: string) => void;
+  actionLabel: string;
 }) {
   const gallery = useMemo(() => buildListingGallery(listing), [listing]);
   const [galleryIndex, setGalleryIndex] = useState(0);
@@ -4905,7 +5064,7 @@ function ListingCard({
           className="h-11 w-full justify-between rounded-full font-black"
           onClick={() => onOpenListing(listing)}
         >
-          打开详情
+          {actionLabel}
           <ArrowRight data-icon="inline-end" />
         </Button>
       </div>

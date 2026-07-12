@@ -6,6 +6,8 @@ import {
   buildViewingSlots,
   createViewingRequest,
   getDealWorkflowStage,
+  getComposerDraftAfterQuickReply,
+  upsertViewingRequest,
   type DealWorkflowListing
 } from "../lib/deal-workflow";
 
@@ -108,5 +110,17 @@ describe("deal workflow", () => {
     expect(getDealWorkflowStage(messaged, [])).toBe("DM active");
     expect(getDealWorkflowStage(messaged, [request])).toBe("Tour requested");
     expect(getDealWorkflowStage(messaged, [{ ...request, status: "CONFIRMED" }])).toBe("Tour confirmed");
+  });
+
+  it("adjusts one listing tour without replacing another listing", () => {
+    const first = createViewingRequest({ listing, participantNames: ["You"], previousCount: 0, slot: buildViewingSlots("2026-08-20")[0] });
+    const other = { ...first, id: "viewing-other-1", listingId: "other" };
+    const adjusted = { ...first, id: "viewing-westwood-2", timeLabel: "New time" };
+
+    expect(upsertViewingRequest([first, other], adjusted)).toEqual([other, adjusted]);
+  });
+
+  it("requires quick replies to populate the composer before sending", () => {
+    expect(getComposerDraftAfterQuickReply("old draft", "Can we tour?")).toBe("Can we tour?");
   });
 });

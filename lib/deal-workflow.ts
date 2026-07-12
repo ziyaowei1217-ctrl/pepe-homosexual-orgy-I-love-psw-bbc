@@ -176,6 +176,14 @@ export function getLatestViewingRequest(listingId: string, requests: ViewingRequ
   return requests.findLast((request) => request.listingId === listingId) ?? null;
 }
 
+export function upsertViewingRequest(requests: ViewingRequest[], request: ViewingRequest) {
+  return [...requests.filter((item) => item.listingId !== request.listingId), request];
+}
+
+export function getComposerDraftAfterQuickReply(_currentDraft: string, reply: string) {
+  return reply;
+}
+
 function parseIsoDate(iso: string) {
   const parsed = new Date(`${iso}T00:00:00.000Z`);
   if (Number.isNaN(parsed.getTime())) return new Date("2026-08-20T00:00:00.000Z");
