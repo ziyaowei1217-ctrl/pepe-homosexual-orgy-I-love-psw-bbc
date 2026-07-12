@@ -23,6 +23,10 @@ export function routeForSection(section: RoutedAppSection) {
   return sectionRoutes[section];
 }
 
+export function discoverRouteForIntent(options: { groupTour?: boolean } = {}) {
+  return options.groupTour ? "/?groupTour=1" : "/";
+}
+
 export type DmRouteTarget =
   | { kind: "listing"; id: string }
   | { kind: "roommate"; id: string };

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { dmRouteForTarget, routeForSection, sectionForPathname } from "../lib/app-routes";
+import { discoverRouteForIntent, dmRouteForTarget, routeForSection, sectionForPathname } from "../lib/app-routes";
 
 describe("app route map", () => {
   it("keeps stay and listing detail inside the home experience", () => {
@@ -32,5 +32,9 @@ describe("app route map", () => {
     expect(dmRouteForTarget({ kind: "listing", id: "westwood" })).toBe("/messages?listingId=westwood");
     expect(dmRouteForTarget({ kind: "roommate", id: "Mia Chen" })).toBe("/messages?roommateId=Mia%20Chen");
     expect(dmRouteForTarget({ kind: "listing", id: "westwood" }, { tour: true })).toBe("/messages?listingId=westwood&tour=1");
+  });
+
+  it("preserves explicit group-tour selection across route navigation", () => {
+    expect(discoverRouteForIntent({ groupTour: true })).toBe("/?groupTour=1");
   });
 });

@@ -80,7 +80,7 @@ import {
   readStoredAuthSession,
   writeStoredAuthSession
 } from "@/lib/auth-session";
-import { dmRouteForTarget, routeForSection, sectionForPathname, type RoutedAppSection } from "@/lib/app-routes";
+import { discoverRouteForIntent, dmRouteForTarget, routeForSection, sectionForPathname, type RoutedAppSection } from "@/lib/app-routes";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import {
@@ -545,8 +545,8 @@ const navItems: Array<{ label: string; section: AppSection }> = [
   { label: "Stay", section: "Discover" },
   { label: "Roommates", section: "Roommates" },
   { label: "Messages", section: "Messages" },
-  { label: "Publish", section: "Publish" },
   { label: "Trips", section: "Trips" },
+  { label: "Publish", section: "Publish" },
   { label: "Trust", section: "Trust" }
 ];
 
@@ -834,11 +834,13 @@ export default function HomePage({
   initialSection,
   initialMessageListingId,
   initialRoommateDmId,
+  initialGroupTourSelecting = false,
   initialAuthPanelOpen = false
 }: {
   initialSection?: AppSection;
   initialMessageListingId?: string | null;
   initialRoommateDmId?: string | null;
+  initialGroupTourSelecting?: boolean;
   initialAuthPanelOpen?: boolean;
 } = {}) {
   const pathname = usePathname();
@@ -853,7 +855,7 @@ export default function HomePage({
   const [activeSection, setActiveSection] = useState<AppSection>(startingSection);
   const [viewMode, setViewMode] = useState<ViewMode>("map");
   const [savedOnly, setSavedOnly] = useState(false);
-  const [groupTourSelecting, setGroupTourSelecting] = useState(false);
+  const [groupTourSelecting, setGroupTourSelecting] = useState(initialGroupTourSelecting);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [filters, setFilters] = useState<SearchFilters>(defaultSearchFilters);
   const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set(["1"]));
@@ -1708,7 +1710,8 @@ export default function HomePage({
 
     setGroupTourSelecting(true);
     setSavedOnly(false);
-    navigateToSection("Discover");
+    setActiveSection("Discover");
+    router.push(discoverRouteForIntent({ groupTour: true }));
     setToast("请选择一套房源，再到 Messages 明确选择 Group Tour 时间");
   }
 
