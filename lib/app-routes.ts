@@ -27,6 +27,10 @@ export function discoverRouteForIntent(options: { groupTour?: boolean } = {}) {
   return options.groupTour ? "/?groupTour=1" : "/";
 }
 
+export function listingDetailRoute(listingId: string) {
+  return `/?listingId=${encodeURIComponent(listingId)}`;
+}
+
 export type DmRouteTarget =
   | { kind: "listing"; id: string }
   | { kind: "roommate"; id: string };
@@ -47,4 +51,9 @@ export function sectionForPathname(pathname: string): RoutedAppSection {
   if (pathname.startsWith("/admin/trust")) return "Trust";
 
   return "Discover";
+}
+
+export function sectionForRoute(pathname: string, options: { listingId?: string | null } = {}) {
+  if (pathname === "/" && options.listingId) return "ListingDetail";
+  return sectionForPathname(pathname);
 }

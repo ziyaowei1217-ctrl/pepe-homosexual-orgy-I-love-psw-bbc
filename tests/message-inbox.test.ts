@@ -4,6 +4,7 @@ import {
   getActiveInboxContact,
   getInboxContactKey,
   getInboxSelection,
+  getNarrowMessagePane,
   mergeInboxContacts,
   type InboxContact
 } from "../lib/message-inbox";
@@ -63,5 +64,13 @@ describe("message inbox", () => {
 
     expect(getActiveInboxContact(contacts, { kind: "listing", targetId: "westwood" })).toBe(landlord);
     expect(getActiveInboxContact(contacts, null)).toBe(roommate);
+  });
+
+  it("shows contacts on a narrow inbox route without a requested conversation", () => {
+    expect(getNarrowMessagePane(null)).toBe("contacts");
+  });
+
+  it("shows only the requested conversation on a narrow targeted route", () => {
+    expect(getNarrowMessagePane({ kind: "roommate", targetId: "mia" })).toBe("conversation");
   });
 });

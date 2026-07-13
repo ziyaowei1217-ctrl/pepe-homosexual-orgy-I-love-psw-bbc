@@ -18,6 +18,8 @@ export type InboxSelection = {
   activeRoommateDmId: string | null;
 };
 
+export type NarrowMessagePane = "contacts" | "conversation";
+
 export function getInboxContactKey(contact: InboxTarget) {
   return `${contact.kind}:${contact.targetId}`;
 }
@@ -26,6 +28,10 @@ export function getInboxSelection(target: InboxTarget): InboxSelection {
   return target.kind === "listing"
     ? { activeMessageListingId: target.targetId, activeRoommateDmId: null }
     : { activeMessageListingId: null, activeRoommateDmId: target.targetId };
+}
+
+export function getNarrowMessagePane(target: InboxTarget | null): NarrowMessagePane {
+  return target ? "conversation" : "contacts";
 }
 
 export function mergeInboxContacts(...groups: readonly InboxContact[][]) {

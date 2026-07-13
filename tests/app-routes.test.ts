@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { discoverRouteForIntent, dmRouteForTarget, routeForSection, sectionForPathname } from "../lib/app-routes";
+import {
+  discoverRouteForIntent,
+  dmRouteForTarget,
+  listingDetailRoute,
+  routeForSection,
+  sectionForRoute,
+  sectionForPathname
+} from "../lib/app-routes";
 
 describe("app route map", () => {
   it("keeps stay and listing detail inside the home experience", () => {
@@ -36,5 +43,15 @@ describe("app route map", () => {
 
   it("preserves explicit group-tour selection across route navigation", () => {
     expect(discoverRouteForIntent({ groupTour: true })).toBe("/?groupTour=1");
+  });
+
+  it("creates a durable route for a selected listing detail", () => {
+    expect(listingDetailRoute("westwood")).toBe("/?listingId=westwood");
+  });
+
+  it("derives the visible workspace from the full route state", () => {
+    expect(sectionForRoute("/", { listingId: "westwood" })).toBe("ListingDetail");
+    expect(sectionForRoute("/messages", { listingId: "westwood" })).toBe("Messages");
+    expect(sectionForRoute("/", {})).toBe("Discover");
   });
 });

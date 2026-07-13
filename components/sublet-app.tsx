@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  ArrowLeft,
   ArrowRight,
   Bath,
   BedDouble,
@@ -80,7 +81,14 @@ import {
   readStoredAuthSession,
   writeStoredAuthSession
 } from "@/lib/auth-session";
-import { discoverRouteForIntent, dmRouteForTarget, routeForSection, sectionForPathname, type RoutedAppSection } from "@/lib/app-routes";
+import {
+  discoverRouteForIntent,
+  dmRouteForTarget,
+  listingDetailRoute,
+  routeForSection,
+  sectionForRoute,
+  type RoutedAppSection
+} from "@/lib/app-routes";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import {
@@ -130,6 +138,7 @@ import {
   getActiveInboxContact,
   getInboxContactKey,
   getInboxSelection,
+  getNarrowMessagePane,
   mergeInboxContacts,
   type InboxContact
 } from "@/lib/message-inbox";
@@ -834,20 +843,25 @@ export default function HomePage({
   initialSection,
   initialMessageListingId,
   initialRoommateDmId,
+  initialListingId,
   initialGroupTourSelecting = false,
   initialAuthPanelOpen = false
 }: {
   initialSection?: AppSection;
   initialMessageListingId?: string | null;
   initialRoommateDmId?: string | null;
+  initialListingId?: string | null;
   initialGroupTourSelecting?: boolean;
   initialAuthPanelOpen?: boolean;
 } = {}) {
   const pathname = usePathname();
   const router = useRouter();
-  const startingSection = initialSection ?? sectionForPathname(pathname);
+  const startingSection = initialListingId
+    ? sectionForRoute(pathname, { listingId: initialListingId })
+    : initialSection ?? sectionForRoute(pathname);
+  const initialSelectedListing = listings.find((listing) => listing.id === initialListingId) ?? listings[0];
   const [allListings, setAllListings] = useState(listings);
-  const [selectedListing, setSelectedListing] = useState(listings[0]);
+  const [selectedListing, setSelectedListing] = useState(initialSelectedListing);
   const [apiRoommates, setApiRoommates] = useState<Roommate[]>(roommates);
   const [apiTrips, setApiTrips] = useState<ApiTrip[]>([]);
   const [apiTrustQueues, setApiTrustQueues] = useState<ApiTrustQueue[]>([]);
@@ -906,10 +920,31 @@ export default function HomePage({
     setViewingRequests(stored.viewingRequests);
     setApplications(stored.applications);
     const storedListingId = stored.applications[0]?.listingId ?? stored.viewingRequests[0]?.listingId;
-    if (storedListingId) setSelectedListing(listings.find((listing) => listing.id === storedListingId) ?? listings[0]);
+    if (!initialListingId && storedListingId) {
+      setSelectedListing(listings.find((listing) => listing.id === storedListingId) ?? listings[0]);
+    }
     setNotifications(stored.notifications);
     setLocalWorkflowHydrated(true);
-  }, []);
+  }, [initialListingId]);
+
+  useEffect(() => {
+    if (initialRoommateDmId) {
+      selectInboxTarget({ kind: "roommate", targetId: initialRoommateDmId });
+      return;
+    }
+
+    if (initialMessageListingId) {
+      selectInboxTarget({ kind: "listing", targetId: initialMessageListingId });
+      return;
+    }
+
+    setActiveMessageListingId(null);
+    setActiveRoommateDmId(null);
+  }, [initialMessageListingId, initialRoommateDmId]);
+
+  useEffect(() => {
+    setActiveSection(sectionForRoute(pathname, { listingId: initialListingId }));
+  }, [initialListingId, pathname]);
 
   useEffect(() => {
     if (!localWorkflowHydrated) return;
@@ -1211,6 +1246,13 @@ export default function HomePage({
     },
     [activeMessageListingId, activeRoommateDmId, roommateConnectionState, roommateStorageHydrated]
   );
+  const routeInboxTarget = activeRoommateDmId
+    ? { kind: "roommate" as const, targetId: activeRoommateDmId }
+    : activeMessageListingId
+      ? { kind: "listing" as const, targetId: activeMessageListingId }
+      : null;
+  const narrowMessagePane = getNarrowMessagePane(routeInboxTarget);
+  const requestedInboxKey = routeInboxTarget ? getInboxContactKey(routeInboxTarget) : null;
   const activeInboxContact = useMemo(
     () => getActiveInboxContact(inboxContacts, requestedInboxTarget),
     [inboxContacts, requestedInboxTarget]
@@ -1259,7 +1301,7 @@ export default function HomePage({
 
   useEffect(() => {
     window.scrollTo({ left: 0, top: 0 });
-  }, [activeSection]);
+  }, [activeSection, requestedInboxKey]);
 
   function navigateToSection(section: AppSection) {
     setActiveSection(section);
@@ -1272,6 +1314,13 @@ export default function HomePage({
 
     setActiveSection("Messages");
     router.push(dmRouteForTarget({ kind: contact.kind, id: contact.targetId }));
+  }
+
+  function handleBackToMessageContacts() {
+    setActiveMessageListingId(null);
+    setActiveRoommateDmId(null);
+    setActiveSection("Messages");
+    router.push("/messages");
   }
 
   function selectInboxTarget(target: { kind: "listing" | "roommate"; targetId: string }) {
@@ -1311,6 +1360,7 @@ export default function HomePage({
   function openListingDetail(listing: Listing) {
     setSelectedListing(listing);
     setActiveSection("ListingDetail");
+    router.push(listingDetailRoute(listing.id));
     setToast(`正在查看房源详情：${listing.title}`);
   }
 
@@ -1891,7 +1941,10 @@ export default function HomePage({
           dealStage={selectedDealStage}
           groupMembers={groupMembers}
           roommate={roommate}
-          onBack={() => navigateToSection("Discover")}
+          onBack={() => {
+            setActiveSection("Discover");
+            router.push("/");
+          }}
           onFavorite={handleFavorite}
           onContact={handleContactListing}
           onRequestTour={(listing) => handleContactListing(listing, { tour: true })}
@@ -1943,11 +1996,13 @@ export default function HomePage({
           dealStage={activeMessageStage}
           dealThread={activeMessageThread}
           latestViewingRequest={activeMessageViewingRequest}
+          narrowPane={narrowMessagePane}
           viewingSlots={viewingSlots}
           onSendMessage={handleSendDealMessage}
           onSendRoommateMessage={handleSendRoommateDm}
           onRequestTour={handleRequestListingTour}
           onSelectContact={handleSelectInboxContact}
+          onBackToContacts={handleBackToMessageContacts}
           onOpenListing={(listing) => {
             openListingDetail(listing);
           }}
@@ -3861,11 +3916,13 @@ function MessagesScreen({
   dealStage,
   dealThread,
   latestViewingRequest,
+  narrowPane,
   viewingSlots,
   onSendMessage,
   onSendRoommateMessage,
   onRequestTour,
   onSelectContact,
+  onBackToContacts,
   onOpenListing
 }: {
   contacts: InboxContact[];
@@ -3876,16 +3933,18 @@ function MessagesScreen({
   dealStage: string;
   dealThread: DealThread | null;
   latestViewingRequest: ViewingRequest | null;
+  narrowPane: "contacts" | "conversation";
   viewingSlots: ViewingSlot[];
   onSendMessage: (listing: Listing, body: string) => void;
   onSendRoommateMessage: (roommate: Roommate, body: string) => void;
   onRequestTour: (listing: Listing, slot?: ViewingSlot) => void;
   onSelectContact: (contact: InboxContact) => void;
+  onBackToContacts: () => void;
   onOpenListing: (listing: Listing) => void;
 }) {
   return (
     <section className="mx-auto grid min-h-[calc(100vh-76px)] w-full max-w-[1380px] grid-cols-1 gap-4 px-4 py-4 lg:grid-cols-[360px_minmax(0,1fr)] xl:px-6">
-      <aside className="min-w-0">
+      <aside className={cn("min-w-0", narrowPane === "conversation" && "hidden lg:block")}>
         <Card className="h-full min-h-[640px] overflow-hidden shadow-panel">
           <CardHeader>
             <div className="flex items-start justify-between gap-3">
@@ -3940,7 +3999,13 @@ function MessagesScreen({
         </Card>
       </aside>
 
-      <div className="flex min-w-0 flex-col gap-4">
+      <div className={cn("min-w-0 flex-col gap-4", narrowPane === "conversation" ? "flex" : "hidden lg:flex")}>
+        {narrowPane === "conversation" ? (
+          <Button variant="outline" className="w-fit lg:hidden" onClick={onBackToContacts}>
+            <ArrowLeft data-icon="inline-start" />
+            返回联系人
+          </Button>
+        ) : null}
         {activeContact?.kind === "listing" && selectedListing && dealThread ? (
           <>
             <Card className="overflow-hidden shadow-panel">

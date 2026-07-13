@@ -39,6 +39,12 @@ Desktop navigation will expose `Stay`, `Roommates`, `Messages`, and `Trips`. `Ho
 
 `Notifications` will open a compact panel showing recent local workflow events: roommate matches, new DMs, tour requests, application creation, and escrow progress. Opening the panel marks visible events read. If there are no events, it shows an intentional empty state.
 
+### Responsive Messages follow-up
+
+The Messages workspace uses two presentation modes without changing its underlying unified inbox. At desktop widths, contacts and the selected conversation remain side by side. Below the desktop breakpoint, `/messages` shows only the contact list; a URL containing `listingId` or `roommateId` shows only that conversation and exposes a `返回联系人` action. Selecting a contact, following a DM entry point, refreshing, and using browser Back must all preserve the URL-to-pane relationship and reset the page to the top.
+
+Opening a listing from a conversation must navigate to a durable listing-detail URL, `/?listingId=<id>`, rather than rendering listing content underneath a Messages URL. Reloading that URL restores the same listing detail, and browser Back returns to the originating conversation.
+
 ## Listing, DM, Tour, and Application Flow
 
 The listing detail page will use the following sequence:
