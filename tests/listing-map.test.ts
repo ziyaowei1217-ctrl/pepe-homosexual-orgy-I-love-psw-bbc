@@ -33,6 +33,7 @@ describe("listing map", () => {
     expect(markers).toHaveLength(2);
     expect(markers.every((marker) => marker.x >= 0 && marker.x <= 640)).toBe(true);
     expect(markers.every((marker) => marker.y >= 0 && marker.y <= 360)).toBe(true);
+    expect(markers.every((marker) => Number.isInteger(marker.x) && Number.isInteger(marker.y))).toBe(true);
   });
 
   it("keeps edge marker labels inside the visible map", () => {

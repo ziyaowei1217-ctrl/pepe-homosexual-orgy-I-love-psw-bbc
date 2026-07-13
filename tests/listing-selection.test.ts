@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { getVisibleSelectedListing, isSelectedListing } from "../lib/listing-selection";
+import { filterSavedListings, getListingCardDomId, getVisibleSelectedListing, isSelectedListing } from "../lib/listing-selection";
 
 describe("listing selection", () => {
   it("keeps the current listing when it is still visible", () => {
@@ -20,6 +20,16 @@ describe("listing selection", () => {
   it("uses the same selected listing id for list cards and map markers", () => {
     expect(isSelectedListing("westwood", listing("westwood"))).toBe(true);
     expect(isSelectedListing("westwood", listing("koreatown"))).toBe(false);
+  });
+
+  it("builds a stable card target for map marker navigation", () => {
+    expect(getListingCardDomId("westwood")).toBe("listing-card-westwood");
+  });
+
+  it("shows only favorites in saved mode without changing normal results", () => {
+    const results = [listing("westwood"), listing("usc")];
+    expect(filterSavedListings(results, new Set(["usc"]), true).map((item) => item.id)).toEqual(["usc"]);
+    expect(filterSavedListings(results, new Set(["usc"]), false)).toEqual(results);
   });
 });
 

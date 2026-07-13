@@ -100,8 +100,8 @@ export function getMapMarkers(
       ...listing,
       ...point,
       label: `$${listing.price.toLocaleString()}`,
-      x: keepInsideViewport(markerPixel.x - centerPixel.x + size.width / 2, size.width, markerInset.x),
-      y: keepInsideViewport(markerPixel.y - centerPixel.y + size.height / 2, size.height, markerInset.y)
+      x: Math.round(keepInsideViewport(markerPixel.x - centerPixel.x + size.width / 2, size.width, markerInset.x)),
+      y: Math.round(keepInsideViewport(markerPixel.y - centerPixel.y + size.height / 2, size.height, markerInset.y))
     };
   });
 }

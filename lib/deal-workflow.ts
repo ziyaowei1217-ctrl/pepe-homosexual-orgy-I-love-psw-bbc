@@ -19,6 +19,7 @@ export type DealThread = {
   subject: string;
   participants: string[];
   messages: DealMessage[];
+  lastActivityAt: number;
 };
 
 export type ViewingMode = "in-person" | "video";
@@ -78,6 +79,7 @@ export function buildInitialDealThread({
     listingId: listing.id,
     subject: listing.title,
     participants,
+    lastActivityAt: 0,
     messages: [
       {
         id: `${listing.id}-seed-1`,
@@ -105,6 +107,7 @@ export function appendDealMessage(thread: DealThread, input: AppendDealMessageIn
 
   return {
     ...thread,
+    lastActivityAt: input.now.getTime(),
     participants: uniqueNames([...thread.participants, input.senderName]),
     messages: [
       ...thread.messages,
@@ -171,6 +174,14 @@ export function getDealWorkflowStage(thread: DealThread, requests: ViewingReques
 
 export function getLatestViewingRequest(listingId: string, requests: ViewingRequest[]) {
   return requests.findLast((request) => request.listingId === listingId) ?? null;
+}
+
+export function upsertViewingRequest(requests: ViewingRequest[], request: ViewingRequest) {
+  return [...requests.filter((item) => item.listingId !== request.listingId), request];
+}
+
+export function getComposerDraftAfterQuickReply(_currentDraft: string, reply: string) {
+  return reply;
 }
 
 function parseIsoDate(iso: string) {

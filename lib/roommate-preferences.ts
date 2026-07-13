@@ -58,6 +58,10 @@ export function rankRoommatesByPreference<T extends PreferenceRoommateProfile>(
     });
 }
 
+export function getRoommateDeckCandidates<T>(rankedRoommates: readonly T[]) {
+  return [...rankedRoommates];
+}
+
 export function buildRoommatePreferenceFit(
   roommate: PreferenceRoommateProfile,
   preference: RoommatePreference
