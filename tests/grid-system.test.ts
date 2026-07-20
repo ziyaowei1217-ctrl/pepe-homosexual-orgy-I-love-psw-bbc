@@ -29,4 +29,24 @@ describe("responsive grid system", () => {
     expect(source).toContain("app-card-grid");
     expect(source).toContain("aspect-[4/3]");
   });
+
+  it("defines the agreed workspace column templates", () => {
+    const source = readFileSync("components/sublet-app.tsx", "utf8");
+    for (const contract of [
+      "xl:col-span-3",
+      "xl:col-span-9",
+      "lg:col-span-4",
+      "xl:col-span-8",
+      "xl:col-span-4"
+    ]) {
+      expect(source).toContain(contract);
+    }
+  });
+
+  it("uses quieter shared card and control radii", () => {
+    const card = readFileSync("components/ui/card.tsx", "utf8");
+    const button = readFileSync("components/ui/button.tsx", "utf8");
+    expect(card).toContain("rounded-[20px]");
+    expect(button).toContain("rounded-[14px]");
+  });
 });

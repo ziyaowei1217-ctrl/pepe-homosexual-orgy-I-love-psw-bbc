@@ -2578,7 +2578,7 @@ function RoommatesMarketplaceScreen({
   }
 
   return (
-    <section className="relative mx-auto flex w-full max-w-[1560px] flex-col gap-6 overflow-hidden px-4 py-5 xl:px-6">
+    <section className="app-shell relative flex w-full flex-col gap-6 overflow-hidden py-5 md:py-6">
       <RoommatePathGraphic className="left-0 top-28 hidden xl:block" />
       <RoommatePathGraphic className="bottom-8 right-28 hidden rotate-180 xl:block" />
 
@@ -2642,14 +2642,16 @@ function RoommatesMarketplaceScreen({
         </CardContent>
       </Card>
 
-      <div className="relative z-10 grid grid-cols-1 gap-6 xl:grid-cols-[360px_minmax(0,1fr)]">
-        <RoommatePreferencePanel
-          preference={preference}
-          fitScore={activeDeckRoommate.preferenceFit.score}
-          onPreferenceChange={updatePreference}
-        />
+      <div className="app-grid relative z-10 items-start">
+        <div className="col-span-full min-w-0 xl:col-span-4">
+          <RoommatePreferencePanel
+            preference={preference}
+            fitScore={activeDeckRoommate.preferenceFit.score}
+            onPreferenceChange={updatePreference}
+          />
+        </div>
 
-        <div className="min-w-0">
+        <div className="col-span-full min-w-0 xl:col-span-8">
           <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <div className="text-2xl font-extrabold text-primary">
@@ -3284,7 +3286,7 @@ function LikeQueueScreen({
         </CardContent>
       </Card>
 
-      <div className="grid gap-5 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3 xl:gap-6">
         <QueueColumn title="Waiting for a like back" description="Liked by you" count={waitingMembers.length}>
           {waitingMembers.length > 0 ? (
             waitingMembers.map((member) => (
@@ -3940,8 +3942,8 @@ function MessagesScreen({
   onOpenListing: (listing: Listing) => void;
 }) {
   return (
-    <section className="app-shell grid min-h-[calc(100vh-76px)] w-full grid-cols-1 gap-4 py-4 lg:grid-cols-[360px_minmax(0,1fr)]">
-      <aside className={cn("min-w-0", narrowPane === "conversation" && "hidden lg:block")}>
+    <section className="app-shell app-grid min-h-[calc(100vh-76px)] w-full py-4 md:py-5">
+      <aside className={cn("col-span-full min-w-0 lg:col-span-3 xl:col-span-3", narrowPane === "conversation" && "hidden lg:block")}>
         <Card className="h-full min-h-[640px] overflow-hidden shadow-panel">
           <CardHeader>
             <div className="flex items-start justify-between gap-3">
@@ -3996,7 +3998,7 @@ function MessagesScreen({
         </Card>
       </aside>
 
-      <div className={cn("min-w-0 flex-col gap-4", narrowPane === "conversation" ? "flex" : "hidden lg:flex")}>
+      <div className={cn("col-span-full min-w-0 flex-col gap-4 lg:col-span-5 xl:col-span-9", narrowPane === "conversation" ? "flex" : "hidden lg:flex")}>
         {narrowPane === "conversation" ? (
           <Button variant="outline" className="w-fit lg:hidden" onClick={onBackToContacts}>
             <ArrowLeft data-icon="inline-start" />
@@ -4096,11 +4098,13 @@ function PublishScreen({
   onCreate: (draft: PublishDraft) => void;
 }) {
   return (
-    <section className="app-shell w-full py-4">
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
+    <section className="app-shell app-grid w-full items-start py-5 md:py-6">
+      <div className="col-span-full min-w-0 xl:col-span-8">
         <PublishingFlow isPublishing={isPublishing} onCreate={onCreate} />
-        <LandlordListingsPanel listings={listings} user={user} />
       </div>
+      <aside className="col-span-full min-w-0 xl:col-span-4">
+        <LandlordListingsPanel listings={listings} user={user} />
+      </aside>
     </section>
   );
 }
@@ -4194,16 +4198,19 @@ function TripsScreen({
   const currentStep = application ? applicationStatuses.indexOf(application.status) : -1;
 
   return (
-    <section className="app-shell grid w-full grid-cols-1 gap-4 py-4 lg:grid-cols-[360px_minmax(0,1fr)]">
-      {application ? (
-        <EscrowPanel listing={listing} currentStep={currentStep} onAdvance={() => onAdvance(application.id)} />
-      ) : (
+    <section className="app-shell app-grid w-full items-start py-5 md:py-6">
+      <aside className="col-span-full min-w-0 lg:col-span-4">
+        {application ? (
+          <EscrowPanel listing={listing} currentStep={currentStep} onAdvance={() => onAdvance(application.id)} />
+        ) : (
+          <Card className="shadow-panel">
+            <CardHeader><CardTitle>还没有申请</CardTitle><CardDescription>预约看房后，可从房源详情明确开始申请。</CardDescription></CardHeader>
+            <CardContent><Badge variant="secondary">No application</Badge></CardContent>
+          </Card>
+        )}
+      </aside>
+      <div className="col-span-full min-w-0 lg:col-span-4 xl:col-span-8">
         <Card className="shadow-panel">
-          <CardHeader><CardTitle>还没有申请</CardTitle><CardDescription>预约看房后，可从房源详情明确开始申请。</CardDescription></CardHeader>
-          <CardContent><Badge variant="secondary">No application</Badge></CardContent>
-        </Card>
-      )}
-      <Card className="shadow-panel">
         <CardHeader>
           <div className="flex items-start justify-between gap-3">
             <div>
@@ -4261,7 +4268,8 @@ function TripsScreen({
             </div>
           </div>
         </CardContent>
-      </Card>
+        </Card>
+      </div>
     </section>
   );
 }
@@ -4676,9 +4684,13 @@ function TrustScreen({
   onToast: (message: string) => void;
 }) {
   return (
-    <section className="app-shell grid w-full grid-cols-1 gap-4 py-4 lg:grid-cols-[minmax(0,1fr)_420px]">
-      <TrustAndRoadmap />
-      <OperationsPanel initialQueues={queues} onToast={onToast} />
+    <section className="app-shell app-grid w-full items-start py-5 md:py-6">
+      <div className="col-span-full min-w-0 xl:col-span-8">
+        <TrustAndRoadmap />
+      </div>
+      <aside className="col-span-full min-w-0 xl:col-span-4">
+        <OperationsPanel initialQueues={queues} onToast={onToast} />
+      </aside>
     </section>
   );
 }
