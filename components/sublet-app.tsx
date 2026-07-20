@@ -2068,18 +2068,18 @@ function AppHeader({
 
   return (
     <header className="sticky top-0 z-30 border-b border-blue-100/80 bg-white/88 backdrop-blur-xl">
-      <div className="mx-auto grid h-[76px] max-w-[1560px] grid-cols-[1fr_auto_1fr] items-center gap-4 px-4 xl:px-6">
-        <div className="flex min-w-0 items-center gap-3">
+      <div className="app-shell grid h-[76px] grid-cols-[minmax(0,1fr)_auto] items-center gap-3 md:grid-cols-8 md:gap-5 xl:grid-cols-12 xl:gap-6">
+        <div className="flex min-w-0 items-center gap-3 md:col-span-2 xl:col-span-3">
           <div className="flex size-11 items-center justify-center rounded-[22px] bg-[linear-gradient(135deg,#006AFF,#0D4599)] text-white shadow-[0_16px_40px_rgba(0,106,255,0.28)]">
             <Home className="size-5" aria-hidden="true" />
           </div>
           <div className="min-w-0 leading-tight">
             <div className="truncate text-lg font-black text-primary">Sublet Pipeline</div>
-            <div className="hidden text-xs font-bold text-[#006AFF] sm:block">LA roommate-ready stays</div>
+            <div className="hidden text-xs font-bold text-[#006AFF] xl:block">LA roommate-ready stays</div>
           </div>
         </div>
 
-        <nav className="hidden items-center justify-center gap-2 md:flex">
+        <nav className="hidden min-w-0 items-center justify-center gap-1 md:col-span-5 md:flex xl:col-span-6 xl:gap-2">
           {primaryItems.map((item) => {
             const Icon = navIcons[item.section];
 
@@ -2102,7 +2102,7 @@ function AppHeader({
           })}
         </nav>
 
-        <div className="flex min-w-0 shrink-0 items-center justify-end gap-2">
+        <div className="flex min-w-0 shrink-0 items-center justify-end gap-2 md:col-span-1 xl:col-span-3">
           <Button variant={savedOnly ? "secondary" : "ghost"} size="icon" className="hidden rounded-full sm:inline-flex" aria-label="Saved homes" onClick={onSavedHomes}>
             <Bookmark className={favoriteCount > 0 ? "fill-current text-primary" : undefined} />
           </Button>
@@ -2156,7 +2156,7 @@ function AppHeader({
         </div>
       ) : null}
       {mobileMenuOpen ? <div className="border-t border-blue-100 bg-white md:hidden">
-        <div className="mx-auto flex max-w-[1560px] gap-1 overflow-x-auto px-4 py-2">
+        <div className="app-shell flex gap-1 overflow-x-auto py-2">
           {[...primaryItems, ...secondaryItems].map((item) => {
             const Icon = navIcons[item.section];
 
@@ -2285,7 +2285,7 @@ function AuthStrip({
 
   return (
     <section className="border-b border-blue-100 bg-white">
-      <div className="mx-auto grid max-w-[1500px] gap-4 px-4 py-4 lg:grid-cols-[minmax(240px,0.7fr)_minmax(0,1.3fr)] lg:items-start xl:px-6">
+      <div className="app-shell grid gap-4 py-4 lg:grid-cols-[minmax(240px,0.7fr)_minmax(0,1.3fr)] lg:items-start">
         <div className="min-w-0 rounded-lg border border-blue-100 bg-blue-50/70 p-4">
           <div className="flex items-start justify-between gap-3">
             <div>
@@ -3259,7 +3259,7 @@ function LikeQueueScreen({
   const ready = members.length > 0;
 
   return (
-    <section className="mx-auto flex w-full max-w-[1380px] flex-col gap-5 px-4 py-5 xl:px-6">
+    <section className="app-shell flex w-full flex-col gap-5 py-5">
       <Card className="overflow-hidden rounded-[32px] border-blue-100 shadow-panel">
         <CardContent className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -3546,7 +3546,7 @@ function DiscoverScreen({
   }
 
   return (
-    <section className="mx-auto flex w-full max-w-[1500px] flex-col gap-5 px-4 py-5 xl:px-6">
+    <section className="app-shell flex w-full flex-col gap-6 py-5 md:py-6">
       <SearchHero
         filters={filters}
         resultCount={listings.length}
@@ -3555,13 +3555,8 @@ function DiscoverScreen({
         onClear={onClear}
       />
 
-      <div
-        className={cn(
-          "grid grid-cols-1 gap-4",
-          viewMode === "map" && "lg:grid-cols-[minmax(0,760px)_minmax(420px,1fr)]"
-        )}
-      >
-        <div className="flex min-w-0 flex-col gap-4">
+      <div className="app-grid items-start">
+        <div className={cn("col-span-full flex min-w-0 flex-col gap-4", viewMode === "map" && "lg:col-span-4 xl:col-span-7")}>
           <MarketToolbar
             listingCount={listings.length}
             viewMode={viewMode}
@@ -3586,7 +3581,7 @@ function DiscoverScreen({
         </div>
 
         {viewMode === "map" ? (
-          <aside className="hidden min-w-0 lg:block">
+          <aside className="col-span-full hidden min-w-0 lg:col-span-4 lg:block xl:col-span-5">
             <MapCanvas
               className="sticky top-24"
               listings={listings}
@@ -3629,8 +3624,8 @@ function SearchHero({
   return (
     <Card className="glass-panel overflow-hidden rounded-[34px] border-blue-100 bg-white shadow-[0_22px_80px_rgba(0,106,255,0.10)]">
       <CardContent className="flex flex-col gap-4 p-4">
-        <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(260px,1.05fr)_minmax(320px,0.9fr)_minmax(300px,1fr)_auto] lg:items-end">
-          <label className="flex flex-col gap-2 text-sm font-semibold">
+        <div className="grid grid-cols-4 gap-4 md:grid-cols-8 md:gap-5 xl:grid-cols-12 xl:items-end xl:gap-6">
+          <label className="col-span-4 flex flex-col gap-2 text-sm font-semibold xl:col-span-4">
             目的地
             <div className="relative">
               <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -3644,11 +3639,13 @@ function SearchHero({
               />
             </div>
           </label>
-          <DateRangePicker
-            range={filters}
-            onChange={(range) => onFiltersChange({ ...filters, ...range })}
-          />
-          <div className="flex flex-col gap-2 text-sm font-semibold">
+          <div className="col-span-4 xl:col-span-4">
+            <DateRangePicker
+              range={filters}
+              onChange={(range) => onFiltersChange({ ...filters, ...range })}
+            />
+          </div>
+          <div className="col-span-4 flex flex-col gap-2 text-sm font-semibold xl:col-span-3">
             <div className="flex items-center justify-between gap-3">
               <span>价格区间</span>
               <span className="text-xs font-black text-[#006AFF]">{formatPriceRangeLabel(filters)}</span>
@@ -3686,7 +3683,7 @@ function SearchHero({
               onChange={(event) => updatePrice({ priceMax: Number(event.target.value) })}
             />
           </div>
-          <Button variant="trust" className="h-12 rounded-full px-5 font-black" onClick={onClear}>
+          <Button variant="trust" className="col-span-4 h-12 px-5 font-black xl:col-span-1" onClick={onClear}>
             重置
           </Button>
         </div>
@@ -3943,7 +3940,7 @@ function MessagesScreen({
   onOpenListing: (listing: Listing) => void;
 }) {
   return (
-    <section className="mx-auto grid min-h-[calc(100vh-76px)] w-full max-w-[1380px] grid-cols-1 gap-4 px-4 py-4 lg:grid-cols-[360px_minmax(0,1fr)] xl:px-6">
+    <section className="app-shell grid min-h-[calc(100vh-76px)] w-full grid-cols-1 gap-4 py-4 lg:grid-cols-[360px_minmax(0,1fr)]">
       <aside className={cn("min-w-0", narrowPane === "conversation" && "hidden lg:block")}>
         <Card className="h-full min-h-[640px] overflow-hidden shadow-panel">
           <CardHeader>
@@ -4099,7 +4096,7 @@ function PublishScreen({
   onCreate: (draft: PublishDraft) => void;
 }) {
   return (
-    <section className="mx-auto w-full max-w-[1100px] px-4 py-4 xl:px-6">
+    <section className="app-shell w-full py-4">
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
         <PublishingFlow isPublishing={isPublishing} onCreate={onCreate} />
         <LandlordListingsPanel listings={listings} user={user} />
@@ -4197,7 +4194,7 @@ function TripsScreen({
   const currentStep = application ? applicationStatuses.indexOf(application.status) : -1;
 
   return (
-    <section className="mx-auto grid w-full max-w-[1100px] grid-cols-1 gap-4 px-4 py-4 lg:grid-cols-[360px_minmax(0,1fr)] xl:px-6">
+    <section className="app-shell grid w-full grid-cols-1 gap-4 py-4 lg:grid-cols-[360px_minmax(0,1fr)]">
       {application ? (
         <EscrowPanel listing={listing} currentStep={currentStep} onAdvance={() => onAdvance(application.id)} />
       ) : (
@@ -4313,8 +4310,8 @@ function ListingDetailScreen({
   const perPersonPrice = Math.round(listing.price / roommateCount);
 
   return (
-    <section className="mx-auto flex w-full max-w-[1280px] flex-col gap-4 px-4 py-4 xl:px-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+    <section className="app-shell app-grid w-full items-start py-5 md:py-6">
+      <div className="app-section flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <Button variant="outline" className="w-fit" onClick={onBack}>
           <ArrowRight className="rotate-180" data-icon="inline-start" />
           返回房源
@@ -4326,8 +4323,7 @@ function ListingDetailScreen({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
-        <div className="flex min-w-0 flex-col gap-4">
+      <div className="col-span-full flex min-w-0 flex-col gap-4 xl:col-span-8">
           <Card className="overflow-hidden shadow-panel">
             <div className="grid grid-cols-1 gap-1 md:grid-cols-[1.5fr_1fr]">
               <div
@@ -4413,7 +4409,7 @@ function ListingDetailScreen({
           </Card>
         </div>
 
-        <aside className="flex min-w-0 flex-col gap-4">
+        <aside className="col-span-full flex min-w-0 flex-col gap-4 xl:col-span-4">
           <Card className="shadow-panel">
             <CardHeader>
               <CardTitle>申请流程</CardTitle>
@@ -4486,7 +4482,6 @@ function ListingDetailScreen({
             </CardContent>
           </Card>
         </aside>
-      </div>
     </section>
   );
 }
@@ -4681,7 +4676,7 @@ function TrustScreen({
   onToast: (message: string) => void;
 }) {
   return (
-    <section className="mx-auto grid w-full max-w-[1280px] grid-cols-1 gap-4 px-4 py-4 lg:grid-cols-[minmax(0,1fr)_420px] xl:px-6">
+    <section className="app-shell grid w-full grid-cols-1 gap-4 py-4 lg:grid-cols-[minmax(0,1fr)_420px]">
       <TrustAndRoadmap />
       <OperationsPanel initialQueues={queues} onToast={onToast} />
     </section>
@@ -4990,7 +4985,7 @@ function ListingGrid({
   actionLabel: string;
 }) {
   return (
-    <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+    <div className="app-card-grid">
       {listings.map((listing) => (
         <ListingCard
           key={listing.id}
@@ -5036,13 +5031,13 @@ function ListingCard({
     <article
       id={getListingCardDomId(listing.id)}
       className={cn(
-        "group scroll-mt-24 overflow-hidden rounded-[30px] border bg-white text-left shadow-[0_14px_50px_rgba(15,23,42,0.06)] transition-all hover:-translate-y-1 hover:shadow-[0_24px_70px_rgba(0,106,255,0.14)]",
+        "group flex h-full scroll-mt-24 flex-col overflow-hidden rounded-[24px] border bg-white text-left shadow-[0_14px_50px_rgba(15,23,42,0.06)] transition-all hover:-translate-y-1 hover:shadow-[0_24px_70px_rgba(0,106,255,0.14)]",
         selected ? "border-[#006AFF] ring-4 ring-[#006AFF]/10" : "border-blue-100"
       )}
     >
       <div className="relative">
         <button
-          className="block h-56 w-full bg-cover bg-center transition-transform duration-500 group-hover:scale-[1.03]"
+          className="block aspect-[4/3] w-full bg-cover bg-center transition-transform duration-500 group-hover:scale-[1.03]"
           style={{ backgroundImage: `url(${currentImage})` }}
           type="button"
           onClick={() => onPreview(listing)}
@@ -5103,7 +5098,7 @@ function ListingCard({
           {listing.score}
         </div>
       </div>
-      <div className="flex flex-col gap-3 p-4">
+      <div className="flex flex-1 flex-col gap-3 p-4">
         <div className="flex items-start justify-between gap-3">
           <button className="min-w-0 text-left" type="button" onClick={() => onPreview(listing)}>
             <div className="line-clamp-2 text-lg font-black leading-tight text-primary">{listing.title}</div>
@@ -5129,7 +5124,7 @@ function ListingCard({
         </div>
         <Button
           variant={selected ? "trust" : "outline"}
-          className="h-11 w-full justify-between rounded-full font-black"
+          className="mt-auto h-11 w-full justify-between font-black"
           onClick={() => onOpenListing(listing)}
         >
           {actionLabel}
