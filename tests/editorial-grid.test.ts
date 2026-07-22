@@ -60,4 +60,20 @@ describe("editorial grid redesign", () => {
     expect(source).toContain("xl:col-span-4 xl:sticky xl:top-24");
     expect(source).toContain("xl:grid-cols-3");
   });
+
+  it("labels every supporting editorial workspace", () => {
+    const source = readFileSync("components/sublet-app.tsx", "utf8");
+
+    for (const label of [
+      "01 / Messages",
+      "01 / Trips",
+      "01 / Publish",
+      "01 / Trust",
+      "01 / Account"
+    ]) {
+      expect(source).toContain(label);
+    }
+    expect(source).toContain("xl:col-span-3");
+    expect(source).toContain("xl:col-span-9");
+  });
 });

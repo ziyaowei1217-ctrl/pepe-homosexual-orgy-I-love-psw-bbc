@@ -2285,11 +2285,12 @@ function AuthStrip({
   const profileComplete = Boolean(profile?.displayName && profile.school && profile.city);
 
   return (
-    <section className="border-b border-blue-100 bg-white">
+    <section className="border-b border-border bg-background">
       <div className="app-shell grid gap-4 py-4 lg:grid-cols-[minmax(240px,0.7fr)_minmax(0,1.3fr)] lg:items-start">
-        <div className="min-w-0 rounded-lg border border-blue-100 bg-blue-50/70 p-4">
+        <div className="editorial-panel min-w-0 p-4">
           <div className="flex items-start justify-between gap-3">
             <div>
+              <span className="editorial-kicker">01 / Account</span>
               <div className="text-sm font-black uppercase text-[#006AFF]">
                 {user ? "Account ready" : "Email sign in"}
               </div>
@@ -3955,6 +3956,7 @@ function MessagesScreen({
       <aside className={cn("col-span-full min-w-0 lg:col-span-3 xl:col-span-3", narrowPane === "conversation" && "hidden lg:block")}>
         <Card className="h-full min-h-[640px] overflow-hidden shadow-panel">
           <CardHeader>
+            <span className="editorial-kicker">01 / Messages</span>
             <div className="flex items-start justify-between gap-3">
               <div>
                 <CardTitle>Messages</CardTitle>
@@ -4008,6 +4010,9 @@ function MessagesScreen({
       </aside>
 
       <div className={cn("col-span-full min-w-0 flex-col gap-4 lg:col-span-5 xl:col-span-9", narrowPane === "conversation" ? "flex" : "hidden lg:flex")}>
+        <div className="editorial-toolbar">
+          <span className="editorial-kicker">01 / Messages</span>
+        </div>
         {narrowPane === "conversation" ? (
           <Button variant="outline" className="w-fit lg:hidden" onClick={onBackToContacts}>
             <ArrowLeft data-icon="inline-start" />
@@ -4108,6 +4113,12 @@ function PublishScreen({
 }) {
   return (
     <section className="app-shell app-grid w-full items-start py-5 md:py-6">
+      <div className="app-section editorial-toolbar">
+        <div>
+          <span className="editorial-kicker">01 / Publish</span>
+          <h1 className="mt-2 text-3xl font-black tracking-[-0.035em] md:text-4xl">发布房源流程</h1>
+        </div>
+      </div>
       <div className="col-span-full min-w-0 xl:col-span-8">
         <PublishingFlow isPublishing={isPublishing} onCreate={onCreate} />
       </div>
@@ -4208,6 +4219,12 @@ function TripsScreen({
 
   return (
     <section className="app-shell app-grid w-full items-start py-5 md:py-6">
+      <div className="app-section editorial-toolbar">
+        <div>
+          <span className="editorial-kicker">01 / Trips</span>
+          <h1 className="mt-2 text-3xl font-black tracking-[-0.035em] md:text-4xl">订单、看房与入住</h1>
+        </div>
+      </div>
       <aside className="col-span-full min-w-0 lg:col-span-4">
         {application ? (
           <EscrowPanel listing={listing} currentStep={currentStep} onAdvance={() => onAdvance(application.id)} />
@@ -4697,6 +4714,12 @@ function TrustScreen({
 }) {
   return (
     <section className="app-shell app-grid w-full items-start py-5 md:py-6">
+      <div className="app-section editorial-toolbar">
+        <div>
+          <span className="editorial-kicker">01 / Trust</span>
+          <h1 className="mt-2 text-3xl font-black tracking-[-0.035em] md:text-4xl">信任与三阶段前端范围</h1>
+        </div>
+      </div>
       <div className="col-span-full min-w-0 xl:col-span-8">
         <TrustAndRoadmap />
       </div>
