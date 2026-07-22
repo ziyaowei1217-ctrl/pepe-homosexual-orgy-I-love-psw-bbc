@@ -31,4 +31,23 @@ describe("editorial grid redesign", () => {
     expect(input).toContain("rounded-[12px]");
     expect(input).toContain("bg-card");
   });
+
+  it("applies the editorial language to the global shell and Stay", () => {
+    const source = readFileSync("components/sublet-app.tsx", "utf8");
+
+    expect(source).toContain("01 / Stay");
+    expect(source).toContain("02 / Discover");
+    expect(source).toContain("editorial-context-strip");
+    expect(source).toContain("xl:col-span-7");
+    expect(source).toContain("xl:col-span-5");
+    expect(source).toContain("rounded-[18px]");
+  });
+
+  it("uses aligned editorial listing cards", () => {
+    const source = readFileSync("components/sublet-app.tsx", "utf8");
+
+    expect(source).toContain("aspect-[16/11]");
+    expect(source).toContain("border-t border-border");
+    expect(source).toContain("mt-auto");
+  });
 });

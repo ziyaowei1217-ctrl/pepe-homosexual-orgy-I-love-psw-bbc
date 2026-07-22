@@ -2067,8 +2067,8 @@ function AppHeader({
   const unreadCount = getUnreadNotificationCount(notifications);
 
   return (
-    <header className="sticky top-0 z-30 border-b border-blue-100/80 bg-white/88 backdrop-blur-xl">
-      <div className="app-shell grid h-[76px] grid-cols-[minmax(0,1fr)_auto] items-center gap-3 md:grid-cols-8 md:gap-5 xl:grid-cols-12 xl:gap-6">
+    <header className="sticky top-0 z-30 border-b border-border bg-background/92 backdrop-blur-xl">
+      <div className="app-shell grid min-h-[72px] grid-cols-[minmax(0,1fr)_auto] items-center gap-3 py-3 md:grid-cols-8 md:gap-5 xl:grid-cols-12 xl:gap-6">
         <div className="flex min-w-0 items-center gap-3 md:col-span-2 xl:col-span-3">
           <div className="flex size-11 items-center justify-center rounded-[22px] bg-[linear-gradient(135deg,#006AFF,#0D4599)] text-white shadow-[0_16px_40px_rgba(0,106,255,0.28)]">
             <Home className="size-5" aria-hidden="true" />
@@ -2086,13 +2086,14 @@ function AppHeader({
             return (
               <Button
                 key={item.section}
-                variant="ghost"
+                variant={
+                  activeSection === item.section ||
+                  (activeSection === "LikeQueue" && item.section === "Roommates")
+                    ? "default"
+                    : "ghost"
+                }
                 size="default"
-                className={cn(
-                  "relative h-12 rounded-[18px] px-4 text-base font-extrabold text-muted-foreground hover:bg-blue-50 hover:text-primary",
-                  (activeSection === item.section || (activeSection === "LikeQueue" && item.section === "Roommates")) &&
-                    "bg-blue-50 text-[#006AFF] shadow-[inset_0_0_0_1px_rgba(0,106,255,0.10)] after:absolute after:-bottom-[15px] after:left-4 after:right-4 after:h-1 after:rounded-full after:bg-[#006AFF]"
-                )}
+                className="h-11 px-4 text-sm font-extrabold"
                 onClick={() => onSectionChange(item.section)}
               >
                 <Icon className="size-4" aria-hidden="true" />
@@ -3624,15 +3625,21 @@ function SearchHero({
   }
 
   return (
-    <Card className="glass-panel overflow-hidden rounded-[34px] border-blue-100 bg-white shadow-[0_22px_80px_rgba(0,106,255,0.10)]">
-      <CardContent className="flex flex-col gap-4 p-4">
-        <div className="grid grid-cols-4 gap-4 md:grid-cols-8 md:gap-5 xl:grid-cols-12 xl:items-end xl:gap-6">
-          <label className="col-span-4 flex flex-col gap-2 text-sm font-semibold xl:col-span-4">
+    <div className="flex min-w-0 flex-col gap-4">
+      <Card className="overflow-hidden rounded-[18px] border-border bg-card shadow-panel">
+        <CardContent className="grid grid-cols-4 gap-4 p-4 md:grid-cols-8 md:gap-5 md:p-5 xl:grid-cols-12 xl:items-end xl:gap-6 xl:p-6">
+          <div className="col-span-4 min-w-0 md:col-span-8 xl:col-span-3">
+            <span className="editorial-kicker">01 / Stay</span>
+            <h2 className="mt-2 text-2xl font-black leading-tight tracking-[-0.035em] text-foreground">
+              Los Angeles 短租发现
+            </h2>
+          </div>
+          <label className="editorial-field col-span-4 xl:col-span-3">
             目的地
             <div className="relative">
               <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input
-                className="h-12 rounded-full border-blue-100 bg-white pl-10 text-base font-bold shadow-sm"
+                className="h-12 pl-10 text-base font-bold"
                 value={filters.query}
                 onChange={(event) =>
                   onFiltersChange({ ...filters, query: event.target.value })
@@ -3641,13 +3648,13 @@ function SearchHero({
               />
             </div>
           </label>
-          <div className="col-span-4 xl:col-span-4">
+          <div className="col-span-4 xl:col-span-3">
             <DateRangePicker
               range={filters}
               onChange={(range) => onFiltersChange({ ...filters, ...range })}
             />
           </div>
-          <div className="col-span-4 flex flex-col gap-2 text-sm font-semibold xl:col-span-3">
+          <div className="editorial-field col-span-4 md:col-span-4 xl:col-span-2">
             <div className="flex items-center justify-between gap-3">
               <span>价格区间</span>
               <span className="text-xs font-black text-[#006AFF]">{formatPriceRangeLabel(filters)}</span>
@@ -3655,7 +3662,7 @@ function SearchHero({
             <div className="grid grid-cols-2 gap-2">
               <Input
                 aria-label="最低价格"
-                className="h-10 rounded-full border-blue-100 bg-white text-sm font-bold shadow-sm"
+                className="h-10 text-sm font-bold"
                 min={priceFilterBounds.min}
                 max={normalizedPrice.priceMax}
                 step={50}
@@ -3665,7 +3672,7 @@ function SearchHero({
               />
               <Input
                 aria-label="最高价格"
-                className="h-10 rounded-full border-blue-100 bg-white text-sm font-bold shadow-sm"
+                className="h-10 text-sm font-bold"
                 min={normalizedPrice.priceMin}
                 max={priceFilterBounds.max}
                 step={50}
@@ -3685,13 +3692,14 @@ function SearchHero({
               onChange={(event) => updatePrice({ priceMax: Number(event.target.value) })}
             />
           </div>
-          <Button variant="trust" className="col-span-4 h-12 px-5 font-black xl:col-span-1" onClick={onClear}>
+          <Button variant="trust" className="col-span-4 h-12 px-5 font-black md:col-span-4 xl:col-span-1" onClick={onClear}>
             重置
           </Button>
-        </div>
+        </CardContent>
+      </Card>
 
-        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <div className="flex flex-wrap gap-2">
+      <div className="editorial-context-strip">
+        <div className="col-span-full flex flex-wrap gap-2 xl:col-span-7">
             {pricePresets.map((preset) => {
               const active =
                 normalizedPrice.priceMin === preset.priceMin &&
@@ -3735,15 +3743,14 @@ function SearchHero({
                 </button>
               );
             })}
-          </div>
-          <div className="text-sm font-semibold text-muted-foreground">
+        </div>
+        <div className="col-span-full text-sm font-semibold text-muted-foreground md:col-span-3 xl:col-span-2">
             当前命中 <span className="text-primary">{resultCount}</span> 套房源
-          </div>
         </div>
 
         <div
           className={cn(
-            "grid grid-cols-1 gap-3 rounded-[24px] border p-4 lg:grid-cols-[190px_minmax(0,1fr)_minmax(240px,0.8fr)] lg:items-center",
+            "col-span-full grid min-w-0 grid-cols-1 gap-3 md:col-span-5 xl:col-span-3",
             insight.status === "healthy" && "border-emerald-100 bg-emerald-50/70",
             insight.status === "tight" && "border-trust-amber/25 bg-trust-amber/5",
             insight.status === "empty" && "border-trust-red/20 bg-trust-red/5"
@@ -3770,8 +3777,8 @@ function SearchHero({
           </div>
           <p className="text-sm font-semibold text-muted-foreground">{insight.suggestion}</p>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }
 
@@ -4711,10 +4718,11 @@ function MarketToolbar({
   onOpenRoommates: () => void;
 }) {
   return (
-    <Card className="shadow-panel">
-      <CardContent className="flex flex-col gap-4 p-4 lg:flex-row lg:items-center lg:justify-between">
+    <Card className="border-0 bg-transparent shadow-none">
+      <CardContent className="editorial-toolbar p-0">
         <div>
-          <h1 className="text-2xl font-bold text-primary">Los Angeles 短租发现</h1>
+          <span className="editorial-kicker">02 / Discover</span>
+          <h1 className="mt-2 text-3xl font-black tracking-[-0.035em] md:text-4xl">Los Angeles 短租发现</h1>
           <p className="text-sm font-medium text-muted-foreground">
             {listingCount} 套可匹配房源 · {favoriteCount} 个收藏 · 主页专注找房
           </p>
@@ -5043,13 +5051,13 @@ function ListingCard({
     <article
       id={getListingCardDomId(listing.id)}
       className={cn(
-        "group flex h-full scroll-mt-24 flex-col overflow-hidden rounded-[24px] border bg-white text-left shadow-[0_14px_50px_rgba(15,23,42,0.06)] transition-all hover:-translate-y-1 hover:shadow-[0_24px_70px_rgba(0,106,255,0.14)]",
-        selected ? "border-[#006AFF] ring-4 ring-[#006AFF]/10" : "border-blue-100"
+        "group flex h-full scroll-mt-24 flex-col overflow-hidden rounded-[18px] border bg-card text-left shadow-card transition-all hover:-translate-y-0.5 hover:shadow-panel",
+        selected ? "border-accent ring-4 ring-accent/10" : "border-border"
       )}
     >
       <div className="relative">
         <button
-          className="block aspect-[4/3] w-full bg-cover bg-center transition-transform duration-500 group-hover:scale-[1.03]"
+          className="block aspect-[16/11] w-full bg-cover bg-center transition-transform duration-500 group-hover:scale-[1.03]"
           style={{ backgroundImage: `url(${currentImage})` }}
           type="button"
           onClick={() => onPreview(listing)}
@@ -5134,14 +5142,16 @@ function ListingCard({
             </Badge>
           ))}
         </div>
-        <Button
-          variant={selected ? "trust" : "outline"}
-          className="mt-auto h-11 w-full justify-between font-black"
-          onClick={() => onOpenListing(listing)}
-        >
-          {actionLabel}
-          <ArrowRight data-icon="inline-end" />
-        </Button>
+        <div className="mt-auto flex items-center justify-between gap-3 border-t border-border pt-3">
+          <Button
+            variant={selected ? "trust" : "outline"}
+            className="h-11 w-full justify-between font-black"
+            onClick={() => onOpenListing(listing)}
+          >
+            {actionLabel}
+            <ArrowRight data-icon="inline-end" />
+          </Button>
+        </div>
       </div>
     </article>
   );

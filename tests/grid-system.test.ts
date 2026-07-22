@@ -27,7 +27,7 @@ describe("responsive grid system", () => {
   it("keeps listing cards on the shared card grid", () => {
     const source = readFileSync("components/sublet-app.tsx", "utf8");
     expect(source).toContain("app-card-grid");
-    expect(source).toContain("aspect-[4/3]");
+    expect(source).toContain("aspect-[16/11]");
   });
 
   it("defines the agreed workspace column templates", () => {
