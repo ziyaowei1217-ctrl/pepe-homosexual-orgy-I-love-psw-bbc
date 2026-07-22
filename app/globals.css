@@ -4,26 +4,26 @@
 
 @layer base {
   :root {
-    --background: 212 100% 99%;
-    --foreground: 222 32% 8%;
+    --background: 40 20% 97%;
+    --foreground: 220 24% 9%;
     --card: 0 0% 100%;
-    --card-foreground: 12 8% 10%;
+    --card-foreground: 220 24% 9%;
     --popover: 0 0% 100%;
-    --popover-foreground: 12 8% 10%;
-    --primary: 222 32% 8%;
+    --popover-foreground: 220 24% 9%;
+    --primary: 220 24% 9%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 210 100% 97%;
-    --secondary-foreground: 12 8% 12%;
-    --muted: 210 55% 96%;
-    --muted-foreground: 218 12% 38%;
+    --secondary: 214 55% 95%;
+    --secondary-foreground: 220 24% 12%;
+    --muted: 40 12% 93%;
+    --muted-foreground: 218 10% 42%;
     --accent: 215 100% 50%;
     --accent-foreground: 0 0% 100%;
     --destructive: 9 76% 48%;
     --destructive-foreground: 0 0% 100%;
-    --border: 211 70% 90%;
-    --input: 211 70% 90%;
+    --border: 216 18% 86%;
+    --input: 216 18% 84%;
     --ring: 215 100% 50%;
-    --radius: 24px;
+    --radius: 18px;
   }
 
   * {
@@ -40,10 +40,6 @@
     font-feature-settings: "cv02", "cv03", "cv04", "ss01";
     letter-spacing: 0;
     overflow-x: hidden;
-    background-image:
-      linear-gradient(rgba(0, 106, 255, 0.02) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(0, 106, 255, 0.02) 1px, transparent 1px);
-    background-size: 64px 64px;
   }
 }
 
@@ -66,6 +62,30 @@
 
   .app-card-grid {
     @apply grid grid-cols-1 gap-4 sm:grid-cols-2 xl:gap-6;
+  }
+
+  .editorial-kicker {
+    @apply text-[11px] font-bold uppercase tracking-[0.14em] text-muted-foreground;
+  }
+
+  .editorial-title {
+    @apply text-balance text-[clamp(2rem,4vw,4.75rem)] font-black leading-[0.94] tracking-[-0.045em] text-foreground;
+  }
+
+  .editorial-toolbar {
+    @apply flex min-w-0 flex-col gap-3 border-b border-border pb-4 sm:flex-row sm:items-end sm:justify-between;
+  }
+
+  .editorial-context-strip {
+    @apply grid min-w-0 gap-3 border-y border-border bg-secondary/65 px-4 py-3 md:grid-cols-8 md:px-5 xl:grid-cols-12 xl:px-6;
+  }
+
+  .editorial-field {
+    @apply flex min-w-0 flex-col gap-2 text-sm font-semibold text-foreground;
+  }
+
+  .editorial-panel {
+    @apply min-w-0 rounded-[18px] border border-border bg-card shadow-card;
   }
 }
 

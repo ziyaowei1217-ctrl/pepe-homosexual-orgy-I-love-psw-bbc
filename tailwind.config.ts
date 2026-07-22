@@ -55,8 +55,8 @@ const config: Config = {
         sm: "calc(var(--radius) - 4px)"
       },
       boxShadow: {
-        panel: "0 12px 32px rgba(0, 34, 68, 0.065)",
-        card: "0 8px 22px rgba(0, 34, 68, 0.085)"
+        panel: "0 18px 48px rgba(20, 26, 38, 0.07)",
+        card: "0 8px 24px rgba(20, 26, 38, 0.055)"
       }
     }
   },
