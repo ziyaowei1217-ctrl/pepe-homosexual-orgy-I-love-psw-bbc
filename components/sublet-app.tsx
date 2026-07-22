@@ -2580,13 +2580,14 @@ function RoommatesMarketplaceScreen({
 
   return (
     <section className="app-shell relative flex w-full flex-col gap-6 overflow-hidden py-5 md:py-6">
-      <RoommatePathGraphic className="left-0 top-28 hidden xl:block" />
-      <RoommatePathGraphic className="bottom-8 right-28 hidden rotate-180 xl:block" />
+      <RoommatePathGraphic className="hidden" />
+      <RoommatePathGraphic className="hidden" />
 
-      <Card className="glass-panel overflow-hidden rounded-[36px] border-blue-100 bg-white shadow-[0_22px_80px_rgba(0,106,255,0.10)]">
+      <Card className="overflow-hidden rounded-[18px] border-border bg-card shadow-panel">
         <CardContent className="p-4 md:p-5">
           <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
             <div>
+              <span className="editorial-kicker">01 / Roommates</span>
               <h1 className="text-display text-4xl font-black leading-tight text-primary md:text-6xl">
                 Roommate Match
               </h1>
@@ -2614,7 +2615,7 @@ function RoommatesMarketplaceScreen({
             </div>
           </div>
 
-          <div className="mt-5 grid grid-cols-1 overflow-hidden rounded-[28px] border border-blue-100 bg-white shadow-[0_12px_40px_rgba(15,23,42,0.08)] md:grid-cols-2 xl:grid-cols-4">
+          <div className="mt-5 grid grid-cols-1 overflow-hidden rounded-[18px] border border-border bg-card md:grid-cols-2 xl:grid-cols-4">
             <PreferenceSummaryField
               icon={Users}
               label="Shared living"
@@ -2772,7 +2773,7 @@ function RoommatePreferencePanel({
   }
 
   return (
-    <Card className="glass-panel h-fit overflow-hidden rounded-[32px] border-blue-100 bg-white shadow-sm">
+    <Card className="editorial-panel h-fit overflow-hidden">
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between gap-3">
           <div>
@@ -2785,7 +2786,7 @@ function RoommatePreferencePanel({
         </div>
       </CardHeader>
       <CardContent className="flex flex-col gap-5">
-        <div className="grid grid-cols-[112px_minmax(0,1fr)] items-center gap-4 rounded-[26px] border border-blue-100 bg-white p-4 shadow-[0_16px_50px_rgba(0,106,255,0.08)]">
+        <div className="grid grid-cols-[112px_minmax(0,1fr)] items-center gap-4 rounded-[16px] border border-border bg-card p-4">
           <MatchScoreRing score={fitScore} label="Match Fit" size="lg" />
           <div className="min-w-0">
             <div className="text-base font-black text-primary">
@@ -3263,9 +3264,10 @@ function LikeQueueScreen({
 
   return (
     <section className="app-shell flex w-full flex-col gap-5 py-5">
-      <Card className="overflow-hidden rounded-[32px] border-blue-100 shadow-panel">
+      <Card className="overflow-hidden rounded-[18px] border-border shadow-panel">
         <CardContent className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
           <div>
+            <span className="editorial-kicker">01 / Like Queue</span>
             <div className="flex items-center gap-2">
               <Heart className="size-6 fill-[#006AFF] text-[#006AFF]" aria-hidden="true" />
               <h1 className="text-display text-3xl font-black text-primary">Like Queue</h1>
@@ -3361,7 +3363,7 @@ function QueueColumn({
   children: ReactNode;
 }) {
   return (
-    <Card className="min-h-[520px] rounded-[30px] border-blue-100 shadow-panel">
+    <Card className="min-h-[520px] rounded-[18px] border-border bg-card shadow-card">
       <CardHeader>
         <div className="flex items-start justify-between gap-3">
           <div>
@@ -4326,11 +4328,14 @@ function ListingDetailScreen({
 
   return (
     <section className="app-shell app-grid w-full items-start py-5 md:py-6">
-      <div className="app-section flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <Button variant="outline" className="w-fit" onClick={onBack}>
-          <ArrowRight className="rotate-180" data-icon="inline-start" />
-          返回房源
-        </Button>
+      <div className="app-section editorial-toolbar">
+        <div className="min-w-0">
+          <span className="editorial-kicker">01 / Listing</span>
+          <Button variant="outline" className="mt-2 w-fit" onClick={onBack}>
+            <ArrowRight className="rotate-180" data-icon="inline-start" />
+            返回房源
+          </Button>
+        </div>
         <div className="flex flex-wrap gap-2">
           {flow.isContacted ? <Badge variant="success">已联系</Badge> : null}
           {flow.isTourRequested ? <Badge variant="trust">已预约看房</Badge> : null}
@@ -4338,7 +4343,7 @@ function ListingDetailScreen({
         </div>
       </div>
 
-      <div className="col-span-full flex min-w-0 flex-col gap-4 xl:col-span-8">
+      <div className="col-span-full flex min-w-0 flex-col gap-5 xl:col-span-8">
           <Card className="overflow-hidden shadow-panel">
             <div className="grid grid-cols-1 gap-1 md:grid-cols-[1.5fr_1fr]">
               <div
@@ -4424,7 +4429,7 @@ function ListingDetailScreen({
           </Card>
         </div>
 
-        <aside className="col-span-full flex min-w-0 flex-col gap-4 xl:col-span-4">
+        <aside className="col-span-full flex min-w-0 flex-col gap-4 xl:col-span-4 xl:sticky xl:top-24">
           <Card className="shadow-panel">
             <CardHeader>
               <CardTitle>申请流程</CardTitle>

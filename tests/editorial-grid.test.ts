@@ -50,4 +50,14 @@ describe("editorial grid redesign", () => {
     expect(source).toContain("border-t border-border");
     expect(source).toContain("mt-auto");
   });
+
+  it("labels the detail and roommate editorial workspaces", () => {
+    const source = readFileSync("components/sublet-app.tsx", "utf8");
+
+    for (const label of ["01 / Listing", "01 / Roommates", "01 / Like Queue"]) {
+      expect(source).toContain(label);
+    }
+    expect(source).toContain("xl:col-span-4 xl:sticky xl:top-24");
+    expect(source).toContain("xl:grid-cols-3");
+  });
 });
