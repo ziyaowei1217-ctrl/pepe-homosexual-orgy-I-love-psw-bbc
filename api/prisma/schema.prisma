@@ -185,10 +185,14 @@ model RoommateProfile {
   budget          String
   commute         String
   tags            String[]
+  status          String           @default("active")
+  archivedAt      DateTime?
   createdAt       DateTime         @default(now())
   actions         RoommateAction[]
   dealRooms       DealRoom[]
   dealRoomMembers DealRoomMember[]
+
+  @@index([status, match])
 }
 
 model RoommateMatchingProfile {

@@ -1,0 +1,206 @@
+# File Change Summary
+
+This repository snapshot replaces the old `main` contents with the finalized GitHub-ready project export.
+Each entry briefly notes what the file contributes or what changed in the final structure.
+
+- `.gitignore` — Git ignore rules preventing generated, local, dependency, and secret files from being committed.
+- `README.md` — Project setup, API overview, verification commands, and roommate matching algorithm documentation.
+- `api/nest-cli.json` — Project source/configuration file included in the GitHub-ready replacement tree.
+- `api/package.json` — Backend package configuration and scripts.
+- `api/prisma/migrations/20260629100000_init_commercial_baseline/migration.sql` — Database migration used by the backend schema and launch-ready local database setup.
+- `api/prisma/migrations/20260709171000_minimal_marketplace_schema/migration.sql` — Database migration used by the backend schema and launch-ready local database setup.
+- `api/prisma/migrations/20260709232000_deal_threads_messages_viewings/migration.sql` — Database migration used by the backend schema and launch-ready local database setup.
+- `api/prisma/migrations/20260718180500_roommate_profile_archive_status/migration.sql` — Database migration used by the backend schema and launch-ready local database setup.
+- `api/prisma/schema.prisma` — Prisma database schema for users, listings, roommate profiles, actions, deal rooms, messages, and workflows.
+- `api/src/app.module.ts` — NestJS backend source file for API modules, services, controllers, auth, seed data, or launch workflows.
+- `api/src/auth/admin.guard.ts` — NestJS backend source file for API modules, services, controllers, auth, seed data, or launch workflows.
+- `api/src/auth/auth.controller.ts` — NestJS backend source file for API modules, services, controllers, auth, seed data, or launch workflows.
+- `api/src/auth/auth.guard.ts` — NestJS backend source file for API modules, services, controllers, auth, seed data, or launch workflows.
+- `api/src/auth/auth.module.ts` — NestJS backend source file for API modules, services, controllers, auth, seed data, or launch workflows.
+- `api/src/auth/auth.service.ts` — NestJS backend source file for API modules, services, controllers, auth, seed data, or launch workflows.
+- `api/src/auth/code-security.ts` — NestJS backend source file for API modules, services, controllers, auth, seed data, or launch workflows.
+- `api/src/auth/dto.ts` — NestJS backend source file for API modules, services, controllers, auth, seed data, or launch workflows.
+- `api/src/auth/optional-auth.guard.ts` — NestJS backend source file for API modules, services, controllers, auth, seed data, or launch workflows.
+- `api/src/config/cors.ts` — NestJS backend source file for API modules, services, controllers, auth, seed data, or launch workflows.
+- `api/src/config/env.ts` — NestJS backend source file for API modules, services, controllers, auth, seed data, or launch workflows.
+- `api/src/deal-rooms/deal-rooms.controller.ts` — NestJS backend source file for API modules, services, controllers, auth, seed data, or launch workflows.
+- `api/src/deal-rooms/deal-rooms.module.ts` — NestJS backend source file for API modules, services, controllers, auth, seed data, or launch workflows.
+- `api/src/deal-rooms/deal-rooms.service.ts` — NestJS backend source file for API modules, services, controllers, auth, seed data, or launch workflows.
+- `api/src/deal-threads/deal-threads.controller.ts` — NestJS backend source file for API modules, services, controllers, auth, seed data, or launch workflows.
+- `api/src/deal-threads/deal-threads.module.ts` — NestJS backend source file for API modules, services, controllers, auth, seed data, or launch workflows.
+- `api/src/deal-threads/deal-threads.service.ts` — NestJS backend source file for API modules, services, controllers, auth, seed data, or launch workflows.
+- `api/src/deal-threads/dto.ts` — NestJS backend source file for API modules, services, controllers, auth, seed data, or launch workflows.
+- `api/src/email/email-sender.ts` — NestJS backend source file for API modules, services, controllers, auth, seed data, or launch workflows.
+- `api/src/groups/groups.controller.ts` — NestJS backend source file for API modules, services, controllers, auth, seed data, or launch workflows.
+- `api/src/groups/groups.module.ts` — NestJS backend source file for API modules, services, controllers, auth, seed data, or launch workflows.
+- `api/src/groups/groups.service.ts` — NestJS backend source file for API modules, services, controllers, auth, seed data, or launch workflows.
+- `api/src/health/health.controller.ts` — NestJS backend source file for API modules, services, controllers, auth, seed data, or launch workflows.
+- `api/src/health/health.module.ts` — NestJS backend source file for API modules, services, controllers, auth, seed data, or launch workflows.
+- `api/src/health/health.service.ts` — NestJS backend source file for API modules, services, controllers, auth, seed data, or launch workflows.
+- `api/src/listings/admin-listings.controller.ts` — NestJS backend source file for API modules, services, controllers, auth, seed data, or launch workflows.
+- `api/src/listings/dto.ts` — NestJS backend source file for API modules, services, controllers, auth, seed data, or launch workflows.
+- `api/src/listings/listings.controller.ts` — NestJS backend source file for API modules, services, controllers, auth, seed data, or launch workflows.
+- `api/src/listings/listings.module.ts` — NestJS backend source file for API modules, services, controllers, auth, seed data, or launch workflows.
+- `api/src/listings/listings.service.ts` — NestJS backend source file for API modules, services, controllers, auth, seed data, or launch workflows.
+- `api/src/main.ts` — NestJS backend source file for API modules, services, controllers, auth, seed data, or launch workflows.
+- `api/src/marketplace/dto.ts` — NestJS backend source file for API modules, services, controllers, auth, seed data, or launch workflows.
+- `api/src/marketplace/marketplace.controller.ts` — NestJS backend source file for API modules, services, controllers, auth, seed data, or launch workflows.
+- `api/src/marketplace/marketplace.module.ts` — NestJS backend source file for API modules, services, controllers, auth, seed data, or launch workflows.
+- `api/src/marketplace/marketplace.service.ts` — NestJS backend source file for API modules, services, controllers, auth, seed data, or launch workflows.
+- `api/src/prisma/prisma.module.ts` — NestJS backend source file for API modules, services, controllers, auth, seed data, or launch workflows.
+- `api/src/prisma/prisma.service.ts` — NestJS backend source file for API modules, services, controllers, auth, seed data, or launch workflows.
+- `api/src/roommates/admin-roommates.controller.ts` — NestJS backend source file for API modules, services, controllers, auth, seed data, or launch workflows.
+- `api/src/roommates/dto.ts` — API validation for roommate deck query parameters, including multi-preference and strategy inputs.
+- `api/src/roommates/matching.ts` — Core roommate matching engine: compatibility dimensions, ranking strategy, recommendation actions, confidence, diversity, and exploration scoring.
+- `api/src/roommates/roommates.controller.ts` — NestJS backend source file for API modules, services, controllers, auth, seed data, or launch workflows.
+- `api/src/roommates/roommates.module.ts` — NestJS backend source file for API modules, services, controllers, auth, seed data, or launch workflows.
+- `api/src/roommates/roommates.service.ts` — NestJS backend source file for API modules, services, controllers, auth, seed data, or launch workflows.
+- `api/src/seed-data.ts` — NestJS backend source file for API modules, services, controllers, auth, seed data, or launch workflows.
+- `api/src/seed-los-angeles.ts` — NestJS backend source file for API modules, services, controllers, auth, seed data, or launch workflows.
+- `api/src/trips/trips.controller.ts` — NestJS backend source file for API modules, services, controllers, auth, seed data, or launch workflows.
+- `api/src/trips/trips.module.ts` — NestJS backend source file for API modules, services, controllers, auth, seed data, or launch workflows.
+- `api/src/trips/trips.service.ts` — NestJS backend source file for API modules, services, controllers, auth, seed data, or launch workflows.
+- `api/src/trust/trust.controller.ts` — NestJS backend source file for API modules, services, controllers, auth, seed data, or launch workflows.
+- `api/src/trust/trust.module.ts` — NestJS backend source file for API modules, services, controllers, auth, seed data, or launch workflows.
+- `api/src/trust/trust.service.ts` — NestJS backend source file for API modules, services, controllers, auth, seed data, or launch workflows.
+- `api/src/users/users.module.ts` — NestJS backend source file for API modules, services, controllers, auth, seed data, or launch workflows.
+- `api/test/admin.guard.spec.ts` — Backend automated test covering API, service, validation, launch-readiness, or workflow behavior.
+- `api/test/auth-validation.e2e.spec.ts` — Backend automated test covering API, service, validation, launch-readiness, or workflow behavior.
+- `api/test/auth.guard.spec.ts` — Backend automated test covering API, service, validation, launch-readiness, or workflow behavior.
+- `api/test/auth.service.spec.ts` — Backend automated test covering API, service, validation, launch-readiness, or workflow behavior.
+- `api/test/cors-origin.spec.ts` — Backend automated test covering API, service, validation, launch-readiness, or workflow behavior.
+- `api/test/deal-rooms.service.spec.ts` — Backend automated test covering API, service, validation, launch-readiness, or workflow behavior.
+- `api/test/deal-threads.e2e.spec.ts` — Backend automated test covering API, service, validation, launch-readiness, or workflow behavior.
+- `api/test/deal-threads.service.spec.ts` — Backend automated test covering API, service, validation, launch-readiness, or workflow behavior.
+- `api/test/env.spec.ts` — Backend automated test covering API, service, validation, launch-readiness, or workflow behavior.
+- `api/test/health.controller.spec.ts` — Backend automated test covering API, service, validation, launch-readiness, or workflow behavior.
+- `api/test/http-launch-readiness.e2e.spec.ts` — Backend automated test covering API, service, validation, launch-readiness, or workflow behavior.
+- `api/test/launch-smoke.spec.ts` — Backend automated test covering API, service, validation, launch-readiness, or workflow behavior.
+- `api/test/listings-validation.e2e.spec.ts` — Backend automated test covering API, service, validation, launch-readiness, or workflow behavior.
+- `api/test/listings.controller.spec.ts` — Backend automated test covering API, service, validation, launch-readiness, or workflow behavior.
+- `api/test/listings.service.spec.ts` — Backend automated test covering API, service, validation, launch-readiness, or workflow behavior.
+- `api/test/marketplace-api.e2e.spec.ts` — Backend automated test covering API, service, validation, launch-readiness, or workflow behavior.
+- `api/test/match-transaction-flow.spec.ts` — Backend automated test covering API, service, validation, launch-readiness, or workflow behavior.
+- `api/test/minimal-database-schema.spec.ts` — Backend automated test covering API, service, validation, launch-readiness, or workflow behavior.
+- `api/test/roommate-matching.spec.ts` — Backend tests covering deck ranking, multi-preference matching, discovery strategy, and pass/like/later recommendations.
+- `api/test/roommates-admin.spec.ts` — Backend automated test covering API, service, validation, launch-readiness, or workflow behavior.
+- `api/test/seed-backed-read-endpoints.spec.ts` — Backend automated test covering API, service, validation, launch-readiness, or workflow behavior.
+- `api/test/support/launch-prisma-mock.ts` — Backend automated test covering API, service, validation, launch-readiness, or workflow behavior.
+- `api/tsconfig.json` — Tooling/configuration file for TypeScript, Next.js, Tailwind, ESLint, Vitest, or UI components.
+- `api/vitest.config.ts` — Tooling/configuration file for TypeScript, Next.js, Tailwind, ESLint, Vitest, or UI components.
+- `app/account/page.tsx` — Next.js App Router page/layout asset wiring the application routes to the shared app shell.
+- `app/admin/roommates/page.tsx` — Next.js App Router page/layout asset wiring the application routes to the shared app shell.
+- `app/admin/trust/page.tsx` — Next.js App Router page/layout asset wiring the application routes to the shared app shell.
+- `app/globals.css` — Next.js App Router page/layout asset wiring the application routes to the shared app shell.
+- `app/host/listings/page.tsx` — Next.js App Router page/layout asset wiring the application routes to the shared app shell.
+- `app/icon.svg` — Next.js App Router page/layout asset wiring the application routes to the shared app shell.
+- `app/layout.tsx` — Next.js App Router page/layout asset wiring the application routes to the shared app shell.
+- `app/messages/page.tsx` — Next.js App Router page/layout asset wiring the application routes to the shared app shell.
+- `app/page.tsx` — Next.js App Router page/layout asset wiring the application routes to the shared app shell.
+- `app/roommates/likes/page.tsx` — Next.js App Router page/layout asset wiring the application routes to the shared app shell.
+- `app/roommates/page.tsx` — Next.js App Router page/layout asset wiring the application routes to the shared app shell.
+- `app/trips/page.tsx` — Next.js App Router page/layout asset wiring the application routes to the shared app shell.
+- `components/admin-roommates-screen.tsx` — Frontend React component for marketplace, roommate, admin, or workspace flows.
+- `components/roommate-first-workspace.tsx` — Frontend React component for marketplace, roommate, admin, or workspace flows.
+- `components/sublet-app.tsx` — Main app UI with Tinder-style roommate deck, recommendation panel, ranking score, and compatibility map integration.
+- `components/ui/avatar.tsx` — Reusable UI primitive used by the frontend interface.
+- `components/ui/badge.tsx` — Reusable UI primitive used by the frontend interface.
+- `components/ui/button.tsx` — Reusable UI primitive used by the frontend interface.
+- `components/ui/card.tsx` — Reusable UI primitive used by the frontend interface.
+- `components/ui/input.tsx` — Reusable UI primitive used by the frontend interface.
+- `components/ui/separator.tsx` — Reusable UI primitive used by the frontend interface.
+- `components/ui/tabs.tsx` — Reusable UI primitive used by the frontend interface.
+- `components.json` — Tooling/configuration file for TypeScript, Next.js, Tailwind, ESLint, Vitest, or UI components.
+- `development-doc.html` — Original/reference HTML artifact retained for project context.
+- `docker-compose.yml` — Full-stack local development orchestration for web, API, database, and admin tooling.
+- `docs/roommate-matching-admin.md` — Developer/admin guide for managing roommate profiles and understanding matching fields.
+- `docs/superpowers/plans/2026-06-26-roommate-first-commercial-demo.md` — Project documentation for developer-facing setup or operating guidance.
+- `docs/superpowers/plans/2026-06-28-match-transaction-backend.md` — Project documentation for developer-facing setup or operating guidance.
+- `docs/superpowers/plans/2026-06-29-backend-commercial-hardening.md` — Project documentation for developer-facing setup or operating guidance.
+- `docs/superpowers/plans/2026-06-29-backend-launch-readiness.md` — Project documentation for developer-facing setup or operating guidance.
+- `docs/superpowers/plans/2026-06-29-email-code-production-rate-limit.md` — Project documentation for developer-facing setup or operating guidance.
+- `docs/superpowers/plans/2026-06-29-listing-review-flow.md` — Project documentation for developer-facing setup or operating guidance.
+- `docs/superpowers/plans/2026-06-30-api-contract-hardening.md` — Project documentation for developer-facing setup or operating guidance.
+- `docs/superpowers/plans/2026-06-30-auth-input-contract-hardening.md` — Project documentation for developer-facing setup or operating guidance.
+- `docs/superpowers/plans/2026-06-30-auth-session-hardening.md` — Project documentation for developer-facing setup or operating guidance.
+- `docs/superpowers/plans/2026-06-30-deal-room-recommendation-visibility.md` — Project documentation for developer-facing setup or operating guidance.
+- `docs/superpowers/plans/2026-06-30-listing-media-metadata.md` — Project documentation for developer-facing setup or operating guidance.
+- `docs/superpowers/plans/2026-06-30-seed-backed-read-endpoints.md` — Project documentation for developer-facing setup or operating guidance.
+- `docs/superpowers/plans/2026-07-09-frontend-auth-profile.md` — Project documentation for developer-facing setup or operating guidance.
+- `docs/superpowers/plans/2026-07-09-map-price-filter.md` — Project documentation for developer-facing setup or operating guidance.
+- `docs/superpowers/plans/2026-07-09-marketplace-db-api.md` — Project documentation for developer-facing setup or operating guidance.
+- `docs/superpowers/plans/2026-07-10-roommate-dm-hardening.md` — Project documentation for developer-facing setup or operating guidance.
+- `docs/superpowers/plans/2026-07-12-core-journey-hardening.md` — Project documentation for developer-facing setup or operating guidance.
+- `docs/superpowers/plans/2026-07-13-responsive-message-navigation.md` — Project documentation for developer-facing setup or operating guidance.
+- `docs/superpowers/specs/2026-06-26-roommate-first-commercial-demo-design.md` — Project documentation for developer-facing setup or operating guidance.
+- `docs/superpowers/specs/2026-06-28-match-transaction-backend-design.md` — Project documentation for developer-facing setup or operating guidance.
+- `docs/superpowers/specs/2026-06-29-backend-commercial-hardening-design.md` — Project documentation for developer-facing setup or operating guidance.
+- `docs/superpowers/specs/2026-06-29-backend-launch-readiness-design.md` — Project documentation for developer-facing setup or operating guidance.
+- `docs/superpowers/specs/2026-06-29-email-code-production-rate-limit-design.md` — Project documentation for developer-facing setup or operating guidance.
+- `docs/superpowers/specs/2026-06-29-listing-review-flow-design.md` — Project documentation for developer-facing setup or operating guidance.
+- `docs/superpowers/specs/2026-06-30-api-contract-hardening-design.md` — Project documentation for developer-facing setup or operating guidance.
+- `docs/superpowers/specs/2026-06-30-auth-input-contract-hardening-design.md` — Project documentation for developer-facing setup or operating guidance.
+- `docs/superpowers/specs/2026-06-30-auth-session-hardening-design.md` — Project documentation for developer-facing setup or operating guidance.
+- `docs/superpowers/specs/2026-06-30-deal-room-recommendation-visibility-design.md` — Project documentation for developer-facing setup or operating guidance.
+- `docs/superpowers/specs/2026-06-30-listing-media-metadata-design.md` — Project documentation for developer-facing setup or operating guidance.
+- `docs/superpowers/specs/2026-06-30-seed-backed-read-endpoints-design.md` — Project documentation for developer-facing setup or operating guidance.
+- `docs/superpowers/specs/2026-07-01-mutual-roommate-match-dm-design.md` — Project documentation for developer-facing setup or operating guidance.
+- `docs/superpowers/specs/2026-07-12-core-journey-hardening-design.md` — Project documentation for developer-facing setup or operating guidance.
+- `docs/superpowers/specs/assets/roommate-first-commercial-demo-concept.png` — Project documentation for developer-facing setup or operating guidance.
+- `eslint.config.mjs` — Tooling/configuration file for TypeScript, Next.js, Tailwind, ESLint, Vitest, or UI components.
+- `gemini-code-1780982196644.html` — Original/reference HTML artifact retained for project context.
+- `lib/api-status.ts` — Frontend utility or domain logic module used by app state, routing, matching, listings, messages, or workflow behavior.
+- `lib/api.ts` — Shared frontend API types for roommate dimensions, recommendations, ranking signals, and deck discovery metadata.
+- `lib/app-routes.ts` — Frontend utility or domain logic module used by app state, routing, matching, listings, messages, or workflow behavior.
+- `lib/auth-session.ts` — Frontend utility or domain logic module used by app state, routing, matching, listings, messages, or workflow behavior.
+- `lib/date-range.ts` — Frontend utility or domain logic module used by app state, routing, matching, listings, messages, or workflow behavior.
+- `lib/deal-workflow.ts` — Frontend utility or domain logic module used by app state, routing, matching, listings, messages, or workflow behavior.
+- `lib/landlord-listings.ts` — Frontend utility or domain logic module used by app state, routing, matching, listings, messages, or workflow behavior.
+- `lib/listing-detail.ts` — Frontend utility or domain logic module used by app state, routing, matching, listings, messages, or workflow behavior.
+- `lib/listing-map.ts` — Frontend utility or domain logic module used by app state, routing, matching, listings, messages, or workflow behavior.
+- `lib/listing-selection.ts` — Frontend utility or domain logic module used by app state, routing, matching, listings, messages, or workflow behavior.
+- `lib/local-workflow.ts` — Frontend utility or domain logic module used by app state, routing, matching, listings, messages, or workflow behavior.
+- `lib/match-demo.ts` — Frontend utility or domain logic module used by app state, routing, matching, listings, messages, or workflow behavior.
+- `lib/message-inbox.ts` — Frontend utility or domain logic module used by app state, routing, matching, listings, messages, or workflow behavior.
+- `lib/notification-center.ts` — Frontend utility or domain logic module used by app state, routing, matching, listings, messages, or workflow behavior.
+- `lib/price-filter.ts` — Frontend utility or domain logic module used by app state, routing, matching, listings, messages, or workflow behavior.
+- `lib/roommate-compatibility.ts` — Frontend compatibility helpers aligned with backend dimensions, local fallback scoring, recommendation, and ranking metadata.
+- `lib/roommate-deck-client.ts` — Client helper for building roommate deck API requests with full school/hobby preference lists.
+- `lib/roommate-dm.ts` — Frontend utility or domain logic module used by app state, routing, matching, listings, messages, or workflow behavior.
+- `lib/roommate-match-flow.ts` — Frontend utility or domain logic module used by app state, routing, matching, listings, messages, or workflow behavior.
+- `lib/roommate-preference-storage.ts` — Frontend utility or domain logic module used by app state, routing, matching, listings, messages, or workflow behavior.
+- `lib/roommate-preferences.ts` — Frontend utility or domain logic module used by app state, routing, matching, listings, messages, or workflow behavior.
+- `lib/roommate-queue.ts` — Frontend utility or domain logic module used by app state, routing, matching, listings, messages, or workflow behavior.
+- `lib/search-insights.ts` — Frontend utility or domain logic module used by app state, routing, matching, listings, messages, or workflow behavior.
+- `lib/utils.ts` — Frontend utility or domain logic module used by app state, routing, matching, listings, messages, or workflow behavior.
+- `next-env.d.ts` — Project source/configuration file included in the GitHub-ready replacement tree.
+- `next.config.mjs` — Tooling/configuration file for TypeScript, Next.js, Tailwind, ESLint, Vitest, or UI components.
+- `package.json` — Package manager configuration and dependency lockfile for reproducible installs.
+- `pnpm-lock.yaml` — Package manager configuration and dependency lockfile for reproducible installs.
+- `pnpm-workspace.yaml` — Package manager configuration and dependency lockfile for reproducible installs.
+- `postcss.config.mjs` — Tooling/configuration file for TypeScript, Next.js, Tailwind, ESLint, Vitest, or UI components.
+- `tailwind.config.ts` — Tooling/configuration file for TypeScript, Next.js, Tailwind, ESLint, Vitest, or UI components.
+- `tests/api-status.test.ts` — Frontend/unit test validating UI helpers, domain logic, storage behavior, or workflow utilities.
+- `tests/app-icon.test.ts` — Frontend/unit test validating UI helpers, domain logic, storage behavior, or workflow utilities.
+- `tests/app-routes.test.ts` — Frontend/unit test validating UI helpers, domain logic, storage behavior, or workflow utilities.
+- `tests/auth-session.test.ts` — Frontend/unit test validating UI helpers, domain logic, storage behavior, or workflow utilities.
+- `tests/date-range.test.ts` — Frontend/unit test validating UI helpers, domain logic, storage behavior, or workflow utilities.
+- `tests/deal-workflow.test.ts` — Frontend/unit test validating UI helpers, domain logic, storage behavior, or workflow utilities.
+- `tests/landlord-listings.test.ts` — Frontend/unit test validating UI helpers, domain logic, storage behavior, or workflow utilities.
+- `tests/listing-detail.test.ts` — Frontend/unit test validating UI helpers, domain logic, storage behavior, or workflow utilities.
+- `tests/listing-map.test.ts` — Frontend/unit test validating UI helpers, domain logic, storage behavior, or workflow utilities.
+- `tests/listing-selection.test.ts` — Frontend/unit test validating UI helpers, domain logic, storage behavior, or workflow utilities.
+- `tests/local-workflow.test.ts` — Frontend/unit test validating UI helpers, domain logic, storage behavior, or workflow utilities.
+- `tests/match-demo.test.ts` — Frontend/unit test validating UI helpers, domain logic, storage behavior, or workflow utilities.
+- `tests/message-inbox.test.ts` — Frontend/unit test validating UI helpers, domain logic, storage behavior, or workflow utilities.
+- `tests/notification-center.test.ts` — Frontend/unit test validating UI helpers, domain logic, storage behavior, or workflow utilities.
+- `tests/price-filter.test.ts` — Frontend/unit test validating UI helpers, domain logic, storage behavior, or workflow utilities.
+- `tests/roommate-compatibility.test.ts` — Frontend helper tests for local scoring, dimensions, recommendation, and ranking metadata.
+- `tests/roommate-deck-client.test.ts` — Frontend tests for deck URL construction, hydration, action targeting, and display score behavior.
+- `tests/roommate-dm.test.ts` — Frontend/unit test validating UI helpers, domain logic, storage behavior, or workflow utilities.
+- `tests/roommate-match-flow.test.ts` — Frontend/unit test validating UI helpers, domain logic, storage behavior, or workflow utilities.
+- `tests/roommate-preferences.test.ts` — Frontend/unit test validating UI helpers, domain logic, storage behavior, or workflow utilities.
+- `tests/roommate-queue.test.ts` — Frontend/unit test validating UI helpers, domain logic, storage behavior, or workflow utilities.
+- `tests/search-insights.test.ts` — Frontend/unit test validating UI helpers, domain logic, storage behavior, or workflow utilities.
+- `tsconfig.json` — Tooling/configuration file for TypeScript, Next.js, Tailwind, ESLint, Vitest, or UI components.
+- `vitest.config.ts` — Tooling/configuration file for TypeScript, Next.js, Tailwind, ESLint, Vitest, or UI components.

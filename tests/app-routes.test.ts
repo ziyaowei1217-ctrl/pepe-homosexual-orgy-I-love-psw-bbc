@@ -23,6 +23,7 @@ describe("app route map", () => {
     expect(routeForSection("Publish")).toBe("/host/listings");
     expect(routeForSection("Trips")).toBe("/trips");
     expect(routeForSection("Trust")).toBe("/admin/trust");
+    expect(routeForSection("AdminRoommates")).toBe("/admin/roommates");
   });
 
   it("recognizes standalone workspace paths", () => {
@@ -33,6 +34,7 @@ describe("app route map", () => {
     expect(sectionForPathname("/trips")).toBe("Trips");
     expect(sectionForPathname("/account")).toBe("Discover");
     expect(sectionForPathname("/admin/trust")).toBe("Trust");
+    expect(sectionForPathname("/admin/roommates")).toBe("AdminRoommates");
   });
 
   it("routes landlord and roommate DM targets into the unified messages workspace", () => {

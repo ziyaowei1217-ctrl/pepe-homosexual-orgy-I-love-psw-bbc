@@ -6,7 +6,8 @@ export type RoutedAppSection =
   | "Messages"
   | "Publish"
   | "Trips"
-  | "Trust";
+  | "Trust"
+  | "AdminRoommates";
 
 const sectionRoutes: Record<RoutedAppSection, string> = {
   Discover: "/",
@@ -16,7 +17,8 @@ const sectionRoutes: Record<RoutedAppSection, string> = {
   Messages: "/messages",
   Publish: "/host/listings",
   Trips: "/trips",
-  Trust: "/admin/trust"
+  Trust: "/admin/trust",
+  AdminRoommates: "/admin/roommates"
 };
 
 export function routeForSection(section: RoutedAppSection) {
@@ -48,6 +50,7 @@ export function sectionForPathname(pathname: string): RoutedAppSection {
   if (pathname.startsWith("/roommates")) return "Roommates";
   if (pathname.startsWith("/host/listings")) return "Publish";
   if (pathname.startsWith("/trips")) return "Trips";
+  if (pathname.startsWith("/admin/roommates")) return "AdminRoommates";
   if (pathname.startsWith("/admin/trust")) return "Trust";
 
   return "Discover";

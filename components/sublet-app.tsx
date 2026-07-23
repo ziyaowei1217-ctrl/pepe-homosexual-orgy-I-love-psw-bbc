@@ -43,6 +43,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { AdminRoommatesScreen } from "@/components/admin-roommates-screen";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -66,7 +67,12 @@ import {
   type ApiDealRoom,
   type ApiListing,
   type ApiRoommate,
+  type ApiRoommateDeckResponse,
   type ApiRoommateActionResponse,
+  type ApiRoommateCompatibilityDimensions,
+  type ApiRoommateMatchType,
+  type ApiRoommateRecommendation,
+  type ApiRoommateRankingSignals,
   type ApiTrip,
   type ApiTrustQueue,
   type ApiDealThread,
@@ -152,6 +158,29 @@ import {
   type SharedLivingGenderPreference
 } from "@/lib/roommate-preferences";
 import {
+  buildRoommateDeckApiPath,
+  getRoommateActionTargetId,
+  getRoommateDisplayScore,
+  hydrateRoommateDeck,
+  mergeUniqueText
+} from "@/lib/roommate-deck-client";
+import {
+  readStoredRoommatePreference,
+  writeStoredRoommatePreference
+} from "@/lib/roommate-preference-storage";
+import {
+  buildLocalRoommateDimensions,
+  formatRoommateMatchType,
+  getLocalRoommateCompatibilityScore,
+  getLocalRoommateDecisionHint,
+  getLocalRoommateMatchType,
+  getLocalRoommateRanking,
+  getLocalRoommateRecommendation,
+  getRoommatePresentationDimensions,
+  roommateDimensionLabels,
+  roommateDimensionOrder
+} from "@/lib/roommate-compatibility";
+import {
   canOpenRoommateDm,
   canSendRoommateIntro,
   getAccessibleRoommateDmId,
@@ -202,6 +231,7 @@ type Listing = {
 
 type Roommate = {
   id?: string;
+  actionTargetId?: string;
   name: string;
   age: number;
   role: string;
@@ -213,6 +243,21 @@ type Roommate = {
   gender?: RoommateGender;
   school?: string;
   tags: string[];
+  status?: "active" | "hidden";
+  archivedAt?: string | null;
+  compatibilityScore?: number;
+  ranking?: ApiRoommateRankingSignals;
+  dimensions?: ApiRoommateCompatibilityDimensions;
+  matchType?: ApiRoommateMatchType;
+  recommendation?: ApiRoommateRecommendation;
+  decisionHint?: string;
+  rank?: number;
+  deckBatch?: string;
+  spark?: string;
+  reasons?: string[];
+  tradeoffs?: string[];
+  icebreaker?: string;
+  badges?: string[];
 };
 
 type AppSection = RoutedAppSection;
@@ -527,22 +572,78 @@ function createRoommates(): Roommate[] {
     "Koreatown / USC"
   ];
 
-  return Array.from({ length: 20 }, (_, index) => {
-    if (seedRoommates[index]) return seedRoommates[index];
+  const sparkLines = [
+    "Commute twin",
+    "Quiet-home energy",
+    "Budget-safe pick",
+    "Great opener",
+    "Lifestyle wildcard",
+    "Study-mode match",
+    "Group-tour ready",
+    "Weekend-compatible"
+  ];
 
+  return Array.from({ length: 240 }, (_, index) => {
+    const baseName = roommateNames[index % roommateNames.length];
+    const cohort = Math.floor(index / roommateNames.length);
+    const firstName = baseName.split(" ")[0] ?? baseName;
+    const lastName = baseName.split(" ")[1] ?? "Roomie";
+    const displayName = cohort === 0 ? baseName : `${firstName} ${lastName.slice(0, 1)}${cohort + 1}`;
+    const roleBase = roommateRoles[index % roommateRoles.length];
+    const extraTag = roommateHobbyOptions[(index + cohort) % roommateHobbyOptions.length];
+    const tags = Array.from(new Set([...roommateTagSets[index % roommateTagSets.length], extraTag])).slice(0, 5);
     const budget = 1150 + ((index * 73) % 950);
+    const school = getRoommateSchool(roleBase);
+    const commute = commuteZones[index % commuteZones.length];
+    const match = 82 + ((index * 3) % 17);
+    const seededRoommate = seedRoommates[index];
+    const roommateBudget = seededRoommate ? getRoommateBudgetValue(seededRoommate) : budget;
+    const roommateMatch = seededRoommate?.match ?? match;
+    const roommateRole = seededRoommate?.role ?? (cohort === 0 ? roleBase : `${school} · ${cohort % 2 === 0 ? "Grad student" : "Intern"} · ${roleBase}`);
+    const roommateSchool = getRoommateSchool(roommateRole);
+    const roommateTags = seededRoommate?.tags ?? tags;
+    const roommateCommute = seededRoommate?.commute ?? commute;
+    const dimensions = buildLocalRoommateDimensions({
+      budget: roommateBudget,
+      match: roommateMatch,
+      school: roommateSchool,
+      tags: roommateTags,
+      commute: roommateCommute
+    }, defaultRoommatePreference);
+    const compatibilityScore = getLocalRoommateCompatibilityScore(dimensions);
+    const matchType = getLocalRoommateMatchType(compatibilityScore, dimensions);
+    const recommendation = getLocalRoommateRecommendation(matchType, dimensions, roommateTags);
+    const ranking = getLocalRoommateRanking(compatibilityScore, dimensions, recommendation);
 
     return {
-      name: roommateNames[index % roommateNames.length],
-      age: 20 + (index % 9),
-      role: roommateRoles[index % roommateRoles.length],
-      image: roommateImages[index % roommateImages.length],
-      match: 82 + ((index * 3) % 17),
-      budget: `$${budget.toLocaleString()}/月`,
-      commute: commuteZones[index % commuteZones.length],
+      id: seededRoommate?.id,
+      name: seededRoommate?.name ?? displayName,
+      age: seededRoommate?.age ?? 20 + (index % 9),
+      role: roommateRole,
+      image: seededRoommate?.image ?? roommateImages[index % roommateImages.length],
+      match: roommateMatch,
+      budget: seededRoommate?.budget ?? `$${budget.toLocaleString()}/月`,
+      commute: roommateCommute,
       gender: roommateGenders[index % roommateGenders.length],
-      school: getRoommateSchool(roommateRoles[index % roommateRoles.length]),
-      tags: roommateTagSets[index % roommateTagSets.length]
+      school: roommateSchool,
+      tags: roommateTags,
+      compatibilityScore,
+      ranking,
+      dimensions,
+      matchType,
+      recommendation,
+      decisionHint: getLocalRoommateDecisionHint(matchType, roommateTags),
+      rank: index + 1,
+      deckBatch: cohort === 0 ? "seed" : `local-${cohort}`,
+      spark: sparkLines[index % sparkLines.length],
+      reasons: [
+        `$${roommateBudget.toLocaleString()} budget signal`,
+        `${roommateSchool} lane`,
+        `${roommateTags[0]} lifestyle`
+      ],
+      tradeoffs: cohort % 3 === 0 ? ["Ask about guest cadence"] : [],
+      icebreaker: `Ask ${(seededRoommate?.name ?? firstName).split(" ")[0]} about ${roommateTags[0]} and ideal quiet hours.`,
+      badges: [formatRoommateMatchType(matchType), roommateTags[0], roommateSchool].slice(0, 3)
     };
   });
 }
@@ -556,7 +657,8 @@ const navItems: Array<{ label: string; section: AppSection }> = [
   { label: "Messages", section: "Messages" },
   { label: "Trips", section: "Trips" },
   { label: "Publish", section: "Publish" },
-  { label: "Trust", section: "Trust" }
+  { label: "Trust", section: "Trust" },
+  { label: "Catalog", section: "AdminRoommates" }
 ];
 
 const navIcons: Record<AppSection, LucideIcon> = {
@@ -567,7 +669,8 @@ const navIcons: Record<AppSection, LucideIcon> = {
   Messages: MessageCircle,
   Publish: DoorOpen,
   Trips: CalendarDays,
-  Trust: ShieldCheck
+  Trust: ShieldCheck,
+  AdminRoommates: Users
 };
 const amenities = [
   { label: "Wi-Fi", icon: Wifi },
@@ -618,6 +721,7 @@ function normalizeListing(listing: ApiListing): Listing {
 function normalizeRoommate(roommate: ApiRoommate, index = 0): Roommate {
   return {
     id: roommate.id,
+    actionTargetId: roommate.actionTargetId,
     name: roommate.name,
     age: roommate.age,
     role: roommate.role,
@@ -627,7 +731,22 @@ function normalizeRoommate(roommate: ApiRoommate, index = 0): Roommate {
     commute: roommate.commute,
     gender: roommateGenders[index % roommateGenders.length],
     school: getRoommateSchool(roommate.role),
-    tags: roommate.tags
+    tags: roommate.tags,
+    status: roommate.status,
+    archivedAt: roommate.archivedAt,
+    compatibilityScore: roommate.compatibilityScore,
+    ranking: roommate.ranking,
+    dimensions: roommate.dimensions,
+    matchType: roommate.matchType,
+    recommendation: roommate.recommendation,
+    decisionHint: roommate.decisionHint,
+    rank: roommate.rank,
+    deckBatch: roommate.deckBatch,
+    spark: roommate.spark,
+    reasons: roommate.reasons,
+    tradeoffs: roommate.tradeoffs,
+    icebreaker: roommate.icebreaker,
+    badges: roommate.badges
   };
 }
 
@@ -1004,10 +1123,15 @@ export default function HomePage({
   useEffect(() => {
     async function loadApiData() {
       try {
+        const roommateDeckPath = buildRoommateDeckApiPath(defaultRoommatePreference);
+        const roommateDeckPromise = apiGet<ApiRoommateDeckResponse>(roommateDeckPath)
+          .then((deck) => deck.items)
+          .catch(() => apiGet<ApiRoommate[]>("/roommates"));
+
         const [apiListings, apiRoommateData, apiTripData, apiQueueData] =
           await Promise.all([
             apiGet<ApiListing[]>("/listings"),
-            apiGet<ApiRoommate[]>("/roommates"),
+            roommateDeckPromise,
             apiGet<ApiTrip[]>("/trips"),
             apiGet<ApiTrustQueue[]>("/trust/queues")
           ]);
@@ -1024,10 +1148,11 @@ export default function HomePage({
                   .slice(0, 100 - normalizedListings.length)
               ];
         const normalizedRoommates = apiRoommateData.map((apiRoommate, index) => normalizeRoommate(apiRoommate, index));
+        const hydratedRoommates = hydrateRoommateDeck(normalizedRoommates, roommates, getRoommateKey);
         setAllListings(hydratedListings);
         setSelectedListing((current) => hydratedListings.find((listing) => listing.id === current.id) ?? hydratedListings[0] ?? current);
-        setApiRoommates(normalizedRoommates);
-        setLikedMeRoommateIds((current) => new Set([...Array.from(current), ...Array.from(getSeededLikedMeRoommateIds(normalizedRoommates))]));
+        setApiRoommates(hydratedRoommates);
+        setLikedMeRoommateIds((current) => new Set([...Array.from(current), ...Array.from(getSeededLikedMeRoommateIds(hydratedRoommates))]));
         setApiTrips(apiTripData);
         setApiTrustQueues(apiQueueData);
         setApiError(null);
@@ -1597,7 +1722,8 @@ export default function HomePage({
       setActiveSection("Messages");
     }
 
-    if (!token || !targetRoommate.id) {
+    const actionTargetId = getRoommateActionTargetId(targetRoommate);
+    if (!token || !actionTargetId) {
       setToast(
         matchedBack
           ? `你和 ${targetRoommate.name} 互相 Like 了，私信已解锁`
@@ -1608,7 +1734,7 @@ export default function HomePage({
 
     try {
       const response = await apiPost<ApiRoommateActionResponse>(
-        `/roommates/${targetRoommate.id}/actions`,
+        `/roommates/${actionTargetId}/actions`,
         { action: "LIKE" },
         token
       );
@@ -1704,10 +1830,11 @@ export default function HomePage({
     setStoredRoommateMemberIds((current) => new Set(current).add(targetKey));
     setTourRequested(false);
 
-    if (token && targetRoommate.id) {
+    const actionTargetId = getRoommateActionTargetId(targetRoommate);
+    if (token && actionTargetId) {
       try {
         const response = await apiPost<ApiRoommateActionResponse>(
-          `/roommates/${targetRoommate.id}/actions`,
+          `/roommates/${actionTargetId}/actions`,
           { action: "LIKE" },
           token
         );
@@ -1728,10 +1855,11 @@ export default function HomePage({
     setToast(`已跳过 ${rejectedRoommate.name}`);
     cycleRoommate(1);
 
-    if (!token || !rejectedRoommate.id) return;
+    const actionTargetId = getRoommateActionTargetId(rejectedRoommate);
+    if (!token || !actionTargetId) return;
 
     try {
-      await apiPost(`/roommates/${rejectedRoommate.id}/actions`, { action: "PASS" }, token);
+      await apiPost(`/roommates/${actionTargetId}/actions`, { action: "PASS" }, token);
     } catch (error) {
       setToast(error instanceof Error ? `跳过已保留，本地同步成功；后端失败：${error.message}` : "跳过已保留，本地同步成功；后端失败");
     }
@@ -1743,10 +1871,11 @@ export default function HomePage({
     setToast(`${laterRoommate.name} 已放入稍后查看`);
     cycleRoommate(1);
 
-    if (!token || !laterRoommate.id) return;
+    const actionTargetId = getRoommateActionTargetId(laterRoommate);
+    if (!token || !actionTargetId) return;
 
     try {
-      await apiPost(`/roommates/${laterRoommate.id}/actions`, { action: "LATER" }, token);
+      await apiPost(`/roommates/${actionTargetId}/actions`, { action: "LATER" }, token);
     } catch (error) {
       setToast(error instanceof Error ? `稍后查看已保留，本地同步成功；后端失败：${error.message}` : "稍后查看已保留，本地同步成功；后端失败");
     }
@@ -1956,6 +2085,7 @@ export default function HomePage({
         <RoommatesMarketplaceScreen
           roommates={apiRoommates}
           activeRoommate={roommate}
+          token={token}
           groupMembers={groupMembers}
           likedRoommateIds={likedRoommateIds}
           likedMeRoommateIds={likedMeRoommateIds}
@@ -2028,6 +2158,9 @@ export default function HomePage({
       ) : null}
       {activeSection === "Trust" ? (
         <TrustScreen queues={apiTrustQueues} onToast={setToast} />
+      ) : null}
+      {activeSection === "AdminRoommates" ? (
+        <AdminRoommatesScreen token={token} user={user} onToast={setToast} />
       ) : null}
       <StatusToast message={toast} />
     </main>
@@ -2434,6 +2567,7 @@ function ProfileInput({
 function RoommatesMarketplaceScreen({
   roommates,
   activeRoommate,
+  token,
   groupMembers,
   likedRoommateIds,
   likedMeRoommateIds,
@@ -2450,6 +2584,7 @@ function RoommatesMarketplaceScreen({
 }: {
   roommates: Roommate[];
   activeRoommate: Roommate;
+  token: string | null;
   groupMembers: Roommate[];
   likedRoommateIds: Set<string>;
   likedMeRoommateIds: Set<string>;
@@ -2464,11 +2599,18 @@ function RoommatesMarketplaceScreen({
   onOpenDiscover: () => void;
   onOpenLikeQueue: () => void;
 }) {
-  const [preference, setPreference] = useState<RoommatePreference>(defaultRoommatePreference);
+  const [preference, setPreference] = useState<RoommatePreference>(() =>
+    readStoredRoommatePreference(defaultRoommatePreference)
+  );
   const [sortMode, setSortMode] = useState<"Preference" | "Budget">("Preference");
   const [deckIndex, setDeckIndex] = useState(0);
   const [searchApplied, setSearchApplied] = useState(false);
-  const rankedRoommates = useMemo(() => rankRoommatesByPreference(roommates, preference), [preference, roommates]);
+  const [deckRoommates, setDeckRoommates] = useState(roommates);
+  const [deckPageInfo, setDeckPageInfo] = useState<ApiRoommateDeckResponse["pageInfo"] | null>(null);
+  const [deckDiscovery, setDeckDiscovery] = useState<ApiRoommateDeckResponse["discovery"] | null>(null);
+  const [deckLoading, setDeckLoading] = useState(false);
+  const [deckError, setDeckError] = useState<string | null>(null);
+  const rankedRoommates = useMemo(() => rankRoommatesByPreference(deckRoommates, preference), [deckRoommates, preference]);
   const exactPreferenceMatches = useMemo(
     () => rankedRoommates.filter((candidate) => matchesRoommatePreference(candidate, preference)),
     [preference, rankedRoommates]
@@ -2504,13 +2646,29 @@ function RoommatesMarketplaceScreen({
     }),
     [introSentRoommateIds, likedMeRoommateIds, likedRoommateIds, roommateMemberIds]
   );
-  const reviewedCount = Math.min(roommates.length, likedRoommateIds.size + skippedCount);
+  const sampleSize = deckDiscovery?.sampleSize ?? deckPageInfo?.totalCandidates ?? deckRoommates.length;
+  const reviewedCount = Math.min(sampleSize, likedRoommateIds.size + skippedCount);
   const activeRoommateKey = getRoommateKey(activeDeckRoommate);
   const activeConnectionStatus = getRoommateConnectionStatus(activeRoommateKey, connectionState);
+  const activeDisplayScore = getRoommateDisplayScore(activeDeckRoommate);
+  const activePercentile = Math.max(1, Math.round(((deckPosition + 1) / Math.max(1, sortedRoommates.length)) * 100));
+  const activeDeckBatch = activeDeckRoommate.deckBatch?.replace("-", " ") ?? "live";
+  const bestSignal = activeDeckRoommate.spark ?? activeDeckRoommate.preferenceFit.reasons[0] ?? "Strong living rhythm";
+  const activeRanking = activeDeckRoommate.ranking;
+  const activeStrategy = activeRanking?.strategy ?? deckDiscovery?.filters.strategy ?? "balanced";
+  const canLoadNextDeckBatch = deckPageInfo?.nextCursor !== null && deckPageInfo?.nextCursor !== undefined;
 
   useEffect(() => {
     setDeckIndex(0);
   }, [preference, sortMode]);
+
+  useEffect(() => {
+    setDeckRoommates((current) => haveSameRoommateKeys(current, roommates) ? current : roommates);
+  }, [roommates]);
+
+  useEffect(() => {
+    writeStoredRoommatePreference(preference);
+  }, [preference]);
 
   function updatePreference(nextPreference: RoommatePreference) {
     setPreference(nextPreference);
@@ -2519,6 +2677,31 @@ function RoommatesMarketplaceScreen({
 
   function goNextCard() {
     setDeckIndex((current) => current + 1);
+  }
+
+  async function refreshRoommateDeck({ append = false }: { append?: boolean } = {}) {
+    const cursor = append ? deckPageInfo?.nextCursor ?? 0 : 0;
+
+    setDeckLoading(true);
+    setDeckError(null);
+
+    try {
+      const deck = await apiGet<ApiRoommateDeckResponse>(buildRoommateDeckApiPath(preference, cursor), token ?? undefined);
+      const normalizedDeck = deck.items.map((apiRoommate, index) => normalizeRoommate(apiRoommate, cursor + index));
+
+      setDeckRoommates((current) => {
+        const primaryRoommates = append ? hydrateRoommateDeck([...current, ...normalizedDeck], [], getRoommateKey) : normalizedDeck;
+        return hydrateRoommateDeck(primaryRoommates, roommates, getRoommateKey, deck.discovery.sampleSize);
+      });
+      setDeckPageInfo(deck.pageInfo);
+      setDeckDiscovery(deck.discovery);
+      setSearchApplied(true);
+      if (!append) setDeckIndex(0);
+    } catch (error) {
+      setDeckError(error instanceof Error ? error.message : "Matching API unavailable");
+    } finally {
+      setDeckLoading(false);
+    }
   }
 
   function handleLike(roommate: Roommate) {
@@ -2590,7 +2773,7 @@ function RoommatesMarketplaceScreen({
                 Roommate Match
               </h1>
               <p className="mt-2 text-sm font-semibold text-muted-foreground">
-                {exactPreferenceMatches.length} filtered / {roommates.length} verified · {reviewedCount} reviewed · {likedRoommateIds.size} liked
+                Scanned {sampleSize} profiles · top {activePercentile}% candidate · {exactPreferenceMatches.length} exact fits · {reviewedCount} reviewed · {likedRoommateIds.size} liked
                 {searchApplied ? " · Preference refreshed" : ""}
               </p>
             </div>
@@ -2605,10 +2788,20 @@ function RoommatesMarketplaceScreen({
               </Button>
               <Button
                 className="rounded-full bg-[#006AFF] font-bold text-white hover:bg-[#0D4599]"
-                onClick={() => setSearchApplied(true)}
+                disabled={deckLoading}
+                onClick={() => void refreshRoommateDeck()}
               >
                 <SlidersHorizontal data-icon="inline-start" />
-                Apply preference
+                {deckLoading ? "Matching..." : "Apply preference"}
+              </Button>
+              <Button
+                variant="outline"
+                className="rounded-full font-bold"
+                disabled={deckLoading || !canLoadNextDeckBatch}
+                onClick={() => void refreshRoommateDeck({ append: true })}
+              >
+                <ArrowRight data-icon="inline-start" />
+                Next batch
               </Button>
             </div>
           </div>
@@ -2639,13 +2832,48 @@ function RoommatesMarketplaceScreen({
               onClick={cycleHobbyFilter}
             />
           </div>
+
+          <div className="mt-4 grid gap-3 md:grid-cols-3">
+            <RoommateDiscoveryStat
+              icon={Search}
+              label="Large sample"
+              value={`${sampleSize} profiles`}
+              detail={`${exactPreferenceMatches.length} exact fits in this pass`}
+            />
+            <RoommateDiscoveryStat
+              icon={Sparkles}
+              label="Best signal"
+              value={bestSignal}
+              detail={`${activeDisplayScore}% compatibility score`}
+            />
+            <RoommateDiscoveryStat
+              icon={Star}
+              label="Deck strategy"
+              value={`${activeStrategy} · ${activeRanking?.finalScore ?? activeDisplayScore}`}
+              detail={
+                canLoadNextDeckBatch
+                  ? `More after card ${deckPageInfo?.nextCursor}`
+                  : `${activeDeckBatch} batch · keep swiping`
+              }
+            />
+          </div>
+          <div className="mt-3 rounded-2xl border border-blue-100 bg-blue-50/70 px-4 py-3 text-xs font-bold text-muted-foreground">
+            {deckError ? (
+              <span className="text-trust-red">Backend deck refresh failed: {deckError}. Local discovery remains available.</span>
+            ) : (
+              <span>
+                {deckDiscovery?.headline ?? "Use Apply preference to ask the backend for a newly ranked roommate deck."}
+                {deckDiscovery?.tips[0] ? ` ${deckDiscovery.tips[0]}` : ""}
+              </span>
+            )}
+          </div>
         </CardContent>
       </Card>
 
       <div className="relative z-10 grid grid-cols-1 gap-6 xl:grid-cols-[360px_minmax(0,1fr)]">
         <RoommatePreferencePanel
           preference={preference}
-          fitScore={activeDeckRoommate.preferenceFit.score}
+          fitScore={activeDisplayScore}
           onPreferenceChange={updatePreference}
         />
 
@@ -2653,10 +2881,10 @@ function RoommatesMarketplaceScreen({
           <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <div className="text-2xl font-extrabold text-primary">
-                {activeDeckRoommate.preferenceFit.score}% preference fit
+                {activeDisplayScore}% compatibility fit
               </div>
               <div className="text-sm font-semibold text-muted-foreground">
-                Card {deckPosition + 1} of {Math.max(1, sortedRoommates.length)}
+                Card {deckPosition + 1} of {Math.max(1, sortedRoommates.length)} · top {activePercentile}% of sampled deck
               </div>
             </div>
             <div className="flex w-fit overflow-hidden rounded-full border border-blue-200 bg-white p-1 shadow-sm">
@@ -2724,6 +2952,31 @@ function PreferenceSummaryField({
       </div>
       <ChevronDown className="ml-auto size-4 shrink-0 text-[#006AFF]" aria-hidden="true" />
     </button>
+  );
+}
+
+function RoommateDiscoveryStat({
+  icon: Icon,
+  label,
+  value,
+  detail
+}: {
+  icon: LucideIcon;
+  label: string;
+  value: string;
+  detail: string;
+}) {
+  return (
+    <div className="min-w-0 rounded-[24px] border border-blue-100 bg-[linear-gradient(135deg,#f8fbff,#ffffff)] p-4 shadow-sm">
+      <div className="mb-3 flex items-center gap-2 text-[#006AFF]">
+        <span className="grid size-9 shrink-0 place-items-center rounded-full bg-blue-50">
+          <Icon className="size-4" aria-hidden="true" />
+        </span>
+        <span className="text-xs font-black uppercase tracking-wide">{label}</span>
+      </div>
+      <div className="truncate text-lg font-black text-primary">{value}</div>
+      <div className="mt-1 text-xs font-semibold text-muted-foreground">{detail}</div>
+    </div>
   );
 }
 
@@ -2989,6 +3242,87 @@ function SwipeActionButton({
   );
 }
 
+function RoommateCompatibilityBars({ dimensions }: { dimensions: ApiRoommateCompatibilityDimensions }) {
+  return (
+    <div className="rounded-[24px] border border-blue-100 bg-white p-4 shadow-sm">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div className="text-xs font-black uppercase tracking-wide text-muted-foreground">Compatibility map</div>
+        <div className="text-xs font-bold text-[#006AFF]">Roommate fit dimensions</div>
+      </div>
+      <div className="grid gap-2">
+        {roommateDimensionOrder.map((dimension) => {
+          const score = dimensions[dimension];
+
+          return (
+            <div key={dimension} className="grid grid-cols-[82px_minmax(0,1fr)_34px] items-center gap-2 text-xs">
+              <span className="font-extrabold text-primary">{roommateDimensionLabels[dimension]}</span>
+              <span className="h-2 overflow-hidden rounded-full bg-blue-50">
+                <span
+                  className="block h-full rounded-full bg-[#006AFF]"
+                  style={{ width: `${Math.max(0, Math.min(100, score))}%` }}
+                />
+              </span>
+              <span className="text-right font-black text-[#006AFF]">{score}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function formatRecommendationAction(action: ApiRoommateRecommendation["action"]) {
+  if (action === "like") return "Like";
+  if (action === "pass") return "Pass";
+  return "Later";
+}
+
+function RoommateRecommendationPanel({
+  ranking,
+  recommendation
+}: {
+  ranking?: ApiRoommateRankingSignals;
+  recommendation: ApiRoommateRecommendation;
+}) {
+  return (
+    <div className="rounded-[24px] border border-blue-100 bg-blue-50/70 p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <div className="text-xs font-black uppercase tracking-wide text-[#006AFF]">Recommendation</div>
+          <div className="mt-1 text-sm font-black text-primary">{recommendation.headline}</div>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {ranking ? (
+            <Badge className="rounded-full border-blue-200 bg-white text-primary">
+              Deck {ranking.finalScore} · {ranking.strategy}
+            </Badge>
+          ) : null}
+          <Badge className="rounded-full border-blue-200 bg-white text-[#006AFF]">
+            {formatRecommendationAction(recommendation.action)} · {recommendation.confidence}
+          </Badge>
+        </div>
+      </div>
+      <div className="mt-3 flex flex-wrap gap-2">
+        {recommendation.primarySignals.slice(0, 3).map((signal) => (
+          <span key={signal} className="rounded-full bg-white px-3 py-1.5 text-xs font-extrabold text-[#006AFF]">
+            {signal}
+          </span>
+        ))}
+        {recommendation.watchouts.slice(0, 2).map((watchout) => (
+          <span key={watchout} className="rounded-full bg-white/80 px-3 py-1.5 text-xs font-extrabold text-slate-600">
+            {watchout}
+          </span>
+        ))}
+      </div>
+      {recommendation.nextQuestions[0] ? (
+        <div className="mt-3 text-xs font-bold text-muted-foreground">
+          Next question: {recommendation.nextQuestions[0]}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function SwipeRoommateDeck({
   roommate,
   nextRoommate,
@@ -3012,11 +3346,18 @@ function SwipeRoommateDeck({
   onOpenDm: () => void;
   onDecideRoommate: () => void;
 }) {
-  const reasons = roommate.preferenceFit.reasons.slice(0, 4);
-  const gaps = roommate.preferenceFit.gaps.slice(0, 2);
+  const displayScore = getRoommateDisplayScore(roommate);
+  const reasons = mergeUniqueText(roommate.reasons, roommate.preferenceFit.reasons).slice(0, 4);
+  const gaps = mergeUniqueText(roommate.tradeoffs, roommate.preferenceFit.gaps).slice(0, 3);
+  const badges = mergeUniqueText(roommate.badges, roommate.tags).slice(0, 5);
   const canSendIntro = connectionStatus === "new" || connectionStatus === "liked-by-me" || connectionStatus === "liked-you";
   const canOpenDm = connectionStatus === "mutual" || connectionStatus === "roommate";
   const canDecideRoommate = connectionStatus === "mutual";
+  const deckLabel = roommate.rank ? `#${roommate.rank} in deck` : roommate.deckBatch ?? "Live deck";
+  const matchTypeLabel = formatRoommateMatchType(roommate.matchType);
+  const dimensions = getRoommatePresentationDimensions(roommate);
+  const recommendation = roommate.recommendation;
+  const ranking = roommate.ranking;
 
   return (
     <div className="relative mx-auto min-h-[760px] w-full max-w-[660px]">
@@ -3031,17 +3372,20 @@ function SwipeRoommateDeck({
           <div className="absolute inset-0 bg-gradient-to-t from-slate-950/72 via-slate-950/8 to-transparent" />
           <div className="absolute left-4 top-4 flex items-center gap-2">
             <Badge className="border-white/70 bg-white text-[#006AFF] shadow-sm">
-            {roommate.preferenceFit.score}% fit
+              {displayScore}% fit
+            </Badge>
+            <Badge className="border-white/25 bg-white/90 text-primary shadow-sm">
+              {matchTypeLabel}
             </Badge>
             <Badge className="border-white/20 bg-[#006AFF] text-white shadow-sm">
-              Verified
+              {deckLabel}
             </Badge>
           </div>
           <Badge className="absolute right-4 top-4 border-white/25 bg-slate-950/45 text-white shadow-sm">
             {getRoommateStatusLabel(connectionStatus)}
           </Badge>
           <div className="absolute bottom-8 right-6 hidden sm:block">
-            <MatchScoreRing score={roommate.preferenceFit.score} label="Match" size="lg" inverted />
+            <MatchScoreRing score={displayScore} label="Match" size="lg" inverted />
           </div>
           <div className="absolute inset-x-0 bottom-0 p-5 text-white">
             <div className="flex flex-wrap items-end justify-between gap-3">
@@ -3060,11 +3404,38 @@ function SwipeRoommateDeck({
         </div>
 
         <div className="grid gap-5 p-5">
+          <div className="rounded-[24px] border border-blue-100 bg-[radial-gradient(circle_at_top_left,rgba(0,106,255,0.14),transparent_38%),#f8fbff] p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <div className="text-xs font-black uppercase tracking-wide text-[#006AFF]">Why this card surfaced</div>
+                <div className="mt-1 text-lg font-black text-primary">{roommate.spark ?? "High-signal roommate candidate"}</div>
+              </div>
+              <Badge className="rounded-full border-blue-200 bg-white text-[#006AFF]">
+                {roommate.deckBatch?.replace("-", " ") ?? "discovery"}
+              </Badge>
+            </div>
+            {roommate.icebreaker ? (
+              <div className="mt-3 rounded-2xl border border-white bg-white/78 p-3 text-sm font-bold text-primary shadow-sm">
+                <Sparkles className="mr-2 inline size-4 text-[#006AFF]" aria-hidden="true" />
+                {roommate.icebreaker}
+              </div>
+            ) : null}
+            {roommate.decisionHint && !recommendation ? (
+              <div className="mt-2 rounded-2xl border border-blue-100 bg-white/88 p-3 text-sm font-bold text-muted-foreground shadow-sm">
+                {roommate.decisionHint}
+              </div>
+            ) : null}
+          </div>
+
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <ProfileMiniStat icon={Users} label="Gender" value={roommate.gender ?? "Open"} />
             <ProfileMiniStat icon={GraduationCap} label="School" value={roommate.school ?? "Other"} />
             <ProfileMiniStat icon={MapPin} label="Area" value={roommate.commute} />
           </div>
+
+          <RoommateCompatibilityBars dimensions={dimensions} />
+
+          {recommendation ? <RoommateRecommendationPanel ranking={ranking} recommendation={recommendation} /> : null}
 
           <div>
             <div className="mb-2 text-xs font-extrabold uppercase tracking-wide text-muted-foreground">Match reasons</div>
@@ -3083,7 +3454,7 @@ function SwipeRoommateDeck({
           </div>
 
           <div className="flex flex-wrap gap-2">
-            {roommate.tags.map((tag) => (
+            {badges.map((tag) => (
               <span key={tag} className="rounded-full border border-blue-100 bg-white px-3 py-1.5 text-xs font-bold text-primary">
                 {tag}
               </span>
@@ -3196,9 +3567,16 @@ function PreferenceMatchRail({
               </Avatar>
               <div className="min-w-0">
                 <div className="truncate text-sm font-extrabold text-primary">{roommate.name}</div>
-                <div className="text-xs font-bold text-[#006AFF]">{roommate.preferenceFit.score}% fit</div>
+                <div className="text-xs font-bold text-[#006AFF]">
+                  {getRoommateDisplayScore(roommate)}% fit{roommate.rank ? ` · #${roommate.rank}` : ""}
+                </div>
               </div>
             </div>
+            {roommate.spark ? (
+              <div className="mt-3 truncate rounded-full bg-white px-3 py-1.5 text-xs font-black text-[#006AFF]">
+                {roommate.spark}
+              </div>
+            ) : null}
             <div className="mt-3 flex items-center justify-between gap-2">
               <span className="truncate text-xs font-bold text-muted-foreground">{roommate.school ?? "Other"}</span>
               {likedRoommateIds.has(getRoommateKey(roommate)) ? (

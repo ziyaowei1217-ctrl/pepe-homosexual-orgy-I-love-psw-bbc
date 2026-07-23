@@ -2,8 +2,13 @@ node_modules/
 api/node_modules/
 api/dist/
 .next/
+dist/
+coverage/
 .tmp-tests/
 .worktrees/
 *.tsbuildinfo
 .env
+.env.*
 api/.env
+api/.env.*
+.DS_Store
