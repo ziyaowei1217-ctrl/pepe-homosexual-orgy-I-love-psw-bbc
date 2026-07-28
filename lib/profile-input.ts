@@ -1,5 +1,20 @@
 import type { UpdateProfileInput } from "./api";
 
+export type OnboardingProfileInput = Required<
+  Pick<UpdateProfileInput, "displayName" | "school" | "city" | "role">
+>;
+
+export function buildOnboardingProfileInput(
+  draft: OnboardingProfileInput
+): OnboardingProfileInput {
+  return {
+    displayName: draft.displayName.trim(),
+    school: draft.school.trim(),
+    city: draft.city.trim(),
+    role: draft.role
+  };
+}
+
 export function buildProfileUpdateInput(draft: UpdateProfileInput): UpdateProfileInput {
   return removeUndefined({
     displayName: optionalText(draft.displayName),
