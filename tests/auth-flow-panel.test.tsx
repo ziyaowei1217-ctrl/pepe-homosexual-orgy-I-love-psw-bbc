@@ -1,6 +1,13 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vitest";
+import {
+  act,
+  create,
+  type ReactTestInstance,
+  type ReactTestRenderer
+} from "react-test-renderer";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import * as api from "../lib/api";
 import { AuthFlowPanel } from "../components/auth-flow-panel";
 import { ProfileOnboarding } from "../components/profile-onboarding";
 import {
@@ -9,6 +16,15 @@ import {
   reduceOnboardingProfileState,
   runEmailCodeRequest
 } from "../lib/auth-flow";
+
+vi.mock("../lib/api", async () => {
+  const actual = await vi.importActual<typeof import("../lib/api")>("../lib/api");
+  return {
+    ...actual,
+    requestEmailCode: vi.fn(),
+    verifyEmailCode: vi.fn()
+  };
+});
 
 describe("progressive email auth UI", () => {
   it("renders the email step with an accessible email field", () => {
@@ -235,3 +251,315 @@ describe("auth panel state transitions", () => {
     expect(next.error).toBe("资料保存失败，请稍后重试。");
   });
 });
+
+describe("AuthFlowPanel interactions", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-29T01:00:00.000Z"));
+    vi.clearAllMocks();
+    (
+      globalThis as typeof globalThis & {
+        IS_REACT_ACT_ENVIRONMENT: boolean;
+      }
+    ).IS_REACT_ACT_ENVIRONMENT = true;
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("requests once while pending, enters the code step, and verifies the code", async () => {
+    const emailCodeRequest = deferred<{
+      email: string;
+      expiresAt: string;
+    }>();
+    vi.mocked(api.requestEmailCode).mockReturnValue(emailCodeRequest.promise);
+    const verificationResponse = {
+      accessToken: "token-1",
+      user: {
+        id: "user-1",
+        email: "maya@example.edu",
+        role: "renter"
+      },
+      isNewUser: true
+    };
+    vi.mocked(api.verifyEmailCode).mockResolvedValue(verificationResponse);
+    const onAuthenticated = vi.fn();
+    const renderer = await renderAuthPanel({ onAuthenticated });
+
+    changeInput(renderer.root, "email", " Maya@Example.edu ");
+    const emailForm = renderer.root.findByType("form");
+    let firstSubmit: Promise<void> | undefined;
+    let repeatedSubmit: Promise<void> | undefined;
+    act(() => {
+      firstSubmit = emailForm.props.onSubmit(submitEvent());
+      repeatedSubmit = emailForm.props.onSubmit(submitEvent());
+    });
+    await flushMicrotasks();
+
+    expect(api.requestEmailCode).toHaveBeenCalledTimes(1);
+    expect(api.requestEmailCode).toHaveBeenCalledWith("maya@example.edu");
+    expect(findButton(renderer.root, "发送中…").props.disabled).toBe(true);
+
+    await act(async () => {
+      emailCodeRequest.resolve({
+        email: "maya@example.edu",
+        expiresAt: "2026-07-29T01:05:00.000Z"
+      });
+      await Promise.all([firstSubmit, repeatedSubmit]);
+    });
+
+    expect(renderer.root.findByProps({ name: "code" })).toBeDefined();
+    expect(renderedText(renderer.root)).toContain(
+      "验证码已发送至 maya@example.edu"
+    );
+
+    changeInput(renderer.root, "code", "12a3456");
+    const verifyButton = findButton(renderer.root, "验证并登录");
+    expect(verifyButton.props.disabled).toBe(false);
+    await act(async () => {
+      await renderer.root.findByType("form").props.onSubmit(submitEvent());
+    });
+
+    expect(api.verifyEmailCode).toHaveBeenCalledWith(
+      "maya@example.edu",
+      "123456"
+    );
+    expect(onAuthenticated).toHaveBeenCalledWith(verificationResponse);
+    await unmountRenderer(renderer);
+  });
+
+  it("clears the code and starts a new 60-second cooldown when resend succeeds", async () => {
+    vi.mocked(api.requestEmailCode).mockResolvedValueOnce({
+      email: "maya@example.edu",
+      expiresAt: "2026-07-29T01:05:00.000Z"
+    });
+    const renderer = await renderAuthPanel();
+    changeInput(renderer.root, "email", "maya@example.edu");
+    await submitCurrentForm(renderer);
+    changeInput(renderer.root, "code", "123456");
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60_000);
+    });
+    const resendRequest = deferred<{
+      email: string;
+      expiresAt: string;
+    }>();
+    vi.mocked(api.requestEmailCode).mockReturnValueOnce(resendRequest.promise);
+    act(() => {
+      findButton(renderer.root, "重新发送").props.onClick();
+    });
+    await flushMicrotasks();
+    expect(api.requestEmailCode).toHaveBeenCalledTimes(2);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10_000);
+      resendRequest.resolve({
+        email: "maya@example.edu",
+        expiresAt: "2026-07-29T01:10:00.000Z"
+      });
+      await Promise.resolve();
+    });
+
+    expect(findInput(renderer.root, "code").props.value).toBe("");
+    expect(findButton(renderer.root, "60 秒后重新发送").props.disabled).toBe(
+      true
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60_000);
+    });
+    expect(findButton(renderer.root, "重新发送").props.disabled).toBe(false);
+    await unmountRenderer(renderer);
+  });
+
+  it("disables expired verification and shows a resend failure instead of the expiry prompt", async () => {
+    vi.mocked(api.requestEmailCode).mockResolvedValueOnce({
+      email: "maya@example.edu",
+      expiresAt: "2026-07-29T01:00:02.000Z"
+    });
+    const renderer = await renderAuthPanel();
+    changeInput(renderer.root, "email", "maya@example.edu");
+    await submitCurrentForm(renderer);
+    changeInput(renderer.root, "code", "123456");
+
+    expect(findButton(renderer.root, "验证并登录").props.disabled).toBe(false);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2_000);
+    });
+
+    expect(findButton(renderer.root, "验证并登录").props.disabled).toBe(true);
+    expect(renderedText(renderer.root.findByProps({ role: "alert" }))).toBe(
+      "验证码已过期，请重新发送。"
+    );
+    await act(async () => {
+      await renderer.root.findByType("form").props.onSubmit(submitEvent());
+    });
+    expect(api.verifyEmailCode).not.toHaveBeenCalled();
+
+    vi.mocked(api.requestEmailCode).mockRejectedValueOnce(
+      new TypeError("Failed to fetch")
+    );
+    await act(async () => {
+      findButton(renderer.root, "重新发送").props.onClick();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(renderedText(renderer.root.findByProps({ role: "alert" }))).toBe(
+      "网络连接失败，请检查网络后重试。"
+    );
+    await unmountRenderer(renderer);
+  });
+
+  it("retains edited onboarding fields after save rejects", async () => {
+    const onSave = vi
+      .fn()
+      .mockRejectedValue(new TypeError("Failed to fetch"));
+    let renderer: ReactTestRenderer | undefined;
+    await act(async () => {
+      renderer = create(
+        <ProfileOnboarding
+          reason="new-user"
+          profile={null}
+          pending={false}
+          error={null}
+          onSave={onSave}
+          onDismiss={vi.fn()}
+        />
+      );
+    });
+    const mounted = requireRenderer(renderer);
+
+    changeInput(mounted.root, "displayName", "  Maya Chen ");
+    changeInput(mounted.root, "school", " UCLA ");
+    changeInput(mounted.root, "city", " Los Angeles ");
+    act(() => {
+      mounted.root.findByType("select").props.onChange({
+        target: { value: "lister" }
+      });
+    });
+    await act(async () => {
+      await mounted.root.findByType("form").props.onSubmit(submitEvent());
+    });
+
+    expect(onSave).toHaveBeenCalledWith({
+      displayName: "Maya Chen",
+      school: "UCLA",
+      city: "Los Angeles",
+      role: "lister"
+    });
+    expect(findInput(mounted.root, "displayName").props.value).toBe(
+      "  Maya Chen "
+    );
+    expect(findInput(mounted.root, "school").props.value).toBe(" UCLA ");
+    expect(findInput(mounted.root, "city").props.value).toBe(" Los Angeles ");
+    expect(mounted.root.findByType("select").props.value).toBe("lister");
+    expect(renderedText(mounted.root.findByProps({ role: "alert" }))).toBe(
+      "网络连接失败，请检查网络后重试。"
+    );
+    await unmountRenderer(mounted);
+  });
+});
+
+async function renderAuthPanel(
+  overrides: Partial<React.ComponentProps<typeof AuthFlowPanel>> = {}
+) {
+  let renderer: ReactTestRenderer | undefined;
+  await act(async () => {
+    renderer = create(
+      <AuthFlowPanel
+        token={null}
+        user={null}
+        profile={null}
+        apiError={null}
+        onboardingReason={null}
+        isPinnedToPublish={false}
+        onAuthenticated={vi.fn()}
+        onProfileSave={vi.fn()}
+        onOnboardingDismiss={vi.fn()}
+        onLogout={vi.fn()}
+        onClose={vi.fn()}
+        onToast={vi.fn()}
+        {...overrides}
+      />
+    );
+  });
+  return requireRenderer(renderer);
+}
+
+async function submitCurrentForm(renderer: ReactTestRenderer) {
+  await act(async () => {
+    await renderer.root.findByType("form").props.onSubmit(submitEvent());
+  });
+}
+
+function changeInput(
+  root: ReactTestInstance,
+  name: string,
+  value: string
+) {
+  act(() => {
+    findInput(root, name).props.onChange({ target: { value } });
+  });
+}
+
+function findInput(root: ReactTestInstance, name: string) {
+  const input = root
+    .findAllByType("input")
+    .find((candidate) => candidate.props.name === name);
+  if (!input) throw new Error(`Input not found: ${name}`);
+  return input;
+}
+
+function findButton(root: ReactTestInstance, label: string) {
+  const button = root
+    .findAllByType("button")
+    .find((candidate) => renderedText(candidate) === label);
+  if (!button) throw new Error(`Button not found: ${label}`);
+  return button;
+}
+
+function renderedText(node: ReactTestInstance): string {
+  return node.children
+    .map((child) =>
+      typeof child === "string" ? child : renderedText(child)
+    )
+    .join("");
+}
+
+function submitEvent() {
+  return { preventDefault: vi.fn() };
+}
+
+function deferred<T>() {
+  let resolvePromise: ((value: T) => void) | undefined;
+  const promise = new Promise<T>((resolve) => {
+    resolvePromise = resolve;
+  });
+  return {
+    promise,
+    resolve(value: T) {
+      if (!resolvePromise) throw new Error("Deferred promise is unavailable");
+      resolvePromise(value);
+    }
+  };
+}
+
+async function flushMicrotasks() {
+  await act(async () => {
+    await Promise.resolve();
+  });
+}
+
+function requireRenderer(
+  renderer: ReactTestRenderer | undefined
+): ReactTestRenderer {
+  if (!renderer) throw new Error("Renderer was not created");
+  return renderer;
+}
+
+async function unmountRenderer(renderer: ReactTestRenderer) {
+  await act(async () => {
+    renderer.unmount();
+  });
+}

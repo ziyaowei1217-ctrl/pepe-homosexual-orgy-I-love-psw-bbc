@@ -79,8 +79,8 @@ export function AuthFlowPanel({
   useEffect(() => {
     if (step !== "code") return;
 
-    const timer = window.setInterval(() => setNow(Date.now()), 1_000);
-    return () => window.clearInterval(timer);
+    const timer = globalThis.setInterval(() => setNow(Date.now()), 1_000);
+    return () => globalThis.clearInterval(timer);
   }, [step]);
 
   async function sendCode(value: string) {
