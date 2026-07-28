@@ -121,6 +121,11 @@ export class AuthService {
     }
 
     const isLocalAdmin = this.localAdminEmails.has(email);
+    const existingUser = await this.prisma.user.findUnique({
+      where: { email },
+      select: { id: true }
+    });
+    const isNewUser = existingUser === null;
     const user = await this.prisma.user.upsert({
       where: { email },
       update: isLocalAdmin ? { role: "ADMIN" } : {},
@@ -142,7 +147,8 @@ export class AuthService {
 
     return {
       accessToken: await this.jwt.signAsync({ sub: user.id, email: user.email, role: user.role }),
-      user
+      user,
+      isNewUser
     };
   }
 }

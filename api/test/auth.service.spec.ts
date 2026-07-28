@@ -28,8 +28,36 @@ describe("AuthService", () => {
 
     expect(session.accessToken).toBeTruthy();
     expect(session.user.email).toBe("student@northeastern.edu");
+    expect(session.isNewUser).toBe(true);
     expect(prisma.profile.state.profile?.email).toBe("student@northeastern.edu");
     expect(prisma.verificationCode.state.code?.consumedAt).toBeInstanceOf(Date);
+  });
+
+  it("marks a returning email login as an existing user", async () => {
+    const prisma = createPrismaMock();
+    const jwt = new JwtService({ secret: "test-secret" });
+    const sender = createEmailSenderMock();
+    const service = createAuthService(prisma, jwt, {
+      nodeEnv: "development",
+      emailSender: sender,
+      codeRequestCooldownMs: 0
+    });
+
+    const first = await service.requestEmailCode("student@northeastern.edu");
+    if (!first.devCode) throw new Error("Expected development verification code");
+    await service.verifyEmailCode({
+      email: "student@northeastern.edu",
+      code: first.devCode
+    });
+
+    const second = await service.requestEmailCode("student@northeastern.edu");
+    if (!second.devCode) throw new Error("Expected development verification code");
+    const session = await service.verifyEmailCode({
+      email: "student@northeastern.edu",
+      code: second.devCode
+    });
+
+    expect(session.isNewUser).toBe(false);
   });
 
   it("assigns the administrator role from the normalized local allowlist", async () => {
@@ -404,6 +432,10 @@ function createPrismaMock() {
       }
     },
     user: {
+      findUnique: async ({ where }: { where: { email: string } }) => {
+        if (state.user?.email === where.email) return state.user;
+        return null;
+      },
       upsert: async ({
         where,
         create,

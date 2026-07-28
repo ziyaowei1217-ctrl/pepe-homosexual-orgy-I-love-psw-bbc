@@ -193,6 +193,7 @@ export type EmailCodeResponse = {
 export type VerifyEmailResponse = {
   accessToken: string;
   user: SessionUser;
+  isNewUser: boolean;
 };
 
 export type ApiDealRoom = {
