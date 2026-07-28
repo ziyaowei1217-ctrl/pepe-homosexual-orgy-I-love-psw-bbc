@@ -57,4 +57,22 @@ export class DealThreadsController {
   ) {
     return this.dealThreads.createViewingRequest(request.user.id, id, dto);
   }
+
+  @Post(":threadId/viewing-requests/:requestId/confirm")
+  confirmViewingRequest(
+    @Req() request: AuthenticatedRequest,
+    @Param("threadId") threadId: string,
+    @Param("requestId") requestId: string
+  ) {
+    return this.dealThreads.confirmViewingRequest(request.user.id, threadId, requestId);
+  }
+
+  @Post(":threadId/viewing-requests/:requestId/decline")
+  declineViewingRequest(
+    @Req() request: AuthenticatedRequest,
+    @Param("threadId") threadId: string,
+    @Param("requestId") requestId: string
+  ) {
+    return this.dealThreads.declineViewingRequest(request.user.id, threadId, requestId);
+  }
 }

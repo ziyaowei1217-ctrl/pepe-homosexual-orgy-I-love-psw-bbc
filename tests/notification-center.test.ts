@@ -3,8 +3,8 @@ import { describe, expect, it } from "vitest";
 import { getUnreadNotificationCount, markNotificationsRead } from "../lib/notification-center";
 
 const notifications = [
-  { id: "1", kind: "dm" as const, title: "DM", detail: "New DM", createdAt: 2, read: false },
-  { id: "2", kind: "tour" as const, title: "Tour", detail: "Tour", createdAt: 1, read: true }
+  { id: "1", title: "DM", detail: "New DM", createdAt: 2, read: false, target: "/messages" },
+  { id: "2", title: "Tour", detail: "Tour", createdAt: 1, read: true, target: "/trips" }
 ];
 
 describe("notification center", () => {

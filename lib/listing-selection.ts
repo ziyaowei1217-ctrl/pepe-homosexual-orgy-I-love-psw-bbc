@@ -10,6 +10,21 @@ export function getListingCardDomId(listingId: string) {
   return `listing-card-${listingId}`;
 }
 
+export function getRequestedListing<T extends { id: string }>(
+  listings: readonly T[],
+  requestedId: string | null | undefined,
+  current: T
+) {
+  return (
+    (requestedId
+      ? listings.find((listing) => listing.id === requestedId)
+      : undefined) ??
+    listings.find((listing) => listing.id === current.id) ??
+    listings[0] ??
+    current
+  );
+}
+
 export function filterSavedListings<T extends { id: string }>(
   listings: T[],
   favoriteIds: ReadonlySet<string>,

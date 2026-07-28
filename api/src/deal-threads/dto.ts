@@ -35,33 +35,6 @@ export class CreateDealThreadDto {
   @MaxLength(120)
   listingId!: string;
 
-  @Trim()
-  @IsString()
-  @MinLength(1)
-  @MaxLength(180)
-  listingTitle!: string;
-
-  @Trim()
-  @IsString()
-  @MinLength(1)
-  @MaxLength(180)
-  area!: string;
-
-  @Trim()
-  @IsString()
-  @MinLength(1)
-  @MaxLength(80)
-  contactName!: string;
-
-  @IsOptional()
-  @TrimStringArray()
-  @IsArray()
-  @ArrayMaxSize(8)
-  @IsString({ each: true })
-  @MinLength(1, { each: true })
-  @MaxLength(80, { each: true })
-  participantNames?: string[];
-
   @IsOptional()
   @Trim()
   @IsString()

@@ -35,7 +35,8 @@ describe("listing detail", () => {
     expect(detail.gallery[0]).toBe(listing.image);
     expect(detail.monthlySavings).toBe(300);
     expect(detail.sections.highlights).toContain("步行 8 分钟到 UCLA");
-    expect(detail.sections.houseRules).toContain("房东知情");
+    expect(detail.sections.houseRules).toContain("房东知情为用户声明，待平台审核");
+    expect(detail.sections.moveIn).toContain("在线申请、支付与资金托管暂未开放");
   });
 
   it("summarizes the current listing flow state", () => {
@@ -43,15 +44,12 @@ describe("listing detail", () => {
       getListingFlowStatus("westwood", {
         favoriteIds: new Set(["westwood"]),
         contactedIds: new Set(["westwood"]),
-        tourRequestedIds: new Set(["koreatown"]),
-        appliedListingId: "westwood"
+        tourRequestedIds: new Set(["koreatown"])
       })
     ).toEqual({
       isFavorite: true,
       isContacted: true,
-      isTourRequested: false,
-      isApplied: true,
-      primaryCta: "继续申请"
+      isTourRequested: false
     });
   });
 

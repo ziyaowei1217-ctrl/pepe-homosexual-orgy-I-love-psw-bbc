@@ -35,8 +35,8 @@ describe("editorial grid redesign", () => {
   it("applies the editorial language to the global shell and Stay", () => {
     const source = readFileSync("components/sublet-app.tsx", "utf8");
 
-    expect(source).toContain("01 / Stay");
-    expect(source).toContain("02 / Discover");
+    expect(source).toContain("01 / 短租");
+    expect(source).toContain("02 / 找房");
     expect(source).toContain("editorial-context-strip");
     expect(source).toContain("xl:col-span-7");
     expect(source).toContain("xl:col-span-5");
@@ -54,7 +54,7 @@ describe("editorial grid redesign", () => {
   it("labels the detail and roommate editorial workspaces", () => {
     const source = readFileSync("components/sublet-app.tsx", "utf8");
 
-    for (const label of ["01 / Listing", "01 / Roommates", "01 / Like Queue"]) {
+    for (const label of ["01 / 房源", "01 / 室友", "01 / 喜欢列表"]) {
       expect(source).toContain(label);
     }
     expect(source).toContain("xl:col-span-4 xl:sticky xl:top-24");
@@ -65,11 +65,11 @@ describe("editorial grid redesign", () => {
     const source = readFileSync("components/sublet-app.tsx", "utf8");
 
     for (const label of [
-      "01 / Messages",
-      "01 / Trips",
-      "01 / Publish",
-      "01 / Trust",
-      "01 / Account"
+      "01 / 消息",
+      "01 / 看房",
+      "01 / 发布",
+      "01 / 信任",
+      "01 / 账户"
     ]) {
       expect(source).toContain(label);
     }

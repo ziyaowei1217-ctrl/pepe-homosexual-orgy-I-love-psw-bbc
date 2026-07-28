@@ -28,7 +28,48 @@ describe("AuthService", () => {
 
     expect(session.accessToken).toBeTruthy();
     expect(session.user.email).toBe("student@northeastern.edu");
+    expect(prisma.profile.state.profile?.email).toBe("student@northeastern.edu");
     expect(prisma.verificationCode.state.code?.consumedAt).toBeInstanceOf(Date);
+  });
+
+  it("assigns the administrator role from the normalized local allowlist", async () => {
+    const prisma = createPrismaMock();
+    const jwt = new JwtService({ secret: "test-secret" });
+    const sender = createEmailSenderMock();
+    const service = createAuthService(prisma, jwt, {
+      nodeEnv: "development",
+      emailSender: sender,
+      localAdminEmails: " OTHER@example.com, Admin@Example.com "
+    });
+
+    const request = await service.requestEmailCode("admin@example.com");
+    if (!request.devCode) throw new Error("Expected development verification code");
+    const session = await service.verifyEmailCode({ email: "ADMIN@example.com", code: request.devCode });
+
+    expect(session.user.role).toBe("ADMIN");
+  });
+
+  it("never demotes an existing administrator who is absent from the local allowlist", async () => {
+    const prisma = createPrismaMock();
+    prisma.verificationCode.state.user = {
+      id: "user-1",
+      email: "admin@example.com",
+      role: "ADMIN",
+      createdAt: new Date()
+    };
+    const jwt = new JwtService({ secret: "test-secret" });
+    const sender = createEmailSenderMock();
+    const service = createAuthService(prisma, jwt, {
+      nodeEnv: "development",
+      emailSender: sender,
+      localAdminEmails: ""
+    });
+
+    const request = await service.requestEmailCode("admin@example.com");
+    if (!request.devCode) throw new Error("Expected development verification code");
+    const session = await service.verifyEmailCode({ email: "admin@example.com", code: request.devCode });
+
+    expect(session.user.role).toBe("ADMIN");
   });
 
   it("does not return dev codes in production", async () => {
@@ -261,6 +302,7 @@ function createEmailSenderMock(): EmailSender & { sentCodes: Array<{ email: stri
 type AuthServiceTestOptions = ConstructorParameters<typeof AuthService>[2] & {
   emailSender?: EmailSender;
   codeRequestCooldownMs?: number;
+  localAdminEmails?: string;
 };
 
 function createAuthService(
@@ -278,7 +320,8 @@ function createPrismaMock() {
     get code() {
       return this.codes.at(-1);
     },
-    user: undefined as { id: string; email: string; role: string; createdAt: Date } | undefined
+    user: undefined as { id: string; email: string; role: string; createdAt: Date } | undefined,
+    profile: undefined as { id: string; email: string } | undefined
   };
 
   const mock = {
@@ -361,14 +404,33 @@ function createPrismaMock() {
       }
     },
     user: {
-      upsert: async ({ where, create }: { where: { email: string }; create: { email: string } }) => {
+      upsert: async ({
+        where,
+        create,
+        update
+      }: {
+        where: { email: string };
+        create: { email: string; role?: string };
+        update?: { role?: string };
+      }) => {
         state.user ??= {
           id: "user-1",
           email: where.email || create.email,
-          role: "USER",
+          role: create.role ?? "USER",
           createdAt: new Date()
         };
+        if (update?.role) state.user.role = update.role;
         return state.user;
+      }
+    },
+    profile: {
+      state,
+      upsert: async ({ where, create }: { where: { email: string }; create: { email: string } }) => {
+        state.profile ??= {
+          id: "profile-1",
+          email: where.email || create.email
+        };
+        return state.profile;
       }
     }
   };

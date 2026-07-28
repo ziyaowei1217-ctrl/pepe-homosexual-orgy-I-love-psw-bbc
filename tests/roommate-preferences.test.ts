@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildRoommatePreferenceFit,
+  filterRoommatesByPreference,
   getRoommateDeckCandidates,
   rankRoommatesByPreference,
   type PreferenceRoommateProfile,
@@ -44,11 +45,12 @@ const profiles: PreferenceRoommateProfile[] = [
 ];
 
 describe("roommate preferences", () => {
-  it("keeps every ranked candidate in the swipe deck", () => {
+  it("filters by gender, budget and school while hobbies only affect ranking", () => {
     const ranked = rankRoommatesByPreference(profiles, preference);
+    const filtered = filterRoommatesByPreference(ranked, preference);
 
-    expect(getRoommateDeckCandidates(ranked)).toEqual(ranked);
-    expect(getRoommateDeckCandidates(ranked)).toHaveLength(profiles.length);
+    expect(getRoommateDeckCandidates(filtered)).toEqual(filtered);
+    expect(filtered.map((candidate) => candidate.name)).toEqual(["Olivia Park", "Mia Chen"]);
   });
 
   it("ranks roommates by gender comfort, budget, school, and hobbies without hiding candidates", () => {
@@ -56,11 +58,11 @@ describe("roommate preferences", () => {
 
     expect(ranked).toHaveLength(3);
     expect(ranked[0].name).toBe("Olivia Park");
-    expect(ranked[0].preferenceFit.reasons).toContain("UCLA track");
-    expect(ranked[0].preferenceFit.reasons).toContain("2 shared hobbies");
+    expect(ranked[0].preferenceFit.reasons).toContain("同校：UCLA");
+    expect(ranked[0].preferenceFit.reasons).toContain("2 项共同爱好");
     expect(ranked[0].preferenceFit.score).toBeGreaterThan(ranked[2].preferenceFit.score);
     expect(ranked[2].name).toBe("Ryan Wu");
-    expect(ranked[2].preferenceFit.gaps).toContain("Budget outside range");
+    expect(ranked[2].preferenceFit.gaps).toContain("预算不在范围内");
   });
 
   it("treats open gender preference as neutral while still explaining budget and school fit", () => {
@@ -82,9 +84,9 @@ describe("roommate preferences", () => {
     const fit = buildRoommatePreferenceFit(ava, openPreference);
 
     expect(fit.score).toBeGreaterThanOrEqual(90);
-    expect(fit.reasons).toContain("USC track");
-    expect(fit.reasons).toContain("1 shared hobby");
-    expect(fit.reasons).toContain("Open shared-living preference");
-    expect(fit.gaps).not.toContain("Shared-living preference differs");
+    expect(fit.reasons).toContain("同校：USC");
+    expect(fit.reasons).toContain("1 项共同爱好");
+    expect(fit.reasons).toContain("不限性别");
+    expect(fit.gaps).not.toContain("性别偏好不同");
   });
 });

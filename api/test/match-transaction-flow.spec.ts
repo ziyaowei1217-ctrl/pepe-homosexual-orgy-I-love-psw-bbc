@@ -77,6 +77,7 @@ type RoommateRecord = {
   budget: string;
   commute: string;
   tags: string[];
+  localReciprocalLike: boolean;
   createdAt: Date;
 };
 
@@ -155,6 +156,7 @@ function createPrismaMock() {
     budget: "$1,450/month",
     commute: "Fenway / Back Bay",
     tags: ["quiet", "early sleeper"],
+    localReciprocalLike: true,
     createdAt: new Date("2026-01-01T00:00:00.000Z")
   };
   const listing: ListingRecord = {
@@ -253,20 +255,32 @@ function createPrismaMock() {
       }
     },
     user: {
-      upsert: async ({ where, create }: { where: { email: string }; create: { email: string } }) => {
+      upsert: async ({
+        where,
+        create
+      }: {
+        where: { email: string };
+        create: { email: string; role?: "USER" | "ADMIN" };
+      }) => {
         const existing = state.users.find((user) => user.email === where.email);
         if (existing) return existing;
 
         const created = {
           id: `user-${state.users.length + 1}`,
           email: create.email,
-          role: "USER" as const,
+          role: create.role ?? ("USER" as const),
           createdAt: new Date(),
           updatedAt: new Date()
         };
         state.users.push(created);
         return created;
       }
+    },
+    profile: {
+      upsert: async ({ where, create }: { where: { email: string }; create: { email: string } }) => ({
+        id: "profile-1",
+        email: where.email || create.email
+      })
     },
     roommateProfile: {
       findUnique: async ({ where }: { where: { id: string } }) => (where.id === roommate.id ? roommate : null),

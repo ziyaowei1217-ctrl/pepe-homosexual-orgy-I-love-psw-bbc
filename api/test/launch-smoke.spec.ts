@@ -61,7 +61,8 @@ describeSmoke("launch smoke against real PostgreSQL", () => {
         match: 91,
         budget: "$1,900/month",
         commute: "Fenway / Back Bay",
-        tags: ["quiet", "verified"]
+        tags: ["quiet", "verified"],
+        localReciprocalLike: true
       }
     });
   });

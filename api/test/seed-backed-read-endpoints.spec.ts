@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 
 import { GroupsController } from "../src/groups/groups.controller";
 import { GroupsService } from "../src/groups/groups.service";
-import { seedGroups, seedTrips, seedTrustQueues } from "../src/seed-data";
 import { TripsController } from "../src/trips/trips.controller";
 import { TripsService } from "../src/trips/trips.service";
 import { TrustController } from "../src/trust/trust.controller";
@@ -44,11 +43,11 @@ describe("GroupsService", () => {
     expect(prisma.group.findManyCalls).toEqual([{ orderBy: { createdAt: "desc" } }]);
   });
 
-  it("keeps the seed fallback when no database groups exist", async () => {
+  it("returns no groups when the database table is empty", async () => {
     const prisma = createPrismaMock({ groups: [] });
     const service = new GroupsService(prisma as never);
 
-    await expect(service.findAll()).resolves.toEqual(seedGroups);
+    await expect(service.findAll()).resolves.toEqual([]);
   });
 });
 
@@ -71,11 +70,11 @@ describe("TripsService", () => {
     expect(prisma.booking.findManyCalls).toEqual([{ orderBy: { createdAt: "desc" } }]);
   });
 
-  it("keeps the seed fallback when no database bookings exist", async () => {
+  it("returns no trips when the database table is empty", async () => {
     const prisma = createPrismaMock({ bookings: [] });
     const service = new TripsService(prisma as never);
 
-    await expect(service.findAll()).resolves.toEqual(seedTrips);
+    await expect(service.findAll()).resolves.toEqual([]);
   });
 });
 
@@ -98,11 +97,11 @@ describe("TrustService", () => {
     expect(prisma.trustQueueItem.findManyCalls).toEqual([{ orderBy: { updatedAt: "desc" } }]);
   });
 
-  it("keeps the seed fallback when no database queue rows exist", async () => {
+  it("returns no trust metrics when the database table is empty", async () => {
     const prisma = createPrismaMock({ trustQueueItems: [] });
     const service = new TrustService(prisma as never);
 
-    await expect(service.queues()).resolves.toEqual(seedTrustQueues);
+    await expect(service.queues()).resolves.toEqual([]);
   });
 });
 

@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { filterSavedListings, getListingCardDomId, getVisibleSelectedListing, isSelectedListing } from "../lib/listing-selection";
+import {
+  filterSavedListings,
+  getListingCardDomId,
+  getRequestedListing,
+  getVisibleSelectedListing,
+  isSelectedListing
+} from "../lib/listing-selection";
 
 describe("listing selection", () => {
   it("keeps the current listing when it is still visible", () => {
@@ -30,6 +36,13 @@ describe("listing selection", () => {
     const results = [listing("westwood"), listing("usc")];
     expect(filterSavedListings(results, new Set(["usc"]), true).map((item) => item.id)).toEqual(["usc"]);
     expect(filterSavedListings(results, new Set(["usc"]), false)).toEqual(results);
+  });
+
+  it("restores the listing requested by a direct URL after API data arrives", () => {
+    const results = [listing("westwood"), listing("usc")];
+
+    expect(getRequestedListing(results, "usc", listing(""))?.id).toBe("usc");
+    expect(getRequestedListing(results, "missing", results[0])?.id).toBe("westwood");
   });
 });
 

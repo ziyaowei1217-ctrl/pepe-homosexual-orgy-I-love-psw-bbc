@@ -249,7 +249,7 @@ describe("roommate deck HTTP endpoint", () => {
     await app.close();
   });
 
-  it("serves a paginated Tinder-style deck from seed fallback data", async () => {
+  it("serves an intentional empty deck when the database has no roommate profiles", async () => {
     await request(app.getHttpServer())
       .get("/api/v1/roommates/deck?limit=12&cursor=12&budgetMin=1200&budgetMax=1800&school=UCLA&hobby=%E6%97%A9%E7%9D%A1")
       .expect(200)
@@ -257,39 +257,17 @@ describe("roommate deck HTTP endpoint", () => {
         expect(body.pageInfo).toMatchObject({
           cursor: 12,
           limit: 12,
-          returned: 12,
-          totalCandidates: 240
+          returned: 0,
+          totalCandidates: 0
         });
         expect(body.discovery).toMatchObject({
-          sampleSize: 240,
-          headline: expect.stringContaining("Scanned 240 roommate profiles"),
+          sampleSize: 0,
           rankingWeights: expect.objectContaining({
             compatibility: expect.any(Number),
             exploration: expect.any(Number)
           })
         });
-        expect(body.items[0]).toMatchObject({
-          compatibilityScore: expect.any(Number),
-          ranking: expect.objectContaining({
-            finalScore: expect.any(Number),
-            percentile: expect.any(Number)
-          }),
-          dimensions: expect.objectContaining({
-            budget: expect.any(Number),
-            lifestyle: expect.any(Number),
-            reliability: expect.any(Number)
-          }),
-          matchType: expect.any(String),
-          recommendation: expect.objectContaining({
-            action: expect.any(String),
-            headline: expect.any(String)
-          }),
-          decisionHint: expect.any(String),
-          reasons: expect.any(Array),
-          tradeoffs: expect.any(Array),
-          icebreaker: expect.any(String),
-          badges: expect.any(Array)
-        });
+        expect(body.items).toEqual([]);
       });
   });
 });

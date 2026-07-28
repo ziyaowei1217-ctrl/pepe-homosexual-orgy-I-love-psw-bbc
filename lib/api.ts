@@ -1,3 +1,5 @@
+import { productErrorForStatus, toProductApiError } from "./product-errors";
+
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000/api/v1";
 
 export type ApiListing = {
@@ -26,6 +28,8 @@ export type ApiListing = {
     kind: string;
     sortOrder: number;
   }>;
+  availableFrom?: string;
+  availableTo?: string;
 };
 
 export type ApiRoommateCompatibilityDimensions = {
@@ -255,6 +259,8 @@ export type ApiViewingRequest = {
 export type ApiDealThread = {
   id: string;
   ownerId: string;
+  listingOwnerId: string;
+  viewerRole: "renter" | "host";
   dealRoomId?: string | null;
   listingId: string;
   listingTitle: string;
@@ -269,10 +275,6 @@ export type ApiDealThread = {
 
 export type CreateDealThreadInput = {
   listingId: string;
-  listingTitle: string;
-  area: string;
-  contactName: string;
-  participantNames: string[];
   dealRoomId?: string;
 };
 
@@ -346,19 +348,27 @@ export function archiveAdminRoommate(token: string, id: string) {
 }
 
 async function apiRequest<T>(path: string, init: RequestInit, token?: string): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...init.headers
-    }
-  });
-
-  if (!response.ok) {
-    const message = await response.text();
-    throw new Error(message || `API request failed: ${response.status}`);
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE_URL}${path}`, {
+      ...init,
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...init.headers
+      }
+    });
+  } catch (error) {
+    throw toProductApiError(error);
   }
 
-  return response.json() as Promise<T>;
+  if (!response.ok) {
+    throw productErrorForStatus(response.status);
+  }
+
+  try {
+    return (await response.json()) as T;
+  } catch {
+    throw productErrorForStatus(502);
+  }
 }

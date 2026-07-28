@@ -1,329 +1,250 @@
-import { BadRequestException, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ConflictException, NotFoundException } from "@nestjs/common";
 import { describe, expect, it } from "vitest";
 
 import { DealThreadsService } from "../src/deal-threads/deal-threads.service";
 
 describe("DealThreadsService", () => {
-  it("creates and reuses a listing deal thread for the current user", async () => {
+  it("derives listing ownership and context instead of trusting the client", async () => {
     const prisma = createPrismaMock();
     const service = new DealThreadsService(prisma as never);
 
-    const first = await service.createOrFindThread("user-1", threadInput());
-    const second = await service.createOrFindThread("user-1", {
-      ...threadInput(),
-      participantNames: ["Mia Chen", "You", "Mia Chen"]
-    });
+    const thread = await service.createOrFindThread("renter-1", { listingId: "listing-1" });
 
-    expect(first.id).toBe(second.id);
-    expect(second.participantNames).toEqual(["Mia Chen", "You"]);
-    expect(second.listingTitle).toBe("El Segundo 海边通勤 2B2B");
-    expect(prisma.dealThread.upsertCalls).toHaveLength(2);
-  });
-
-  it("stores trimmed outgoing DM messages on owned threads", async () => {
-    const prisma = createPrismaMock();
-    const service = new DealThreadsService(prisma as never);
-    const thread = await service.createOrFindThread("user-1", threadInput());
-
-    const updated = await service.sendMessage("user-1", thread.id, {
-      body: "  Hi, can we tour after class today?  "
-    });
-
-    expect(updated.messages).toHaveLength(1);
-    expect(updated.messages[0]).toMatchObject({
-      body: "Hi, can we tour after class today?",
-      senderName: "You",
-      align: "right",
-      status: "sent"
-    });
-  });
-
-  it("rejects empty DM messages and hides threads owned by someone else", async () => {
-    const prisma = createPrismaMock();
-    const service = new DealThreadsService(prisma as never);
-    const thread = await service.createOrFindThread("user-1", threadInput());
-
-    await expect(service.sendMessage("user-1", thread.id, { body: "   " })).rejects.toBeInstanceOf(BadRequestException);
-    await expect(service.sendMessage("user-2", thread.id, { body: "hello" })).rejects.toBeInstanceOf(NotFoundException);
-  });
-
-  it("creates viewing requests and appends a scheduling message", async () => {
-    const prisma = createPrismaMock();
-    const service = new DealThreadsService(prisma as never);
-    const thread = await service.createOrFindThread("user-1", threadInput());
-
-    const updated = await service.createViewingRequest("user-1", thread.id, {
-      iso: "2026-08-21T12:00:00.000Z",
-      mode: "in-person",
-      participantNames: ["Mia Chen", "You"],
-      timeLabel: "8月21日 周五 12:00"
-    });
-
-    expect(updated.viewingRequests).toHaveLength(1);
-    expect(updated.viewingRequests[0]).toMatchObject({
+    expect(thread).toMatchObject({
+      ownerId: "renter-1",
+      listingOwnerId: "host-1",
       listingId: "listing-1",
-      listingTitle: "El Segundo 海边通勤 2B2B",
-      mode: "in-person",
-      participantNames: ["Mia Chen", "You"],
-      status: "REQUESTED",
-      timeLabel: "8月21日 周五 12:00"
+      listingTitle: "Database listing",
+      area: "LA · Westwood",
+      contactName: "Host Taylor",
+      participantNames: ["Renter Riley"],
+      viewerRole: "renter"
     });
-    expect(updated.messages.at(-1)?.body).toContain("我想预约 8月21日 周五 12:00");
   });
 
-  it("updates an existing active viewing request when the user adjusts time", async () => {
+  it("shows the same thread to renter and host with viewer-relative identity and alignment", async () => {
     const prisma = createPrismaMock();
     const service = new DealThreadsService(prisma as never);
-    const thread = await service.createOrFindThread("user-1", threadInput());
+    const created = await service.createOrFindThread("renter-1", { listingId: "listing-1" });
+    await service.sendMessage("renter-1", created.id, { body: "Hello host" });
+    await service.sendMessage("host-1", created.id, { body: "Hello renter" });
 
-    await service.createViewingRequest("user-1", thread.id, {
+    const [renterThread] = await service.findForUser("renter-1");
+    const [hostThread] = await service.findForUser("host-1");
+
+    expect(renterThread).toMatchObject({ viewerRole: "renter", contactName: "Host Taylor" });
+    expect(renterThread.messages.map((message: any) => message.align)).toEqual(["right", "left"]);
+    expect(hostThread).toMatchObject({ viewerRole: "host", contactName: "Renter Riley" });
+    expect(hostThread.messages.map((message: any) => message.align)).toEqual(["left", "right"]);
+  });
+
+  it("hides a conversation from unrelated users", async () => {
+    const prisma = createPrismaMock();
+    const service = new DealThreadsService(prisma as never);
+    const thread = await service.createOrFindThread("renter-1", { listingId: "listing-1" });
+
+    await expect(service.sendMessage("other-1", thread.id, { body: "hello" })).rejects.toBeInstanceOf(
+      NotFoundException
+    );
+  });
+
+  it("rejects a different deal-room binding on an existing thread", async () => {
+    const prisma = createPrismaMock();
+    const service = new DealThreadsService(prisma as never);
+    await service.createOrFindThread("renter-1", { listingId: "listing-1", dealRoomId: "room-1" });
+
+    await expect(
+      service.createOrFindThread("renter-1", { listingId: "listing-1", dealRoomId: "room-2" })
+    ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it("allows only the renter to create or adjust a viewing request", async () => {
+    const prisma = createPrismaMock();
+    const service = new DealThreadsService(prisma as never);
+    const thread = await service.createOrFindThread("renter-1", { listingId: "listing-1" });
+    const payload = {
       iso: "2026-08-21T12:00:00.000Z",
-      mode: "in-person",
-      participantNames: ["Mia Chen", "You"],
-      timeLabel: "8月21日 周五 12:00"
-    });
-    const updated = await service.createViewingRequest("user-1", thread.id, {
-      iso: "2026-08-22T11:00:00.000Z",
-      mode: "video",
-      participantNames: ["Mia Chen", "You"],
-      timeLabel: "8月22日 周六 11:00"
-    });
+      mode: "in-person" as const,
+      participantNames: ["Renter Riley"],
+      timeLabel: "Aug 21 12:00"
+    };
 
-    expect(updated.viewingRequests).toHaveLength(1);
-    expect(updated.viewingRequests[0]).toMatchObject({
-      mode: "video",
-      timeLabel: "8月22日 周六 11:00"
-    });
-    expect(updated.messages.at(-1)?.body).toContain("我想调整看房到 8月22日 周六 11:00");
+    await expect(service.createViewingRequest("host-1", thread.id, payload)).rejects.toBeInstanceOf(
+      NotFoundException
+    );
+    const updated = await service.createViewingRequest("renter-1", thread.id, payload);
+    expect(updated.viewingRequests).toMatchObject([{ status: "REQUESTED" }]);
+    expect(updated.messages.at(-1)?.body).toContain("Aug 21 12:00");
   });
 
-  it("rejects deal rooms not owned by the current user and empty viewing participants", async () => {
+  it("lets the listing owner confirm and decline valid viewing requests", async () => {
     const prisma = createPrismaMock();
     const service = new DealThreadsService(prisma as never);
+    const thread = await service.createOrFindThread("renter-1", { listingId: "listing-1" });
+    const withRequest = await service.createViewingRequest("renter-1", thread.id, {
+      iso: "2026-08-21T12:00:00.000Z",
+      mode: "video",
+      participantNames: ["Renter Riley"],
+      timeLabel: "Aug 21 12:00"
+    });
+    const requestId = withRequest.viewingRequests[0].id;
 
-    await expect(
-      service.createOrFindThread("user-1", {
-        ...threadInput(),
-        dealRoomId: "deal-room-other"
-      })
-    ).rejects.toBeInstanceOf(NotFoundException);
-
-    const thread = await service.createOrFindThread("user-1", threadInput());
-    await expect(
-      service.createViewingRequest("user-1", thread.id, {
-        iso: "2026-08-21T12:00:00.000Z",
-        mode: "in-person",
-        participantNames: [],
-        timeLabel: "8月21日 周五 12:00"
-      })
-    ).rejects.toBeInstanceOf(BadRequestException);
+    const confirmed = await service.confirmViewingRequest("host-1", thread.id, requestId);
+    expect(confirmed.viewingRequests[0].status).toBe("CONFIRMED");
+    expect(confirmed.messages.at(-1)?.body).toContain("已确认");
+    const declined = await service.declineViewingRequest("host-1", thread.id, requestId);
+    expect(declined.viewingRequests[0].status).toBe("CANCELLED");
+    expect(declined.messages.at(-1)?.body).toContain("已拒绝");
   });
 
-  it("lists user threads with messages and viewing requests newest first", async () => {
+  it("rejects invalid host viewing transitions", async () => {
     const prisma = createPrismaMock();
     const service = new DealThreadsService(prisma as never);
-    const first = await service.createOrFindThread("user-1", threadInput({ listingId: "listing-1" }));
-    const second = await service.createOrFindThread("user-1", threadInput({ listingId: "listing-2", listingTitle: "Westwood 主卧" }));
-    await service.sendMessage("user-1", first.id, { body: "First thread message" });
-    await service.sendMessage("user-1", second.id, { body: "Second thread message" });
+    const thread = await service.createOrFindThread("renter-1", { listingId: "listing-1" });
+    const withRequest = await service.createViewingRequest("renter-1", thread.id, {
+      iso: "2026-08-21T12:00:00.000Z",
+      mode: "video",
+      participantNames: ["Renter Riley"],
+      timeLabel: "Aug 21 12:00"
+    });
+    const requestId = withRequest.viewingRequests[0].id;
 
-    const threads = await service.findForUser("user-1");
-
-    expect(threads.map((thread) => thread.id)).toEqual([second.id, first.id]);
-    expect(threads[0].messages[0].body).toBe("Second thread message");
+    await expect(service.confirmViewingRequest("renter-1", thread.id, requestId)).rejects.toBeInstanceOf(
+      NotFoundException
+    );
+    await service.declineViewingRequest("host-1", thread.id, requestId);
+    await expect(service.confirmViewingRequest("host-1", thread.id, requestId)).rejects.toBeInstanceOf(
+      BadRequestException
+    );
   });
 });
 
-function threadInput(overrides: Partial<ThreadInput> = {}) {
-  return {
-    area: "Los Angeles · El Segundo",
-    contactName: "Alex",
-    listingId: "listing-1",
-    listingTitle: "El Segundo 海边通勤 2B2B",
-    participantNames: ["Mia Chen", "You"],
-    ...overrides
-  };
-}
-
-type ThreadInput = {
-  area: string;
-  contactName: string;
-  dealRoomId?: string;
-  listingId: string;
-  listingTitle: string;
-  participantNames: string[];
-};
-
-type DealThreadRecord = ThreadInput & {
-  id: string;
-  ownerId: string;
-  dealRoomId?: string;
-  createdAt: Date;
-  updatedAt: Date;
-};
-
-type DealMessageRecord = {
-  id: string;
-  threadId: string;
-  senderId: string;
-  senderName: string;
-  body: string;
-  align: string;
-  status: string;
-  createdAt: Date;
-};
-
-type ViewingRequestRecord = {
-  id: string;
-  threadId: string;
-  requesterId: string;
-  listingId: string;
-  listingTitle: string;
-  area: string;
-  iso: Date;
-  mode: string;
-  participantNames: string[];
-  status: string;
-  timeLabel: string;
-  createdAt: Date;
-  updatedAt: Date;
-};
-
 function createPrismaMock() {
-  const state = {
-    threads: [] as DealThreadRecord[],
-    messages: [] as DealMessageRecord[],
-    requests: [] as ViewingRequestRecord[],
-    rooms: [
-      {
-        id: "deal-room-1",
-        ownerId: "user-1",
-        status: "ACTIVE"
-      }
-    ]
-  };
-  let tick = 0;
+  const users = [
+    { id: "renter-1", email: "renter@example.com" },
+    { id: "host-1", email: "host@example.com" },
+    { id: "other-1", email: "other@example.com" }
+  ];
+  const profiles = [
+    { email: "renter@example.com", displayName: "Renter Riley" },
+    { email: "host@example.com", displayName: "Host Taylor" }
+  ];
+  const listings = [
+    {
+      id: "listing-1",
+      ownerId: "host-1",
+      title: "Database listing",
+      area: "LA · Westwood",
+      status: "APPROVED"
+    }
+  ];
+  const rooms = [
+    { id: "room-1", ownerId: "renter-1", status: "ACTIVE" },
+    { id: "room-2", ownerId: "renter-1", status: "ACTIVE" }
+  ];
+  const threads: any[] = [];
+  const messages: any[] = [];
+  const requests: any[] = [];
+  let clock = 0;
+  const now = () => new Date(2026, 0, 1, 0, 0, ++clock);
+  const include = (thread: any) => ({
+    ...thread,
+    messages: messages.filter((item) => item.threadId === thread.id),
+    viewingRequests: requests.filter((item) => item.threadId === thread.id)
+  });
 
-  function now() {
-    tick += 1;
-    return new Date(`2026-07-09T12:00:${tick.toString().padStart(2, "0")}.000Z`);
-  }
-
-  function includeThread(thread: DealThreadRecord) {
-    return {
-      ...thread,
-      messages: state.messages
-        .filter((message) => message.threadId === thread.id)
-        .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime()),
-      viewingRequests: state.requests
-        .filter((request) => request.threadId === thread.id)
-        .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
-    };
-  }
-
-  const mock = {
+  return {
+    user: {
+      findUnique: async ({ where }: any) => users.find((user) => user.id === where.id) ?? null
+    },
+    profile: {
+      findUnique: async ({ where }: any) => profiles.find((profile) => profile.email === where.email) ?? null
+    },
+    listing: {
+      findFirst: async ({ where }: any) =>
+        listings.find((listing) => listing.id === where.id && listing.status === where.status) ?? null
+    },
     dealRoom: {
-      findFirst: async (args: { where: { id: string; ownerId: string; status: string } }) =>
-        state.rooms.find(
-          (room) =>
-            room.id === args.where.id &&
-            room.ownerId === args.where.ownerId &&
-            room.status === args.where.status
-        ) ?? null
+      findFirst: async ({ where }: any) =>
+        rooms.find((room) => room.id === where.id && room.ownerId === where.ownerId && room.status === where.status) ??
+        null
     },
     dealThread: {
-      upsertCalls: [] as unknown[],
-      findFirstCalls: [] as unknown[],
-      findManyCalls: [] as unknown[],
-      upsert: async (args: {
-        where: { ownerId_listingId: { ownerId: string; listingId: string } };
-        create: ThreadInput & { ownerId: string };
-        update: Partial<ThreadInput>;
-      }) => {
-        mock.dealThread.upsertCalls.push(args);
-        const existing = state.threads.find(
+      findUnique: async ({ where }: any) =>
+        threads.find(
           (thread) =>
-            thread.ownerId === args.where.ownerId_listingId.ownerId &&
-            thread.listingId === args.where.ownerId_listingId.listingId
+            thread.ownerId === where.ownerId_listingId.ownerId &&
+            thread.listingId === where.ownerId_listingId.listingId
+        )
+          ? include(
+              threads.find(
+                (thread) =>
+                  thread.ownerId === where.ownerId_listingId.ownerId &&
+                  thread.listingId === where.ownerId_listingId.listingId
+              )
+            )
+          : null,
+      upsert: async ({ where, create, update }: any) => {
+        const existing = threads.find(
+          (thread) =>
+            thread.ownerId === where.ownerId_listingId.ownerId &&
+            thread.listingId === where.ownerId_listingId.listingId
         );
         if (existing) {
-          Object.assign(existing, args.update, { updatedAt: now() });
-          return includeThread(existing);
+          Object.assign(existing, update, { updatedAt: now() });
+          return include(existing);
         }
-
-        const created = {
-          id: `thread-${state.threads.length + 1}`,
-          ...args.create,
-          createdAt: now(),
-          updatedAt: now()
-        };
-        state.threads.push(created);
-        return includeThread(created);
+        const created = { id: `thread-${threads.length + 1}`, ...create, createdAt: now(), updatedAt: now() };
+        threads.push(created);
+        return include(created);
       },
-      findFirst: async (args: { where: { id: string; ownerId: string } }) => {
-        mock.dealThread.findFirstCalls.push(args);
-        const thread = state.threads.find(
-          (record) => record.id === args.where.id && record.ownerId === args.where.ownerId
+      findMany: async ({ where }: any) =>
+        threads
+          .filter((thread) =>
+            where.OR.some((clause: any) =>
+              clause.ownerId ? thread.ownerId === clause.ownerId : thread.listingOwnerId === clause.listingOwnerId
+            )
+          )
+          .map(include),
+      findFirst: async ({ where }: any) => {
+        const thread = threads.find(
+          (item) =>
+            item.id === where.id &&
+            where.OR.some((clause: any) =>
+              clause.ownerId ? item.ownerId === clause.ownerId : item.listingOwnerId === clause.listingOwnerId
+            )
         );
-        return thread ? includeThread(thread) : null;
-      },
-      findMany: async (args: { where: { ownerId: string }; orderBy: { updatedAt: "desc" } }) => {
-        mock.dealThread.findManyCalls.push(args);
-        return state.threads
-          .filter((thread) => thread.ownerId === args.where.ownerId)
-          .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())
-          .map(includeThread);
+        return thread ? include(thread) : null;
       }
     },
     dealMessage: {
-      create: async (args: { data: Omit<DealMessageRecord, "id" | "createdAt"> }) => {
-        const message = {
-          id: `message-${state.messages.length + 1}`,
-          ...args.data,
-          createdAt: now()
-        };
-        state.messages.push(message);
-        const thread = state.threads.find((record) => record.id === args.data.threadId);
-        if (thread) thread.updatedAt = now();
-        return message;
+      create: async ({ data }: any) => {
+        const created = { id: `message-${messages.length + 1}`, ...data, createdAt: now() };
+        messages.push(created);
+        return created;
       }
     },
     viewingRequest: {
-      findFirst: async (args: {
-        where: { threadId: string; status: { in: string[] } };
-        orderBy: { updatedAt: "desc" };
-      }) =>
-        state.requests
-          .filter(
-            (request) =>
-              request.threadId === args.where.threadId && args.where.status.in.includes(request.status)
-          )
-          .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())[0] ?? null,
-      create: async (args: { data: Omit<ViewingRequestRecord, "id" | "createdAt" | "updatedAt"> }) => {
-        const request = {
-          id: `viewing-${state.requests.length + 1}`,
-          ...args.data,
+      findFirst: async ({ where }: any) =>
+        requests.find(
+          (request) => request.threadId === where.threadId && where.status.in.includes(request.status)
+        ) ?? null,
+      findUnique: async ({ where }: any) => requests.find((request) => request.id === where.id) ?? null,
+      create: async ({ data }: any) => {
+        const created = {
+          id: `viewing-${requests.length + 1}`,
+          ...data,
           createdAt: now(),
           updatedAt: now()
         };
-        state.requests.push(request);
-        const thread = state.threads.find((record) => record.id === args.data.threadId);
-        if (thread) thread.updatedAt = now();
-        return request;
+        requests.push(created);
+        return created;
       },
-      update: async (args: {
-        where: { id: string };
-        data: Partial<Omit<ViewingRequestRecord, "id" | "createdAt" | "updatedAt">>;
-      }) => {
-        const request = state.requests.find((record) => record.id === args.where.id);
-        if (!request) throw new Error(`Missing request ${args.where.id}`);
-        Object.assign(request, args.data, { updatedAt: now() });
-        const thread = state.threads.find((record) => record.id === request.threadId);
-        if (thread) thread.updatedAt = now();
+      update: async ({ where, data }: any) => {
+        const request = requests.find((item) => item.id === where.id);
+        Object.assign(request, data, { updatedAt: now() });
         return request;
       }
     }
   };
-
-  return mock;
 }

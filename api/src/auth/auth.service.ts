@@ -10,6 +10,7 @@ type AuthServiceOptions = {
   nodeEnv?: string;
   emailSender?: EmailSender;
   codeRequestCooldownMs?: number;
+  localAdminEmails?: string;
 };
 
 const maxVerificationAttempts = 5;
@@ -20,6 +21,7 @@ export class AuthService {
   private readonly nodeEnv: string;
   private readonly emailSender: EmailSender;
   private readonly codeRequestCooldownMs: number;
+  private readonly localAdminEmails: Set<string>;
 
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
@@ -30,6 +32,12 @@ export class AuthService {
     this.nodeEnv = options.nodeEnv ?? process.env.NODE_ENV ?? "development";
     this.emailSender = options.emailSender ?? createEmailSender({ nodeEnv: this.nodeEnv });
     this.codeRequestCooldownMs = options.codeRequestCooldownMs ?? defaultCodeRequestCooldownMs;
+    this.localAdminEmails = new Set(
+      (options.localAdminEmails ?? process.env.LOCAL_ADMIN_EMAILS ?? "")
+        .split(",")
+        .map(normalizeEmail)
+        .filter(Boolean)
+    );
   }
 
   async requestEmailCode(emailInput: string) {
@@ -112,7 +120,16 @@ export class AuthService {
       throw new UnauthorizedException("Invalid or expired verification code");
     }
 
+    const isLocalAdmin = this.localAdminEmails.has(email);
     const user = await this.prisma.user.upsert({
+      where: { email },
+      update: isLocalAdmin ? { role: "ADMIN" } : {},
+      create: {
+        email,
+        role: isLocalAdmin ? "ADMIN" : "USER"
+      }
+    });
+    await this.prisma.profile.upsert({
       where: { email },
       update: {},
       create: { email }

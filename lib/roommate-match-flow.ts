@@ -15,22 +15,6 @@ export type RoommateConnectionState = {
   roommateIds: RoommateIdCollection;
 };
 
-export type RoommateMatchStorageStateInput = Pick<
-  RoommateConnectionState,
-  "likedByMeIds" | "introSentIds" | "roommateIds"
->;
-
-export function getRoommateMatchStateAfterLike(
-  roommateId: string,
-  state: RoommateMatchStorageStateInput
-) {
-  return {
-    likedByMeIds: Array.from(new Set([...toIds(state.likedByMeIds), roommateId])),
-    introSentIds: toIds(state.introSentIds),
-    roommateMemberIds: toIds(state.roommateIds)
-  };
-}
-
 export function getRoommateConnectionStatus(roommateId: string, state: RoommateConnectionState): RoommateConnectionStatus {
   const likedByMe = hasId(state.likedByMeIds, roommateId);
   const likedMe = hasId(state.likedMeIds, roommateId);
@@ -43,28 +27,6 @@ export function getRoommateConnectionStatus(roommateId: string, state: RoommateC
   return "new";
 }
 
-export function canSendRoommateIntro(roommateId: string, state: RoommateConnectionState) {
-  const status = getRoommateConnectionStatus(roommateId, state);
-  return status === "new" || status === "liked-by-me" || status === "liked-you";
-}
-
-export function canOpenRoommateDm(roommateId: string, state: RoommateConnectionState) {
-  const status = getRoommateConnectionStatus(roommateId, state);
-  return status === "mutual" || status === "roommate";
-}
-
-export function getAccessibleRoommateDmId(roommateId: string | null, state: RoommateConnectionState) {
-  return roommateId && canOpenRoommateDm(roommateId, state) ? roommateId : null;
-}
-
-export function canRequestRoommateGroupTour(roommateId: string, state: RoommateConnectionState) {
-  return getRoommateConnectionStatus(roommateId, state) === "roommate";
-}
-
 function hasId(collection: RoommateIdCollection, id: string) {
   return "has" in collection ? collection.has(id) : collection.includes(id);
-}
-
-function toIds(collection: RoommateIdCollection) {
-  return "has" in collection ? Array.from(collection) : [...collection];
 }

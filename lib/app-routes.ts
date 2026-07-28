@@ -25,8 +25,11 @@ export function routeForSection(section: RoutedAppSection) {
   return sectionRoutes[section];
 }
 
-export function discoverRouteForIntent(options: { groupTour?: boolean } = {}) {
-  return options.groupTour ? "/?groupTour=1" : "/";
+export function discoverRouteForIntent(
+  options: { groupTour?: boolean; dealRoomId?: string | null } = {}
+) {
+  if (!options.groupTour) return "/";
+  return `/?groupTour=1${options.dealRoomId ? `&dealRoomId=${encodeURIComponent(options.dealRoomId)}` : ""}`;
 }
 
 export function listingDetailRoute(listingId: string) {
@@ -37,11 +40,16 @@ export type DmRouteTarget =
   | { kind: "listing"; id: string }
   | { kind: "roommate"; id: string };
 
-export function dmRouteForTarget(target: DmRouteTarget, options: { tour?: boolean } = {}) {
+export function dmRouteForTarget(
+  target: DmRouteTarget,
+  options: { tour?: boolean; dealRoomId?: string | null } = {}
+) {
   const param = target.kind === "listing" ? "listingId" : "roommateId";
   const route = "/messages";
 
-  return `${route}?${param}=${encodeURIComponent(target.id)}${options.tour ? "&tour=1" : ""}`;
+  return `${route}?${param}=${encodeURIComponent(target.id)}${options.tour ? "&tour=1" : ""}${
+    options.dealRoomId ? `&dealRoomId=${encodeURIComponent(options.dealRoomId)}` : ""
+  }`;
 }
 
 export function sectionForPathname(pathname: string): RoutedAppSection {

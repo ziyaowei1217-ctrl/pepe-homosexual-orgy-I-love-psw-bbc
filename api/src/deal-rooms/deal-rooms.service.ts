@@ -1,7 +1,6 @@
 import { Inject, Injectable, NotFoundException } from "@nestjs/common";
 
 import { PrismaService } from "../prisma/prisma.service";
-import { seedListings, seedRoommates } from "../seed-data";
 
 export type RoommateActionValue = "LIKE" | "PASS" | "LATER";
 
@@ -9,6 +8,7 @@ type RecordRoommateActionInput = {
   userId: string;
   roommateProfileId: string;
   action: RoommateActionValue;
+  createDealRoom?: boolean;
 };
 
 type RoommateSnapshot = {
@@ -60,7 +60,7 @@ export class DealRoomsService {
       }
     });
 
-    if (input.action !== "LIKE") {
+    if (input.action !== "LIKE" || !input.createDealRoom) {
       return {
         action,
         dealRoom: null
@@ -173,24 +173,7 @@ export class DealRoomsService {
     const record = await this.prisma.roommateProfile.findUnique({ where: { id } });
     if (record) return this.toRoommateSnapshot(record);
 
-    const seeded = seedRoommates.find((roommate) => roommate.id === id);
-    if (!seeded) throw new NotFoundException("Roommate profile not found");
-
-    const created = await this.prisma.roommateProfile.create({
-      data: {
-        id: seeded.id,
-        name: seeded.name,
-        age: seeded.age,
-        role: seeded.role,
-        image: seeded.image,
-        match: seeded.match,
-        budget: seeded.budget,
-        commute: seeded.commute,
-        tags: seeded.tags
-      }
-    });
-
-    return this.toRoommateSnapshot(created);
+    throw new NotFoundException("Roommate profile not found");
   }
 
   private async buildRecommendedHomes(roommate: RoommateSnapshot): Promise<ListingSnapshot[]> {
@@ -203,10 +186,9 @@ export class DealRoomsService {
       },
       take: 6
     });
-    const listings = records.length > 0 ? records : seedListings;
     const roommateTokens = getTokens(roommate.commute);
 
-    return listings
+    return records
       .map((listing) => {
         const listingTokens = getTokens(`${listing.area} ${listing.commute} ${listing.transit}`);
         const overlap = roommateTokens.filter((token) => listingTokens.includes(token)).length;

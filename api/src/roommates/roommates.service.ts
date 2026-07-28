@@ -28,7 +28,7 @@ export class RoommatesService {
       }
     });
 
-    return records.length > 0 ? records : seedRoommates;
+    return records.map(toPublicRoommate);
   }
 
   async findDeck(query: RoommateDeckQueryDto, userId?: string) {
@@ -87,10 +87,16 @@ export class RoommatesService {
   }
 
   async recordAction(userId: string, roommateProfileId: string, action: RoommateActionDtoValue) {
+    const candidate = await this.prisma.roommateProfile.findUnique({
+      where: { id: roommateProfileId }
+    });
+    if (!candidate) throw new NotFoundException("Roommate profile not found");
+
     const result = await this.dealRooms.recordRoommateAction({
       userId,
       roommateProfileId,
-      action
+      action,
+      createDealRoom: action === "LIKE" && candidate.localReciprocalLike
     });
 
     const snapshot = result.dealRoom?.members?.[0]?.snapshot as { name?: string } | undefined;
@@ -157,4 +163,8 @@ function getRoommateProfileStatusFields(status?: string) {
   }
 
   return {};
+}
+
+function toPublicRoommate({ localReciprocalLike: _localReciprocalLike, ...roommate }: any) {
+  return roommate;
 }

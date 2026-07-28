@@ -41,10 +41,19 @@ describe("app route map", () => {
     expect(dmRouteForTarget({ kind: "listing", id: "westwood" })).toBe("/messages?listingId=westwood");
     expect(dmRouteForTarget({ kind: "roommate", id: "Mia Chen" })).toBe("/messages?roommateId=Mia%20Chen");
     expect(dmRouteForTarget({ kind: "listing", id: "westwood" }, { tour: true })).toBe("/messages?listingId=westwood&tour=1");
+    expect(
+      dmRouteForTarget(
+        { kind: "listing", id: "westwood" },
+        { tour: true, dealRoomId: "room A/B" }
+      )
+    ).toBe("/messages?listingId=westwood&tour=1&dealRoomId=room%20A%2FB");
   });
 
   it("preserves explicit group-tour selection across route navigation", () => {
     expect(discoverRouteForIntent({ groupTour: true })).toBe("/?groupTour=1");
+    expect(discoverRouteForIntent({ groupTour: true, dealRoomId: "room A/B" })).toBe(
+      "/?groupTour=1&dealRoomId=room%20A%2FB"
+    );
   });
 
   it("creates a durable route for a selected listing detail", () => {
