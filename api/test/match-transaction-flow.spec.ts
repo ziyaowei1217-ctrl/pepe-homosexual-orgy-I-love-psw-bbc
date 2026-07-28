@@ -255,6 +255,8 @@ function createPrismaMock() {
       }
     },
     user: {
+      findUnique: async ({ where }: { where: { email: string } }) =>
+        state.users.find((user) => user.email === where.email) ?? null,
       upsert: async ({
         where,
         create
