@@ -16,6 +16,13 @@ describe("product capabilities", () => {
       checkProductCapability("publish-listing", {
         authenticated: true,
         apiOnline: true,
+        profileRole: undefined
+      }).status
+    ).toBe("unavailable");
+    expect(
+      checkProductCapability("publish-listing", {
+        authenticated: true,
+        apiOnline: true,
         profileRole: "renter"
       }).status
     ).toBe("unavailable");

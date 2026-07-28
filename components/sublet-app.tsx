@@ -42,6 +42,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
+import { AuthFlowPanel } from "@/components/auth-flow-panel";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -60,9 +61,7 @@ import {
   getMyProfile,
   getSessionUser,
   apiPost,
-  requestEmailCode,
   updateMyProfile,
-  verifyEmailCode,
   type ApiProfile,
   type ApiDealRoom,
   type ApiListing,
@@ -73,14 +72,21 @@ import {
   type ApiViewingRequest,
   type SessionUser,
   type UpdateProfileInput,
+  type VerifyEmailResponse,
   type CreateViewingRequestInput
 } from "@/lib/api";
-import { getApiPresentationState } from "@/lib/api-status";
 import {
   clearStoredAuthSession,
   readStoredAuthSession,
   writeStoredAuthSession
 } from "@/lib/auth-session";
+import {
+  getPublishGate,
+  isProfileComplete,
+  shouldClearAuthSession,
+  shouldOpenNewUserOnboarding,
+  type OnboardingReason
+} from "@/lib/auth-flow";
 import {
   discoverRouteForIntent,
   dmRouteForTarget,
@@ -140,7 +146,6 @@ import {
   type LocalReminder
 } from "@/lib/user-ui-state";
 import { getUnreadNotificationCount } from "@/lib/notification-center";
-import { buildProfileUpdateInput } from "@/lib/profile-input";
 import {
   getActiveInboxContact,
   getInboxContactKey,
@@ -554,12 +559,6 @@ function getRoommateBudgetValue(roommate: Roommate) {
   return Number(roommate.budget.replace(/[^0-9]/g, "")) || 0;
 }
 
-function getProfileRoleLabel(role: string) {
-  if (role === "lister") return "房东";
-  if (role === "both") return "租客兼房东";
-  return "租客";
-}
-
 function getHostContactName(listing: Listing) {
   void listing;
   return "房东";
@@ -710,6 +709,8 @@ export default function HomePage({
   const [user, setUser] = useState<SessionUser | null>(null);
   const [profile, setProfile] = useState<ApiProfile | null>(null);
   const [authPanelOpen, setAuthPanelOpen] = useState(initialAuthPanelOpen);
+  const [onboardingReason, setOnboardingReason] =
+    useState<OnboardingReason | null>(null);
   const [dealRooms, setDealRooms] = useState<ApiDealRoom[]>([]);
   const [activeDealRoomId, setActiveDealRoomId] = useState<string | null>(null);
   const [groupTourContext, setGroupTourContext] = useState<{
@@ -847,12 +848,20 @@ export default function HomePage({
         if (cancelled) return;
         setUser(currentUser);
         setProfile(currentProfile);
-      } catch {
+      } catch (error) {
         if (cancelled) return;
-        clearStoredAuthSession();
-        setToken(null);
-        setUser(null);
-        setProfile(null);
+        const productError = toProductApiError(error);
+        if (shouldClearAuthSession(productError)) {
+          clearStoredAuthSession();
+          setToken(null);
+          setUser(null);
+          setProfile(null);
+          setToast(productError.message);
+          setAuthPanelOpen(true);
+        } else {
+          setApiError(productError.message);
+          setApiOnline(false);
+        }
       }
     }
 
@@ -861,6 +870,31 @@ export default function HomePage({
       cancelled = true;
     };
   }, [token]);
+
+  useEffect(() => {
+    if (activeSection !== "Publish") return;
+
+    const gate = getPublishGate({
+      authenticated: Boolean(token && user),
+      profile
+    });
+
+    if (gate.status === "needs-auth") {
+      setAuthPanelOpen(true);
+      setOnboardingReason(null);
+      return;
+    }
+
+    if (gate.status === "needs-profile" || gate.status === "needs-role") {
+      setAuthPanelOpen(true);
+      setOnboardingReason("publish-required");
+      return;
+    }
+
+    setOnboardingReason((current) =>
+      current === "publish-required" ? null : current
+    );
+  }, [activeSection, profile, token, user]);
 
   useEffect(() => {
     setMyListings([]);
@@ -1100,7 +1134,7 @@ export default function HomePage({
     if (result.status === "allowed") return true;
     if (result.status === "requires-auth") {
       setAuthPanelOpen(true);
-      router.push("/account");
+      if (capability !== "publish-listing") router.push("/account");
     }
     setToast(result.message);
     return false;
@@ -1579,11 +1613,19 @@ export default function HomePage({
     }
   }
 
-  function handleAuthenticated(accessToken: string, nextUser: SessionUser) {
-    writeStoredAuthSession(accessToken);
-    setToken(accessToken);
-    setUser(nextUser);
+  function handleAuthenticated(response: VerifyEmailResponse) {
+    writeStoredAuthSession(response.accessToken);
+    setToken(response.accessToken);
+    setUser(response.user);
     setAuthPanelOpen(true);
+    setOnboardingReason(
+      shouldOpenNewUserOnboarding({
+        isNewUser: response.isNewUser,
+        profile
+      })
+        ? "new-user"
+        : null
+    );
   }
 
   function handleLogout() {
@@ -1591,23 +1633,29 @@ export default function HomePage({
     setToken(null);
     setUser(null);
     setProfile(null);
+    setOnboardingReason(null);
     setAuthPanelOpen(false);
     setToast("已退出登录");
   }
 
-  async function handleSaveProfile(draft: UpdateProfileInput) {
+  async function handleSaveProfile(
+    draft: UpdateProfileInput
+  ): Promise<ApiProfile | null> {
     if (!token) {
       setToast("请先登录再完善资料");
       setAuthPanelOpen(true);
-      return;
+      return null;
     }
 
     try {
       const updatedProfile = await updateMyProfile(token, draft);
       setProfile(updatedProfile);
+      if (isProfileComplete(updatedProfile)) setOnboardingReason(null);
       setToast("资料已保存");
+      return updatedProfile;
     } catch (error) {
       setToast(toProductApiError(error).message);
+      return null;
     }
   }
 
@@ -1646,14 +1694,16 @@ export default function HomePage({
         onLogout={handleLogout}
       />
       {showAuthStrip ? (
-        <AuthStrip
+        <AuthFlowPanel
           token={token}
           user={user}
           profile={profile}
           apiError={apiError}
+          onboardingReason={onboardingReason}
           isPinnedToPublish={activeSection === "Publish"}
           onAuthenticated={handleAuthenticated}
           onProfileSave={handleSaveProfile}
+          onOnboardingDismiss={() => setOnboardingReason(null)}
           onLogout={handleLogout}
           onClose={() => setAuthPanelOpen(false)}
           onToast={setToast}
@@ -1999,242 +2049,6 @@ function formatReminderTime(timestamp: number) {
     hour: "2-digit",
     minute: "2-digit"
   }).format(new Date(timestamp));
-}
-
-function AuthStrip({
-  token,
-  user,
-  profile,
-  apiError,
-  isPinnedToPublish,
-  onAuthenticated,
-  onProfileSave,
-  onLogout,
-  onClose,
-  onToast
-}: {
-  token: string | null;
-  user: SessionUser | null;
-  profile: ApiProfile | null;
-  apiError: string | null;
-  isPinnedToPublish: boolean;
-  onAuthenticated: (token: string, user: SessionUser) => void;
-  onProfileSave: (profile: UpdateProfileInput) => Promise<void>;
-  onLogout: () => void;
-  onClose: () => void;
-  onToast: (message: string) => void;
-}) {
-  const apiPresentation = getApiPresentationState(apiError);
-  const [email, setEmail] = useState("student@ucla.edu");
-  const [code, setCode] = useState("");
-  const [pending, setPending] = useState(false);
-  const [profileDraft, setProfileDraft] = useState<UpdateProfileInput>({
-    displayName: "",
-    school: "UCLA",
-    city: "LA",
-    role: "renter",
-    instagram: "",
-    wechat: "",
-    bio: ""
-  });
-
-  useEffect(() => {
-    if (!profile) return;
-    setProfileDraft({
-      displayName: profile.displayName ?? "",
-      school: profile.school ?? "UCLA",
-      city: profile.city ?? "LA",
-      role: profile.role,
-      instagram: profile.instagram ?? "",
-      wechat: profile.wechat ?? "",
-      bio: profile.bio ?? ""
-    });
-  }, [profile]);
-
-  async function requestCode() {
-    setPending(true);
-    try {
-      const response = await requestEmailCode(email);
-      if (response.devCode) setCode(response.devCode);
-      onToast(response.devCode ? `开发验证码：${response.devCode}` : "验证码已发送");
-    } catch (error) {
-      onToast(toProductApiError(error).message);
-    } finally {
-      setPending(false);
-    }
-  }
-
-  async function verifyCode() {
-    setPending(true);
-    try {
-      const response = await verifyEmailCode(email, code);
-      onAuthenticated(response.accessToken, response.user);
-      onToast(`已登录：${response.user.email}`);
-    } catch (error) {
-      onToast(toProductApiError(error).message);
-    } finally {
-      setPending(false);
-    }
-  }
-
-  async function saveProfile() {
-    setPending(true);
-    try {
-      await onProfileSave(buildProfileUpdateInput(profileDraft));
-    } finally {
-      setPending(false);
-    }
-  }
-
-  const profileComplete = Boolean(profile?.displayName && profile.school && profile.city);
-
-  return (
-    <section className="border-b border-border bg-background">
-      <div className="app-shell grid gap-4 py-4 lg:grid-cols-[minmax(240px,0.7fr)_minmax(0,1.3fr)] lg:items-start">
-        <div className="editorial-panel min-w-0 p-4">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <span className="editorial-kicker">01 / 账户</span>
-              <div className="text-sm font-black uppercase text-[#006AFF]">
-                {user ? "账户已登录" : "邮箱登录"}
-              </div>
-              <div className="mt-1 text-lg font-black text-primary">
-                {user ? profile?.displayName ?? user.email : "登录 / 注册"}
-              </div>
-            </div>
-            {!isPinnedToPublish ? (
-              <Button variant="ghost" size="icon" className="rounded-full" onClick={onClose} aria-label="关闭账户面板">
-                <X />
-              </Button>
-            ) : null}
-          </div>
-          <div className="mt-2 text-xs font-semibold text-muted-foreground">
-            {token ? "已登录，资料与发布操作会同步到服务端" : `${apiPresentation.label}：${apiPresentation.detail}`}
-          </div>
-          {user ? (
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              <Badge variant={profileComplete ? "trust" : "warning"}>
-                {profileComplete ? "资料已完善" : "请完善资料"}
-              </Badge>
-              <Badge variant="secondary">{getProfileRoleLabel(profile?.role ?? user.role)}</Badge>
-            </div>
-          ) : null}
-        </div>
-        {token && user ? (
-          <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_180px]">
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-              <ProfileInput
-                label="显示名称"
-                value={profileDraft.displayName ?? ""}
-                onChange={(value) => setProfileDraft((current) => ({ ...current, displayName: value }))}
-                placeholder="Maya Chen"
-              />
-              <ProfileInput
-                label="学校"
-                value={profileDraft.school ?? ""}
-                onChange={(value) => setProfileDraft((current) => ({ ...current, school: value }))}
-                placeholder="USC / UCLA"
-              />
-              <ProfileInput
-                label="城市"
-                value={profileDraft.city ?? ""}
-                onChange={(value) => setProfileDraft((current) => ({ ...current, city: value }))}
-                placeholder="LA"
-              />
-              <label className="grid gap-1 text-xs font-black uppercase text-muted-foreground">
-                身份
-                <select
-                  className="h-10 rounded-md border border-input bg-white px-3 text-sm font-bold normal-case text-primary shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  value={profileDraft.role ?? "renter"}
-                  onChange={(event) =>
-                    setProfileDraft((current) => ({
-                      ...current,
-                      role: event.target.value as UpdateProfileInput["role"]
-                    }))
-                  }
-                >
-                  <option value="renter">租客</option>
-                  <option value="lister">房东</option>
-                  <option value="both">租客兼房东</option>
-                </select>
-              </label>
-              <ProfileInput
-                label="Instagram"
-                value={profileDraft.instagram ?? ""}
-                onChange={(value) => setProfileDraft((current) => ({ ...current, instagram: value }))}
-                placeholder="选填"
-              />
-              <ProfileInput
-                label="微信"
-                value={profileDraft.wechat ?? ""}
-                onChange={(value) => setProfileDraft((current) => ({ ...current, wechat: value }))}
-                placeholder="仅自己可见"
-              />
-              <label className="grid gap-1 text-xs font-black uppercase text-muted-foreground md:col-span-2">
-                个人简介
-                <textarea
-                  className="min-h-20 rounded-md border border-input bg-white px-3 py-2 text-sm font-semibold normal-case text-primary shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  value={profileDraft.bio ?? ""}
-                  onChange={(event) => setProfileDraft((current) => ({ ...current, bio: event.target.value }))}
-                  placeholder="简要介绍你的合租或住房需求"
-                />
-              </label>
-            </div>
-            <div className="flex flex-col gap-2">
-              <div className="rounded-md border bg-white p-3 text-xs font-semibold text-muted-foreground">
-                <div className="font-black text-primary">{user.email}</div>
-                <div className="mt-1">微信号只保存在你的私密资料里，不会公开展示。</div>
-              </div>
-              <Button variant="trust" size="sm" onClick={saveProfile} disabled={pending}>
-                保存资料
-              </Button>
-              <Button variant="outline" size="sm" onClick={onLogout}>
-                退出登录
-              </Button>
-            </div>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 gap-2 md:grid-cols-[minmax(220px,1fr)_120px_auto_auto]">
-            <Input
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              placeholder="student@ucla.edu"
-            />
-            <Input
-              value={code}
-              onChange={(event) => setCode(event.target.value)}
-              placeholder="验证码"
-            />
-            <Button variant="outline" size="sm" onClick={requestCode} disabled={pending}>
-              发送验证码
-            </Button>
-            <Button variant="trust" size="sm" onClick={verifyCode} disabled={pending || code.length !== 6}>
-              登录
-            </Button>
-          </div>
-        )}
-      </div>
-    </section>
-  );
-}
-
-function ProfileInput({
-  label,
-  value,
-  onChange,
-  placeholder
-}: {
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-  placeholder: string;
-}) {
-  return (
-    <label className="grid gap-1 text-xs font-black uppercase text-muted-foreground">
-      {label}
-      <Input value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} />
-    </label>
-  );
 }
 
 function RoommatesMarketplaceScreen({
