@@ -16,9 +16,24 @@ export type PublishGateResult =
   | { status: "needs-role"; message: string }
   | { status: "allowed"; message: "" };
 
+export type ProfileLoadStatus = "idle" | "loading" | "loaded" | "error";
+
+export type PublishAccessInput = PublishGateInput & {
+  profileStatus: ProfileLoadStatus;
+};
+
+export type PublishAccessResult =
+  | PublishGateResult
+  | { status: "profile-loading"; message: string }
+  | { status: "profile-error"; message: string };
+
 type NewUserOnboardingInput = {
   isNewUser: boolean;
   profile: Partial<ApiProfile> | null;
+};
+
+export type LatestRequestGuard = {
+  current: number;
 };
 
 type AuthActionLock = {
@@ -64,6 +79,7 @@ export type EmailCodeRequestResult =
 export type OnboardingProfileState = {
   draft: OnboardingProfileInput;
   error: string | null;
+  dirtyFields?: ProfileField[];
 };
 
 type OnboardingProfileChange = {
@@ -76,7 +92,8 @@ type OnboardingProfileChange = {
 
 export type OnboardingProfileAction =
   | OnboardingProfileChange
-  | { type: "set-error"; error: string | null };
+  | { type: "set-error"; error: string | null }
+  | { type: "hydrate-profile"; profile: Partial<ApiProfile> | null };
 
 const profileFields: ProfileField[] = ["displayName", "role", "school", "city"];
 const validRoles = new Set<ApiProfile["role"]>(["renter", "lister", "both"]);
@@ -211,12 +228,45 @@ export function reduceOnboardingProfileState(
     return { ...state, error: action.error };
   }
 
+  if (action.type === "hydrate-profile") {
+    const incoming = getOnboardingProfileDraft(action.profile);
+    const dirtyFields = new Set(state.dirtyFields ?? []);
+
+    return {
+      ...state,
+      draft: {
+        displayName: dirtyFields.has("displayName")
+          ? state.draft.displayName
+          : incoming.displayName,
+        school: dirtyFields.has("school")
+          ? state.draft.school
+          : incoming.school,
+        city: dirtyFields.has("city") ? state.draft.city : incoming.city,
+        role: dirtyFields.has("role") ? state.draft.role : incoming.role
+      }
+    };
+  }
+
   return {
     ...state,
     draft: {
       ...state.draft,
       [action.field]: action.value
-    }
+    },
+    dirtyFields: Array.from(
+      new Set([...(state.dirtyFields ?? []), action.field])
+    )
+  };
+}
+
+export function getOnboardingProfileDraft(
+  profile: Partial<ApiProfile> | null
+): OnboardingProfileInput {
+  return {
+    displayName: profile?.displayName ?? "",
+    school: profile?.school ?? "",
+    city: profile?.city ?? "",
+    role: profile?.role ?? "renter"
   };
 }
 
@@ -248,6 +298,57 @@ export function getPublishGate(input: PublishGateInput): PublishGateResult {
   }
 
   return { status: "allowed", message: "" };
+}
+
+export function getPublishAccess(
+  input: PublishAccessInput
+): PublishAccessResult {
+  if (!input.authenticated) return getPublishGate(input);
+
+  if (input.profileStatus === "error") {
+    return {
+      status: "profile-error",
+      message: "身份资料暂时无法读取，请稍后重试。"
+    };
+  }
+
+  if (input.profileStatus !== "loaded") {
+    return {
+      status: "profile-loading",
+      message: "正在读取身份资料。"
+    };
+  }
+
+  return getPublishGate(input);
+}
+
+export async function runGuardedPublishAction<T>(
+  input: PublishAccessInput,
+  action: () => Promise<T>
+) {
+  const gate = getPublishAccess(input);
+  if (gate.status !== "allowed") return { gate, value: null };
+
+  return { gate, value: await action() };
+}
+
+export function beginLatestRequest(guard: LatestRequestGuard) {
+  guard.current += 1;
+  return guard.current;
+}
+
+export function invalidateLatestRequests(guard: LatestRequestGuard) {
+  guard.current += 1;
+}
+
+export function commitLatestRequest(
+  guard: LatestRequestGuard,
+  requestVersion: number,
+  commit: () => void
+) {
+  if (guard.current !== requestVersion) return false;
+  commit();
+  return true;
 }
 
 export function shouldOpenNewUserOnboarding(input: NewUserOnboardingInput) {

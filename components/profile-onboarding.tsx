@@ -1,9 +1,10 @@
-import { useId, useReducer, type FormEvent } from "react";
+import { useEffect, useId, useReducer, type FormEvent } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { ApiProfile } from "@/lib/api";
 import {
+  getOnboardingProfileDraft,
   getMissingProfileFields,
   reduceOnboardingProfileState,
   type OnboardingReason
@@ -40,14 +41,14 @@ export function ProfileOnboarding({
 }: ProfileOnboardingProps) {
   const fieldId = useId();
   const [formState, dispatch] = useReducer(reduceOnboardingProfileState, {
-    draft: {
-      displayName: profile?.displayName ?? "",
-      school: profile?.school ?? "",
-      city: profile?.city ?? "",
-      role: profile?.role ?? "renter"
-    },
-    error: null
+    draft: getOnboardingProfileDraft(profile),
+    error: null,
+    dirtyFields: []
   });
+
+  useEffect(() => {
+    dispatch({ type: "hydrate-profile", profile });
+  }, [profile]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

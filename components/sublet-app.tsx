@@ -81,11 +81,17 @@ import {
   writeStoredAuthSession
 } from "@/lib/auth-session";
 import {
-  getPublishGate,
+  beginLatestRequest,
+  commitLatestRequest,
+  getPublishAccess,
+  invalidateLatestRequests,
   isProfileComplete,
+  runGuardedPublishAction,
   shouldClearAuthSession,
   shouldOpenNewUserOnboarding,
-  type OnboardingReason
+  type OnboardingReason,
+  type ProfileLoadStatus,
+  type PublishAccessResult
 } from "@/lib/auth-flow";
 import {
   discoverRouteForIntent,
@@ -708,6 +714,9 @@ export default function HomePage({
   const [token, setToken] = useState<string | null>(null);
   const [user, setUser] = useState<SessionUser | null>(null);
   const [profile, setProfile] = useState<ApiProfile | null>(null);
+  const [profileStatus, setProfileStatus] =
+    useState<ProfileLoadStatus>("idle");
+  const profileRequestGuard = useRef(0);
   const [authPanelOpen, setAuthPanelOpen] = useState(initialAuthPanelOpen);
   const [onboardingReason, setOnboardingReason] =
     useState<OnboardingReason | null>(null);
@@ -720,6 +729,11 @@ export default function HomePage({
   const [myListings, setMyListings] = useState<ApiListing[]>([]);
   const [editingListingId, setEditingListingId] = useState<string | null>(null);
   const [isPublishing, setIsPublishing] = useState(false);
+  const publishAccess = getPublishAccess({
+    authenticated: Boolean(token && user),
+    profile,
+    profileStatus
+  });
 
   useEffect(() => {
     const storedSession = readStoredAuthSession();
@@ -837,31 +851,52 @@ export default function HomePage({
   useEffect(() => {
     let cancelled = false;
     setProfile(null);
+    if (!token) {
+      setProfileStatus("idle");
+      return;
+    }
+    const currentToken = token;
 
     async function loadMe() {
-      if (!token) return;
+      const requestVersion = beginLatestRequest(profileRequestGuard);
+      setProfileStatus("loading");
       try {
         const [currentUser, currentProfile] = await Promise.all([
-          getSessionUser(token),
-          getMyProfile(token)
+          getSessionUser(currentToken),
+          getMyProfile(currentToken)
         ]);
         if (cancelled) return;
-        setUser(currentUser);
-        setProfile(currentProfile);
+        commitLatestRequest(
+          profileRequestGuard,
+          requestVersion,
+          () => {
+            setUser(currentUser);
+            setProfile(currentProfile);
+            setProfileStatus("loaded");
+          }
+        );
       } catch (error) {
         if (cancelled) return;
-        const productError = toProductApiError(error);
-        if (shouldClearAuthSession(productError)) {
-          clearStoredAuthSession();
-          setToken(null);
-          setUser(null);
-          setProfile(null);
-          setToast(productError.message);
-          setAuthPanelOpen(true);
-        } else {
-          setApiError(productError.message);
-          setApiOnline(false);
-        }
+        commitLatestRequest(
+          profileRequestGuard,
+          requestVersion,
+          () => {
+            const productError = toProductApiError(error);
+            if (shouldClearAuthSession(productError)) {
+              clearStoredAuthSession();
+              setToken(null);
+              setUser(null);
+              setProfile(null);
+              setProfileStatus("idle");
+              setToast(productError.message);
+              setAuthPanelOpen(true);
+            } else {
+              setProfileStatus("error");
+              setApiError(productError.message);
+              setApiOnline(false);
+            }
+          }
+        );
       }
     }
 
@@ -874,27 +909,27 @@ export default function HomePage({
   useEffect(() => {
     if (activeSection !== "Publish") return;
 
-    const gate = getPublishGate({
-      authenticated: Boolean(token && user),
-      profile
-    });
-
-    if (gate.status === "needs-auth") {
+    if (publishAccess.status === "needs-auth") {
       setAuthPanelOpen(true);
       setOnboardingReason(null);
       return;
     }
 
-    if (gate.status === "needs-profile" || gate.status === "needs-role") {
+    if (
+      publishAccess.status === "needs-profile" ||
+      publishAccess.status === "needs-role"
+    ) {
       setAuthPanelOpen(true);
       setOnboardingReason("publish-required");
       return;
     }
 
-    setOnboardingReason((current) =>
-      current === "publish-required" ? null : current
-    );
-  }, [activeSection, profile, token, user]);
+    if (publishAccess.status === "allowed") {
+      setOnboardingReason((current) =>
+        current === "publish-required" ? null : current
+      );
+    }
+  }, [activeSection, publishAccess.status]);
 
   useEffect(() => {
     setMyListings([]);
@@ -1574,43 +1609,68 @@ export default function HomePage({
   }
 
   async function handleSaveListing(draft: PublishDraft, shouldSubmit: boolean) {
-    if (!requireCapability("publish-listing") || !token) return null;
-    setIsPublishing(true);
+    const attempt = await runGuardedPublishAction(
+      {
+        authenticated: Boolean(token && user),
+        profile,
+        profileStatus
+      },
+      async () => {
+        if (!requireCapability("publish-listing") || !token) return null;
+        setIsPublishing(true);
 
-    try {
-      const result = await executePublishSave(
-        draft,
-        {
-          create: (payload) => apiPost<ApiListing>("/listings", payload, token),
-          update: (id, payload) => apiPatch<ApiListing>(`/listings/${id}`, payload, token),
-          addMedia: (id, media) => apiPost(`/listings/${id}/media`, media, token),
-          submit: (id) => apiPost(`/listings/${id}/submit`, {}, token)
-        },
-        shouldSubmit
-      );
-      let refreshFailed = false;
-      try {
-        const ownedListings = await apiGet<ApiListing[]>("/listings/mine", token);
-        setMyListings(
-          sortOwnerListings(
-            ownedListings.filter((listing): listing is ApiListing & { status: ListingStatus } => Boolean(listing.status))
-          )
-        );
-      } catch {
-        refreshFailed = true;
+        try {
+          const result = await executePublishSave(
+            draft,
+            {
+              create: (payload) => apiPost<ApiListing>("/listings", payload, token),
+              update: (id, payload) => apiPatch<ApiListing>(`/listings/${id}`, payload, token),
+              addMedia: (id, media) => apiPost(`/listings/${id}/media`, media, token),
+              submit: (id) => apiPost(`/listings/${id}/submit`, {}, token)
+            },
+            shouldSubmit
+          );
+          let refreshFailed = false;
+          try {
+            const ownedListings = await apiGet<ApiListing[]>("/listings/mine", token);
+            setMyListings(
+              sortOwnerListings(
+                ownedListings.filter((listing): listing is ApiListing & { status: ListingStatus } => Boolean(listing.status))
+              )
+            );
+          } catch {
+            refreshFailed = true;
+          }
+          setToast(
+            refreshFailed
+              ? `${result.message} 房源列表暂未刷新，草稿编号已保留，可继续重试。`
+              : result.message
+          );
+          return result;
+        } catch (error) {
+          setToast(toProductApiError(error).message);
+          return null;
+        } finally {
+          setIsPublishing(false);
+        }
       }
-      setToast(
-        refreshFailed
-          ? `${result.message} 房源列表暂未刷新，草稿编号已保留，可继续重试。`
-          : result.message
-      );
-      return result;
-    } catch (error) {
-      setToast(toProductApiError(error).message);
+    );
+
+    if (attempt.gate.status !== "allowed") {
+      setAuthPanelOpen(true);
+      if (
+        attempt.gate.status === "needs-profile" ||
+        attempt.gate.status === "needs-role"
+      ) {
+        setOnboardingReason("publish-required");
+      } else if (attempt.gate.status === "needs-auth") {
+        setOnboardingReason(null);
+      }
+      setToast(attempt.gate.message);
       return null;
-    } finally {
-      setIsPublishing(false);
     }
+
+    return attempt.value;
   }
 
   function handleAuthenticated(response: VerifyEmailResponse) {
@@ -1630,9 +1690,11 @@ export default function HomePage({
 
   function handleLogout() {
     clearStoredAuthSession();
+    invalidateLatestRequests(profileRequestGuard);
     setToken(null);
     setUser(null);
     setProfile(null);
+    setProfileStatus("idle");
     setOnboardingReason(null);
     setAuthPanelOpen(false);
     setToast("已退出登录");
@@ -1649,7 +1711,9 @@ export default function HomePage({
 
     try {
       const updatedProfile = await updateMyProfile(token, draft);
+      invalidateLatestRequests(profileRequestGuard);
       setProfile(updatedProfile);
+      setProfileStatus("loaded");
       if (isProfileComplete(updatedProfile)) setOnboardingReason(null);
       setToast("资料已保存");
       return updatedProfile;
@@ -1845,7 +1909,7 @@ export default function HomePage({
           isPublishing={isPublishing}
           listings={myListings}
           user={user}
-          profile={profile}
+          publishAccess={publishAccess}
           editingListingId={editingListingId}
           onEditListing={setEditingListingId}
           onSave={handleSaveListing}
@@ -3801,11 +3865,11 @@ function MessagesScreen({
   );
 }
 
-function PublishScreen({
+export function PublishScreen({
   isPublishing,
   listings,
   user,
-  profile,
+  publishAccess,
   editingListingId,
   onEditListing,
   onSave
@@ -3813,7 +3877,7 @@ function PublishScreen({
   isPublishing: boolean;
   listings: ApiListing[];
   user: SessionUser | null;
-  profile: ApiProfile | null;
+  publishAccess: PublishAccessResult;
   editingListingId: string | null;
   onEditListing: (listingId: string | null) => void;
   onSave: (draft: PublishDraft, shouldSubmit: boolean) => Promise<PublishSaveResult | null>;
@@ -3830,21 +3894,35 @@ function PublishScreen({
         </div>
       </div>
       <div className="col-span-full min-w-0 xl:col-span-8">
-        {!user ? (
+        {publishAccess.status === "needs-auth" ? (
           <Card className="border-dashed shadow-card">
             <CardHeader>
               <CardTitle>请先登录房东账户</CardTitle>
               <CardDescription>使用上方邮箱验证码登录后，系统会继续检查你的房东身份。</CardDescription>
             </CardHeader>
           </Card>
-        ) : !profile ? (
+        ) : publishAccess.status === "profile-loading" ? (
           <Card className="border-dashed shadow-card">
             <CardHeader>
               <CardTitle>正在读取身份资料</CardTitle>
               <CardDescription>资料确认完成后才会开放发布表单。</CardDescription>
             </CardHeader>
           </Card>
-        ) : profile.role !== "lister" && profile.role !== "both" ? (
+        ) : publishAccess.status === "profile-error" ? (
+          <Card className="border-dashed shadow-card">
+            <CardHeader>
+              <CardTitle>身份资料暂时无法读取</CardTitle>
+              <CardDescription>请检查网络后重试，资料确认前不会开放发布表单。</CardDescription>
+            </CardHeader>
+          </Card>
+        ) : publishAccess.status === "needs-profile" ? (
+          <Card className="border-dashed shadow-card">
+            <CardHeader>
+              <CardTitle>请先完善身份资料</CardTitle>
+              <CardDescription>填写显示名称、学校和城市后，系统会继续检查房东身份。</CardDescription>
+            </CardHeader>
+          </Card>
+        ) : publishAccess.status === "needs-role" ? (
           <Card className="border-dashed shadow-card">
             <CardHeader>
               <CardTitle>请先设置房东身份</CardTitle>
