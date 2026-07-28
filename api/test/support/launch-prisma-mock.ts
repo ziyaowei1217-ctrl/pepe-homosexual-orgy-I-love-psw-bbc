@@ -67,6 +67,7 @@ type RoommateRecord = {
   budget: string;
   commute: string;
   tags: string[];
+  localReciprocalLike: boolean;
   createdAt: Date;
 };
 
@@ -599,9 +600,16 @@ export function createLaunchPrismaMock() {
       findMany: async () => state.roommates.length > 0 ? [...state.roommates].sort((a, b) => b.match - a.match) : [],
       findUnique: async ({ where }: { where: { id: string } }) =>
         state.roommates.find((roommate) => roommate.id === where.id) ?? null,
-      create: async ({ data }: { data: Omit<RoommateRecord, "createdAt"> }) => {
+      create: async ({
+        data
+      }: {
+        data: Omit<RoommateRecord, "createdAt" | "localReciprocalLike"> & {
+          localReciprocalLike?: boolean;
+        };
+      }) => {
         const created: RoommateRecord = {
           ...data,
+          localReciprocalLike: data.localReciprocalLike ?? true,
           createdAt: new Date()
         };
         state.roommates.push(created);

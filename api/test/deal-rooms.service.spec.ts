@@ -11,7 +11,8 @@ describe("DealRoomsService", () => {
     const result = await service.recordRoommateAction({
       userId: "user-1",
       roommateProfileId: "roommate-1",
-      action: "LIKE"
+      action: "LIKE",
+      createDealRoom: true
     });
 
     expect(result.action.action).toBe("LIKE");
@@ -32,12 +33,14 @@ describe("DealRoomsService", () => {
     const first = await service.recordRoommateAction({
       userId: "user-1",
       roommateProfileId: "roommate-1",
-      action: "LIKE"
+      action: "LIKE",
+      createDealRoom: true
     });
     const second = await service.recordRoommateAction({
       userId: "user-1",
       roommateProfileId: "roommate-1",
-      action: "LIKE"
+      action: "LIKE",
+      createDealRoom: true
     });
 
     expect(first.dealRoom?.id).toBe(second.dealRoom?.id);
@@ -76,7 +79,8 @@ describe("DealRoomsService", () => {
     const result = await service.recordRoommateAction({
       userId: "user-1",
       roommateProfileId: "roommate-1",
-      action: "LIKE"
+      action: "LIKE",
+      createDealRoom: true
     });
 
     expect(prisma.listing.findManyCalls[0].where).toEqual({ status: "APPROVED" });
@@ -84,7 +88,7 @@ describe("DealRoomsService", () => {
     expect(JSON.stringify(result.dealRoom?.recommendedHomes)).not.toContain("draft-listing");
   });
 
-  it("keeps seed fallback when no approved database listings exist", async () => {
+  it("keeps recommendations empty when no approved database listings exist", async () => {
     const prisma = createPrismaMock({
       listings: [listingRecord({ id: "draft-listing", status: "DRAFT" })]
     });
@@ -93,13 +97,12 @@ describe("DealRoomsService", () => {
     const result = await service.recordRoommateAction({
       userId: "user-1",
       roommateProfileId: "roommate-1",
-      action: "LIKE"
+      action: "LIKE",
+      createDealRoom: true
     });
 
     expect(prisma.listing.findManyCalls[0].where).toEqual({ status: "APPROVED" });
-    expect(result.dealRoom?.recommendedHomes).toEqual(
-      expect.arrayContaining([expect.objectContaining({ id: expect.stringMatching(/^seed-/) })])
-    );
+    expect(result.dealRoom?.recommendedHomes).toEqual([]);
   });
 
   it("creates a tour request for an owned deal room idempotently", async () => {
@@ -109,7 +112,8 @@ describe("DealRoomsService", () => {
     const match = await service.recordRoommateAction({
       userId: "user-1",
       roommateProfileId: "roommate-1",
-      action: "LIKE"
+      action: "LIKE",
+      createDealRoom: true
     });
     const first = await service.requestGroupTour("user-1", match.dealRoom!.id);
     const second = await service.requestGroupTour("user-1", match.dealRoom!.id);
@@ -126,7 +130,8 @@ describe("DealRoomsService", () => {
     const match = await service.recordRoommateAction({
       userId: "user-1",
       roommateProfileId: "roommate-1",
-      action: "LIKE"
+      action: "LIKE",
+      createDealRoom: true
     });
 
     await expect(service.requestGroupTour("user-2", match.dealRoom!.id)).rejects.toBeInstanceOf(NotFoundException);

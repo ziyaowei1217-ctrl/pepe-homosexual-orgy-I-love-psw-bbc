@@ -16,11 +16,27 @@ describe("backend launch readiness HTTP flow", () => {
     process.env.NODE_ENV = "development";
     process.env.JWT_SECRET = "test-secret";
 
+    const prisma = createLaunchPrismaMock();
+    await prisma.roommateProfile.create({
+      data: {
+        id: "seed-roommate-1",
+        name: "Mia Chen",
+        age: 22,
+        role: "Student",
+        image: "https://example.com/mia.jpg",
+        match: 96,
+        budget: "$1,650/month",
+        commute: "Fenway",
+        tags: ["quiet"],
+        localReciprocalLike: true
+      }
+    });
+
     const moduleRef = await Test.createTestingModule({
       imports: [AppModule]
     })
       .overrideProvider(PrismaService)
-      .useValue(createLaunchPrismaMock())
+      .useValue(prisma)
       .compile();
 
     app = moduleRef.createNestApplication();
