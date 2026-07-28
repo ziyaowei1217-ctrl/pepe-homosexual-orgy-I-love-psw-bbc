@@ -4,11 +4,10 @@ import { describe, expect, it, vi } from "vitest";
 import { AuthFlowPanel } from "../components/auth-flow-panel";
 import { ProfileOnboarding } from "../components/profile-onboarding";
 import {
-  acquireAuthActionLock,
-  getEmailCodeRequestTransition,
+  getCodeStepVisibleError,
   getVerificationCodeStatus,
   reduceOnboardingProfileState,
-  releaseAuthActionLock
+  runEmailCodeRequest
 } from "../lib/auth-flow";
 
 describe("progressive email auth UI", () => {
@@ -56,37 +55,152 @@ describe("progressive email auth UI", () => {
 });
 
 describe("auth panel state transitions", () => {
-  it("records the server email, expiry, and resend window after requesting a code", () => {
-    expect(
-      getEmailCodeRequestTransition({
+  it("enters the code step after a successful request", async () => {
+    const request = vi.fn().mockResolvedValue({
+      email: "maya@example.edu",
+      expiresAt: "2026-07-29T01:10:00.000Z"
+    });
+    const pendingStates: boolean[] = [];
+
+    const result = await runEmailCodeRequest(
+      {
+        email: " Maya@Example.edu ",
         currentCode: "",
-        response: {
-          email: "maya@example.edu",
-          expiresAt: "2026-07-29T01:10:00.000Z"
-        },
-        requestedAt: 1_000,
         isDevelopment: false
-      })
-    ).toEqual({
-      sentEmail: "maya@example.edu",
-      expiresAt: "2026-07-29T01:10:00.000Z",
-      resendAvailableAt: 61_000,
-      code: ""
+      },
+      {
+        lock: { current: false },
+        request,
+        now: () => 1_000,
+        onPendingChange: (pending) => pendingStates.push(pending)
+      }
+    );
+
+    expect(request).toHaveBeenCalledWith("maya@example.edu");
+    expect(pendingStates).toEqual([true, false]);
+    expect(result).toEqual({
+      status: "success",
+      transition: {
+        step: "code",
+        sentEmail: "maya@example.edu",
+        expiresAt: "2026-07-29T01:10:00.000Z",
+        resendAvailableAt: 61_000,
+        code: ""
+      },
+      hasDevelopmentCode: false
     });
   });
 
-  it("clears an old verification code after a successful production resend", () => {
-    expect(
-      getEmailCodeRequestTransition({
-        currentCode: "123456",
-        response: {
-          email: "maya@example.edu",
-          expiresAt: "2026-07-29T01:12:00.000Z"
-        },
-        requestedAt: 10_000,
+  it("blocks a repeated request while the first request is pending", async () => {
+    let resolveRequest:
+      | ((response: { email: string; expiresAt: string }) => void)
+      | undefined;
+    const request = vi.fn(
+      () =>
+        new Promise<{ email: string; expiresAt: string }>((resolve) => {
+          resolveRequest = resolve;
+        })
+    );
+    const lock = { current: false };
+    const dependencies = {
+      lock,
+      request,
+      now: () => 1_000,
+      onPendingChange: vi.fn()
+    };
+
+    const firstRequest = runEmailCodeRequest(
+      {
+        email: "maya@example.edu",
+        currentCode: "",
         isDevelopment: false
-      }).code
-    ).toBe("");
+      },
+      dependencies
+    );
+    const repeatedRequest = await runEmailCodeRequest(
+      {
+        email: "maya@example.edu",
+        currentCode: "",
+        isDevelopment: false
+      },
+      dependencies
+    );
+
+    expect(repeatedRequest).toEqual({ status: "blocked" });
+    expect(request).toHaveBeenCalledTimes(1);
+
+    resolveRequest?.({
+      email: "maya@example.edu",
+      expiresAt: "2026-07-29T01:10:00.000Z"
+    });
+    await firstRequest;
+  });
+
+  it("starts a fresh 60-second cooldown at resend success and clears the old code", async () => {
+    let completedAt = 1_000;
+    const request = vi.fn(async () => {
+      completedAt = 10_000;
+      return {
+        email: "maya@example.edu",
+        expiresAt: "2026-07-29T01:12:00.000Z"
+      };
+    });
+
+    const result = await runEmailCodeRequest(
+      {
+        email: "maya@example.edu",
+        currentCode: "123456",
+        isDevelopment: false
+      },
+      {
+        lock: { current: false },
+        request,
+        now: () => completedAt,
+        onPendingChange: vi.fn()
+      }
+    );
+
+    expect(result).toMatchObject({
+      status: "success",
+      transition: {
+        step: "code",
+        resendAvailableAt: 70_000,
+        code: ""
+      }
+    });
+  });
+
+  it("keeps a resend API error visible when the old code is expired", async () => {
+    const result = await runEmailCodeRequest(
+      {
+        email: "maya@example.edu",
+        currentCode: "123456",
+        isDevelopment: false
+      },
+      {
+        lock: { current: false },
+        request: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+        now: () => Date.parse("2026-07-29T01:11:00.000Z"),
+        onPendingChange: vi.fn()
+      }
+    );
+    const verificationStatus = getVerificationCodeStatus(
+      "123456",
+      "2026-07-29T01:10:00.000Z",
+      Date.parse("2026-07-29T01:11:00.000Z")
+    );
+
+    expect(result).toEqual({
+      status: "error",
+      error: "网络连接失败，请检查网络后重试。"
+    });
+    expect(
+      getCodeStepVisibleError({
+        localError: result.status === "error" ? result.error : null,
+        apiError: null,
+        verificationStatus
+      })
+    ).toBe("网络连接失败，请检查网络后重试。");
   });
 
   it("blocks an expired verification code with a Chinese resend prompt", () => {
@@ -102,16 +216,6 @@ describe("auth panel state transitions", () => {
       canSubmit: false,
       error: "验证码已过期，请重新发送。"
     });
-  });
-
-  it("allows only one auth action to acquire the shared pending lock", () => {
-    const lock = { current: false };
-
-    expect(acquireAuthActionLock(lock)).toBe(true);
-    expect(acquireAuthActionLock(lock)).toBe(false);
-
-    releaseAuthActionLock(lock);
-    expect(acquireAuthActionLock(lock)).toBe(true);
   });
 
   it("retains the onboarding draft when saving fails", () => {

@@ -12,13 +12,12 @@ import {
 } from "@/lib/api";
 import {
   acquireAuthActionLock,
-  getEmailCodeRequestTransition,
+  getCodeStepVisibleError,
   getResendSeconds,
   getVerificationCodeStatus,
-  isValidAuthEmail,
-  normalizeAuthEmail,
   normalizeVerificationCode,
   releaseAuthActionLock,
+  runEmailCodeRequest,
   type OnboardingReason
 } from "@/lib/auth-flow";
 import { buildProfileUpdateInput, type OnboardingProfileInput } from "@/lib/profile-input";
@@ -85,41 +84,39 @@ export function AuthFlowPanel({
   }, [step]);
 
   async function sendCode(value: string) {
-    if (!isValidAuthEmail(value)) {
-      setLocalError("请输入有效的邮箱地址。");
+    setLocalError(null);
+    const result = await runEmailCodeRequest(
+      {
+        email: value,
+        currentCode: code,
+        isDevelopment: process.env.NODE_ENV === "development"
+      },
+      {
+        lock: actionLock,
+        request: requestEmailCode,
+        now: () => Date.now(),
+        onPendingChange: (pending) =>
+          setPendingAction(pending ? "request" : null)
+      }
+    );
+
+    if (result.status === "blocked") return;
+    if (result.status === "invalid-email" || result.status === "error") {
+      setLocalError(result.error);
       return;
     }
-    if (!acquireAuthActionLock(actionLock)) return;
 
-    setLocalError(null);
-    setPendingAction("request");
-    try {
-      const requestedAt = Date.now();
-      const response = await requestEmailCode(normalizeAuthEmail(value));
-      const transition = getEmailCodeRequestTransition({
-        currentCode: code,
-        response,
-        requestedAt,
-        isDevelopment: process.env.NODE_ENV === "development"
-      });
-      setSentEmail(transition.sentEmail);
-      setExpiresAt(transition.expiresAt);
-      setResendAvailableAt(transition.resendAvailableAt);
-      setCode(transition.code);
-      setNow(requestedAt);
-
-      if (process.env.NODE_ENV === "development" && response.devCode) {
-        onToast("本地开发验证码已填入");
-      } else {
-        onToast("验证码已发送");
-      }
-      setStep("code");
-    } catch (requestError) {
-      setLocalError(toProductApiError(requestError).message);
-    } finally {
-      setPendingAction(null);
-      releaseAuthActionLock(actionLock);
-    }
+    setStep(result.transition.step);
+    setSentEmail(result.transition.sentEmail);
+    setExpiresAt(result.transition.expiresAt);
+    setResendAvailableAt(result.transition.resendAvailableAt);
+    setCode(result.transition.code);
+    setNow(result.transition.resendAvailableAt - 60_000);
+    onToast(
+      result.hasDevelopmentCode
+        ? "本地开发验证码已填入"
+        : "验证码已发送"
+    );
   }
 
   async function handleEmailSubmit(event: FormEvent<HTMLFormElement>) {
@@ -218,9 +215,11 @@ export function AuthFlowPanel({
   const visibleError = localError ?? apiError;
   const resendSeconds = getResendSeconds(resendAvailableAt, now);
   const verificationStatus = getVerificationCodeStatus(code, expiresAt, now);
-  const codeStepError = verificationStatus.expired
-    ? verificationStatus.error
-    : visibleError;
+  const codeStepError = getCodeStepVisibleError({
+    localError,
+    apiError,
+    verificationStatus
+  });
 
   return (
     <section className="border-b border-border bg-background" aria-labelledby={`${panelId}-title`}>

@@ -28,9 +28,38 @@ type AuthActionLock = {
 type EmailCodeRequestTransitionInput = {
   currentCode: string;
   response: EmailCodeResponse;
-  requestedAt: number;
+  succeededAt: number;
   isDevelopment: boolean;
 };
+
+type EmailCodeRequestControllerInput = {
+  email: string;
+  currentCode: string;
+  isDevelopment: boolean;
+};
+
+type EmailCodeRequestControllerDependencies = {
+  lock: AuthActionLock;
+  request: (email: string) => Promise<EmailCodeResponse>;
+  now: () => number;
+  onPendingChange: (pending: boolean) => void;
+};
+
+export type EmailCodeRequestResult =
+  | { status: "blocked" }
+  | { status: "invalid-email"; error: string }
+  | { status: "error"; error: string }
+  | {
+      status: "success";
+      transition: {
+        step: "code";
+        sentEmail: string;
+        expiresAt: string;
+        resendAvailableAt: number;
+        code: string;
+      };
+      hasDevelopmentCode: boolean;
+    };
 
 export type OnboardingProfileState = {
   draft: OnboardingProfileInput;
@@ -71,18 +100,57 @@ export function getResendSeconds(availableAt: number, now: number) {
 export function getEmailCodeRequestTransition({
   currentCode: _currentCode,
   response,
-  requestedAt,
+  succeededAt,
   isDevelopment
 }: EmailCodeRequestTransitionInput) {
   return {
+    step: "code" as const,
     sentEmail: response.email,
     expiresAt: response.expiresAt,
-    resendAvailableAt: requestedAt + 60_000,
+    resendAvailableAt: succeededAt + 60_000,
     code:
       isDevelopment && response.devCode
         ? normalizeVerificationCode(response.devCode)
         : ""
   };
+}
+
+export async function runEmailCodeRequest(
+  input: EmailCodeRequestControllerInput,
+  dependencies: EmailCodeRequestControllerDependencies
+): Promise<EmailCodeRequestResult> {
+  if (!isValidAuthEmail(input.email)) {
+    return { status: "invalid-email", error: "请输入有效的邮箱地址。" };
+  }
+  if (!acquireAuthActionLock(dependencies.lock)) {
+    return { status: "blocked" };
+  }
+
+  dependencies.onPendingChange(true);
+  try {
+    const response = await dependencies.request(normalizeAuthEmail(input.email));
+    const succeededAt = dependencies.now();
+    return {
+      status: "success",
+      transition: getEmailCodeRequestTransition({
+        currentCode: input.currentCode,
+        response,
+        succeededAt,
+        isDevelopment: input.isDevelopment
+      }),
+      hasDevelopmentCode: Boolean(
+        input.isDevelopment && response.devCode
+      )
+    };
+  } catch (requestError) {
+    return {
+      status: "error",
+      error: toProductApiError(requestError).message
+    };
+  } finally {
+    dependencies.onPendingChange(false);
+    releaseAuthActionLock(dependencies.lock);
+  }
 }
 
 export function getVerificationCodeStatus(
@@ -107,6 +175,22 @@ export function getVerificationCodeStatus(
     canSubmit: error === null,
     error
   };
+}
+
+export function getCodeStepVisibleError({
+  localError,
+  apiError,
+  verificationStatus
+}: {
+  localError: string | null;
+  apiError: string | null;
+  verificationStatus: ReturnType<typeof getVerificationCodeStatus>;
+}) {
+  return (
+    localError ??
+    apiError ??
+    (verificationStatus.expired ? verificationStatus.error : null)
+  );
 }
 
 export function acquireAuthActionLock(lock: AuthActionLock) {
