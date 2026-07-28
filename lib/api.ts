@@ -28,8 +28,43 @@ export type ApiListing = {
   }>;
 };
 
+export type ApiRoommateCompatibilityDimensions = {
+  budget: number;
+  lifestyle: number;
+  school: number;
+  area: number;
+  reliability: number;
+  profile: number;
+};
+
+export type ApiRoommateMatchType = "top-pick" | "strong-fit" | "explore" | "wildcard";
+
+export type ApiRoommateDeckStrategy = "precision" | "balanced" | "discovery";
+
+export type ApiRoommateRecommendation = {
+  action: "like" | "later" | "pass";
+  confidence: "high" | "medium" | "low";
+  headline: string;
+  primarySignals: string[];
+  watchouts: string[];
+  nextQuestions: string[];
+};
+
+export type ApiRoommateRankingSignals = {
+  finalScore: number;
+  compatibilityScore: number;
+  confidenceScore: number;
+  profileQualityScore: number;
+  diversityBoost: number;
+  explorationBoost: number;
+  recommendationPriority: number;
+  percentile: number;
+  strategy: ApiRoommateDeckStrategy;
+};
+
 export type ApiRoommate = {
   id?: string;
+  actionTargetId?: string;
   name: string;
   age: number;
   role: string;
@@ -38,6 +73,57 @@ export type ApiRoommate = {
   budget: string;
   commute: string;
   tags: string[];
+  status?: "active" | "hidden";
+  archivedAt?: string | null;
+  compatibilityScore?: number;
+  ranking?: ApiRoommateRankingSignals;
+  dimensions?: ApiRoommateCompatibilityDimensions;
+  matchType?: ApiRoommateMatchType;
+  recommendation?: ApiRoommateRecommendation;
+  decisionHint?: string;
+  rank?: number;
+  deckBatch?: string;
+  spark?: string;
+  reasons?: string[];
+  tradeoffs?: string[];
+  icebreaker?: string;
+  badges?: string[];
+};
+
+export type ApiRoommateDeckResponse = {
+  items: ApiRoommate[];
+  pageInfo: {
+    cursor: number;
+    nextCursor: number | null;
+    limit: number;
+    returned: number;
+    totalCandidates: number;
+  };
+  discovery: {
+    headline: string;
+    sampleSize: number;
+    topScore: number;
+    filters: {
+      budgetMin: number;
+      budgetMax: number;
+      school: string;
+      schools?: string[];
+      hobby: string;
+      hobbies?: string[];
+      city: string;
+      gender?: string;
+      strategy?: ApiRoommateDeckStrategy;
+    };
+    weights?: Partial<Record<keyof ApiRoommateCompatibilityDimensions, number>>;
+    rankingWeights?: {
+      compatibility: number;
+      confidence: number;
+      profileQuality: number;
+      diversity: number;
+      exploration: number;
+    };
+    tips: string[];
+  };
 };
 
 export type ApiGroup = {
@@ -122,6 +208,21 @@ export type ApiRoommateActionResponse = {
     action: "LIKE" | "PASS" | "LATER";
   };
   dealRoom: ApiDealRoom | null;
+};
+
+export type UpsertAdminRoommateInput = {
+  name: string;
+  age: number;
+  role: string;
+  image: string;
+  match: number;
+  budget: string;
+  commute: string;
+  tags: string[];
+};
+
+export type UpdateAdminRoommateInput = Partial<UpsertAdminRoommateInput> & {
+  status?: "active" | "hidden";
 };
 
 export type ApiDealMessage = {
@@ -226,6 +327,22 @@ export function getMyProfile(token: string) {
 
 export function updateMyProfile(token: string, profile: UpdateProfileInput) {
   return apiPatch<ApiProfile>("/profiles/me", profile, token);
+}
+
+export function getAdminRoommates(token: string) {
+  return apiGet<ApiRoommate[]>("/admin/roommates", token);
+}
+
+export function createAdminRoommate(token: string, roommate: UpsertAdminRoommateInput) {
+  return apiPost<ApiRoommate>("/admin/roommates", roommate, token);
+}
+
+export function updateAdminRoommate(token: string, id: string, roommate: UpdateAdminRoommateInput) {
+  return apiPatch<ApiRoommate>(`/admin/roommates/${encodeURIComponent(id)}`, roommate, token);
+}
+
+export function archiveAdminRoommate(token: string, id: string) {
+  return apiPost<ApiRoommate>(`/admin/roommates/${encodeURIComponent(id)}/archive`, {}, token);
 }
 
 async function apiRequest<T>(path: string, init: RequestInit, token?: string): Promise<T> {

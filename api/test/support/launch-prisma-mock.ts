@@ -67,6 +67,8 @@ type RoommateRecord = {
   budget: string;
   commute: string;
   tags: string[];
+  status?: string;
+  archivedAt?: Date | null;
   createdAt: Date;
 };
 
@@ -596,19 +598,36 @@ export function createLaunchPrismaMock() {
       }
     },
     roommateProfile: {
-      findMany: async () => state.roommates.length > 0 ? [...state.roommates].sort((a, b) => b.match - a.match) : [],
+      findMany: async ({ where }: { where?: { status?: string } } = {}) =>
+        state.roommates.length > 0
+          ? [...state.roommates]
+              .filter((roommate) => !where?.status || (roommate.status ?? "active") === where.status)
+              .sort((a, b) => b.match - a.match)
+          : [],
       findUnique: async ({ where }: { where: { id: string } }) =>
         state.roommates.find((roommate) => roommate.id === where.id) ?? null,
       create: async ({ data }: { data: Omit<RoommateRecord, "createdAt"> }) => {
         const created: RoommateRecord = {
+          status: "active",
+          archivedAt: null,
           ...data,
           createdAt: new Date()
         };
         state.roommates.push(created);
         return created;
+      },
+      update: async ({ where, data }: { where: { id: string }; data: Partial<RoommateRecord> }) => {
+        const existing = state.roommates.find((roommate) => roommate.id === where.id);
+        if (!existing) throw new Error("Roommate profile not found");
+        Object.assign(existing, data);
+        return existing;
       }
     },
     roommateAction: {
+      findMany: async ({ where }: { where: { userId: string }; select?: { roommateProfileId: true } }) =>
+        state.actions
+          .filter((action) => action.userId === where.userId)
+          .map((action) => ({ roommateProfileId: action.roommateProfileId })),
       upsert: async ({
         where,
         create,

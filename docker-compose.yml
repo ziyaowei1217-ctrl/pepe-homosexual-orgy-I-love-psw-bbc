@@ -1,14 +1,97 @@
 services:
+  web:
+    image: node:22-alpine
+    container_name: sublet-pipeline-web
+    restart: unless-stopped
+    working_dir: /app
+    command: sh -lc "corepack enable && pnpm install --frozen-lockfile && pnpm dev --hostname 0.0.0.0"
+    environment:
+      NEXT_PUBLIC_API_BASE_URL: http://localhost:4000/api/v1
+    ports:
+      - "3000:3000"
+    volumes:
+      - .:/app
+      - sublet_pipeline_node_modules:/app/node_modules
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - sublet_pipeline
+
+  api:
+    image: node:22-alpine
+    container_name: sublet-pipeline-api
+    restart: unless-stopped
+    working_dir: /app
+    command: sh -lc "corepack enable && pnpm install --frozen-lockfile && pnpm --dir api prisma generate && pnpm --dir api prisma db push && pnpm --dir api dev"
+    environment:
+      NODE_ENV: development
+      PORT: 4000
+      DATABASE_URL: postgresql://sublet:sublet@db:5432/sublet_pipeline?schema=public
+      JWT_SECRET: dev-only-change-me
+      WEB_ORIGIN: http://localhost:3000
+      EMAIL_CODE_TTL_SECONDS: 600
+      EMAIL_CODE_MAX_ATTEMPTS: 5
+      EMAIL_CODE_RESEND_COOLDOWN_SECONDS: 60
+    ports:
+      - "4000:4000"
+    volumes:
+      - .:/app
+      - sublet_pipeline_node_modules:/app/node_modules
+      - sublet_pipeline_api_dist:/app/api/dist
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:4000/api/v1/health >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    networks:
+      - sublet_pipeline
+
   db:
     image: postgres:16-alpine
+    container_name: sublet-pipeline-db
+    restart: unless-stopped
     environment:
       POSTGRES_USER: sublet
       POSTGRES_PASSWORD: sublet
       POSTGRES_DB: sublet_pipeline
+      PGDATA: /var/lib/postgresql/data/pgdata
     ports:
       - "5432:5432"
     volumes:
       - sublet_pipeline_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sublet -d sublet_pipeline"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    networks:
+      - sublet_pipeline
+
+  adminer:
+    image: adminer:4
+    container_name: sublet-pipeline-adminer
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    networks:
+      - sublet_pipeline
+
+networks:
+  sublet_pipeline:
+    driver: bridge
 
 volumes:
+  sublet_pipeline_node_modules:
+    driver: local
+  sublet_pipeline_api_dist:
+    driver: local
   sublet_pipeline_pg:
+    driver: local
