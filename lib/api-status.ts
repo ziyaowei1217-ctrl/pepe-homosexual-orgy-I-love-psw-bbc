@@ -1,15 +1,19 @@
 export function getApiPresentationState(error: string | null) {
-  if (!error || /failed to fetch|networkerror|load failed/i.test(error)) {
+  if (!error) {
     return {
-      mode: "demo" as const,
-      label: "本地 Demo 模式",
-      detail: "浏览与本地流程可继续使用；登录、发布和云端同步需要 API。"
+      mode: "online" as const,
+      label: "服务已连接",
+      detail: "数据由正式服务提供。"
     };
   }
 
+  const networkFailure = /failed to fetch|networkerror|load failed|网络连接失败/i.test(error);
+
   return {
     mode: "error" as const,
-    label: "API 同步异常",
-    detail: error
+    label: "服务暂时不可用",
+    detail: networkFailure
+      ? "暂时无法连接服务，请检查网络后重试。"
+      : "操作未完成，请稍后重试。"
   };
 }

@@ -62,6 +62,22 @@ export function getRoommateDeckCandidates<T>(rankedRoommates: readonly T[]) {
   return [...rankedRoommates];
 }
 
+export function filterRoommatesByPreference<T extends PreferenceRoommateProfile>(
+  roommates: readonly T[],
+  preference: RoommatePreference
+) {
+  return roommates.filter((roommate) => {
+    const budget = getRoommateBudgetNumber(roommate);
+    const genderMatches = isGenderAligned(roommate.gender, preference.gender);
+    const budgetMatches = getBudgetDistance(budget, preference) === 0;
+    const schoolMatches =
+      preference.schools.length === 0 ||
+      getSchoolMatches(roommate.role, preference.schools).length > 0;
+
+    return genderMatches && budgetMatches && schoolMatches;
+  });
+}
+
 export function buildRoommatePreferenceFit(
   roommate: PreferenceRoommateProfile,
   preference: RoommatePreference
@@ -85,29 +101,29 @@ export function buildRoommatePreferenceFit(
   const gaps: string[] = [];
 
   if (preference.gender === "Open") {
-    reasons.push("Open shared-living preference");
+    reasons.push("不限性别");
   } else if (genderAligned) {
-    reasons.push("Shared-living preference aligned");
+    reasons.push("性别偏好符合");
   } else {
-    gaps.push(roommate.gender ? "Shared-living preference differs" : "Shared-living preference pending");
+    gaps.push(roommate.gender ? "性别偏好不同" : "性别信息待完善");
   }
 
   if (budgetInRange) {
-    reasons.push(`${currency.format(budget)} budget fit`);
+    reasons.push(`预算符合：${currency.format(budget)}`);
   } else {
-    gaps.push("Budget outside range");
+    gaps.push("预算不在范围内");
   }
 
   if (schoolMatches.length > 0) {
-    reasons.push(...schoolMatches.map((school) => `${school} track`));
+    reasons.push(...schoolMatches.map((school) => `同校：${school}`));
   } else if (preference.schools.length > 0) {
-    gaps.push("Different school track");
+    gaps.push("学校偏好不同");
   }
 
   if (sharedHobbies.length > 0) {
-    reasons.push(`${sharedHobbies.length} shared ${sharedHobbies.length === 1 ? "hobby" : "hobbies"}`);
+    reasons.push(`${sharedHobbies.length} 项共同爱好`);
   } else if (preference.hobbies.length > 0) {
-    gaps.push("Hobbies still pending");
+    gaps.push("暂无共同爱好");
   }
 
   return {

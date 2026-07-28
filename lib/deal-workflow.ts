@@ -18,6 +18,9 @@ export type DealThread = {
   listingId: string;
   subject: string;
   participants: string[];
+  participantNames?: string[];
+  dealRoomId?: string | null;
+  viewerRole?: "renter" | "host";
   messages: DealMessage[];
   lastActivityAt: number;
 };
@@ -72,33 +75,38 @@ export function buildInitialDealThread({
   participantNames
 }: BuildInitialDealThreadInput): DealThread {
   const participants = uniqueNames([contactName, ...participantNames]);
-  const neighborhood = getNeighborhood(listing.area);
 
   return {
     id: `listing-${listing.id}-host`,
     listingId: listing.id,
     subject: listing.title,
     participants,
+    participantNames: uniqueNames(participantNames),
+    viewerRole: "renter",
     lastActivityAt: 0,
-    messages: [
-      {
-        id: `${listing.id}-seed-1`,
-        author: contactName,
-        body: `${neighborhood} 这套还在，可先发偏好和看房时间。`,
-        time: "10:24 AM",
-        align: "left",
-        status: "received"
-      },
-      {
-        id: `${listing.id}-seed-2`,
-        author: "You",
-        body: `我这边会和 ${formatNameList(participantNames)} 对齐预算和时间。`,
-        time: "10:27 AM",
-        align: "right",
-        status: "sent"
-      }
-    ]
+    messages: []
   };
+}
+
+export function getExistingRemoteThreadId(
+  threads: Readonly<Record<string, DealThread>>,
+  listingId: string
+) {
+  return threads[listingId]?.id || null;
+}
+
+export function getExistingThreadDealRoomId(
+  threads: Readonly<Record<string, DealThread>>,
+  listingId: string
+) {
+  return threads[listingId]?.dealRoomId ?? null;
+}
+
+export function canReuseDealThreadForViewing(
+  thread: Pick<DealThread, "dealRoomId">,
+  activeDealRoomId: string | null | undefined
+) {
+  return (thread.dealRoomId ?? null) === (activeDealRoomId ?? null);
 }
 
 export function appendDealMessage(thread: DealThread, input: AppendDealMessageInput): DealThread {
@@ -166,14 +174,24 @@ export function createViewingRequest({
 
 export function getDealWorkflowStage(thread: DealThread, requests: ViewingRequest[]) {
   const latest = requests.findLast((request) => request.listingId === thread.listingId);
-  if (latest?.status === "CONFIRMED") return "Tour confirmed";
-  if (latest?.status === "REQUESTED") return "Tour requested";
-  if (thread.messages.length > 2) return "DM active";
-  return "DM ready";
+  if (latest?.status === "CONFIRMED") return "看房已确认";
+  if (latest?.status === "REQUESTED") return "已请求看房";
+  if (thread.messages.length > 0) return "沟通中";
+  return "可以发送消息";
 }
 
 export function getLatestViewingRequest(listingId: string, requests: ViewingRequest[]) {
   return requests.findLast((request) => request.listingId === listingId) ?? null;
+}
+
+export function canHostDecideViewing(
+  thread: Pick<DealThread, "viewerRole">,
+  request: Pick<ViewingRequest, "status">
+) {
+  return (
+    thread.viewerRole === "host" &&
+    (request.status === "REQUESTED" || request.status === "CONFIRMED")
+  );
 }
 
 export function upsertViewingRequest(requests: ViewingRequest[], request: ViewingRequest) {
@@ -191,26 +209,16 @@ function parseIsoDate(iso: string) {
 }
 
 function formatMessageTime(date: Date) {
-  return new Intl.DateTimeFormat("en-US", {
-    hour: "numeric",
+  return new Intl.DateTimeFormat("zh-CN", {
+    hour: "2-digit",
     minute: "2-digit",
+    hour12: false,
     timeZone: "UTC"
   }).format(date);
 }
 
-function formatNameList(names: string[]) {
-  const unique = uniqueNames(names);
-  if (unique.length === 0) return "室友";
-  if (unique.length === 1) return unique[0];
-  return unique.slice(0, 2).join(" 和 ");
-}
-
 function uniqueNames(names: string[]) {
   return Array.from(new Set(names.map((name) => name.trim()).filter(Boolean)));
-}
-
-function getNeighborhood(area: string) {
-  return area.split(/[·-]/).map((part) => part.trim()).filter(Boolean).at(-1) ?? area;
 }
 
 function padTime(value: number) {

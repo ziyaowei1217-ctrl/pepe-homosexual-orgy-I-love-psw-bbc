@@ -58,7 +58,8 @@ model User {
   roommateActions RoommateAction[]
   ownedDealRooms  DealRoom[]
   tourRequests    TourRequest[]
-  dealThreads     DealThread[]
+  renterDealThreads DealThread[]       @relation("RenterDealThreads")
+  ownedListingThreads DealThread[]      @relation("ListingOwnerDealThreads")
   dealMessages    DealMessage[]
   viewingRequests ViewingRequest[]
 }
@@ -119,6 +120,7 @@ model Listing {
   reviewerId      String?
   rejectionReason String?
   media           ListingMedia[]
+  dealThreads     DealThread[]
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
 
@@ -314,10 +316,13 @@ model TourRequest {
 model DealThread {
   id              String           @id @default(cuid())
   ownerId         String
-  owner           User             @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  owner           User             @relation("RenterDealThreads", fields: [ownerId], references: [id], onDelete: Cascade)
+  listingOwnerId  String
+  listingOwner    User             @relation("ListingOwnerDealThreads", fields: [listingOwnerId], references: [id], onDelete: Cascade)
   dealRoomId      String?
   dealRoom        DealRoom?        @relation(fields: [dealRoomId], references: [id], onDelete: SetNull)
   listingId       String
+  listing         Listing          @relation(fields: [listingId], references: [id], onDelete: Cascade)
   listingTitle    String
   area            String
   contactName     String
@@ -329,6 +334,7 @@ model DealThread {
 
   @@unique([ownerId, listingId])
   @@index([ownerId, updatedAt])
+  @@index([listingOwnerId, updatedAt])
   @@index([dealRoomId])
 }
 

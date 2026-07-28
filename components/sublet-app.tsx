@@ -12,7 +12,6 @@ import {
   CheckCircle2,
   ChevronDown,
   Clock3,
-  Coffee,
   DollarSign,
   DoorOpen,
   GraduationCap,
@@ -41,6 +40,7 @@ import {
 import type { LucideIcon } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -56,6 +56,7 @@ import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import {
   apiGet,
+  apiPatch,
   getMyProfile,
   getSessionUser,
   apiPost,
@@ -67,7 +68,6 @@ import {
   type ApiListing,
   type ApiRoommate,
   type ApiRoommateActionResponse,
-  type ApiTrip,
   type ApiTrustQueue,
   type ApiDealThread,
   type ApiViewingRequest,
@@ -101,7 +101,13 @@ import {
   selectDateRange,
   type DateRange
 } from "@/lib/date-range";
-import { filterSavedListings, getListingCardDomId, getVisibleSelectedListing, isSelectedListing } from "@/lib/listing-selection";
+import {
+  filterSavedListings,
+  getListingCardDomId,
+  getRequestedListing,
+  getVisibleSelectedListing,
+  isSelectedListing
+} from "@/lib/listing-selection";
 import {
   buildListingDetail,
   buildListingGallery,
@@ -109,41 +115,42 @@ import {
   getListingFlowStatus
 } from "@/lib/listing-detail";
 import {
-  appendDealMessage,
   buildInitialDealThread,
   buildViewingSlots,
+  canHostDecideViewing,
+  canReuseDealThreadForViewing,
   createViewingRequest,
+  getExistingRemoteThreadId,
+  getExistingThreadDealRoomId,
   getComposerDraftAfterQuickReply,
   getDealWorkflowStage,
   getLatestViewingRequest,
-  upsertViewingRequest,
   type DealThread,
   type ViewingRequest,
   type ViewingSlot
 } from "@/lib/deal-workflow";
 import { getListingStatusMeta, sortOwnerListings, type ListingStatus } from "@/lib/landlord-listings";
 import {
-  addLocalNotification,
-  advanceLocalApplication,
-  applicationStatuses,
-  createLocalApplication,
-  emptyLocalWorkflowState,
-  normalizeLocalWorkflowState,
-  type LocalApplication,
-  type LocalNotification,
-  type LocalWorkflowState
-} from "@/lib/local-workflow";
-import { getUnreadNotificationCount, markNotificationsRead } from "@/lib/notification-center";
+  addLocalReminder,
+  clearLegacyProductStorage,
+  getUserUiStorageKey,
+  markAllNotificationsRead,
+  markNotificationRead,
+  normalizeUserUiState,
+  type LocalReminder
+} from "@/lib/user-ui-state";
+import { getUnreadNotificationCount } from "@/lib/notification-center";
+import { buildProfileUpdateInput } from "@/lib/profile-input";
 import {
   getActiveInboxContact,
   getInboxContactKey,
-  getInboxSelection,
   getNarrowMessagePane,
   mergeInboxContacts,
   type InboxContact
 } from "@/lib/message-inbox";
 import { buildSearchInsight } from "@/lib/search-insights";
 import {
+  filterRoommatesByPreference,
   getRoommateDeckCandidates,
   rankRoommatesByPreference,
   type RankedRoommate,
@@ -151,26 +158,15 @@ import {
   type RoommatePreference,
   type SharedLivingGenderPreference
 } from "@/lib/roommate-preferences";
+import { getRoommateConnectionStatus, type RoommateConnectionState, type RoommateConnectionStatus } from "@/lib/roommate-match-flow";
 import {
-  canOpenRoommateDm,
-  canSendRoommateIntro,
-  getAccessibleRoommateDmId,
-  getRoommateMatchStateAfterLike,
-  getRoommateConnectionStatus,
-  type RoommateConnectionState,
-  type RoommateConnectionStatus
-} from "@/lib/roommate-match-flow";
+  getRoommateStateKey,
+  getThreadParticipantNames,
+  hasCompleteRoommateGenderData,
+  selectSingleDealRoom
+} from "@/lib/roommate-product-data";
 import { classifyRoommateQueue } from "@/lib/roommate-queue";
 import {
-  appendRoommateDmMessage,
-  buildRoommateDmThread,
-  buildStoredRoommateDmThread,
-  getStoredRoommateDmThreads,
-  type RoommateDmThread,
-  type StoredRoommateDmThread
-} from "@/lib/roommate-dm";
-import {
-  filterListingsByPrice,
   formatPriceRangeLabel,
   normalizePriceRange,
   priceFilterBounds
@@ -183,6 +179,25 @@ import {
   type MapSize,
   type MapPoint
 } from "@/lib/listing-map";
+import {
+  buildCatalogPage,
+  canFilterCatalogByDate,
+  type CatalogSort
+} from "@/lib/listing-catalog";
+import { createPreviewListings, isPreviewDataEnabled } from "@/lib/preview-data";
+import {
+  checkProductCapability,
+  type ProductCapability
+} from "@/lib/product-capabilities";
+import { ProductApiError, toProductApiError } from "@/lib/product-errors";
+import {
+  executePublishSave,
+  getPublishStepErrors,
+  mapApiListingToPublishDraft,
+  type PublishDraft,
+  type PublishSaveResult,
+  type PublishStep
+} from "@/lib/publish-listing";
 
 type Listing = {
   id: string;
@@ -198,6 +213,10 @@ type Listing = {
   trust: string;
   tags: string[];
   score: number;
+  availableFrom?: string;
+  availableTo?: string;
+  latitude?: number;
+  longitude?: number;
 };
 
 type Roommate = {
@@ -226,14 +245,8 @@ type SearchFilters = {
   priceMin: number;
   priceMax: number;
   amenity: string;
-};
-
-type PublishDraft = {
-  title: string;
-  area: string;
-  price: number;
-  beds: number;
-  baths: number;
+  sort: CatalogSort;
+  page: number;
 };
 
 type QueueItem = {
@@ -244,131 +257,23 @@ type QueueItem = {
   variant: "trust" | "warning" | "danger" | "success";
 };
 
-const seedListings: Listing[] = [];
-
-const listingImages = [
-  "https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?auto=format&fit=crop&w=1200&q=80",
-  "https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?auto=format&fit=crop&w=1200&q=80",
-  "https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?auto=format&fit=crop&w=1200&q=80",
-  "https://images.unsplash.com/photo-1493809842364-78817add7ffb?auto=format&fit=crop&w=1200&q=80",
-  "https://images.unsplash.com/photo-1484154218962-a197022b5858?auto=format&fit=crop&w=1200&q=80",
-  "https://images.unsplash.com/photo-1512917774080-9991f1c4c750?auto=format&fit=crop&w=1200&q=80",
-  "https://images.unsplash.com/photo-1560185127-6ed189bf02f4?auto=format&fit=crop&w=1200&q=80",
-  "https://images.unsplash.com/photo-1560448075-bb485b067938?auto=format&fit=crop&w=1200&q=80",
-  "https://images.unsplash.com/photo-1560448205-4d9b3e6bb6db?auto=format&fit=crop&w=1200&q=80",
-  "https://images.unsplash.com/photo-1570129477492-45c003edd2be?auto=format&fit=crop&w=1200&q=80"
-];
-
-const listingAreas = [
-  "Los Angeles · Westwood",
-  "Los Angeles · Koreatown",
-  "Los Angeles · Culver City",
-  "Los Angeles · Santa Monica",
-  "Los Angeles · Silver Lake",
-  "Los Angeles · Pasadena",
-  "Los Angeles · DTLA",
-  "Los Angeles · USC North",
-  "Los Angeles · Hollywood",
-  "Los Angeles · Burbank",
-  "Los Angeles · Sawtelle",
-  "Los Angeles · Glendale",
-  "Los Angeles · Mar Vista",
-  "Los Angeles · Echo Park",
-  "Los Angeles · Playa Vista",
-  "Los Angeles · North Hollywood",
-  "Los Angeles · Los Feliz",
-  "Los Angeles · Brentwood",
-  "Los Angeles · Arts District",
-  "Los Angeles · El Segundo"
-];
-
-const listingTitles = [
-  "UCLA 步行圈阳光主卧",
-  "地铁口 2B2B 合租",
-  "实习通勤友好 1B1B",
-  "海边 Studio 转租",
-  "安静次卧短租",
-  "Caltech 附近主卧",
-  "高层 Loft",
-  "3B2B Group 优选",
-  "景观 1B",
-  "影视实习友好次卧",
-  "日系街区主卧",
-  "安全小区 2B1B",
-  "采光 Studio",
-  "湖边合租房",
-  "科技园 1B1B",
-  "地铁旁 2B",
-  "复古公寓主卧",
-  "明亮 1B 转租",
-  "工业风 Loft",
-  "海边通勤 2B2B"
-];
-
-const listingTagSets = [
-  ["独卫", "电梯", "可 8/20 入住"],
-  ["整租", "宠物友好", "Group 推荐"],
-  ["健身房", "门卫", "可短租"],
-  ["近地铁", "洗烘", "视频验房"],
-  ["无烟", "采光好", "房东知情"],
-  ["带家具", "可做饭", "首日保障"]
-];
-
-const trustLabels = [
-  ".edu 已认证 · 房东知情",
-  "三方协议模板 · 视频验房",
-  "企业邮箱认证 · 首日保障",
-  "原租客高分 · 合同存证",
-  "金牌转租人 · 低纠纷记录"
-];
-
-const commuteTargets = [
-  "UCLA",
-  "USC",
-  "Santa Monica",
-  "Culver City",
-  "Caltech",
-  "DTLA",
-  "Burbank Studios",
-  "Silicon Beach",
-  "Hollywood",
-  "LAX"
-];
-
-function createListings(): Listing[] {
-  const generated = Array.from({ length: 100 }, (_, index) => {
-    if (seedListings[index]) return seedListings[index];
-
-    const area = listingAreas[index % listingAreas.length];
-    const neighborhood = area.split(" · ")[1];
-    const title = `${neighborhood} ${listingTitles[index % listingTitles.length]}`;
-    const beds = (index % 4) + 1;
-    const baths = Math.min(3, Math.max(1, beds - (index % 2)));
-    const price = 980 + ((index * 137) % 3100);
-    const originalPrice = price + 180 + ((index * 41) % 420);
-    const commuteMinutes = 8 + ((index * 5) % 28);
-    const transitMinutes = commuteMinutes + 6 + (index % 12);
-    const target = commuteTargets[index % commuteTargets.length];
-
-    return {
-      id: String(index + 1),
-      title,
-      area,
-      image: listingImages[index % listingImages.length],
-      price,
-      originalPrice,
-      beds,
-      baths,
-      commute: `${index % 3 === 0 ? "步行" : index % 3 === 1 ? "轻轨" : "骑行"} ${commuteMinutes} 分钟到 ${target}`,
-      transit: `公共交通 ${transitMinutes} 分钟 · ${neighborhood}`,
-      trust: trustLabels[index % trustLabels.length],
-      tags: listingTagSets[index % listingTagSets.length],
-      score: Number((4.62 + ((index * 7) % 37) / 100).toFixed(2))
-    };
-  });
-
-  return generated;
-}
+const previewDataEnabled = isPreviewDataEnabled();
+const previewListings: Listing[] = previewDataEnabled ? createPreviewListings() : [];
+const emptyListing: Listing = {
+  id: "",
+  title: "",
+  area: "",
+  image: "",
+  price: 0,
+  originalPrice: 0,
+  beds: 0,
+  baths: 0,
+  commute: "",
+  transit: "",
+  trust: "",
+  tags: [],
+  score: 0
+};
 
 const seedRoommates: Roommate[] = [];
 
@@ -464,22 +369,6 @@ const roommateGenders: RoommateGender[] = [
 ];
 
 const roommateGenderOptions: SharedLivingGenderPreference[] = ["Open", "Women", "Men", "Non-binary"];
-const seededLikedMeRoommateNames = new Set(["Mia Chen", "Grace Xu", "Olivia Park", "Ava Zhang"]);
-const roommateMatchStorageKey = "sublet-roommate-match-flow-v1";
-const roommateDmStorageKey = "sublet-roommate-dm-threads-v1";
-const localWorkflowStorageKey = "sublet-pipeline-local-workflow-v1";
-
-type StoredRoommateMatchState = {
-  introSentIds: string[];
-  likedByMeIds: string[];
-  roommateMemberIds: string[];
-};
-
-const emptyStoredRoommateMatchState: StoredRoommateMatchState = {
-  introSentIds: [],
-  likedByMeIds: [],
-  roommateMemberIds: []
-};
 
 const roommateGenderLabels: Record<SharedLivingGenderPreference, string> = {
   Open: "不限",
@@ -533,6 +422,7 @@ function createRoommates(): Roommate[] {
     const budget = 1150 + ((index * 73) % 950);
 
     return {
+      id: `preview-roommate-${index + 1}`,
       name: roommateNames[index % roommateNames.length],
       age: 20 + (index % 9),
       role: roommateRoles[index % roommateRoles.length],
@@ -547,16 +437,16 @@ function createRoommates(): Roommate[] {
   });
 }
 
-const listings = createListings();
-const roommates = createRoommates();
+const listings = previewListings;
+const roommates = previewDataEnabled ? createRoommates() : [];
 
 const navItems: Array<{ label: string; section: AppSection }> = [
-  { label: "Stay", section: "Discover" },
-  { label: "Roommates", section: "Roommates" },
-  { label: "Messages", section: "Messages" },
-  { label: "Trips", section: "Trips" },
-  { label: "Publish", section: "Publish" },
-  { label: "Trust", section: "Trust" }
+  { label: "找房", section: "Discover" },
+  { label: "找室友", section: "Roommates" },
+  { label: "消息", section: "Messages" },
+  { label: "看房", section: "Trips" },
+  { label: "发布", section: "Publish" },
+  { label: "信任", section: "Trust" }
 ];
 
 const navIcons: Record<AppSection, LucideIcon> = {
@@ -570,6 +460,7 @@ const navIcons: Record<AppSection, LucideIcon> = {
   Trust: ShieldCheck
 };
 const amenities = [
+  { label: "全部", icon: SlidersHorizontal },
   { label: "Wi-Fi", icon: Wifi },
   { label: "独卫", icon: Bath },
   { label: "宠物", icon: PawPrint },
@@ -577,12 +468,14 @@ const amenities = [
 ];
 
 const defaultSearchFilters: SearchFilters = {
-  query: "Los Angeles",
-  checkIn: "2026-08-20",
-  checkOut: "2026-11-30",
+  query: "",
+  checkIn: "",
+  checkOut: "",
   priceMin: 0,
   priceMax: 4200,
-  amenity: "Wi-Fi"
+  amenity: "全部",
+  sort: "recommended",
+  page: 1
 };
 
 const pricePresets = [
@@ -611,11 +504,13 @@ function normalizeListing(listing: ApiListing): Listing {
     transit: listing.transit,
     trust: listing.trust,
     tags: listing.tags,
-    score: listing.score
+    score: listing.score,
+    availableFrom: listing.availableFrom,
+    availableTo: listing.availableTo
   };
 }
 
-function normalizeRoommate(roommate: ApiRoommate, index = 0): Roommate {
+function normalizeRoommate(roommate: ApiRoommate): Roommate {
   return {
     id: roommate.id,
     name: roommate.name,
@@ -625,7 +520,6 @@ function normalizeRoommate(roommate: ApiRoommate, index = 0): Roommate {
     match: roommate.match,
     budget: roommate.budget,
     commute: roommate.commute,
-    gender: roommateGenders[index % roommateGenders.length],
     school: getRoommateSchool(roommate.role),
     tags: roommate.tags
   };
@@ -638,7 +532,7 @@ function getRoommatesFromDealRooms(dealRooms: ApiDealRoom[]): Roommate[] {
   return members.flatMap((member) => {
     if (!member.snapshot) return [];
     const roommate = normalizeRoommate(member.snapshot);
-    const key = roommate.id ?? roommate.name;
+    const key = getRoommateKey(roommate);
     if (seen.has(key)) return [];
     seen.add(key);
 
@@ -646,150 +540,62 @@ function getRoommatesFromDealRooms(dealRooms: ApiDealRoom[]): Roommate[] {
   });
 }
 
+function getDealRoomLabel(dealRoom: ApiDealRoom) {
+  const memberName = dealRoom.members?.find((member) => member.snapshot)?.snapshot?.name;
+  return memberName ? `与 ${memberName} 的小组` : `小组 ${dealRoom.id.slice(-6)}`;
+}
+
 function getRoommateKey(roommate: Roommate) {
-  return roommate.name;
+  return getRoommateStateKey(roommate);
 }
 
 function getRoommateBudgetValue(roommate: Roommate) {
   return Number(roommate.budget.replace(/[^0-9]/g, "")) || 0;
 }
 
-function getSeededLikedMeRoommateIds(roommateProfiles: Roommate[]) {
-  return new Set(
-    roommateProfiles
-      .filter((roommate) => seededLikedMeRoommateNames.has(roommate.name))
-      .map(getRoommateKey)
-  );
-}
-
-function normalizeStoredRoommateIds(value: unknown) {
-  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
-}
-
-function readStoredRoommateMatchState(): StoredRoommateMatchState {
-  if (typeof window === "undefined" || typeof window.localStorage === "undefined") return emptyStoredRoommateMatchState;
-
-  try {
-    const stored = window.localStorage.getItem(roommateMatchStorageKey);
-    if (!stored) return emptyStoredRoommateMatchState;
-    const parsed = JSON.parse(stored) as Partial<StoredRoommateMatchState>;
-
-    return {
-      introSentIds: normalizeStoredRoommateIds(parsed.introSentIds),
-      likedByMeIds: normalizeStoredRoommateIds(parsed.likedByMeIds),
-      roommateMemberIds: normalizeStoredRoommateIds(parsed.roommateMemberIds)
-    };
-  } catch {
-    return emptyStoredRoommateMatchState;
-  }
-}
-
-function writeStoredRoommateMatchState(state: StoredRoommateMatchState) {
-  if (typeof window === "undefined" || typeof window.localStorage === "undefined") return;
-
-  try {
-    window.localStorage.setItem(roommateMatchStorageKey, JSON.stringify(state));
-  } catch {
-    // Storage can be unavailable in embedded browsers or private sessions.
-  }
-}
-
-function readStoredRoommateDmThreads() {
-  if (typeof window === "undefined" || typeof window.localStorage === "undefined") return {};
-
-  try {
-    const stored = window.localStorage.getItem(roommateDmStorageKey);
-    if (!stored) return {};
-    const parsed = JSON.parse(stored);
-
-    return getStoredRoommateDmThreads(parsed);
-  } catch {
-    return {};
-  }
-}
-
-function writeStoredRoommateDmThreads(threads: Record<string, StoredRoommateDmThread>) {
-  if (typeof window === "undefined" || typeof window.localStorage === "undefined") return;
-
-  try {
-    window.localStorage.setItem(roommateDmStorageKey, JSON.stringify(Object.values(threads)));
-  } catch {
-    // Storage can be unavailable in embedded browsers or private sessions.
-  }
-}
-
-function readStoredLocalWorkflow() {
-  if (typeof window === "undefined" || typeof window.localStorage === "undefined") return emptyLocalWorkflowState;
-  try {
-    const stored = window.localStorage.getItem(localWorkflowStorageKey);
-    return normalizeLocalWorkflowState(stored ? JSON.parse(stored) : null);
-  } catch {
-    return emptyLocalWorkflowState;
-  }
-}
-
-function writeStoredLocalWorkflow(state: LocalWorkflowState) {
-  if (typeof window === "undefined" || typeof window.localStorage === "undefined") return;
-  try {
-    window.localStorage.setItem(localWorkflowStorageKey, JSON.stringify(state));
-  } catch {
-    // Embedded and private browser sessions may deny storage.
-  }
-}
-
-function haveSameRoommateKeys(left: Roommate[], right: Roommate[]) {
-  if (left.length !== right.length) return false;
-  return left.every((roommate, index) => getRoommateKey(roommate) === getRoommateKey(right[index]));
-}
-
-function matchesRoommatePreference(roommate: Roommate, preference: RoommatePreference) {
-  const budget = getRoommateBudgetValue(roommate);
-  const budgetFits = budget >= preference.budgetMin && budget <= preference.budgetMax;
-  const genderFits =
-    preference.gender === "Open" ||
-    (preference.gender === "Women" && roommate.gender === "Woman") ||
-    (preference.gender === "Men" && roommate.gender === "Man") ||
-    (preference.gender === "Non-binary" && roommate.gender === "Non-binary");
-  const schoolFits =
-    preference.schools.length === 0 ||
-    preference.schools.includes(roommate.school ?? "Other") ||
-    preference.schools.some((school) => roommate.role.toLowerCase().includes(school.toLowerCase()));
-  const hobbyFits =
-    preference.hobbies.length === 0 ||
-    preference.hobbies.some((hobby) => roommate.tags.includes(hobby));
-
-  return budgetFits && genderFits && schoolFits && hobbyFits;
+function getProfileRoleLabel(role: string) {
+  if (role === "lister") return "房东";
+  if (role === "both") return "租客兼房东";
+  return "租客";
 }
 
 function getHostContactName(listing: Listing) {
-  if (listing.area.includes("UCLA") || listing.area.includes("Westwood")) return "Maya";
-  if (listing.area.includes("USC")) return "Jordan";
-  if (listing.area.includes("Santa Monica")) return "Sofia";
-  return "Alex";
+  void listing;
+  return "房东";
 }
 
-function getDealParticipantNames(roommate: Roommate, groupMembers: Roommate[]) {
-  const memberNames = groupMembers.map((member) => member.name);
-  return Array.from(new Set([...memberNames, roommate.name, "You"]));
+function getDealParticipantNames(groupMembers: Roommate[]) {
+  return getThreadParticipantNames(groupMembers);
 }
 
-function buildThreadForListing(listing: Listing, roommate: Roommate, groupMembers: Roommate[]) {
+function buildThreadForListing(listing: Listing, groupMembers: Roommate[]) {
   return buildInitialDealThread({
     listing,
     contactName: getHostContactName(listing),
-    participantNames: getDealParticipantNames(roommate, groupMembers)
+    participantNames: getDealParticipantNames(groupMembers)
   });
 }
 
-function buildCreateThreadPayload(listing: Listing, roommate: Roommate, groupMembers: Roommate[], dealRoomId?: string) {
+function buildCreateThreadPayload(listing: Listing, groupMembers: Roommate[], dealRoomId?: string) {
+  void groupMembers;
   return {
     listingId: listing.id,
-    listingTitle: listing.title,
-    area: listing.area,
-    contactName: getHostContactName(listing),
-    participantNames: getDealParticipantNames(roommate, groupMembers),
     ...(dealRoomId ? { dealRoomId } : {})
   };
+}
+
+function assertViewingThreadGroup(
+  thread: Pick<DealThread, "dealRoomId">,
+  requestedDealRoomId: string | null | undefined,
+  enforceMatch = false
+) {
+  if (!enforceMatch || canReuseDealThreadForViewing(thread, requestedDealRoomId)) return;
+
+  throw new ProductApiError({
+    category: "validation",
+    message: "这套房的现有看房会话属于另一个室友小组。请切回原小组后重试；当前暂不支持更换会话小组。",
+    retryable: false
+  });
 }
 
 function apiThreadToDealThread(apiThread: ApiDealThread, fallback: DealThread): DealThread {
@@ -797,7 +603,7 @@ function apiThreadToDealThread(apiThread: ApiDealThread, fallback: DealThread): 
     apiThread.messages.length > 0
       ? apiThread.messages.map((message) => ({
           id: message.id,
-          author: message.senderName,
+          author: message.align === "right" ? "我" : message.senderName,
           body: message.body,
           time: formatApiMessageTime(message.createdAt),
           align: message.align,
@@ -809,7 +615,10 @@ function apiThreadToDealThread(apiThread: ApiDealThread, fallback: DealThread): 
     id: apiThread.id,
     listingId: apiThread.listingId,
     subject: apiThread.listingTitle,
-    participants: Array.from(new Set([apiThread.contactName, ...apiThread.participantNames])),
+    participants: Array.from(new Set(["房东", ...apiThread.participantNames])),
+    participantNames: apiThread.participantNames,
+    dealRoomId: apiThread.dealRoomId,
+    viewerRole: apiThread.viewerRole,
     messages,
     lastActivityAt:
       apiThread.messages.length > 0
@@ -833,9 +642,10 @@ function apiViewingRequestToViewingRequest(request: ApiViewingRequest): ViewingR
 }
 
 function formatApiMessageTime(value: string) {
-  return new Intl.DateTimeFormat("en-US", {
-    hour: "numeric",
-    minute: "2-digit"
+  return new Intl.DateTimeFormat("zh-CN", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false
   }).format(new Date(value));
 }
 
@@ -845,6 +655,7 @@ export default function HomePage({
   initialRoommateDmId,
   initialListingId,
   initialGroupTourSelecting = false,
+  initialGroupTourDealRoomId = null,
   initialAuthPanelOpen = false
 }: {
   initialSection?: AppSection;
@@ -852,6 +663,7 @@ export default function HomePage({
   initialRoommateDmId?: string | null;
   initialListingId?: string | null;
   initialGroupTourSelecting?: boolean;
+  initialGroupTourDealRoomId?: string | null;
   initialAuthPanelOpen?: boolean;
 } = {}) {
   const pathname = usePathname();
@@ -859,87 +671,89 @@ export default function HomePage({
   const startingSection = initialListingId
     ? sectionForRoute(pathname, { listingId: initialListingId })
     : initialSection ?? sectionForRoute(pathname);
-  const initialSelectedListing = listings.find((listing) => listing.id === initialListingId) ?? listings[0];
+  const initialSelectedListing =
+    listings.find((listing) => listing.id === initialListingId) ??
+    listings[0] ??
+    emptyListing;
   const [allListings, setAllListings] = useState(listings);
   const [selectedListing, setSelectedListing] = useState(initialSelectedListing);
   const [apiRoommates, setApiRoommates] = useState<Roommate[]>(roommates);
-  const [apiTrips, setApiTrips] = useState<ApiTrip[]>([]);
   const [apiTrustQueues, setApiTrustQueues] = useState<ApiTrustQueue[]>([]);
-  const [roommateIndex, setRoommateIndex] = useState(0);
   const [activeSection, setActiveSection] = useState<AppSection>(startingSection);
   const [viewMode, setViewMode] = useState<ViewMode>("map");
   const [savedOnly, setSavedOnly] = useState(false);
   const [groupTourSelecting, setGroupTourSelecting] = useState(initialGroupTourSelecting);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [filters, setFilters] = useState<SearchFilters>(defaultSearchFilters);
-  const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set(["1"]));
+  const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set());
   const [contactedListingIds, setContactedListingIds] = useState<Set<string>>(
     () => new Set(initialMessageListingId ? [initialMessageListingId] : [])
   );
   const [tourRequestedListingIds, setTourRequestedListingIds] = useState<Set<string>>(new Set());
   const [dealThreads, setDealThreads] = useState<Record<string, DealThread>>({});
   const [viewingRequests, setViewingRequests] = useState<ViewingRequest[]>([]);
-  const [applications, setApplications] = useState<LocalApplication[]>([]);
-  const [notifications, setNotifications] = useState<LocalNotification[]>([]);
-  const [localWorkflowHydrated, setLocalWorkflowHydrated] = useState(false);
+  const [notifications, setNotifications] = useState<LocalReminder[]>([]);
+  const [userUiHydratedFor, setUserUiHydratedFor] = useState<string | null>(null);
   const [activeMessageListingId, setActiveMessageListingId] = useState<string | null>(initialMessageListingId ?? null);
-  const [appliedListingId, setAppliedListingId] = useState<string | null>(null);
   const [groupMembers, setGroupMembers] = useState<Roommate[]>([]);
-  const [activeRoommateDmId, setActiveRoommateDmId] = useState<string | null>(initialRoommateDmId ?? null);
-  const [roommateDmThreads, setRoommateDmThreads] = useState<Record<string, StoredRoommateDmThread>>({});
-  const [roommateDmStorageHydrated, setRoommateDmStorageHydrated] = useState(false);
   const [likedRoommateIds, setLikedRoommateIds] = useState<Set<string>>(new Set());
-  const [likedMeRoommateIds, setLikedMeRoommateIds] = useState<Set<string>>(
-    () => getSeededLikedMeRoommateIds(roommates)
-  );
-  const [introSentRoommateIds, setIntroSentRoommateIds] = useState<Set<string>>(new Set());
-  const [storedRoommateMemberIds, setStoredRoommateMemberIds] = useState<Set<string>>(new Set());
-  const [roommateStorageHydrated, setRoommateStorageHydrated] = useState(false);
+  const [likedMeRoommateIds, setLikedMeRoommateIds] = useState<Set<string>>(new Set());
+  const [introSentRoommateIds] = useState<Set<string>>(new Set());
   const [skippedCount, setSkippedCount] = useState(0);
   const [tourRequested, setTourRequested] = useState(false);
   const [toast, setToast] = useState("");
   const [apiError, setApiError] = useState<string | null>(null);
+  const [apiOnline, setApiOnline] = useState(false);
+  const [pendingActions, setPendingActions] = useState<Set<string>>(new Set());
   const [token, setToken] = useState<string | null>(null);
   const [user, setUser] = useState<SessionUser | null>(null);
   const [profile, setProfile] = useState<ApiProfile | null>(null);
   const [authPanelOpen, setAuthPanelOpen] = useState(initialAuthPanelOpen);
+  const [dealRooms, setDealRooms] = useState<ApiDealRoom[]>([]);
   const [activeDealRoomId, setActiveDealRoomId] = useState<string | null>(null);
+  const [groupTourContext, setGroupTourContext] = useState<{
+    dealRoomId: string;
+    members: Roommate[];
+  } | null>(null);
   const [myListings, setMyListings] = useState<ApiListing[]>([]);
+  const [editingListingId, setEditingListingId] = useState<string | null>(null);
   const [isPublishing, setIsPublishing] = useState(false);
 
   useEffect(() => {
     const storedSession = readStoredAuthSession();
     if (storedSession) setToken(storedSession.accessToken);
+    clearLegacyProductStorage(window.localStorage);
   }, []);
 
   useEffect(() => {
-    const stored = readStoredLocalWorkflow();
-    setFavoriteIds(new Set(stored.favoriteListingIds));
-    setContactedListingIds(new Set(stored.contactedListingIds));
-    setDealThreads(stored.dealThreads);
-    setViewingRequests(stored.viewingRequests);
-    setApplications(stored.applications);
-    const storedListingId = stored.applications[0]?.listingId ?? stored.viewingRequests[0]?.listingId;
-    if (!initialListingId && storedListingId) {
-      setSelectedListing(listings.find((listing) => listing.id === storedListingId) ?? listings[0]);
-    }
-    setNotifications(stored.notifications);
-    setLocalWorkflowHydrated(true);
-  }, [initialListingId]);
-
-  useEffect(() => {
-    if (initialRoommateDmId) {
-      selectInboxTarget({ kind: "roommate", targetId: initialRoommateDmId });
+    if (!user) {
+      setFavoriteIds(new Set());
+      setNotifications([]);
+      setUserUiHydratedFor(null);
       return;
     }
 
+    setUserUiHydratedFor(null);
+    try {
+      const raw = window.localStorage.getItem(getUserUiStorageKey(user.id));
+      const stored = normalizeUserUiState(raw ? JSON.parse(raw) : null);
+      setFavoriteIds(new Set(stored.favoriteListingIds));
+      setNotifications(stored.notifications);
+    } catch {
+      setFavoriteIds(new Set());
+      setNotifications([]);
+    }
+    setUserUiHydratedFor(user.id);
+  }, [user]);
+
+  useEffect(() => {
     if (initialMessageListingId) {
-      selectInboxTarget({ kind: "listing", targetId: initialMessageListingId });
+      setActiveMessageListingId(initialMessageListingId);
       return;
     }
 
     setActiveMessageListingId(null);
-    setActiveRoommateDmId(null);
+    if (initialRoommateDmId) setToast("室友私信暂未开放。");
   }, [initialMessageListingId, initialRoommateDmId]);
 
   useEffect(() => {
@@ -947,100 +761,81 @@ export default function HomePage({
   }, [initialListingId, pathname]);
 
   useEffect(() => {
-    if (!localWorkflowHydrated) return;
-    writeStoredLocalWorkflow({
-      version: 1,
+    if (!user || userUiHydratedFor !== user.id) return;
+    const state = {
+      version: 2 as const,
       favoriteListingIds: Array.from(favoriteIds),
-      contactedListingIds: Array.from(contactedListingIds),
-      dealThreads,
-      viewingRequests,
-      applications,
       notifications
-    });
-  }, [applications, contactedListingIds, dealThreads, favoriteIds, localWorkflowHydrated, notifications, viewingRequests]);
+    };
+    window.localStorage.setItem(getUserUiStorageKey(user.id), JSON.stringify(state));
+  }, [favoriteIds, notifications, user, userUiHydratedFor]);
 
   useEffect(() => {
-    const storedRoommateState = readStoredRoommateMatchState();
-    setLikedRoommateIds(new Set(storedRoommateState.likedByMeIds));
-    setIntroSentRoommateIds(new Set(storedRoommateState.introSentIds));
-    setStoredRoommateMemberIds(new Set(storedRoommateState.roommateMemberIds));
-    setGroupMembers(roommates.filter((candidate) => storedRoommateState.roommateMemberIds.includes(getRoommateKey(candidate))));
-    setRoommateStorageHydrated(true);
-  }, []);
+    let cancelled = false;
 
-  useEffect(() => {
-    setRoommateDmThreads(readStoredRoommateDmThreads());
-    setRoommateDmStorageHydrated(true);
-  }, []);
-
-  useEffect(() => {
-    if (!roommateDmStorageHydrated) return;
-    writeStoredRoommateDmThreads(roommateDmThreads);
-  }, [roommateDmStorageHydrated, roommateDmThreads]);
-
-  useEffect(() => {
-    if (!roommateStorageHydrated) return;
-
-    writeStoredRoommateMatchState({
-      introSentIds: Array.from(introSentRoommateIds),
-      likedByMeIds: Array.from(likedRoommateIds),
-      roommateMemberIds: groupMembers.map(getRoommateKey)
-    });
-  }, [groupMembers, introSentRoommateIds, likedRoommateIds, roommateStorageHydrated]);
-
-  useEffect(() => {
-    if (!roommateStorageHydrated || storedRoommateMemberIds.size === 0) return;
-
-    const storedMembers = apiRoommates.filter((candidate) => storedRoommateMemberIds.has(getRoommateKey(candidate)));
-    if (storedMembers.length === 0) return;
-
-    setGroupMembers((current) => {
-      const remainingMembers = current.filter((member) => !storedRoommateMemberIds.has(getRoommateKey(member)));
-      const nextMembers = [...remainingMembers, ...storedMembers].slice(-4);
-      return haveSameRoommateKeys(current, nextMembers) ? current : nextMembers;
-    });
-  }, [apiRoommates, roommateStorageHydrated, storedRoommateMemberIds]);
-
-  useEffect(() => {
-    async function loadApiData() {
+    async function loadListings() {
       try {
-        const [apiListings, apiRoommateData, apiTripData, apiQueueData] =
-          await Promise.all([
-            apiGet<ApiListing[]>("/listings"),
-            apiGet<ApiRoommate[]>("/roommates"),
-            apiGet<ApiTrip[]>("/trips"),
-            apiGet<ApiTrustQueue[]>("/trust/queues")
-          ]);
-
-        const normalizedListings = apiListings.map(normalizeListing);
-        const normalizedListingIds = new Set(normalizedListings.map((listing) => listing.id));
-        const hydratedListings =
-          normalizedListings.length >= 100
-            ? normalizedListings
-            : [
-                ...normalizedListings,
-                ...listings
-                  .filter((listing) => !normalizedListingIds.has(listing.id))
-                  .slice(0, 100 - normalizedListings.length)
-              ];
-        const normalizedRoommates = apiRoommateData.map((apiRoommate, index) => normalizeRoommate(apiRoommate, index));
-        setAllListings(hydratedListings);
-        setSelectedListing((current) => hydratedListings.find((listing) => listing.id === current.id) ?? hydratedListings[0] ?? current);
-        setApiRoommates(normalizedRoommates);
-        setLikedMeRoommateIds((current) => new Set([...Array.from(current), ...Array.from(getSeededLikedMeRoommateIds(normalizedRoommates))]));
-        setApiTrips(apiTripData);
-        setApiTrustQueues(apiQueueData);
+        const apiListings = await apiGet<ApiListing[]>("/listings");
+        if (cancelled) return;
+        const nextListings = previewDataEnabled
+          ? previewListings
+          : apiListings.map(normalizeListing);
+        setAllListings(nextListings);
+        setSelectedListing((current) =>
+          getRequestedListing(nextListings, initialListingId, current)
+        );
         setApiError(null);
-        setToast("已从后端 API 加载数据");
+        setApiOnline(true);
+        if (previewDataEnabled) setToast("正在使用开发预览数据。");
       } catch (error) {
-        setApiError(error instanceof Error ? error.message : "后端 API 不可用");
+        if (cancelled) return;
+        const productError = toProductApiError(error);
+        setApiError(productError.message);
+        setApiOnline(false);
+        if (!previewDataEnabled) {
+          setAllListings([]);
+          setSelectedListing(emptyListing);
+        } else {
+          setAllListings(previewListings);
+          setSelectedListing((current) =>
+            getRequestedListing(previewListings, initialListingId, current)
+          );
+          setToast("正在使用开发预览数据；正式服务当前不可用。");
+        }
       }
     }
 
-    void loadApiData();
-  }, []);
+    async function loadRoommates() {
+      try {
+        const apiRoommateData = await apiGet<ApiRoommate[]>("/roommates");
+        if (!cancelled) setApiRoommates(apiRoommateData.map(normalizeRoommate));
+      } catch {
+        if (!cancelled) setApiRoommates([]);
+      }
+    }
+
+    async function loadTrustQueues() {
+      try {
+        const apiQueueData = await apiGet<ApiTrustQueue[]>("/trust/queues");
+        if (!cancelled) setApiTrustQueues(apiQueueData);
+      } catch {
+        if (!cancelled) setApiTrustQueues([]);
+      }
+    }
+
+    void loadListings();
+    void loadRoommates();
+    void loadTrustQueues();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [initialListingId]);
 
   useEffect(() => {
+    let cancelled = false;
+    setProfile(null);
+
     async function loadMe() {
       if (!token) return;
       try {
@@ -1048,9 +843,11 @@ export default function HomePage({
           getSessionUser(token),
           getMyProfile(token)
         ]);
+        if (cancelled) return;
         setUser(currentUser);
         setProfile(currentProfile);
       } catch {
+        if (cancelled) return;
         clearStoredAuthSession();
         setToken(null);
         setUser(null);
@@ -1059,26 +856,85 @@ export default function HomePage({
     }
 
     void loadMe();
+    return () => {
+      cancelled = true;
+    };
   }, [token]);
 
   useEffect(() => {
-    async function loadAuthenticatedWorkspace() {
-      if (!token) {
-        setMyListings([]);
-        setActiveDealRoomId(null);
-        return;
-      }
+    setMyListings([]);
+    setEditingListingId(null);
+    setDealRooms([]);
+    setActiveDealRoomId(null);
+    setGroupTourContext(null);
+    setDealThreads({});
+    setViewingRequests([]);
+    setContactedListingIds(new Set());
+    setTourRequestedListingIds(new Set());
+    setLikedRoommateIds(new Set());
+    setLikedMeRoommateIds(new Set());
+    setGroupMembers([]);
+    setTourRequested(false);
+    if (!token) return;
 
+    let cancelled = false;
+    const currentToken = token;
+
+    async function loadOwnedListings() {
       try {
-        const [ownedListings, dealRooms, apiDealThreads] = await Promise.all([
-          apiGet<ApiListing[]>("/listings/mine", token),
-          apiGet<ApiDealRoom[]>("/deal-rooms/active", token),
-          apiGet<ApiDealThread[]>("/deal-threads", token)
-        ]);
+        const ownedListings = await apiGet<ApiListing[]>("/listings/mine", currentToken);
+        if (cancelled) return;
         const sortedListings = sortOwnerListings(
           ownedListings.filter((listing): listing is ApiListing & { status: ListingStatus } => Boolean(listing.status))
         );
-        const dealRoomMembers = getRoommatesFromDealRooms(dealRooms);
+        setMyListings(sortedListings);
+        setApiOnline(true);
+      } catch (error) {
+        if (!cancelled) setToast(`房东房源加载失败：${toProductApiError(error).message}`);
+      }
+    }
+
+    async function loadDealRooms() {
+      try {
+        const nextDealRooms = await apiGet<ApiDealRoom[]>("/deal-rooms/active", currentToken);
+        if (cancelled) return;
+        const allDealRoomMembers = getRoommatesFromDealRooms(nextDealRooms);
+        const routedDealRoom = initialGroupTourDealRoomId
+          ? nextDealRooms.find((room) => room.id === initialGroupTourDealRoomId) ?? null
+          : null;
+        const activeDealRoom = routedDealRoom ?? selectSingleDealRoom(nextDealRooms);
+        const activeDealRoomMembers = activeDealRoom
+          ? getRoommatesFromDealRooms([activeDealRoom])
+          : [];
+        setDealRooms(nextDealRooms);
+        setActiveDealRoomId(activeDealRoom?.id ?? null);
+        const matchedIds = allDealRoomMembers.map(getRoommateKey);
+        setLikedRoommateIds(new Set(matchedIds));
+        setLikedMeRoommateIds(new Set(matchedIds));
+        setGroupMembers(activeDealRoomMembers.slice(-4));
+        setGroupTourContext(
+          routedDealRoom
+            ? {
+                dealRoomId: routedDealRoom.id,
+                members: activeDealRoomMembers.slice(-4)
+              }
+            : null
+        );
+        if (initialGroupTourDealRoomId && !routedDealRoom) {
+          setGroupTourSelecting(false);
+          setToast("所选室友小组已失效，请返回喜欢列表重新选择。");
+        }
+        setTourRequested(activeDealRoom?.tourRequest?.status === "REQUESTED");
+        setApiOnline(true);
+      } catch (error) {
+        if (!cancelled) setToast(`室友小组加载失败：${toProductApiError(error).message}`);
+      }
+    }
+
+    async function loadDealThreads() {
+      try {
+        const apiDealThreads = await apiGet<ApiDealThread[]>("/deal-threads", currentToken);
+        if (cancelled) return;
         const nextThreads = Object.fromEntries(
           apiDealThreads.map((thread) => {
             const fallbackThread = buildInitialDealThread({
@@ -1097,75 +953,47 @@ export default function HomePage({
         const nextViewingRequests = apiDealThreads.flatMap((thread) =>
           thread.viewingRequests.map(apiViewingRequestToViewingRequest)
         );
-
-        setMyListings(sortedListings);
-        setActiveDealRoomId(dealRooms[0]?.id ?? null);
-        setLikedRoommateIds((current) => new Set([...Array.from(current), ...dealRoomMembers.map(getRoommateKey)]));
-        if (dealRoomMembers.length > 0) {
-          setGroupMembers(dealRoomMembers.slice(-4));
-          setStoredRoommateMemberIds((current) => new Set([...Array.from(current), ...dealRoomMembers.map(getRoommateKey)]));
-        }
-        setTourRequested(dealRooms.some((room) => room.tourRequest?.status === "REQUESTED"));
         setDealThreads(nextThreads);
         setViewingRequests(nextViewingRequests);
         setContactedListingIds(new Set(apiDealThreads.map((thread) => thread.listingId)));
         setTourRequestedListingIds(new Set(nextViewingRequests.map((request) => request.listingId)));
+        setApiOnline(true);
       } catch (error) {
-        setToast(error instanceof Error ? error.message : "登录工作台加载失败");
+        if (!cancelled) setToast(`消息与看房记录加载失败：${toProductApiError(error).message}`);
       }
     }
 
-    void loadAuthenticatedWorkspace();
-  }, [token]);
+    void loadOwnedListings();
+    void loadDealRooms();
+    void loadDealThreads();
+    return () => {
+      cancelled = true;
+    };
+  }, [initialGroupTourDealRoomId, token]);
 
-  const roommate = apiRoommates[roommateIndex] ?? apiRoommates[0] ?? roommates[0];
-  const roommateMemberIds = useMemo(() => new Set(groupMembers.map(getRoommateKey)), [groupMembers]);
-  const roommateConnectionState = useMemo<RoommateConnectionState>(
-    () => ({
-      likedByMeIds: likedRoommateIds,
-      likedMeIds: likedMeRoommateIds,
-      introSentIds: introSentRoommateIds,
-      roommateIds: roommateMemberIds
-    }),
-    [introSentRoommateIds, likedMeRoommateIds, likedRoommateIds, roommateMemberIds]
-  );
   const canRequestTour = groupMembers.length > 0;
-  const filteredListings = useMemo(
-    () =>
-      allListings.filter((listing) => {
-        const query = filters.query.trim().toLowerCase();
-        const haystack = [
-          listing.title,
-          listing.area,
-          listing.commute,
-          listing.transit,
-          listing.trust,
-          ...listing.tags
-        ]
-          .join(" ")
-          .toLowerCase();
-        const matchesQuery = !query || haystack.includes(query) || query === "la";
-        const matchesPrice = filterListingsByPrice([listing], filters).length > 0;
-        const matchesAmenity =
-          filters.amenity === "Wi-Fi" ||
-          haystack.includes(filters.amenity.toLowerCase()) ||
-          (filters.amenity === "独卫" && (listing.baths > 1 || listing.tags.includes("独卫"))) ||
-          (filters.amenity === "宠物" && listing.tags.some((tag) => tag.includes("宠物"))) ||
-          (filters.amenity === "近地铁" && (listing.transit.includes("地铁") || listing.tags.includes("近地铁")));
-
-        return matchesQuery && matchesPrice && matchesAmenity;
-      }),
-    [allListings, filters]
+  const catalogSource = useMemo(
+    () => filterSavedListings(allListings, favoriteIds, savedOnly),
+    [allListings, favoriteIds, savedOnly]
   );
-  const visibleListings = filterSavedListings(filteredListings, favoriteIds, savedOnly);
+  const catalogPage = useMemo(
+    () =>
+      buildCatalogPage(catalogSource, {
+        ...filters,
+        pageSize: 12
+      }),
+    [catalogSource, filters]
+  );
+  const visibleListings = catalogPage.items;
   const visibleSelectedListing = getVisibleSelectedListing(selectedListing, visibleListings);
+  const dateFilterAvailable = canFilterCatalogByDate(allListings);
   const viewingSlots = useMemo(
-    () => buildViewingSlots(filters.checkIn || defaultSearchFilters.checkIn),
+    () => buildViewingSlots(filters.checkIn || "2026-08-20"),
     [filters.checkIn]
   );
   const selectedDealThread = useMemo(
-    () => dealThreads[selectedListing.id] ?? buildThreadForListing(selectedListing, roommate, groupMembers),
-    [dealThreads, groupMembers, roommate, selectedListing]
+    () => dealThreads[selectedListing.id] ?? buildThreadForListing(selectedListing, groupMembers),
+    [dealThreads, groupMembers, selectedListing]
   );
   const selectedDealStage = useMemo(
     () => getDealWorkflowStage(selectedDealThread, viewingRequests),
@@ -1179,14 +1007,10 @@ export default function HomePage({
       return listing ? [listing] : [];
     });
   }, [allListings, contactedListingIds, dealThreads, selectedListing]);
-  const messageRoommates = useMemo(
-    () => apiRoommates.filter((candidate) => canOpenRoommateDm(getRoommateKey(candidate), roommateConnectionState)),
-    [apiRoommates, roommateConnectionState]
-  );
   const listingInboxContacts = useMemo<InboxContact[]>(
     () =>
       messageListings.map((listing) => {
-        const thread = dealThreads[listing.id] ?? buildThreadForListing(listing, roommate, groupMembers);
+        const thread = dealThreads[listing.id] ?? buildThreadForListing(listing, groupMembers);
         const latestMessage = thread.messages.at(-1);
 
         return {
@@ -1200,63 +1024,19 @@ export default function HomePage({
           activityOrder: thread.lastActivityAt
         };
       }),
-    [dealThreads, groupMembers, messageListings, roommate]
-  );
-  const roommateInboxContacts = useMemo<InboxContact[]>(
-    () =>
-      messageRoommates.map((candidate) => {
-        const targetKey = getRoommateKey(candidate);
-        const thread = buildRoommateDmThread({
-          roommateId: targetKey,
-          roommateName: candidate.name,
-          roommateRole: candidate.role,
-          storedMessages: roommateDmThreads[targetKey]?.messages,
-          lastActivityAt: roommateDmThreads[targetKey]?.lastActivityAt
-        });
-        const latestMessage = thread.messages.at(-1);
-
-        return {
-          kind: "roommate",
-          targetId: targetKey,
-          contactName: candidate.name,
-          contextLabel: candidate.role,
-          preview: latestMessage?.body ?? "Roommate DM",
-          time: latestMessage?.time ?? "",
-          image: candidate.image,
-          activityOrder: thread.lastActivityAt
-        };
-      }),
-    [messageRoommates, roommateDmThreads]
+    [dealThreads, groupMembers, messageListings]
   );
   const inboxContacts = useMemo(
-    () => mergeInboxContacts(listingInboxContacts, roommateInboxContacts),
-    [listingInboxContacts, roommateInboxContacts]
+    () => mergeInboxContacts(listingInboxContacts),
+    [listingInboxContacts]
   );
-  const requestedInboxTarget = useMemo(
-    () => {
-      const accessibleRoommateDmId = roommateStorageHydrated
-        ? getAccessibleRoommateDmId(activeRoommateDmId, roommateConnectionState)
-        : null;
-
-      return accessibleRoommateDmId
-        ? { kind: "roommate" as const, targetId: accessibleRoommateDmId }
-        : activeMessageListingId
-          ? { kind: "listing" as const, targetId: activeMessageListingId }
-          : null;
-    },
-    [activeMessageListingId, activeRoommateDmId, roommateConnectionState, roommateStorageHydrated]
-  );
-  const routeInboxTarget = activeRoommateDmId
-    ? { kind: "roommate" as const, targetId: activeRoommateDmId }
-    : activeMessageListingId
-      ? { kind: "listing" as const, targetId: activeMessageListingId }
-      : null;
+  const requestedInboxTarget = activeMessageListingId
+    ? { kind: "listing" as const, targetId: activeMessageListingId }
+    : null;
+  const routeInboxTarget = requestedInboxTarget;
   const narrowMessagePane = getNarrowMessagePane(routeInboxTarget);
   const requestedInboxKey = routeInboxTarget ? getInboxContactKey(routeInboxTarget) : null;
-  const activeInboxContact = useMemo(
-    () => getActiveInboxContact(inboxContacts, requestedInboxTarget),
-    [inboxContacts, requestedInboxTarget]
-  );
+  const activeInboxContact = getActiveInboxContact(inboxContacts, requestedInboxTarget);
   const activeMessageListing = useMemo(
     () =>
       activeInboxContact?.kind === "listing"
@@ -1264,38 +1044,19 @@ export default function HomePage({
         : null,
     [activeInboxContact, messageListings]
   );
-  const activeRoommateDm = useMemo(
-    () =>
-      activeInboxContact?.kind === "roommate"
-        ? messageRoommates.find((candidate) => getRoommateKey(candidate) === activeInboxContact.targetId) ?? null
-        : null,
-    [activeInboxContact, messageRoommates]
-  );
-  const activeRoommateDmThread = useMemo<RoommateDmThread | null>(() => {
-    if (!activeRoommateDm) return null;
-
-    const targetKey = getRoommateKey(activeRoommateDm);
-    return buildRoommateDmThread({
-      roommateId: targetKey,
-      roommateName: activeRoommateDm.name,
-      roommateRole: activeRoommateDm.role,
-      storedMessages: roommateDmThreads[targetKey]?.messages,
-      lastActivityAt: roommateDmThreads[targetKey]?.lastActivityAt
-    });
-  }, [activeRoommateDm, roommateDmThreads]);
   const activeMessageThread = useMemo(
     () =>
       activeMessageListing
-        ? dealThreads[activeMessageListing.id] ?? buildThreadForListing(activeMessageListing, roommate, groupMembers)
+        ? dealThreads[activeMessageListing.id] ?? buildThreadForListing(activeMessageListing, groupMembers)
         : null,
-    [activeMessageListing, dealThreads, groupMembers, roommate]
+    [activeMessageListing, dealThreads, groupMembers]
   );
   const activeMessageViewingRequest = useMemo(
     () => (activeMessageListing ? getLatestViewingRequest(activeMessageListing.id, viewingRequests) : null),
     [activeMessageListing, viewingRequests]
   );
   const activeMessageStage = useMemo(
-    () => (activeMessageThread ? getDealWorkflowStage(activeMessageThread, viewingRequests) : "Inbox empty"),
+    () => (activeMessageThread ? getDealWorkflowStage(activeMessageThread, viewingRequests) : "暂无会话"),
     [activeMessageThread, viewingRequests]
   );
 
@@ -1310,40 +1071,56 @@ export default function HomePage({
   }
 
   function handleSelectInboxContact(contact: InboxContact) {
-    selectInboxTarget({ kind: contact.kind, targetId: contact.targetId });
-
+    if (contact.kind !== "listing") return;
+    setActiveMessageListingId(contact.targetId);
     setActiveSection("Messages");
-    router.push(dmRouteForTarget({ kind: contact.kind, id: contact.targetId }));
+    router.push(
+      dmRouteForTarget(
+        { kind: "listing", id: contact.targetId },
+        { dealRoomId: getExistingThreadDealRoomId(dealThreads, contact.targetId) }
+      )
+    );
   }
 
   function handleBackToMessageContacts() {
     setActiveMessageListingId(null);
-    setActiveRoommateDmId(null);
     setActiveSection("Messages");
     router.push("/messages");
   }
 
-  function selectInboxTarget(target: { kind: "listing" | "roommate"; targetId: string }) {
-    const selection = getInboxSelection(target);
-    setActiveMessageListingId(selection.activeMessageListingId);
-    setActiveRoommateDmId(selection.activeRoommateDmId);
+  function requireCapability(capability: ProductCapability) {
+    const result = checkProductCapability(capability, {
+      authenticated: Boolean(token && user),
+      apiOnline,
+      profileRole: profile?.role,
+      datesAvailable: dateFilterAvailable
+    });
+
+    if (result.status === "allowed") return true;
+    if (result.status === "requires-auth") {
+      setAuthPanelOpen(true);
+      router.push("/account");
+    }
+    setToast(result.message);
+    return false;
   }
 
-  function cycleRoommate(direction: 1 | -1) {
-    setRoommateIndex((current) => {
-      const next = current + direction;
-      if (next < 0) return apiRoommates.length - 1;
-      if (next >= apiRoommates.length) return 0;
+  function setActionPending(key: string, pending: boolean) {
+    setPendingActions((current) => {
+      const next = new Set(current);
+      if (pending) next.add(key);
+      else next.delete(key);
       return next;
     });
   }
 
   function handleAmenityChange(amenity: string) {
-    setFilters((current) => ({ ...current, amenity }));
+    setFilters((current) => ({ ...current, amenity, page: 1 }));
     setToast(`已筛选设施：${amenity}`);
   }
 
   function handleFavorite(listingId: string) {
+    if (!requireCapability("favorite-listing")) return;
     setFavoriteIds((current) => {
       const next = new Set(current);
       if (next.has(listingId)) {
@@ -1351,7 +1128,7 @@ export default function HomePage({
         setToast("已取消收藏");
       } else {
         next.add(listingId);
-        setToast("已加入收藏");
+        setToast("已加入收藏，仅保存在此设备。");
       }
       return next;
     });
@@ -1364,50 +1141,102 @@ export default function HomePage({
     setToast(`正在查看房源详情：${listing.title}`);
   }
 
-  async function handleContactListing(listing: Listing, options: { tour?: boolean } = {}) {
+  function openListingThread(
+    listing: Listing,
+    options: { tour?: boolean; dealRoomId?: string | null }
+  ) {
     setSelectedListing(listing);
-    selectInboxTarget({ kind: "listing", targetId: listing.id });
+    setActiveMessageListingId(listing.id);
+    setContactedListingIds((current) => new Set(current).add(listing.id));
     router.push(dmRouteForTarget({ kind: "listing", id: listing.id }, options));
     setActiveSection("Messages");
-    setContactedListingIds((current) => new Set(current).add(listing.id));
-    const fallbackThread = buildThreadForListing(listing, roommate, groupMembers);
-    setDealThreads((current) => ({
-      ...current,
-      [listing.id]: current[listing.id] ?? fallbackThread
-    }));
+    setToast(`已打开 ${listing.title} 的消息`);
+  }
 
-    if (token) {
-      try {
-        const apiThread = await apiPost<ApiDealThread>(
-          "/deal-threads",
-          buildCreateThreadPayload(listing, roommate, groupMembers, activeDealRoomId ?? undefined),
-          token
-        );
+  async function handleContactListing(
+    listing: Listing,
+    options: { tour?: boolean; dealRoomId?: string | null; participantMembers?: Roommate[] } = {}
+  ) {
+    if (!requireCapability("message-host") || !token) return false;
+    const requestedDealRoomId = options.tour
+      ? options.dealRoomId ?? activeDealRoomId
+      : activeDealRoomId;
+    const requestedMembers = options.participantMembers ?? groupMembers;
+
+    const pendingKey = `contact:${listing.id}`;
+    setActionPending(pendingKey, true);
+
+    try {
+      const apiThread = await ensureRemoteDealThread(listing, {
+        syncLocal: true,
+        enforceDealRoomMatch: Boolean(options.tour),
+        requestedDealRoomId,
+        participantMembers: requestedMembers
+      });
+      if (!apiThread) return false;
+      if (options.dealRoomId) {
+        setActiveDealRoomId(options.dealRoomId);
+        setGroupMembers(requestedMembers);
+      }
+      openListingThread(listing, options);
+      return true;
+    } catch (error) {
+      setToast(toProductApiError(error).message);
+      return false;
+    } finally {
+      setActionPending(pendingKey, false);
+    }
+  }
+
+  async function ensureRemoteDealThread(
+    listing: Listing,
+    options: {
+      syncLocal?: boolean;
+      enforceDealRoomMatch?: boolean;
+      requestedDealRoomId?: string | null;
+      participantMembers?: Roommate[];
+    } = {}
+  ) {
+    if (!token) return null;
+    const syncLocal = options.syncLocal ?? true;
+    const requestedDealRoomId =
+      "requestedDealRoomId" in options ? options.requestedDealRoomId : activeDealRoomId;
+    const participantMembers = options.participantMembers ?? groupMembers;
+    const existingThread = dealThreads[listing.id];
+    const existingThreadId = getExistingRemoteThreadId(dealThreads, listing.id);
+
+    if (existingThreadId && existingThread) {
+      assertViewingThreadGroup(existingThread, requestedDealRoomId, options.enforceDealRoomMatch);
+      return { id: existingThreadId };
+    }
+
+    const remoteThreads = await apiGet<ApiDealThread[]>("/deal-threads", token);
+    const remoteThread = remoteThreads.find((thread) => thread.listingId === listing.id);
+    if (remoteThread) {
+      assertViewingThreadGroup(remoteThread, requestedDealRoomId, options.enforceDealRoomMatch);
+      if (syncLocal) {
+        const fallbackThread = buildInitialDealThread({
+          listing,
+          contactName: remoteThread.contactName,
+          participantNames: remoteThread.participantNames
+        });
         setDealThreads((current) => ({
           ...current,
-          [listing.id]: apiThreadToDealThread(apiThread, current[listing.id] ?? fallbackThread)
+          [listing.id]: apiThreadToDealThread(remoteThread, current[listing.id] ?? fallbackThread)
         }));
         setViewingRequests((current) => [
           ...current.filter((request) => request.listingId !== listing.id),
-          ...apiThread.viewingRequests.map(apiViewingRequestToViewingRequest)
+          ...remoteThread.viewingRequests.map(apiViewingRequestToViewingRequest)
         ]);
-      } catch (error) {
-        setToast(error instanceof Error ? `Messages 已本地打开，后端同步失败：${error.message}` : "Messages 已本地打开，后端同步失败");
-        return;
+        setContactedListingIds((current) => new Set(current).add(listing.id));
       }
+      return remoteThread;
     }
 
-    setToast(`已打开 ${listing.title} 的 Messages`);
-  }
-
-  async function ensureRemoteDealThread(listing: Listing, options: { syncLocal?: boolean } = {}) {
-    if (!token) return null;
-
-    const syncLocal = options.syncLocal ?? true;
-    const fallbackThread = dealThreads[listing.id] ?? buildThreadForListing(listing, roommate, groupMembers);
+    const fallbackThread = buildThreadForListing(listing, participantMembers);
     const apiThread = await apiPost<ApiDealThread>(
       "/deal-threads",
-      buildCreateThreadPayload(listing, roommate, groupMembers, activeDealRoomId ?? undefined),
+      buildCreateThreadPayload(listing, participantMembers, requestedDealRoomId ?? undefined),
       token
     );
 
@@ -1426,60 +1255,67 @@ export default function HomePage({
   }
 
   async function handleSendDealMessage(listing: Listing, body: string) {
-    setSelectedListing(listing);
-    selectInboxTarget({ kind: "listing", targetId: listing.id });
-    setContactedListingIds((current) => new Set(current).add(listing.id));
-    setDealThreads((current) => {
-      const thread = current[listing.id] ?? buildThreadForListing(listing, roommate, groupMembers);
-      return {
+    if (!requireCapability("message-host") || !token || !body.trim()) return false;
+    const pendingKey = `message:${listing.id}`;
+    setActionPending(pendingKey, true);
+
+    try {
+      const apiThread = await ensureRemoteDealThread(listing, { syncLocal: false });
+      if (!apiThread) return false;
+      const updatedThread = await apiPost<ApiDealThread>(
+        `/deal-threads/${apiThread.id}/messages`,
+        { body: body.trim() },
+        token
+      );
+      const fallbackThread = dealThreads[listing.id] ?? buildThreadForListing(listing, groupMembers);
+      setSelectedListing(listing);
+      setActiveMessageListingId(listing.id);
+      setContactedListingIds((current) => new Set(current).add(listing.id));
+      setDealThreads((current) => ({
         ...current,
-        [listing.id]: appendDealMessage(thread, {
-          body,
-          now: new Date(),
-          senderName: "You"
+        [listing.id]: apiThreadToDealThread(updatedThread, current[listing.id] ?? fallbackThread)
+      }));
+      setNotifications((current) =>
+        addLocalReminder(current, {
+          id: `dm-${listing.id}-${Date.now()}`,
+          title: `消息已发送给 ${getHostContactName(listing)}`,
+          detail: listing.title,
+          createdAt: Date.now(),
+          read: false,
+          target: dmRouteForTarget(
+            { kind: "listing", id: listing.id },
+            { dealRoomId: updatedThread.dealRoomId }
+          )
         })
-      };
-    });
-    setNotifications((current) => addLocalNotification(current, {
-      id: `dm-${listing.id}-${Date.now()}`,
-      kind: "dm",
-      title: `已发送给 ${getHostContactName(listing)}`,
-      detail: listing.title,
-      createdAt: Date.now(),
-      read: false
-    }));
-
-    if (token) {
-      try {
-        const apiThread = await ensureRemoteDealThread(listing, { syncLocal: false });
-        if (apiThread) {
-          const updatedThread = await apiPost<ApiDealThread>(
-            `/deal-threads/${apiThread.id}/messages`,
-            { body },
-            token
-          );
-          const fallbackThread = dealThreads[listing.id] ?? buildThreadForListing(listing, roommate, groupMembers);
-          setDealThreads((current) => ({
-            ...current,
-            [listing.id]: apiThreadToDealThread(updatedThread, current[listing.id] ?? fallbackThread)
-          }));
-        }
-      } catch (error) {
-        setToast(error instanceof Error ? `DM 已本地发送，后端同步失败：${error.message}` : "DM 已本地发送，后端同步失败");
-        return;
-      }
+      );
+      setToast("消息已发送");
+      return true;
+    } catch (error) {
+      setToast(toProductApiError(error).message);
+      return false;
+    } finally {
+      setActionPending(pendingKey, false);
     }
-
-    setToast("DM 已发送");
   }
 
   async function handleRequestListingTour(listing: Listing, slot = viewingSlots[0]) {
+    if (!requireCapability("request-viewing") || !token) return false;
     if (!slot) {
       setToast("暂无可预约时间");
-      return;
+      return false;
+    }
+    const existingThread = dealThreads[listing.id];
+    if (existingThread && !canReuseDealThreadForViewing(existingThread, activeDealRoomId)) {
+      setToast("这套房的现有看房会话属于另一个室友小组。请切回原小组后重试；当前暂不支持更换会话小组。");
+      return false;
     }
 
-    const participantNames = getDealParticipantNames(roommate, groupMembers);
+    const pendingKey = `tour:${listing.id}`;
+    setActionPending(pendingKey, true);
+    const participantNames =
+      dealThreads[listing.id]?.participantNames?.length
+        ? dealThreads[listing.id].participantNames!
+        : getDealParticipantNames(groupMembers);
     const hasExistingActiveRequest = viewingRequests.some(
       (item) => item.listingId === listing.id && item.status !== "COMPLETED" && item.status !== "CANCELLED"
     );
@@ -1490,121 +1326,103 @@ export default function HomePage({
       slot
     });
 
-    setSelectedListing(listing);
-    selectInboxTarget({ kind: "listing", targetId: listing.id });
-    setContactedListingIds((current) => new Set(current).add(listing.id));
-    setTourRequestedListingIds((current) => new Set(current).add(listing.id));
-    setViewingRequests((current) => upsertViewingRequest(current, request));
-    setDealThreads((current) => {
-      const thread = current[listing.id] ?? buildThreadForListing(listing, roommate, groupMembers);
-      return {
-        ...current,
-        [listing.id]: appendDealMessage(thread, {
-          body: `我想${hasExistingActiveRequest ? "调整看房到" : "预约"} ${request.timeLabel} 的${request.mode === "video" ? "视频" : "线下"}看房，参与人：${participantNames.join(", ")}。`,
-          now: new Date(),
-          senderName: "You"
-        })
+    try {
+      const apiThread = await ensureRemoteDealThread(listing, {
+        syncLocal: false,
+        enforceDealRoomMatch: true,
+        requestedDealRoomId: activeDealRoomId,
+        participantMembers: groupMembers
+      });
+      if (!apiThread) return false;
+      const payload: CreateViewingRequestInput = {
+        timeLabel: request.timeLabel,
+        iso: request.iso,
+        mode: request.mode,
+        participantNames: request.participantNames
       };
-    });
-    setNotifications((current) => addLocalNotification(current, {
-      id: `tour-${listing.id}`,
-      kind: "tour",
-      title: hasExistingActiveRequest ? "看房时间已调整" : "看房请求已创建",
-      detail: `${listing.title} · ${request.timeLabel}`,
-      createdAt: Date.now(),
-      read: false
-    }));
-
-    if (token) {
-      try {
-        const apiThread = await ensureRemoteDealThread(listing, { syncLocal: false });
-        if (apiThread) {
-          const payload: CreateViewingRequestInput = {
-            timeLabel: request.timeLabel,
-            iso: request.iso,
-            mode: request.mode,
-            participantNames: request.participantNames
-          };
-          const updatedThread = await apiPost<ApiDealThread>(
-            `/deal-threads/${apiThread.id}/viewing-requests`,
-            payload,
-            token
-          );
-          const fallbackThread = dealThreads[listing.id] ?? buildThreadForListing(listing, roommate, groupMembers);
-          setDealThreads((current) => ({
-            ...current,
-            [listing.id]: apiThreadToDealThread(updatedThread, current[listing.id] ?? fallbackThread)
-          }));
-          setViewingRequests((current) => [
-            ...current.filter((item) => item.listingId !== listing.id),
-            ...updatedThread.viewingRequests.map(apiViewingRequestToViewingRequest)
-          ]);
-        }
-      } catch (error) {
-        setToast(error instanceof Error ? `看房已本地预约，后端同步失败：${error.message}` : "看房已本地预约，后端同步失败");
-        return;
-      }
+      const updatedThread = await apiPost<ApiDealThread>(
+        `/deal-threads/${apiThread.id}/viewing-requests`,
+        payload,
+        token
+      );
+      const fallbackThread = dealThreads[listing.id] ?? buildThreadForListing(listing, groupMembers);
+      const remoteRequests = updatedThread.viewingRequests.map(apiViewingRequestToViewingRequest);
+      setSelectedListing(listing);
+      setActiveMessageListingId(listing.id);
+      setContactedListingIds((current) => new Set(current).add(listing.id));
+      setTourRequestedListingIds((current) => new Set(current).add(listing.id));
+      setDealThreads((current) => ({
+        ...current,
+        [listing.id]: apiThreadToDealThread(updatedThread, current[listing.id] ?? fallbackThread)
+      }));
+      setViewingRequests((current) => [
+        ...current.filter((item) => item.listingId !== listing.id),
+        ...remoteRequests
+      ]);
+      setNotifications((current) =>
+        addLocalReminder(current, {
+          id: `tour-${listing.id}`,
+          title: hasExistingActiveRequest ? "看房时间已调整" : "看房请求已发送",
+          detail: `${listing.title} · ${request.timeLabel}`,
+          createdAt: Date.now(),
+          read: false,
+          target: "/trips"
+        })
+      );
+      setToast(`看房请求已发送：${listing.title} · ${slot.label}`);
+      return true;
+    } catch (error) {
+      setToast(toProductApiError(error).message);
+      return false;
+    } finally {
+      setActionPending(pendingKey, false);
     }
+  }
 
-    setToast(`已预约看房：${listing.title} · ${slot.label}`);
+  async function handleViewingDecision(
+    listing: Listing,
+    request: ViewingRequest,
+    decision: "confirm" | "decline"
+  ) {
+    if (!token) return false;
+    const thread = dealThreads[listing.id];
+    if (!thread || !canHostDecideViewing(thread, request)) return false;
+    const pendingKey = `viewing-decision:${request.id}`;
+    setActionPending(pendingKey, true);
+    try {
+      const updated = await apiPost<ApiDealThread>(
+        `/deal-threads/${thread.id}/viewing-requests/${request.id}/${decision}`,
+        {},
+        token
+      );
+      setDealThreads((current) => ({
+        ...current,
+        [listing.id]: apiThreadToDealThread(updated, current[listing.id] ?? thread)
+      }));
+      setViewingRequests((current) => [
+        ...current.filter((item) => item.listingId !== listing.id),
+        ...updated.viewingRequests.map(apiViewingRequestToViewingRequest)
+      ]);
+      setToast(decision === "confirm" ? "看房请求已确认" : "看房请求已拒绝");
+      return true;
+    } catch (error) {
+      setToast(toProductApiError(error).message);
+      return false;
+    } finally {
+      setActionPending(pendingKey, false);
+    }
   }
 
   function handleStartApplication(listing: Listing) {
-    const now = new Date();
-    setApplications((current) => createLocalApplication(current, {
-      listingId: listing.id,
-      listingTitle: listing.title,
-      now
-    }));
-    setAppliedListingId(listing.id);
     setSelectedListing(listing);
-    setNotifications((current) => addLocalNotification(current, {
-      id: `application-${listing.id}`,
-      kind: "application",
-      title: "申请已创建",
-      detail: listing.title,
-      createdAt: now.getTime(),
-      read: false
-    }));
-    navigateToSection("Trips");
-    setToast(`已为 ${listing.title} 开始申请流程`);
+    setToast("在线申请、支付与托管暂未开放。");
   }
 
-  async function handleAcceptRoommate(targetRoommate = roommate) {
+  async function handleAcceptRoommate(targetRoommate: Roommate) {
+    if (!requireCapability("roommate-action") || !token || !targetRoommate.id) return false;
     const targetKey = getRoommateKey(targetRoommate);
-    const nextStoredMatchState = getRoommateMatchStateAfterLike(targetKey, {
-      likedByMeIds: likedRoommateIds,
-      introSentIds: introSentRoommateIds,
-      roommateIds: groupMembers.map(getRoommateKey)
-    });
-    setLikedRoommateIds(new Set(nextStoredMatchState.likedByMeIds));
-    writeStoredRoommateMatchState(nextStoredMatchState);
-    setTourRequested(false);
-    const matchedBack = likedMeRoommateIds.has(targetKey);
-    if (matchedBack) {
-      setRoommateDmThreads((current) => ({
-        ...current,
-        [targetKey]:
-          current[targetKey] ??
-          buildStoredRoommateDmThread({
-            roommateId: targetKey,
-            roommateName: targetRoommate.name,
-            roommateRole: targetRoommate.role
-          })
-      }));
-      selectInboxTarget({ kind: "roommate", targetId: targetKey });
-      router.push(dmRouteForTarget({ kind: "roommate", id: targetKey }));
-      setActiveSection("Messages");
-    }
-
-    if (!token || !targetRoommate.id) {
-      setToast(
-        matchedBack
-          ? `你和 ${targetRoommate.name} 互相 Like 了，私信已解锁`
-          : `${targetRoommate.name} 已加入 Liked by me，等对方 Like 回来后解锁私信`
-      );
-      return;
-    }
+    const pendingKey = `roommate:${targetKey}`;
+    setActionPending(pendingKey, true);
 
     try {
       const response = await apiPost<ApiRoommateActionResponse>(
@@ -1612,217 +1430,152 @@ export default function HomePage({
         { action: "LIKE" },
         token
       );
-      if (matchedBack) setActiveDealRoomId(response.dealRoom?.id ?? null);
-      setToast(
-        matchedBack
-          ? `你和 ${targetRoommate.name} 互相 Like 了，私信已解锁`
-          : `${targetRoommate.name} 已加入 Liked by me，等对方 Like 回来后解锁私信`
-      );
+      setLikedRoommateIds((current) => new Set(current).add(targetKey));
+      setTourRequested(false);
+      if (response.dealRoom) {
+        const responseDealRoom: ApiDealRoom =
+          response.dealRoom.members?.length
+            ? response.dealRoom
+            : {
+                ...response.dealRoom,
+                members: [{ snapshot: targetRoommate }]
+              };
+        setLikedMeRoommateIds((current) => new Set(current).add(targetKey));
+        setDealRooms((current) => [
+          responseDealRoom,
+          ...current.filter((room) => room.id !== responseDealRoom.id)
+        ]);
+        setActiveDealRoomId(responseDealRoom.id);
+        setGroupMembers(getRoommatesFromDealRooms([responseDealRoom]).slice(-4));
+        setToast(`你和 ${targetRoommate.name} 已互相匹配；室友私信暂未开放。`);
+      } else {
+        setToast(`已喜欢 ${targetRoommate.name}，等待对方回应。`);
+      }
+      return true;
     } catch (error) {
-      setToast(error instanceof Error ? `本地已匹配，后端同步失败：${error.message}` : "本地已匹配，后端同步失败");
+      setToast(toProductApiError(error).message);
+      return false;
+    } finally {
+      setActionPending(pendingKey, false);
     }
   }
 
   function handleSendRoommateIntro(targetRoommate: Roommate) {
-    const targetKey = getRoommateKey(targetRoommate);
-    if (!canSendRoommateIntro(targetKey, roommateConnectionState)) {
-      setToast(`${targetRoommate.name} 的 opening message 已经发过，互相 Like 后才能继续私信`);
-      return;
-    }
-
-    setIntroSentRoommateIds((current) => new Set(current).add(targetKey));
-    setToast(`已给 ${targetRoommate.name} 发送一条 opening message`);
+    setToast(`${targetRoommate.name} 的室友私信暂未开放。`);
   }
 
   function handleOpenRoommateDm(targetRoommate: Roommate) {
-    const targetKey = getRoommateKey(targetRoommate);
-    if (!canOpenRoommateDm(targetKey, roommateConnectionState)) {
-      setToast(`先互相 Like，才能解锁 ${targetRoommate.name} 的私信`);
-      return;
-    }
-
-    setRoommateDmThreads((current) => ({
-      ...current,
-      [targetKey]:
-        current[targetKey] ??
-        buildStoredRoommateDmThread({
-          roommateId: targetKey,
-          roommateName: targetRoommate.name,
-          roommateRole: targetRoommate.role
-        })
-    }));
-    selectInboxTarget({ kind: "roommate", targetId: targetKey });
-    router.push(dmRouteForTarget({ kind: "roommate", id: targetKey }));
-    setActiveSection("Messages");
-    setToast(`${targetRoommate.name} 的室友私信已打开`);
-  }
-
-  function handleSendRoommateDm(targetRoommate: Roommate, body: string) {
-    const targetKey = getRoommateKey(targetRoommate);
-    if (!canOpenRoommateDm(targetKey, roommateConnectionState)) {
-      setToast(`先互相 Like，才能给 ${targetRoommate.name} 发送私信`);
-      return;
-    }
-
-    setRoommateDmThreads((current) => {
-      const baseThread = buildRoommateDmThread({
-        roommateId: targetKey,
-        roommateName: targetRoommate.name,
-        roommateRole: targetRoommate.role,
-        storedMessages: current[targetKey]?.messages,
-        lastActivityAt: current[targetKey]?.lastActivityAt
-      });
-      const nextThread = appendRoommateDmMessage(baseThread, {
-        body,
-        now: new Date()
-      });
-
-      return {
-        ...current,
-        [targetKey]: {
-          roommateId: targetKey,
-          messages: nextThread.messages,
-          lastActivityAt: nextThread.lastActivityAt
-        }
-      };
-    });
-    selectInboxTarget({ kind: "roommate", targetId: targetKey });
-    setToast("Roommate DM 已保存到本地 Demo");
+    setToast(`${targetRoommate.name} 的室友私信暂未开放。`);
   }
 
   async function handleDecideRoommate(targetRoommate: Roommate) {
-    const targetKey = getRoommateKey(targetRoommate);
-    if (!canOpenRoommateDm(targetKey, roommateConnectionState)) {
-      setToast(`先和 ${targetRoommate.name} 互相 Like，再决定是否当室友`);
-      return;
-    }
-
-    setGroupMembers((current) => {
-      if (current.some((member) => getRoommateKey(member) === targetKey)) return current;
-      return [...current, targetRoommate].slice(-4);
-    });
-    setStoredRoommateMemberIds((current) => new Set(current).add(targetKey));
-    setTourRequested(false);
-
-    if (token && targetRoommate.id) {
-      try {
-        const response = await apiPost<ApiRoommateActionResponse>(
-          `/roommates/${targetRoommate.id}/actions`,
-          { action: "LIKE" },
-          token
-        );
-        setActiveDealRoomId(response.dealRoom?.id ?? activeDealRoomId);
-      } catch (error) {
-        setToast(error instanceof Error ? `已本地加入室友，后端同步失败：${error.message}` : "已本地加入室友，后端同步失败");
-        return;
-      }
-    }
-
-    setToast(`${targetRoommate.name} 已加入室友组，现在可以一起预约 group tour`);
+    setToast(`${targetRoommate.name} 的组队确认功能暂未开放。`);
+    return false;
   }
 
-  async function handleRejectRoommate(targetRoommate = roommate) {
-    const rejectedRoommate = targetRoommate;
-    setSkippedCount((current) => current + 1);
-    setTourRequested(false);
-    setToast(`已跳过 ${rejectedRoommate.name}`);
-    cycleRoommate(1);
-
-    if (!token || !rejectedRoommate.id) return;
+  async function handleRejectRoommate(targetRoommate: Roommate) {
+    if (!requireCapability("roommate-action") || !token || !targetRoommate.id) return false;
+    const pendingKey = `roommate:${getRoommateKey(targetRoommate)}`;
+    setActionPending(pendingKey, true);
 
     try {
-      await apiPost(`/roommates/${rejectedRoommate.id}/actions`, { action: "PASS" }, token);
+      await apiPost(`/roommates/${targetRoommate.id}/actions`, { action: "PASS" }, token);
+      setSkippedCount((current) => current + 1);
+      setTourRequested(false);
+      setToast(`已跳过 ${targetRoommate.name}`);
+      return true;
     } catch (error) {
-      setToast(error instanceof Error ? `跳过已保留，本地同步成功；后端失败：${error.message}` : "跳过已保留，本地同步成功；后端失败");
+      setToast(toProductApiError(error).message);
+      return false;
+    } finally {
+      setActionPending(pendingKey, false);
     }
   }
 
-  async function handleLaterRoommate(targetRoommate = roommate) {
-    const laterRoommate = targetRoommate;
-    setTourRequested(false);
-    setToast(`${laterRoommate.name} 已放入稍后查看`);
-    cycleRoommate(1);
-
-    if (!token || !laterRoommate.id) return;
+  async function handleLaterRoommate(targetRoommate: Roommate) {
+    if (!requireCapability("roommate-action") || !token || !targetRoommate.id) return false;
+    const pendingKey = `roommate:${getRoommateKey(targetRoommate)}`;
+    setActionPending(pendingKey, true);
 
     try {
-      await apiPost(`/roommates/${laterRoommate.id}/actions`, { action: "LATER" }, token);
+      await apiPost(`/roommates/${targetRoommate.id}/actions`, { action: "LATER" }, token);
+      setTourRequested(false);
+      setToast(`${targetRoommate.name} 已放入稍后查看`);
+      return true;
     } catch (error) {
-      setToast(error instanceof Error ? `稍后查看已保留，本地同步成功；后端失败：${error.message}` : "稍后查看已保留，本地同步成功；后端失败");
+      setToast(toProductApiError(error).message);
+      return false;
+    } finally {
+      setActionPending(pendingKey, false);
     }
+  }
+
+  function handleSelectDealRoom(dealRoomId: string) {
+    const selectedRoom = dealRooms.find((room) => room.id === dealRoomId);
+    if (!selectedRoom) return;
+    const selectedMembers = getRoommatesFromDealRooms([selectedRoom]);
+    setActiveDealRoomId(selectedRoom.id);
+    setGroupMembers(selectedMembers.slice(-4));
+    setGroupTourContext(null);
+    setTourRequested(selectedRoom.tourRequest?.status === "REQUESTED");
+    setToast(`当前小组已切换为：${getDealRoomLabel(selectedRoom)}`);
   }
 
   async function handleRequestGroupTour() {
-    if (!canRequestTour) {
-      setToast("先互相 Like，并决定成为室友后，才能发起 Group Tour");
+    if (!canRequestTour || !activeDealRoomId) {
+      setToast("服务端确认室友小组后，才能发起小组看房。");
       return;
     }
 
+    setGroupTourContext({
+      dealRoomId: activeDealRoomId,
+      members: groupMembers
+    });
     setGroupTourSelecting(true);
     setSavedOnly(false);
     setActiveSection("Discover");
-    router.push(discoverRouteForIntent({ groupTour: true }));
-    setToast("请选择一套房源，再到 Messages 明确选择 Group Tour 时间");
+    router.push(discoverRouteForIntent({ groupTour: true, dealRoomId: activeDealRoomId }));
+    setToast("请选择一套房源，再到消息页明确选择小组看房时间。");
   }
 
-  async function handleCreateListing(draft: PublishDraft) {
-    if (!token) {
-      setToast("请先用邮箱验证码登录，再发布房源");
-      setAuthPanelOpen(true);
-      return;
-    }
-
+  async function handleSaveListing(draft: PublishDraft, shouldSubmit: boolean) {
+    if (!requireCapability("publish-listing") || !token) return null;
     setIsPublishing(true);
-    const payload = {
-      title: draft.title,
-      area: draft.area,
-      image: listingImages[allListings.length % listingImages.length],
-      price: draft.price,
-      originalPrice: draft.price + 320,
-      beds: draft.beds,
-      baths: draft.baths,
-      commute: "步行 15 分钟到 UCLA",
-      transit: "地铁 22 分钟 · 新发布房源",
-      trust: "房东知情 · 待审核",
-      tags: ["新发布", "视频验房", "房东知情"],
-      score: 4.8
-    };
 
     try {
-      const createdListing = await apiPost<ApiListing>("/listings", payload, token);
-
-      try {
-        await apiPost<ApiListing>(`/listings/${createdListing.id}/submit`, {}, token);
-        setToast(`${draft.title} 已创建并提交审核`);
-      } catch (error) {
-        setToast(error instanceof Error ? `${draft.title} 已创建为草稿，提交审核失败：${error.message}` : `${draft.title} 已创建为草稿，提交审核失败`);
-      }
-
-      const ownedListings = await apiGet<ApiListing[]>("/listings/mine", token);
-      setMyListings(
-        sortOwnerListings(
-          ownedListings.filter((listing): listing is ApiListing & { status: ListingStatus } => Boolean(listing.status))
-        )
+      const result = await executePublishSave(
+        draft,
+        {
+          create: (payload) => apiPost<ApiListing>("/listings", payload, token),
+          update: (id, payload) => apiPatch<ApiListing>(`/listings/${id}`, payload, token),
+          addMedia: (id, media) => apiPost(`/listings/${id}/media`, media, token),
+          submit: (id) => apiPost(`/listings/${id}/submit`, {}, token)
+        },
+        shouldSubmit
       );
-      navigateToSection("Publish");
+      let refreshFailed = false;
+      try {
+        const ownedListings = await apiGet<ApiListing[]>("/listings/mine", token);
+        setMyListings(
+          sortOwnerListings(
+            ownedListings.filter((listing): listing is ApiListing & { status: ListingStatus } => Boolean(listing.status))
+          )
+        );
+      } catch {
+        refreshFailed = true;
+      }
+      setToast(
+        refreshFailed
+          ? `${result.message} 房源列表暂未刷新，草稿编号已保留，可继续重试。`
+          : result.message
+      );
+      return result;
     } catch (error) {
-      setToast(error instanceof Error ? error.message : "房源创建失败");
+      setToast(toProductApiError(error).message);
+      return null;
     } finally {
       setIsPublishing(false);
     }
-  }
-
-  function advanceEscrow(applicationId: string) {
-    setApplications((current) => advanceLocalApplication(current, applicationId));
-    setNotifications((current) => addLocalNotification(current, {
-      id: `escrow-${applicationId}-${Date.now()}`,
-      kind: "escrow",
-      title: "交易状态已更新",
-      detail: "可在 Trips 查看最新托管进度",
-      createdAt: Date.now(),
-      read: false
-    }));
-    setToast("交易托管状态已更新");
   }
 
   function handleAuthenticated(accessToken: string, nextUser: SessionUser) {
@@ -1853,7 +1606,7 @@ export default function HomePage({
       setProfile(updatedProfile);
       setToast("资料已保存");
     } catch (error) {
-      setToast(error instanceof Error ? error.message : "资料保存失败");
+      setToast(toProductApiError(error).message);
     }
   }
 
@@ -1869,14 +1622,20 @@ export default function HomePage({
         activeSection={activeSection}
         onSectionChange={navigateToSection}
         onSavedHomes={() => {
+          if (!requireCapability("favorite-listing")) return;
           setSavedOnly((current) => !current);
           setActiveSection("Discover");
           router.push("/");
         }}
         onNotifications={() => {
           setNotificationsOpen((current) => !current);
-          setNotifications((current) => markNotificationsRead(current));
         }}
+        onNotificationOpen={(notification) => {
+          setNotifications((current) => markNotificationRead(current, notification.id));
+          setNotificationsOpen(false);
+          router.push(notification.target);
+        }}
+        onMarkAllNotifications={() => setNotifications((current) => markAllNotificationsRead(current))}
         user={user}
         profile={profile}
         onAuthOpen={() => {
@@ -1903,11 +1662,19 @@ export default function HomePage({
         <DiscoverScreen
           filters={filters}
           listings={visibleListings}
+          totalListingCount={catalogPage.total}
+          page={catalogPage.page}
+          pageCount={catalogPage.pageCount}
+          heading={catalogPage.heading}
+          summary={catalogPage.summary}
+          dateFilterAvailable={dateFilterAvailable}
+          previewDataEnabled={previewDataEnabled}
+          serviceUnavailable={Boolean(apiError) && !previewDataEnabled}
           selectedListing={visibleSelectedListing}
           favoriteIds={favoriteIds}
           viewMode={viewMode}
-          listingActionLabel={groupTourSelecting ? "选择用于 Group Tour" : "打开详情"}
-          onFiltersChange={setFilters}
+          listingActionLabel={groupTourSelecting ? "选择用于小组看房" : "打开详情"}
+          onFiltersChange={(next) => setFilters({ ...next, page: next.page || 1 })}
           onAmenityChange={handleAmenityChange}
           onClear={() => {
             setFilters({ ...defaultSearchFilters, query: "" });
@@ -1919,8 +1686,21 @@ export default function HomePage({
           }}
           onOpenListing={(listing) => {
             if (groupTourSelecting) {
-              setGroupTourSelecting(false);
-              handleContactListing(listing, { tour: true });
+              const pinnedTourContext = groupTourContext;
+              const pinnedDealRoomId = pinnedTourContext?.dealRoomId ?? activeDealRoomId;
+              if (!pinnedDealRoomId) {
+                setToast("正在加载所选室友小组，请稍后重试。");
+                return;
+              }
+              void handleContactListing(listing, {
+                tour: true,
+                dealRoomId: pinnedDealRoomId,
+                participantMembers: pinnedTourContext?.members ?? groupMembers
+              }).then((opened) => {
+                if (!opened) return;
+                setGroupTourSelecting(false);
+                setGroupTourContext(null);
+              });
             } else {
               openListingDetail(listing);
             }
@@ -1928,6 +1708,7 @@ export default function HomePage({
           onFavorite={handleFavorite}
           onViewModeChange={setViewMode}
           onOpenRoommates={() => navigateToSection("Roommates")}
+          onPageChange={(page) => setFilters((current) => ({ ...current, page }))}
         />
       ) : null}
       {activeSection === "ListingDetail" ? (
@@ -1937,10 +1718,8 @@ export default function HomePage({
           favoriteIds={favoriteIds}
           contactedIds={contactedListingIds}
           tourRequestedIds={tourRequestedListingIds}
-          appliedListingId={appliedListingId}
           dealStage={selectedDealStage}
           groupMembers={groupMembers}
-          roommate={roommate}
           onBack={() => {
             setActiveSection("Discover");
             router.push("/");
@@ -1955,12 +1734,12 @@ export default function HomePage({
       {activeSection === "Roommates" ? (
         <RoommatesMarketplaceScreen
           roommates={apiRoommates}
-          activeRoommate={roommate}
           groupMembers={groupMembers}
           likedRoommateIds={likedRoommateIds}
           likedMeRoommateIds={likedMeRoommateIds}
           introSentRoommateIds={introSentRoommateIds}
           skippedCount={skippedCount}
+          pendingRoommateIds={pendingActions}
           onLike={handleAcceptRoommate}
           onLater={handleLaterRoommate}
           onPass={handleRejectRoommate}
@@ -1975,6 +1754,8 @@ export default function HomePage({
         <LikeQueueScreen
           roommates={apiRoommates}
           members={groupMembers}
+          dealRooms={dealRooms}
+          activeDealRoomId={activeDealRoomId}
           likedRoommateIds={likedRoommateIds}
           likedMeRoommateIds={likedMeRoommateIds}
           introSentRoommateIds={introSentRoommateIds}
@@ -1983,6 +1764,7 @@ export default function HomePage({
           onOpenMessages={() => navigateToSection("Messages")}
           onOpenDm={handleOpenRoommateDm}
           onDecideRoommate={handleDecideRoommate}
+          onSelectDealRoom={handleSelectDealRoom}
           onRequestTour={handleRequestGroupTour}
         />
       ) : null}
@@ -1991,16 +1773,15 @@ export default function HomePage({
           contacts={inboxContacts}
           activeContact={activeInboxContact}
           selectedListing={activeMessageListing}
-          selectedRoommate={activeRoommateDm}
-          roommateThread={activeRoommateDmThread}
           dealStage={activeMessageStage}
           dealThread={activeMessageThread}
           latestViewingRequest={activeMessageViewingRequest}
           narrowPane={narrowMessagePane}
           viewingSlots={viewingSlots}
+          pendingActions={pendingActions}
           onSendMessage={handleSendDealMessage}
-          onSendRoommateMessage={handleSendRoommateDm}
           onRequestTour={handleRequestListingTour}
+          onViewingDecision={handleViewingDecision}
           onSelectContact={handleSelectInboxContact}
           onBackToContacts={handleBackToMessageContacts}
           onOpenListing={(listing) => {
@@ -2013,16 +1794,16 @@ export default function HomePage({
           isPublishing={isPublishing}
           listings={myListings}
           user={user}
-          onCreate={handleCreateListing}
+          profile={profile}
+          editingListingId={editingListingId}
+          onEditListing={setEditingListingId}
+          onSave={handleSaveListing}
         />
       ) : null}
       {activeSection === "Trips" ? (
         <TripsScreen
-          listing={selectedListing}
-          trips={apiTrips}
           viewingRequests={viewingRequests}
-          applications={applications}
-          onAdvance={advanceEscrow}
+          user={user}
           onOpenDealRoom={() => navigateToSection("Messages")}
         />
       ) : null}
@@ -2043,6 +1824,8 @@ function AppHeader({
   onSectionChange,
   onSavedHomes,
   onNotifications,
+  onNotificationOpen,
+  onMarkAllNotifications,
   user,
   profile,
   onAuthOpen,
@@ -2050,12 +1833,14 @@ function AppHeader({
 }: {
   favoriteCount: number;
   savedOnly: boolean;
-  notifications: LocalNotification[];
+  notifications: LocalReminder[];
   notificationsOpen: boolean;
   activeSection: AppSection;
   onSectionChange: (section: AppSection) => void;
   onSavedHomes: () => void;
   onNotifications: () => void;
+  onNotificationOpen: (notification: LocalReminder) => void;
+  onMarkAllNotifications: () => void;
   user: SessionUser | null;
   profile: ApiProfile | null;
   onAuthOpen: () => void;
@@ -2075,7 +1860,7 @@ function AppHeader({
           </div>
           <div className="min-w-0 leading-tight">
             <div className="truncate text-lg font-black text-primary">Sublet Pipeline</div>
-            <div className="hidden text-xs font-bold text-[#006AFF] xl:block">LA roommate-ready stays</div>
+            <div className="hidden text-xs font-bold text-[#006AFF] xl:block">可信赖的短租与室友平台</div>
           </div>
         </div>
 
@@ -2104,10 +1889,10 @@ function AppHeader({
         </nav>
 
         <div className="flex min-w-0 shrink-0 items-center justify-end gap-2 md:col-span-1 xl:col-span-3">
-          <Button variant={savedOnly ? "secondary" : "ghost"} size="icon" className="hidden rounded-full sm:inline-flex" aria-label="Saved homes" onClick={onSavedHomes}>
+          <Button variant={savedOnly ? "secondary" : "ghost"} size="icon" className="hidden rounded-full sm:inline-flex" aria-label="本机收藏" aria-pressed={savedOnly} onClick={onSavedHomes}>
             <Bookmark className={favoriteCount > 0 ? "fill-current text-primary" : undefined} />
           </Button>
-          <Button variant={notificationsOpen ? "secondary" : "ghost"} size="icon" className="relative hidden rounded-full sm:inline-flex" aria-label="Notifications" onClick={onNotifications}>
+          <Button variant={notificationsOpen ? "secondary" : "ghost"} size="icon" className="relative hidden rounded-full sm:inline-flex" aria-label="本机提醒" aria-expanded={notificationsOpen} onClick={onNotifications}>
             <Bell />
             {unreadCount > 0 ? <span className="absolute right-0 top-0 flex size-4 items-center justify-center rounded-full bg-[#006AFF] text-[10px] font-black text-white">{unreadCount}</span> : null}
           </Button>
@@ -2118,7 +1903,7 @@ function AppHeader({
           >
             <ShieldCheck className="size-4 text-trust-green" aria-hidden="true" />
             <span className="max-w-[180px] truncate">
-              {user ? profile?.displayName ?? user.email : "Sign in"}
+              {user ? profile?.displayName ?? user.email : "登录"}
             </span>
           </button>
           {user ? (
@@ -2126,7 +1911,7 @@ function AppHeader({
               退出
             </Button>
           ) : null}
-          <Button variant="outline" size="icon" className="rounded-full md:hidden" onClick={onAuthOpen} aria-label="Account">
+          <Button variant="outline" size="icon" className="rounded-full md:hidden" onClick={onAuthOpen} aria-label="账户">
             <ShieldCheck />
           </Button>
           <Button
@@ -2136,23 +1921,40 @@ function AppHeader({
             onClick={() => onSectionChange("Publish")}
           >
             <DoorOpen data-icon="inline-start" />
-            Host
+            房东发布
           </Button>
-          <Button variant="outline" size="icon" className="rounded-full md:hidden" aria-label="Open menu" aria-expanded={mobileMenuOpen} onClick={() => setMobileMenuOpen((current) => !current)}>
+          <Button variant="outline" size="icon" className="rounded-full md:hidden" aria-label="打开菜单" aria-expanded={mobileMenuOpen} onClick={() => setMobileMenuOpen((current) => !current)}>
             <Menu />
           </Button>
         </div>
       </div>
       {notificationsOpen ? (
         <div className="absolute right-4 top-[68px] z-50 w-[min(360px,calc(100vw-2rem))] rounded-[24px] border border-blue-100 bg-white p-4 shadow-panel">
-          <div className="text-base font-extrabold text-primary">Notifications</div>
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <div className="text-base font-extrabold text-primary">本机提醒</div>
+              <div className="text-xs font-semibold text-muted-foreground">仅保存在此设备</div>
+            </div>
+            {unreadCount > 0 ? (
+              <Button variant="ghost" size="sm" onClick={onMarkAllNotifications}>全部已读</Button>
+            ) : null}
+          </div>
           <div className="mt-3 grid gap-2">
             {notifications.length > 0 ? notifications.slice(0, 6).map((notification) => (
-              <div key={notification.id} className="rounded-2xl bg-blue-50/70 p-3">
-                <div className="text-sm font-extrabold text-primary">{notification.title}</div>
+              <button
+                key={notification.id}
+                className={cn("rounded-2xl p-3 text-left", notification.read ? "bg-slate-50" : "bg-blue-50")}
+                type="button"
+                onClick={() => onNotificationOpen(notification)}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <div className="text-sm font-extrabold text-primary">{notification.title}</div>
+                  {!notification.read ? <span className="size-2 rounded-full bg-[#006AFF]" aria-label="未读" /> : null}
+                </div>
                 <div className="mt-1 text-xs font-semibold text-muted-foreground">{notification.detail}</div>
-              </div>
-            )) : <div className="rounded-2xl border border-dashed p-4 text-sm font-semibold text-muted-foreground">暂无通知。完成 Like、DM、预约或申请后会显示在这里。</div>}
+                <div className="mt-2 text-[11px] font-bold text-muted-foreground">{formatReminderTime(notification.createdAt)}</div>
+              </button>
+            )) : <div className="rounded-2xl border border-dashed p-4 text-sm font-semibold text-muted-foreground">暂无本机提醒。成功发送消息或看房请求后会显示在这里。</div>}
           </div>
         </div>
       ) : null}
@@ -2178,15 +1980,24 @@ function AppHeader({
             );
           })}
           <Button variant={savedOnly ? "secondary" : "ghost"} size="sm" className="shrink-0" onClick={onSavedHomes}>
-            <Bookmark className="size-3.5" aria-hidden="true" /> Saved
+            <Bookmark className="size-3.5" aria-hidden="true" /> 收藏
           </Button>
           <Button variant={notificationsOpen ? "secondary" : "ghost"} size="sm" className="shrink-0" onClick={onNotifications}>
-            <Bell className="size-3.5" aria-hidden="true" /> Notifications
+            <Bell className="size-3.5" aria-hidden="true" /> 提醒
           </Button>
         </div>
       </div> : null}
     </header>
   );
+}
+
+function formatReminderTime(timestamp: number) {
+  return new Intl.DateTimeFormat("zh-CN", {
+    month: "numeric",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(new Date(timestamp));
 }
 
 function AuthStrip({
@@ -2246,7 +2057,7 @@ function AuthStrip({
       if (response.devCode) setCode(response.devCode);
       onToast(response.devCode ? `开发验证码：${response.devCode}` : "验证码已发送");
     } catch (error) {
-      onToast(error instanceof Error ? error.message : "验证码发送失败");
+      onToast(toProductApiError(error).message);
     } finally {
       setPending(false);
     }
@@ -2259,7 +2070,7 @@ function AuthStrip({
       onAuthenticated(response.accessToken, response.user);
       onToast(`已登录：${response.user.email}`);
     } catch (error) {
-      onToast(error instanceof Error ? error.message : "登录失败");
+      onToast(toProductApiError(error).message);
     } finally {
       setPending(false);
     }
@@ -2268,15 +2079,7 @@ function AuthStrip({
   async function saveProfile() {
     setPending(true);
     try {
-      await onProfileSave({
-        displayName: profileDraft.displayName?.trim(),
-        school: profileDraft.school?.trim(),
-        city: profileDraft.city?.trim(),
-        role: profileDraft.role,
-        instagram: profileDraft.instagram?.trim(),
-        wechat: profileDraft.wechat?.trim(),
-        bio: profileDraft.bio?.trim()
-      });
+      await onProfileSave(buildProfileUpdateInput(profileDraft));
     } finally {
       setPending(false);
     }
@@ -2290,29 +2093,29 @@ function AuthStrip({
         <div className="editorial-panel min-w-0 p-4">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <span className="editorial-kicker">01 / Account</span>
+              <span className="editorial-kicker">01 / 账户</span>
               <div className="text-sm font-black uppercase text-[#006AFF]">
-                {user ? "Account ready" : "Email sign in"}
+                {user ? "账户已登录" : "邮箱登录"}
               </div>
               <div className="mt-1 text-lg font-black text-primary">
                 {user ? profile?.displayName ?? user.email : "登录 / 注册"}
               </div>
             </div>
             {!isPinnedToPublish ? (
-              <Button variant="ghost" size="icon" className="rounded-full" onClick={onClose} aria-label="Close account panel">
+              <Button variant="ghost" size="icon" className="rounded-full" onClick={onClose} aria-label="关闭账户面板">
                 <X />
               </Button>
             ) : null}
           </div>
           <div className="mt-2 text-xs font-semibold text-muted-foreground">
-            {token ? "已登录，资料与发布操作会同步 API" : `${apiPresentation.label}：${apiPresentation.detail}`}
+            {token ? "已登录，资料与发布操作会同步到服务端" : `${apiPresentation.label}：${apiPresentation.detail}`}
           </div>
           {user ? (
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <Badge variant={profileComplete ? "trust" : "warning"}>
-                {profileComplete ? "Profile complete" : "Complete profile"}
+                {profileComplete ? "资料已完善" : "请完善资料"}
               </Badge>
-              <Badge variant="secondary">{profile?.role ?? user.role}</Badge>
+              <Badge variant="secondary">{getProfileRoleLabel(profile?.role ?? user.role)}</Badge>
             </div>
           ) : null}
         </div>
@@ -2320,25 +2123,25 @@ function AuthStrip({
           <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_180px]">
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
               <ProfileInput
-                label="Display name"
+                label="显示名称"
                 value={profileDraft.displayName ?? ""}
                 onChange={(value) => setProfileDraft((current) => ({ ...current, displayName: value }))}
                 placeholder="Maya Chen"
               />
               <ProfileInput
-                label="School"
+                label="学校"
                 value={profileDraft.school ?? ""}
                 onChange={(value) => setProfileDraft((current) => ({ ...current, school: value }))}
                 placeholder="USC / UCLA"
               />
               <ProfileInput
-                label="City"
+                label="城市"
                 value={profileDraft.city ?? ""}
                 onChange={(value) => setProfileDraft((current) => ({ ...current, city: value }))}
                 placeholder="LA"
               />
               <label className="grid gap-1 text-xs font-black uppercase text-muted-foreground">
-                Role
+                身份
                 <select
                   className="h-10 rounded-md border border-input bg-white px-3 text-sm font-bold normal-case text-primary shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   value={profileDraft.role ?? "renter"}
@@ -2349,37 +2152,37 @@ function AuthStrip({
                     }))
                   }
                 >
-                  <option value="renter">Renter</option>
-                  <option value="lister">Lister</option>
-                  <option value="both">Both</option>
+                  <option value="renter">租客</option>
+                  <option value="lister">房东</option>
+                  <option value="both">租客兼房东</option>
                 </select>
               </label>
               <ProfileInput
                 label="Instagram"
                 value={profileDraft.instagram ?? ""}
                 onChange={(value) => setProfileDraft((current) => ({ ...current, instagram: value }))}
-                placeholder="optional"
+                placeholder="选填"
               />
               <ProfileInput
-                label="Wechat"
+                label="微信"
                 value={profileDraft.wechat ?? ""}
                 onChange={(value) => setProfileDraft((current) => ({ ...current, wechat: value }))}
-                placeholder="private"
+                placeholder="仅自己可见"
               />
               <label className="grid gap-1 text-xs font-black uppercase text-muted-foreground md:col-span-2">
-                Bio
+                个人简介
                 <textarea
                   className="min-h-20 rounded-md border border-input bg-white px-3 py-2 text-sm font-semibold normal-case text-primary shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   value={profileDraft.bio ?? ""}
                   onChange={(event) => setProfileDraft((current) => ({ ...current, bio: event.target.value }))}
-                  placeholder="Brief roommate / housing intro"
+                  placeholder="简要介绍你的合租或住房需求"
                 />
               </label>
             </div>
             <div className="flex flex-col gap-2">
               <div className="rounded-md border bg-white p-3 text-xs font-semibold text-muted-foreground">
                 <div className="font-black text-primary">{user.email}</div>
-                <div className="mt-1">Wechat 只保存在你的私密资料里，不会公开展示。</div>
+                <div className="mt-1">微信号只保存在你的私密资料里，不会公开展示。</div>
               </div>
               <Button variant="trust" size="sm" onClick={saveProfile} disabled={pending}>
                 保存资料
@@ -2435,12 +2238,12 @@ function ProfileInput({
 
 function RoommatesMarketplaceScreen({
   roommates,
-  activeRoommate,
   groupMembers,
   likedRoommateIds,
   likedMeRoommateIds,
   introSentRoommateIds,
   skippedCount,
+  pendingRoommateIds,
   onLike,
   onLater,
   onPass,
@@ -2451,35 +2254,35 @@ function RoommatesMarketplaceScreen({
   onOpenLikeQueue
 }: {
   roommates: Roommate[];
-  activeRoommate: Roommate;
   groupMembers: Roommate[];
   likedRoommateIds: Set<string>;
   likedMeRoommateIds: Set<string>;
   introSentRoommateIds: Set<string>;
   skippedCount: number;
-  onLike: (roommate: Roommate) => void;
-  onLater: (roommate: Roommate) => void;
-  onPass: (roommate: Roommate) => void;
+  pendingRoommateIds: Set<string>;
+  onLike: (roommate: Roommate) => Promise<boolean>;
+  onLater: (roommate: Roommate) => Promise<boolean>;
+  onPass: (roommate: Roommate) => Promise<boolean>;
   onSendIntro: (roommate: Roommate) => void;
   onOpenDm: (roommate: Roommate) => void;
   onDecideRoommate: (roommate: Roommate) => void;
   onOpenDiscover: () => void;
   onOpenLikeQueue: () => void;
 }) {
-  const [preference, setPreference] = useState<RoommatePreference>(defaultRoommatePreference);
+  const [draftPreference, setDraftPreference] = useState<RoommatePreference>(defaultRoommatePreference);
+  const [appliedPreference, setAppliedPreference] = useState<RoommatePreference>(defaultRoommatePreference);
   const [sortMode, setSortMode] = useState<"Preference" | "Budget">("Preference");
   const [deckIndex, setDeckIndex] = useState(0);
-  const [searchApplied, setSearchApplied] = useState(false);
-  const rankedRoommates = useMemo(() => rankRoommatesByPreference(roommates, preference), [preference, roommates]);
+  const genderFilterAvailable = hasCompleteRoommateGenderData(roommates);
+  const rankedRoommates = useMemo(
+    () => rankRoommatesByPreference(roommates, appliedPreference),
+    [appliedPreference, roommates]
+  );
   const exactPreferenceMatches = useMemo(
-    () => rankedRoommates.filter((candidate) => matchesRoommatePreference(candidate, preference)),
-    [preference, rankedRoommates]
+    () => filterRoommatesByPreference(rankedRoommates, appliedPreference),
+    [appliedPreference, rankedRoommates]
   );
-  const displayRoommates = getRoommateDeckCandidates(rankedRoommates);
-  const fallbackRoommate = useMemo(
-    () => rankRoommatesByPreference([activeRoommate], preference)[0],
-    [activeRoommate, preference]
-  );
+  const displayRoommates = getRoommateDeckCandidates(exactPreferenceMatches);
   const sortedRoommates = useMemo(
     () =>
       sortMode === "Budget"
@@ -2492,7 +2295,7 @@ function RoommatesMarketplaceScreen({
     [displayRoommates, sortMode]
   );
   const deckPosition = sortedRoommates.length > 0 ? deckIndex % sortedRoommates.length : 0;
-  const activeDeckRoommate = sortedRoommates[deckPosition] ?? fallbackRoommate;
+  const activeDeckRoommate = sortedRoommates[deckPosition];
   const nextDeckRoommate =
     sortedRoommates.length > 1 ? sortedRoommates[(deckPosition + 1) % sortedRoommates.length] : undefined;
   const visibleRoommates = sortedRoommates.slice(0, 5);
@@ -2507,41 +2310,40 @@ function RoommatesMarketplaceScreen({
     [introSentRoommateIds, likedMeRoommateIds, likedRoommateIds, roommateMemberIds]
   );
   const reviewedCount = Math.min(roommates.length, likedRoommateIds.size + skippedCount);
-  const activeRoommateKey = getRoommateKey(activeDeckRoommate);
-  const activeConnectionStatus = getRoommateConnectionStatus(activeRoommateKey, connectionState);
+  const activeRoommateKey = activeDeckRoommate ? getRoommateKey(activeDeckRoommate) : "";
+  const activeConnectionStatus = activeDeckRoommate
+    ? getRoommateConnectionStatus(activeRoommateKey, connectionState)
+    : "new";
 
   useEffect(() => {
     setDeckIndex(0);
-  }, [preference, sortMode]);
+  }, [appliedPreference, sortMode]);
 
   function updatePreference(nextPreference: RoommatePreference) {
-    setPreference(nextPreference);
-    setSearchApplied(false);
+    setDraftPreference(nextPreference);
   }
 
   function goNextCard() {
     setDeckIndex((current) => current + 1);
   }
 
-  function handleLike(roommate: Roommate) {
-    onLike(roommate);
-    goNextCard();
+  async function handleLike(roommate: Roommate) {
+    if (await onLike(roommate)) goNextCard();
   }
 
-  function handleLater(roommate: Roommate) {
-    onLater(roommate);
-    goNextCard();
+  async function handleLater(roommate: Roommate) {
+    if (await onLater(roommate)) goNextCard();
   }
 
-  function handlePass(roommate: Roommate) {
-    onPass(roommate);
-    goNextCard();
+  async function handlePass(roommate: Roommate) {
+    if (await onPass(roommate)) goNextCard();
   }
 
   function cycleGenderFilter() {
-    const currentIndex = roommateGenderOptions.indexOf(preference.gender);
+    if (!genderFilterAvailable) return;
+    const currentIndex = roommateGenderOptions.indexOf(draftPreference.gender);
     const nextGender = roommateGenderOptions[(currentIndex + 1) % roommateGenderOptions.length];
-    updatePreference({ ...preference, gender: nextGender });
+    updatePreference({ ...draftPreference, gender: nextGender });
   }
 
   function cycleBudgetFilter() {
@@ -2552,18 +2354,18 @@ function RoommatesMarketplaceScreen({
       { budgetMin: 0, budgetMax: 3000 }
     ];
     const currentIndex = presets.findIndex(
-      (preset) => preset.budgetMin === preference.budgetMin && preset.budgetMax === preference.budgetMax
+      (preset) => preset.budgetMin === draftPreference.budgetMin && preset.budgetMax === draftPreference.budgetMax
     );
     const nextPreset = presets[(currentIndex + 1) % presets.length];
-    updatePreference({ ...preference, ...nextPreset });
+    updatePreference({ ...draftPreference, ...nextPreset });
   }
 
   function cycleSchoolFilter() {
     const presets = [["UCLA"], ["USC"], ["Caltech"], ["LMU"], []] as const;
-    const currentKey = preference.schools.join(",");
+    const currentKey = draftPreference.schools.join(",");
     const currentIndex = presets.findIndex((preset) => preset.join(",") === currentKey);
     const nextSchools = presets[(currentIndex + 1) % presets.length];
-    updatePreference({ ...preference, schools: [...nextSchools] });
+    updatePreference({ ...draftPreference, schools: [...nextSchools] });
   }
 
   function cycleHobbyFilter() {
@@ -2573,10 +2375,10 @@ function RoommatesMarketplaceScreen({
       ["轻社交", "宠物友好"],
       []
     ] as const;
-    const currentKey = preference.hobbies.join(",");
+    const currentKey = draftPreference.hobbies.join(",");
     const currentIndex = presets.findIndex((preset) => preset.join(",") === currentKey);
     const nextHobbies = presets[(currentIndex + 1) % presets.length];
-    updatePreference({ ...preference, hobbies: [...nextHobbies] });
+    updatePreference({ ...draftPreference, hobbies: [...nextHobbies] });
   }
 
   return (
@@ -2588,30 +2390,36 @@ function RoommatesMarketplaceScreen({
         <CardContent className="p-4 md:p-5">
           <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
             <div>
-              <span className="editorial-kicker">01 / Roommates</span>
+              <span className="editorial-kicker">01 / 室友</span>
               <h1 className="text-display text-4xl font-black leading-tight text-primary md:text-6xl">
-                Roommate Match
+                室友匹配
               </h1>
               <p className="mt-2 text-sm font-semibold text-muted-foreground">
-                {exactPreferenceMatches.length} filtered / {roommates.length} verified · {reviewedCount} reviewed · {likedRoommateIds.size} liked
-                {searchApplied ? " · Preference refreshed" : ""}
+                {exactPreferenceMatches.length} 位符合 / 共 {roommates.length} 位认证 · 已浏览 {reviewedCount} 位 · 喜欢 {likedRoommateIds.size} 位
               </p>
             </div>
             <div className="flex flex-wrap gap-2 lg:justify-end">
               <Button variant="secondary" className="rounded-full font-bold" onClick={onOpenLikeQueue}>
                 <Heart data-icon="inline-start" />
-                Like Queue · {likedRoommateIds.size}
+                喜欢列表 · {likedRoommateIds.size}
               </Button>
               <Button variant="outline" className="rounded-full font-bold" onClick={onOpenDiscover}>
                 <Home data-icon="inline-start" />
-                Browse stays
+                浏览房源
               </Button>
               <Button
                 className="rounded-full bg-[#006AFF] font-bold text-white hover:bg-[#0D4599]"
-                onClick={() => setSearchApplied(true)}
+                onClick={() => {
+                  setAppliedPreference(
+                    genderFilterAvailable
+                      ? draftPreference
+                      : { ...draftPreference, gender: "Open" }
+                  );
+                  setDeckIndex(0);
+                }}
               >
                 <SlidersHorizontal data-icon="inline-start" />
-                Apply preference
+                应用偏好
               </Button>
             </div>
           </div>
@@ -2619,26 +2427,31 @@ function RoommatesMarketplaceScreen({
           <div className="mt-5 grid grid-cols-1 overflow-hidden rounded-[18px] border border-border bg-card md:grid-cols-2 xl:grid-cols-4">
             <PreferenceSummaryField
               icon={Users}
-              label="Shared living"
-              value={roommateGenderLabels[preference.gender]}
+              label="合租偏好"
+              value={
+                genderFilterAvailable
+                  ? roommateGenderLabels[draftPreference.gender]
+                  : "性别资料未提供"
+              }
+              disabled={!genderFilterAvailable}
               onClick={cycleGenderFilter}
             />
             <PreferenceSummaryField
               icon={DollarSign}
-              label="Budget"
-              value={`$${preference.budgetMin.toLocaleString()} - $${preference.budgetMax.toLocaleString()}`}
+              label="预算"
+              value={`$${draftPreference.budgetMin.toLocaleString()} - $${draftPreference.budgetMax.toLocaleString()}`}
               onClick={cycleBudgetFilter}
             />
             <PreferenceSummaryField
               icon={GraduationCap}
-              label="School"
-              value={preference.schools.join(", ") || "不限"}
+              label="学校"
+              value={draftPreference.schools.join(", ") || "不限"}
               onClick={cycleSchoolFilter}
             />
             <PreferenceSummaryField
               icon={Sparkles}
-              label="Hobbies"
-              value={preference.hobbies.slice(0, 3).join(", ") || "不限"}
+              label="爱好"
+              value={draftPreference.hobbies.slice(0, 3).join(", ") || "不限"}
               onClick={cycleHobbyFilter}
             />
           </div>
@@ -2648,8 +2461,9 @@ function RoommatesMarketplaceScreen({
       <div className="app-grid relative z-10 items-start">
         <div className="col-span-full min-w-0 xl:col-span-4">
           <RoommatePreferencePanel
-            preference={preference}
-            fitScore={activeDeckRoommate.preferenceFit.score}
+            preference={draftPreference}
+            fitScore={activeDeckRoommate?.preferenceFit.score ?? 0}
+            genderFilterAvailable={genderFilterAvailable}
             onPreferenceChange={updatePreference}
           />
         </div>
@@ -2658,10 +2472,14 @@ function RoommatesMarketplaceScreen({
           <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <div className="text-2xl font-extrabold text-primary">
-                {activeDeckRoommate.preferenceFit.score}% preference fit
+                {activeDeckRoommate
+                  ? `偏好匹配度 ${activeDeckRoommate.preferenceFit.score}%`
+                  : "没有符合当前偏好的室友"}
               </div>
               <div className="text-sm font-semibold text-muted-foreground">
-                Card {deckPosition + 1} of {Math.max(1, sortedRoommates.length)}
+                {activeDeckRoommate
+                  ? `第 ${deckPosition + 1} 位 / 共 ${sortedRoommates.length} 位`
+                  : "调整左侧偏好并重新应用后再查看。"}
               </div>
             </div>
             <div className="flex w-fit overflow-hidden rounded-full border border-blue-200 bg-white p-1 shadow-sm">
@@ -2675,24 +2493,34 @@ function RoommatesMarketplaceScreen({
                   type="button"
                   onClick={() => setSortMode(mode)}
                 >
-                  {mode}
+                  {mode === "Preference" ? "推荐" : "预算"}
                 </button>
               ))}
             </div>
           </div>
 
-          <SwipeRoommateDeck
-            roommate={activeDeckRoommate}
-            nextRoommate={nextDeckRoommate}
-            liked={likedRoommateIds.has(getRoommateKey(activeDeckRoommate))}
-            connectionStatus={activeConnectionStatus}
-            onLike={() => handleLike(activeDeckRoommate)}
-            onLater={() => handleLater(activeDeckRoommate)}
-            onPass={() => handlePass(activeDeckRoommate)}
-            onSendIntro={() => onSendIntro(activeDeckRoommate)}
-            onOpenDm={() => onOpenDm(activeDeckRoommate)}
-            onDecideRoommate={() => onDecideRoommate(activeDeckRoommate)}
-          />
+          {activeDeckRoommate ? (
+            <SwipeRoommateDeck
+              roommate={activeDeckRoommate}
+              nextRoommate={nextDeckRoommate}
+              liked={likedRoommateIds.has(getRoommateKey(activeDeckRoommate))}
+              connectionStatus={activeConnectionStatus}
+              pending={pendingRoommateIds.has(`roommate:${activeRoommateKey}`)}
+              onLike={() => handleLike(activeDeckRoommate)}
+              onLater={() => handleLater(activeDeckRoommate)}
+              onPass={() => handlePass(activeDeckRoommate)}
+              onSendIntro={() => onSendIntro(activeDeckRoommate)}
+              onOpenDm={() => onOpenDm(activeDeckRoommate)}
+              onDecideRoommate={() => onDecideRoommate(activeDeckRoommate)}
+            />
+          ) : (
+            <Card className="border-dashed p-8 text-center shadow-card">
+              <CardTitle>暂无符合条件的室友</CardTitle>
+              <CardDescription className="mt-2">
+                当前不会回退显示未命中的人选，请调整预算、学校或其他偏好。
+              </CardDescription>
+            </Card>
+          )}
 
           <PreferenceMatchRail
             roommates={visibleRoommates}
@@ -2709,17 +2537,20 @@ function PreferenceSummaryField({
   icon: Icon,
   label,
   value,
+  disabled = false,
   onClick
 }: {
   icon: LucideIcon;
   label: string;
   value: string;
+  disabled?: boolean;
   onClick: () => void;
 }) {
   return (
     <button
-      className="flex min-h-16 min-w-0 items-center gap-3 border-b border-blue-100 bg-white px-4 py-3 text-left transition-colors hover:bg-blue-50 last:border-b-0 md:border-r md:last:border-r-0 xl:border-b-0"
+      className="flex min-h-16 min-w-0 items-center gap-3 border-b border-blue-100 bg-white px-4 py-3 text-left transition-colors hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60 last:border-b-0 md:border-r md:last:border-r-0 xl:border-b-0"
       type="button"
+      disabled={disabled}
       onClick={onClick}
     >
       <Icon className="size-5 shrink-0 text-[#006AFF]" aria-hidden="true" />
@@ -2735,10 +2566,12 @@ function PreferenceSummaryField({
 function RoommatePreferencePanel({
   preference,
   fitScore,
+  genderFilterAvailable,
   onPreferenceChange
 }: {
   preference: RoommatePreference;
   fitScore: number;
+  genderFilterAvailable: boolean;
   onPreferenceChange: (preference: RoommatePreference) => void;
 }) {
   function setBudget(field: "budgetMin" | "budgetMax", value: string) {
@@ -2778,8 +2611,8 @@ function RoommatePreferencePanel({
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <CardTitle className="text-display text-2xl font-black">My Preference</CardTitle>
-            <CardDescription className="font-semibold">Shared-living match settings</CardDescription>
+            <CardTitle className="text-display text-2xl font-black">我的偏好</CardTitle>
+            <CardDescription className="font-semibold">调整合租筛选条件，应用后才会更新结果</CardDescription>
           </div>
           <div className="flex size-11 items-center justify-center rounded-full bg-blue-50 text-[#006AFF]">
             <SlidersHorizontal className="size-5" aria-hidden="true" />
@@ -2788,30 +2621,36 @@ function RoommatePreferencePanel({
       </CardHeader>
       <CardContent className="flex flex-col gap-5">
         <div className="grid grid-cols-[112px_minmax(0,1fr)] items-center gap-4 rounded-[16px] border border-border bg-card p-4">
-          <MatchScoreRing score={fitScore} label="Match Fit" size="lg" />
+          <MatchScoreRing score={fitScore} label="匹配度" size="lg" />
           <div className="min-w-0">
             <div className="text-base font-black text-primary">
-              {fitScore >= 90 ? "Great start!" : fitScore >= 78 ? "Strong lane" : "Needs tuning"}
+              {fitScore >= 90 ? "非常匹配" : fitScore >= 78 ? "比较匹配" : "建议调整偏好"}
             </div>
             <p className="mt-1 text-sm font-semibold leading-6 text-muted-foreground">
-              Preference updates reorder the swipe deck without hiding candidates.
+              编辑中的偏好不会立即改变结果，点击“应用偏好”后才会重新筛选和排序。
             </p>
           </div>
         </div>
 
         <div>
           <div className="mb-2 text-xs font-extrabold uppercase tracking-wide text-muted-foreground">性别</div>
-          <div className="grid grid-cols-2 gap-2">
-            {roommateGenderOptions.map((option) => (
-              <PreferenceChip
-                key={option}
-                selected={preference.gender === option}
-                onClick={() => onPreferenceChange({ ...preference, gender: option })}
-              >
-                {roommateGenderLabels[option]}
-              </PreferenceChip>
-            ))}
-          </div>
+          {genderFilterAvailable ? (
+            <div className="grid grid-cols-2 gap-2">
+              {roommateGenderOptions.map((option) => (
+                <PreferenceChip
+                  key={option}
+                  selected={preference.gender === option}
+                  onClick={() => onPreferenceChange({ ...preference, gender: option })}
+                >
+                  {roommateGenderLabels[option]}
+                </PreferenceChip>
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-dashed border-blue-200 bg-blue-50/50 p-3 text-sm font-semibold text-muted-foreground">
+              当前服务未提供可信性别资料，性别筛选暂不可用。
+            </div>
+          )}
         </div>
 
         <div>
@@ -2823,7 +2662,7 @@ function RoommatePreferencePanel({
           </div>
           <div className="grid grid-cols-2 gap-2">
             <Input
-              aria-label="Minimum roommate budget"
+              aria-label="室友最低预算"
               className="h-11 rounded-2xl border-blue-100 text-sm font-bold"
               min={600}
               max={preference.budgetMax}
@@ -2832,7 +2671,7 @@ function RoommatePreferencePanel({
               value={preference.budgetMin}
             />
             <Input
-              aria-label="Maximum roommate budget"
+              aria-label="室友最高预算"
               className="h-11 rounded-2xl border-blue-100 text-sm font-bold"
               min={preference.budgetMin}
               max={3000}
@@ -2852,7 +2691,7 @@ function RoommatePreferencePanel({
                 selected={preference.schools.includes(school)}
                 onClick={() => toggleSchool(school)}
               >
-                {school}
+                {school === "Other" ? "其他" : school}
               </PreferenceChip>
             ))}
           </div>
@@ -2966,12 +2805,14 @@ function SwipeActionButton({
   icon: Icon,
   label,
   tone,
-  onClick
+  onClick,
+  disabled = false
 }: {
   icon: LucideIcon;
   label: string;
   tone: "pass" | "later" | "like";
   onClick: () => void;
+  disabled?: boolean;
 }) {
   const toneClass = {
     pass: "border-red-100 bg-white text-trust-red hover:bg-red-50",
@@ -2980,7 +2821,7 @@ function SwipeActionButton({
   }[tone];
 
   return (
-    <button className="group flex min-w-0 flex-col items-center gap-2 text-sm font-black" type="button" onClick={onClick}>
+    <button className="group flex min-w-0 flex-col items-center gap-2 text-sm font-black disabled:cursor-not-allowed disabled:opacity-55" type="button" onClick={onClick} disabled={disabled}>
       <span
         className={cn(
           "grid size-16 place-items-center rounded-full border transition-all group-hover:-translate-y-1",
@@ -2999,6 +2840,7 @@ function SwipeRoommateDeck({
   nextRoommate,
   liked,
   connectionStatus,
+  pending,
   onLike,
   onLater,
   onPass,
@@ -3010,6 +2852,7 @@ function SwipeRoommateDeck({
   nextRoommate?: RankedRoommate<Roommate>;
   liked: boolean;
   connectionStatus: RoommateConnectionStatus;
+  pending: boolean;
   onLike: () => void;
   onLater: () => void;
   onPass: () => void;
@@ -3019,9 +2862,14 @@ function SwipeRoommateDeck({
 }) {
   const reasons = roommate.preferenceFit.reasons.slice(0, 4);
   const gaps = roommate.preferenceFit.gaps.slice(0, 2);
-  const canSendIntro = connectionStatus === "new" || connectionStatus === "liked-by-me" || connectionStatus === "liked-you";
-  const canOpenDm = connectionStatus === "mutual" || connectionStatus === "roommate";
-  const canDecideRoommate = connectionStatus === "mutual";
+  if (!roommate.name) {
+    return (
+      <Card className="border-dashed p-8 text-center shadow-card">
+        <CardTitle>暂无可显示的室友资料</CardTitle>
+        <CardDescription className="mt-2">服务恢复后可继续筛选与匹配。</CardDescription>
+      </Card>
+    );
+  }
 
   return (
     <div className="relative mx-auto min-h-[760px] w-full max-w-[660px]">
@@ -3036,17 +2884,17 @@ function SwipeRoommateDeck({
           <div className="absolute inset-0 bg-gradient-to-t from-slate-950/72 via-slate-950/8 to-transparent" />
           <div className="absolute left-4 top-4 flex items-center gap-2">
             <Badge className="border-white/70 bg-white text-[#006AFF] shadow-sm">
-            {roommate.preferenceFit.score}% fit
+            匹配度 {roommate.preferenceFit.score}%
             </Badge>
             <Badge className="border-white/20 bg-[#006AFF] text-white shadow-sm">
-              Verified
+              已认证
             </Badge>
           </div>
           <Badge className="absolute right-4 top-4 border-white/25 bg-slate-950/45 text-white shadow-sm">
             {getRoommateStatusLabel(connectionStatus)}
           </Badge>
           <div className="absolute bottom-8 right-6 hidden sm:block">
-            <MatchScoreRing score={roommate.preferenceFit.score} label="Match" size="lg" inverted />
+            <MatchScoreRing score={roommate.preferenceFit.score} label="匹配" size="lg" inverted />
           </div>
           <div className="absolute inset-x-0 bottom-0 p-5 text-white">
             <div className="flex flex-wrap items-end justify-between gap-3">
@@ -3057,8 +2905,8 @@ function SwipeRoommateDeck({
                 <p className="mt-2 text-sm font-bold text-white/88 md:text-base">{roommate.role}</p>
               </div>
               <div className="rounded-2xl border border-white/25 bg-white/14 px-4 py-3 text-right backdrop-blur">
-                <div className="text-xs font-bold uppercase text-white/70">Budget</div>
-                <div className="text-lg font-extrabold">{roommate.budget.replace("/月", "/mo")}</div>
+                <div className="text-xs font-bold uppercase text-white/70">预算</div>
+                <div className="text-lg font-extrabold">{roommate.budget}</div>
               </div>
             </div>
           </div>
@@ -3066,13 +2914,13 @@ function SwipeRoommateDeck({
 
         <div className="grid gap-5 p-5">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <ProfileMiniStat icon={Users} label="Gender" value={roommate.gender ?? "Open"} />
-            <ProfileMiniStat icon={GraduationCap} label="School" value={roommate.school ?? "Other"} />
-            <ProfileMiniStat icon={MapPin} label="Area" value={roommate.commute} />
+            <ProfileMiniStat icon={Users} label="性别" value={getRoommateGenderLabel(roommate.gender)} />
+            <ProfileMiniStat icon={GraduationCap} label="学校" value={roommate.school ?? "其他"} />
+            <ProfileMiniStat icon={MapPin} label="区域" value={roommate.commute} />
           </div>
 
           <div>
-            <div className="mb-2 text-xs font-extrabold uppercase tracking-wide text-muted-foreground">Match reasons</div>
+            <div className="mb-2 text-xs font-extrabold uppercase tracking-wide text-muted-foreground">匹配原因</div>
             <div className="flex flex-wrap gap-2">
               {reasons.map((reason) => (
                 <span key={reason} className="rounded-full bg-blue-50 px-3 py-1.5 text-xs font-extrabold text-[#006AFF]">
@@ -3096,39 +2944,26 @@ function SwipeRoommateDeck({
           </div>
 
           <div className="grid grid-cols-3 items-start gap-3 pt-1">
-            <SwipeActionButton icon={X} label="Pass" tone="pass" onClick={onPass} />
-            <SwipeActionButton icon={Star} label="Later" tone="later" onClick={onLater} />
-            <SwipeActionButton icon={Heart} label={liked ? "Liked" : "Like"} tone="like" onClick={onLike} />
+            <SwipeActionButton icon={X} label={pending ? "提交中" : "跳过"} tone="pass" onClick={onPass} disabled={pending} />
+            <SwipeActionButton icon={Star} label={pending ? "提交中" : "稍后"} tone="later" onClick={onLater} disabled={pending} />
+            <SwipeActionButton icon={Heart} label={pending ? "提交中" : liked ? "已喜欢" : "喜欢"} tone="like" onClick={onLike} disabled={pending} />
           </div>
 
           <div className="grid gap-2 rounded-[24px] border border-blue-100 bg-blue-50/70 p-3 sm:grid-cols-2">
-            {canOpenDm ? (
-              <Button className="rounded-full bg-[#006AFF] font-extrabold text-white hover:bg-[#0D4599]" onClick={onOpenDm}>
-                <MessageCircle data-icon="inline-start" />
-                Open DM
-              </Button>
-            ) : (
-              <Button
-                variant={canSendIntro ? "outline" : "secondary"}
-                className="rounded-full font-extrabold"
-                disabled={!canSendIntro}
-                onClick={onSendIntro}
-              >
-                <Send data-icon="inline-start" />
-                {connectionStatus === "intro-sent" ? "Intro sent" : "Send intro"}
-              </Button>
-            )}
+            <Button variant="outline" className="rounded-full font-extrabold" onClick={connectionStatus === "new" ? onSendIntro : onOpenDm}>
+              <MessageCircle data-icon="inline-start" />
+              室友私信（暂未开放）
+            </Button>
             <Button
-              variant={canDecideRoommate || connectionStatus === "roommate" ? "trust" : "secondary"}
+              variant="secondary"
               className="rounded-full font-extrabold"
-              disabled={!canDecideRoommate && connectionStatus !== "roommate"}
               onClick={onDecideRoommate}
             >
               <UserCheck data-icon="inline-start" />
-              {connectionStatus === "roommate" ? "Roommate" : "Decide roommate"}
+              组队确认（暂未开放）
             </Button>
             <p className="text-xs font-semibold leading-5 text-muted-foreground sm:col-span-2">
-              {getRoommateStatusDescription(connectionStatus)}
+              {getRoommateStatusDescription(connectionStatus)} 私信与组队确认需等待后端接通。
             </p>
           </div>
         </div>
@@ -3138,21 +2973,28 @@ function SwipeRoommateDeck({
 }
 
 function getRoommateStatusLabel(status: RoommateConnectionStatus) {
-  if (status === "roommate") return "Roommate";
-  if (status === "mutual") return "Mutual match";
-  if (status === "intro-sent") return "Intro sent";
-  if (status === "liked-you") return "Liked you";
-  if (status === "liked-by-me") return "Waiting";
-  return "New";
+  if (status === "roommate") return "已组成室友";
+  if (status === "mutual") return "已互相匹配";
+  if (status === "intro-sent") return "已发开场消息";
+  if (status === "liked-you") return "对方喜欢了你";
+  if (status === "liked-by-me") return "等待对方回应";
+  return "新候选人";
 }
 
 function getRoommateStatusDescription(status: RoommateConnectionStatus) {
-  if (status === "roommate") return "You both decided to room together. Group tour is now unlocked.";
-  if (status === "mutual") return "Mutual like unlocked private DM. Decide as roommates before group tour.";
-  if (status === "intro-sent") return "Opening message sent. More private messages unlock after a mutual like.";
-  if (status === "liked-you") return "They liked you. Like back to unlock private DM.";
-  if (status === "liked-by-me") return "Saved to Liked by me. Private DM unlocks when they like you back.";
-  return "Before mutual like, you can send exactly one opening message.";
+  if (status === "roommate") return "服务端已确认室友关系。";
+  if (status === "mutual") return "服务端已确认互相匹配。";
+  if (status === "intro-sent") return "旧版开场消息状态仅供提示，不会继续本地推进。";
+  if (status === "liked-you") return "对方喜欢了你；喜欢回去后等待服务端确认匹配。";
+  if (status === "liked-by-me") return "操作已提交，正在等待对方回应。";
+  return "喜欢、跳过和稍后查看都会在服务端成功后才切换卡片。";
+}
+
+function getRoommateGenderLabel(gender?: string) {
+  if (gender === "Woman" || gender === "Women") return "女性";
+  if (gender === "Man" || gender === "Men") return "男性";
+  if (gender === "Non-binary") return "非二元";
+  return "未提供";
 }
 
 function ProfileMiniStat({
@@ -3186,8 +3028,8 @@ function PreferenceMatchRail({
     <div className="mt-5 rounded-[28px] border border-blue-100 bg-white p-4 shadow-sm">
       <div className="mb-3 flex items-center justify-between gap-3">
         <div>
-          <div className="text-lg font-extrabold text-primary">Next matches</div>
-          <div className="text-xs font-bold text-muted-foreground">Preference-ranked queue</div>
+          <div className="text-lg font-extrabold text-primary">接下来的匹配</div>
+          <div className="text-xs font-bold text-muted-foreground">按偏好匹配度排序</div>
         </div>
         <ChevronDown className="size-4 text-[#006AFF]" aria-hidden="true" />
       </div>
@@ -3201,11 +3043,11 @@ function PreferenceMatchRail({
               </Avatar>
               <div className="min-w-0">
                 <div className="truncate text-sm font-extrabold text-primary">{roommate.name}</div>
-                <div className="text-xs font-bold text-[#006AFF]">{roommate.preferenceFit.score}% fit</div>
+                <div className="text-xs font-bold text-[#006AFF]">匹配度 {roommate.preferenceFit.score}%</div>
               </div>
             </div>
             <div className="mt-3 flex items-center justify-between gap-2">
-              <span className="truncate text-xs font-bold text-muted-foreground">{roommate.school ?? "Other"}</span>
+              <span className="truncate text-xs font-bold text-muted-foreground">{roommate.school ?? "其他"}</span>
               {likedRoommateIds.has(getRoommateKey(roommate)) ? (
                 <Heart className="size-4 fill-[#006AFF] text-[#006AFF]" aria-hidden="true" />
               ) : null}
@@ -3220,6 +3062,8 @@ function PreferenceMatchRail({
 function LikeQueueScreen({
   roommates,
   members,
+  dealRooms,
+  activeDealRoomId,
   likedRoommateIds,
   likedMeRoommateIds,
   introSentRoommateIds,
@@ -3228,10 +3072,13 @@ function LikeQueueScreen({
   onOpenMessages,
   onOpenDm,
   onDecideRoommate,
+  onSelectDealRoom,
   onRequestTour
 }: {
   roommates: Roommate[];
   members: Roommate[];
+  dealRooms: ApiDealRoom[];
+  activeDealRoomId: string | null;
   likedRoommateIds: Set<string>;
   likedMeRoommateIds: Set<string>;
   introSentRoommateIds: Set<string>;
@@ -3240,6 +3087,7 @@ function LikeQueueScreen({
   onOpenMessages: () => void;
   onOpenDm: (roommate: Roommate) => void;
   onDecideRoommate: (roommate: Roommate) => void;
+  onSelectDealRoom: (dealRoomId: string) => void;
   onRequestTour: () => void;
 }) {
   const memberIds = useMemo(() => new Set(members.map(getRoommateKey)), [members]);
@@ -3268,30 +3116,55 @@ function LikeQueueScreen({
       <Card className="overflow-hidden rounded-[18px] border-border shadow-panel">
         <CardContent className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <span className="editorial-kicker">01 / Like Queue</span>
+            <span className="editorial-kicker">01 / 喜欢列表</span>
             <div className="flex items-center gap-2">
               <Heart className="size-6 fill-[#006AFF] text-[#006AFF]" aria-hidden="true" />
-              <h1 className="text-display text-3xl font-black text-primary">Like Queue</h1>
+              <h1 className="text-display text-3xl font-black text-primary">喜欢列表</h1>
             </div>
             <p className="mt-1 text-sm font-semibold text-muted-foreground">
-              {waitingMembers.length} waiting · {mutualMembers.length} mutual · {members.length} roommates
+              {waitingMembers.length} 位等待回应 · {mutualMembers.length} 位互相匹配 · {members.length} 位已组队
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" className="rounded-full font-bold" onClick={onOpenRoommates}>
               <Users data-icon="inline-start" />
-              Back to matching
+              返回匹配
             </Button>
             <Button className="rounded-full bg-[#006AFF] font-bold text-white hover:bg-[#0D4599]" onClick={onOpenMessages}>
               <MessageCircle data-icon="inline-start" />
-              Messages
+              消息
             </Button>
           </div>
         </CardContent>
       </Card>
 
+      {dealRooms.length > 1 ? (
+        <Card className="rounded-[18px] border-blue-200 bg-blue-50/40 shadow-card">
+          <CardContent className="p-4">
+            <label className="grid gap-2 text-sm font-extrabold text-primary sm:grid-cols-[180px_minmax(0,1fr)] sm:items-center">
+              选择当前室友小组
+              <select
+                className="h-11 rounded-md border border-blue-200 bg-white px-3 text-sm font-bold"
+                value={activeDealRoomId ?? ""}
+                onChange={(event) => onSelectDealRoom(event.target.value)}
+              >
+                <option value="">请选择一个小组</option>
+                {dealRooms.map((dealRoom) => (
+                  <option key={dealRoom.id} value={dealRoom.id}>
+                    {getDealRoomLabel(dealRoom)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <p className="mt-2 text-xs font-semibold text-muted-foreground">
+              多个小组不会自动合并；消息和小组看房只使用你明确选中的小组。
+            </p>
+          </CardContent>
+        </Card>
+      ) : null}
+
       <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3 xl:gap-6">
-        <QueueColumn title="Waiting for a like back" description="Liked by you" count={waitingMembers.length}>
+        <QueueColumn title="等待对方回应" description="你已喜欢" count={waitingMembers.length}>
           {waitingMembers.length > 0 ? (
             waitingMembers.map((member) => (
               <RoommateConnectionRow
@@ -3303,11 +3176,11 @@ function LikeQueueScreen({
               />
             ))
           ) : (
-            <QueueEmptyState>Like someone to save them here.</QueueEmptyState>
+            <QueueEmptyState>喜欢候选人后会显示在这里。</QueueEmptyState>
           )}
         </QueueColumn>
 
-        <QueueColumn title="Mutual matches" description="Private DM is unlocked" count={mutualMembers.length}>
+        <QueueColumn title="互相匹配" description="仅显示服务端确认的结果；私信暂未开放" count={mutualMembers.length}>
           {mutualMembers.length > 0 ? (
             mutualMembers.map((member) => (
               <RoommateConnectionRow
@@ -3319,12 +3192,12 @@ function LikeQueueScreen({
               />
             ))
           ) : (
-            <QueueEmptyState>Mutual likes will appear here.</QueueEmptyState>
+            <QueueEmptyState>服务端确认互相匹配后会显示在这里。</QueueEmptyState>
           )}
         </QueueColumn>
 
-        <QueueColumn title="Roommate group" description={ready ? `$${averageBudget.toLocaleString()} per person` : "Decide as roommates first"} count={members.length}>
-          <div className="text-3xl font-extrabold text-primary">{ready ? `$${totalBudget.toLocaleString()} / mo` : "Locked"}</div>
+        <QueueColumn title="室友小组" description={ready ? `人均 $${averageBudget.toLocaleString()}` : "等待服务端确认室友关系"} count={members.length}>
+          <div className="text-3xl font-extrabold text-primary">{ready ? `$${totalBudget.toLocaleString()} / 月` : "尚未组成"}</div>
           {members.length > 0 ? (
             members.map((member) => (
               <div key={getRoommateKey(member)} className="flex items-center gap-3 rounded-[22px] border border-blue-100 bg-white p-3">
@@ -3340,11 +3213,11 @@ function LikeQueueScreen({
               </div>
             ))
           ) : (
-            <QueueEmptyState>No roommate group yet.</QueueEmptyState>
+            <QueueEmptyState>还没有服务端确认的室友小组。</QueueEmptyState>
           )}
           <Button className="mt-auto h-11 rounded-full bg-[#006AFF] font-extrabold text-white hover:bg-[#0D4599]" disabled={!ready} onClick={onRequestTour}>
             <CalendarDays data-icon="inline-start" />
-            {tourRequested && ready ? "Group tour requested" : "Request group tour"}
+            {tourRequested && ready ? "小组看房已请求" : "发起小组看房"}
           </Button>
         </QueueColumn>
       </div>
@@ -3383,90 +3256,6 @@ function QueueEmptyState({ children }: { children: ReactNode }) {
   return <div className="rounded-[22px] border border-dashed border-blue-200 bg-white p-4 text-sm font-semibold text-muted-foreground">{children}</div>;
 }
 
-function RoommateDmPanel({
-  roommate,
-  thread,
-  onSendMessage
-}: {
-  roommate: Roommate;
-  thread: RoommateDmThread;
-  onSendMessage: (body: string) => void;
-}) {
-  const [draft, setDraft] = useState("");
-  const visibleMessages = thread.messages.slice(-5);
-  const quickReplies = [
-    "你理想入住时间是什么时候？",
-    "预算和区域我这边也合适。",
-    "我们可以先聊一下作息和做饭频率。"
-  ];
-
-  function submitMessage(body = draft) {
-    if (!body.trim()) return;
-    onSendMessage(body);
-    setDraft("");
-  }
-
-  return (
-    <Card className="shadow-panel" data-testid="roommate-dm-panel">
-      <CardHeader>
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <CardTitle>DM & Roommate fit</CardTitle>
-            <CardDescription>{roommate.name} · {roommate.role}</CardDescription>
-          </div>
-          <Badge variant="trust">Mutual</Badge>
-        </div>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-4">
-        <div className="flex max-h-[420px] flex-col gap-3 overflow-y-auto rounded-[24px] border border-blue-100 bg-blue-50/50 p-3 app-scrollbar">
-          {visibleMessages.map((message) => (
-            <div
-              key={message.id}
-              className={cn(
-                "max-w-[88%] rounded-[22px] border px-3 py-2 text-sm shadow-sm",
-                message.align === "right"
-                  ? "ml-auto border-[#006AFF]/20 bg-[#006AFF] text-white"
-                  : "border-blue-100 bg-white text-primary"
-              )}
-            >
-              <div className={cn("flex items-center justify-between gap-3 text-[11px] font-black", message.align === "right" ? "text-white/80" : "text-muted-foreground")}>
-                <span>{message.author}</span>
-                <span>{message.time}</span>
-              </div>
-              <p className="mt-1 font-semibold leading-5">{message.body}</p>
-            </div>
-          ))}
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {quickReplies.map((reply) => (
-            <Button key={reply} variant="secondary" size="sm" className="rounded-full" onClick={() => setDraft(getComposerDraftAfterQuickReply(draft, reply))}>
-              {reply}
-            </Button>
-          ))}
-        </div>
-        <div className="grid grid-cols-[minmax(0,1fr)_56px] items-stretch gap-2">
-          <textarea
-            className="min-h-20 resize-none rounded-[22px] border border-blue-100 bg-white px-4 py-3 text-sm font-semibold text-primary shadow-sm outline-none transition-colors placeholder:text-muted-foreground focus:border-[#006AFF]"
-          value={draft}
-          onChange={(event) => setDraft(event.target.value)}
-          placeholder={`给 ${roommate.name} 发私信`}
-          onKeyDown={(event) => {
-            if (event.key === "Enter" && !event.shiftKey) {
-              event.preventDefault();
-              submitMessage();
-            }
-          }}
-          />
-          <Button className="h-20 rounded-[22px] bg-[#006AFF] px-4 text-white hover:bg-[#0D4599]" onClick={() => submitMessage()}>
-            <Send aria-hidden="true" />
-            <span className="sr-only">发送 roommate DM</span>
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
 function RoommateConnectionRow({
   roommate,
   state,
@@ -3480,8 +3269,6 @@ function RoommateConnectionRow({
 }) {
   const key = getRoommateKey(roommate);
   const status = getRoommateConnectionStatus(key, state);
-  const canDm = canOpenRoommateDm(key, state);
-  const canDecide = status === "mutual";
 
   return (
     <div className="grid min-w-0 grid-cols-[1fr_auto] items-center gap-3 rounded-[24px] border border-blue-100 bg-white p-3 shadow-sm">
@@ -3496,13 +3283,13 @@ function RoommateConnectionRow({
         </div>
       </div>
       <div className="flex shrink-0 gap-1">
-        <Button size="icon" variant={canDm ? "outline" : "secondary"} className="size-9 rounded-full" disabled={!canDm} onClick={() => onOpenDm(roommate)}>
+        <Button size="icon" variant="secondary" className="size-9 rounded-full" onClick={() => onOpenDm(roommate)}>
           <MessageCircle className="size-4" aria-hidden="true" />
-          <span className="sr-only">Open DM</span>
+          <span className="sr-only">室友私信暂未开放</span>
         </Button>
-        <Button size="icon" variant={canDecide || status === "roommate" ? "trust" : "secondary"} className="size-9 rounded-full" disabled={!canDecide && status !== "roommate"} onClick={() => onDecideRoommate(roommate)}>
+        <Button size="icon" variant="secondary" className="size-9 rounded-full" onClick={() => onDecideRoommate(roommate)}>
           <UserCheck className="size-4" aria-hidden="true" />
-          <span className="sr-only">Decide roommate</span>
+          <span className="sr-only">组队确认暂未开放</span>
         </Button>
       </div>
     </div>
@@ -3512,6 +3299,14 @@ function RoommateConnectionRow({
 function DiscoverScreen({
   filters,
   listings,
+  totalListingCount,
+  page,
+  pageCount,
+  heading,
+  summary,
+  dateFilterAvailable,
+  previewDataEnabled,
+  serviceUnavailable,
   selectedListing,
   favoriteIds,
   viewMode,
@@ -3523,10 +3318,19 @@ function DiscoverScreen({
   onOpenListing,
   onFavorite,
   onViewModeChange,
-  onOpenRoommates
+  onOpenRoommates,
+  onPageChange
 }: {
   filters: SearchFilters;
   listings: Listing[];
+  totalListingCount: number;
+  page: number;
+  pageCount: number;
+  heading: string;
+  summary: string;
+  dateFilterAvailable: boolean;
+  previewDataEnabled: boolean;
+  serviceUnavailable: boolean;
   selectedListing: Listing;
   favoriteIds: Set<string>;
   viewMode: ViewMode;
@@ -3539,6 +3343,7 @@ function DiscoverScreen({
   onFavorite: (id: string) => void;
   onViewModeChange: (value: ViewMode) => void;
   onOpenRoommates: () => void;
+  onPageChange: (page: number) => void;
 }) {
   function handleMapSelect(listing: Listing) {
     onPreview(listing);
@@ -3555,7 +3360,9 @@ function DiscoverScreen({
     <section className="app-shell flex w-full flex-col gap-6 py-5 md:py-6">
       <SearchHero
         filters={filters}
-        resultCount={listings.length}
+        resultCount={totalListingCount}
+        dateFilterAvailable={dateFilterAvailable}
+        previewDataEnabled={previewDataEnabled}
         onFiltersChange={onFiltersChange}
         onAmenityChange={onAmenityChange}
         onClear={onClear}
@@ -3565,17 +3372,26 @@ function DiscoverScreen({
         <div className={cn("col-span-full flex min-w-0 flex-col gap-4", viewMode === "map" && "lg:col-span-4 xl:col-span-7")}>
           <MarketToolbar
             listingCount={listings.length}
+            heading={heading}
+            summary={summary}
             viewMode={viewMode}
             onViewModeChange={onViewModeChange}
             favoriteCount={favoriteIds.size}
             dateRangeLabel={formatDateRangeLabel(filters)}
             onOpenRoommates={onOpenRoommates}
           />
-          {listings.length === 0 ? (
+          {serviceUnavailable ? (
+            <Card className="border-dashed shadow-card">
+              <CardHeader>
+                <CardTitle>房源服务暂时不可用</CardTitle>
+                <CardDescription>当前没有使用假房源回退，请稍后刷新重试。</CardDescription>
+              </CardHeader>
+            </Card>
+          ) : listings.length === 0 ? (
             <EmptyResults filters={filters} onClear={onClear} />
           ) : (
             <ListingGrid
-              listings={listings.slice(0, 100)}
+              listings={listings}
               selectedId={selectedListing.id}
               favoriteIds={favoriteIds}
               onPreview={onPreview}
@@ -3584,6 +3400,13 @@ function DiscoverScreen({
               actionLabel={listingActionLabel}
             />
           )}
+          {totalListingCount > 0 ? (
+            <nav className="flex items-center justify-between rounded-[18px] border bg-white p-3" aria-label="房源分页">
+              <Button variant="outline" disabled={page <= 1} onClick={() => onPageChange(page - 1)}>上一页</Button>
+              <span className="text-sm font-bold text-muted-foreground">第 {page} / {pageCount} 页</span>
+              <Button variant="outline" disabled={page >= pageCount} onClick={() => onPageChange(page + 1)}>下一页</Button>
+            </nav>
+          ) : null}
         </div>
 
         {viewMode === "map" ? (
@@ -3591,6 +3414,7 @@ function DiscoverScreen({
             <MapCanvas
               className="sticky top-24"
               listings={listings}
+              totalResultCount={totalListingCount}
               selectedListing={selectedListing}
               onSelect={handleMapSelect}
             />
@@ -3604,12 +3428,16 @@ function DiscoverScreen({
 function SearchHero({
   filters,
   resultCount,
+  dateFilterAvailable,
+  previewDataEnabled,
   onFiltersChange,
   onAmenityChange,
   onClear
 }: {
   filters: SearchFilters;
   resultCount: number;
+  dateFilterAvailable: boolean;
+  previewDataEnabled: boolean;
   onFiltersChange: (filters: SearchFilters) => void;
   onAmenityChange: (value: string) => void;
   onClear: () => void;
@@ -3620,6 +3448,7 @@ function SearchHero({
   function updatePrice(nextPrice: Partial<Pick<SearchFilters, "priceMin" | "priceMax">>) {
     onFiltersChange({
       ...filters,
+      page: 1,
       ...normalizePriceRange({
         priceMin: nextPrice.priceMin ?? filters.priceMin,
         priceMax: nextPrice.priceMax ?? filters.priceMax
@@ -3629,13 +3458,14 @@ function SearchHero({
 
   return (
     <div className="flex min-w-0 flex-col gap-4">
-      <Card className="overflow-hidden rounded-[18px] border-border bg-card shadow-panel">
+      <Card className="rounded-[18px] border-border bg-card shadow-panel">
         <CardContent className="grid grid-cols-4 gap-4 p-4 md:grid-cols-8 md:gap-5 md:p-5 xl:grid-cols-12 xl:items-end xl:gap-6 xl:p-6">
           <div className="col-span-4 min-w-0 md:col-span-8 xl:col-span-3">
-            <span className="editorial-kicker">01 / Stay</span>
+            <span className="editorial-kicker">01 / 短租</span>
             <h2 className="mt-2 text-2xl font-black leading-tight tracking-[-0.035em] text-foreground">
-              Los Angeles 短租发现
+              查找适合你的短租
             </h2>
+            {previewDataEnabled ? <Badge className="mt-2" variant="warning">开发预览数据</Badge> : null}
           </div>
           <label className="editorial-field col-span-4 xl:col-span-3">
             目的地
@@ -3645,7 +3475,7 @@ function SearchHero({
                 className="h-12 pl-10 text-base font-bold"
                 value={filters.query}
                 onChange={(event) =>
-                  onFiltersChange({ ...filters, query: event.target.value })
+                  onFiltersChange({ ...filters, query: event.target.value, page: 1 })
                 }
                 placeholder="学校、公司、街区"
               />
@@ -3654,7 +3484,8 @@ function SearchHero({
           <div className="col-span-4 xl:col-span-3">
             <DateRangePicker
               range={filters}
-              onChange={(range) => onFiltersChange({ ...filters, ...range })}
+              enabled={dateFilterAvailable}
+              onChange={(range) => onFiltersChange({ ...filters, ...range, page: 1 })}
             />
           </div>
           <div className="editorial-field col-span-4 md:col-span-4 xl:col-span-2">
@@ -3718,6 +3549,7 @@ function SearchHero({
                       : "border-border bg-white text-muted-foreground hover:bg-secondary"
                   )}
                   type="button"
+                  aria-pressed={active}
                   onClick={() => updatePrice({ priceMin: preset.priceMin, priceMax: preset.priceMax })}
                 >
                   <DollarSign className="size-4" aria-hidden="true" />
@@ -3739,6 +3571,7 @@ function SearchHero({
                       : "border-border bg-white text-muted-foreground hover:bg-secondary"
                   )}
                   type="button"
+                  aria-pressed={active}
                   onClick={() => onAmenityChange(amenity.label)}
                 >
                   <Icon className="size-4" aria-hidden="true" />
@@ -3749,6 +3582,19 @@ function SearchHero({
         </div>
         <div className="col-span-full text-sm font-semibold text-muted-foreground md:col-span-3 xl:col-span-2">
             当前命中 <span className="text-primary">{resultCount}</span> 套房源
+            <label className="mt-2 grid gap-1 text-xs font-bold">
+              排序
+              <select
+                className="h-9 rounded-md border bg-white px-2 text-sm text-primary"
+                value={filters.sort}
+                onChange={(event) => onFiltersChange({ ...filters, sort: event.target.value as CatalogSort, page: 1 })}
+              >
+                <option value="recommended">推荐</option>
+                <option value="price-low">价格从低到高</option>
+                <option value="price-high">价格从高到低</option>
+                <option value="rating">评分最高</option>
+              </select>
+            </label>
         </div>
 
         <div
@@ -3787,20 +3633,59 @@ function SearchHero({
 
 function DateRangePicker({
   range,
+  enabled,
   onChange
 }: {
   range: DateRange;
+  enabled: boolean;
   onChange: (range: DateRange) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const [activeField, setActiveField] = useState<"checkIn" | "checkOut">("checkIn");
-  const months = useMemo(() => buildCalendarMonths(range.checkIn || defaultSearchFilters.checkIn, 4), [range.checkIn]);
+  const [visibleMonth, setVisibleMonth] = useState(range.checkIn || "2026-08-01");
+  const lastTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const months = useMemo(() => buildCalendarMonths(visibleMonth, 2), [visibleMonth]);
   const nights = countNights(range);
   const flexibleStays = [
     { label: "周末", nights: 2 },
     { label: "一周", nights: 7 },
     { label: "一个月", nights: 30 }
   ];
+
+  useEffect(() => setMounted(true), []);
+
+  useEffect(() => {
+    if (!open) return;
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      setOpen(false);
+      window.requestAnimationFrame(() => lastTriggerRef.current?.focus());
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [open]);
+
+  function toggleDialog(field: "checkIn" | "checkOut", trigger: HTMLButtonElement) {
+    if (!enabled) return;
+    lastTriggerRef.current = trigger;
+    setActiveField(field);
+    setVisibleMonth(range.checkIn || "2026-08-01");
+    setOpen((current) => !current || activeField !== field);
+  }
+
+  function closeDialog() {
+    setOpen(false);
+    window.requestAnimationFrame(() => lastTriggerRef.current?.focus());
+  }
+
+  function moveVisibleMonth(offset: number) {
+    const [year, month] = visibleMonth.split("-").map(Number);
+    const next = new Date(Date.UTC(year, month - 1 + offset, 1));
+    setVisibleMonth(next.toISOString().slice(0, 10));
+  }
 
   function handleDateClick(isoDate: string) {
     const nextRange =
@@ -3815,14 +3700,15 @@ function DateRangePicker({
   return (
     <div className="relative flex flex-col gap-2 text-sm font-semibold">
       日期
+      {!enabled ? <span className="text-xs font-semibold text-muted-foreground">日期筛选暂未开放</span> : null}
       <div className="grid grid-cols-2 gap-2">
         <Button
           variant={activeField === "checkIn" && open ? "secondary" : "outline"}
           className="h-11 justify-start"
-          onClick={() => {
-            setActiveField("checkIn");
-            setOpen((current) => !current || activeField !== "checkIn");
-          }}
+          disabled={!enabled}
+          aria-haspopup="dialog"
+          aria-expanded={open && activeField === "checkIn"}
+          onClick={(event) => toggleDialog("checkIn", event.currentTarget)}
         >
           <CalendarDays data-icon="inline-start" />
           {range.checkIn ? formatShortDate(range.checkIn) : "入住"}
@@ -3830,17 +3716,24 @@ function DateRangePicker({
         <Button
           variant={activeField === "checkOut" && open ? "secondary" : "outline"}
           className="h-11 justify-start"
-          onClick={() => {
-            setActiveField("checkOut");
-            setOpen((current) => !current || activeField !== "checkOut");
-          }}
+          disabled={!enabled}
+          aria-haspopup="dialog"
+          aria-expanded={open && activeField === "checkOut"}
+          onClick={(event) => toggleDialog("checkOut", event.currentTarget)}
         >
           <CalendarDays data-icon="inline-start" />
           {range.checkOut ? formatShortDate(range.checkOut) : "搬出"}
         </Button>
       </div>
-      {open ? (
-        <div className="absolute left-0 right-0 top-[calc(100%+0.5rem)] z-40 rounded-lg border bg-white p-4 shadow-panel lg:right-auto lg:w-[720px]">
+      {mounted && open ? createPortal(
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/35 p-3" onMouseDown={closeDialog}>
+        <div
+          className="max-h-[calc(100vh-1.5rem)] w-full max-w-[760px] overflow-y-auto rounded-[24px] border bg-white p-4 shadow-panel sm:p-5"
+          role="dialog"
+          aria-modal="true"
+          aria-label="选择入住和搬出日期"
+          onMouseDown={(event) => event.stopPropagation()}
+        >
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <div className="text-base font-extrabold text-primary">{formatDateRangeLabel(range)}</div>
@@ -3864,9 +3757,18 @@ function DateRangePicker({
               ))}
             </div>
           </div>
-          <div className="mt-4 grid max-h-[420px] grid-cols-1 gap-4 overflow-y-auto pr-1 sm:grid-cols-2">
-            {months.map((month) => (
-              <div key={month.key} className="min-w-0">
+          <div className="mt-4 flex items-center justify-between">
+            <Button variant="outline" size="icon" aria-label="上个月" onClick={() => moveVisibleMonth(-1)}>
+              <ArrowLeft />
+            </Button>
+            <span className="text-xs font-bold text-muted-foreground">桌面显示两个月，窄屏显示一个月</span>
+            <Button variant="outline" size="icon" aria-label="下个月" onClick={() => moveVisibleMonth(1)}>
+              <ArrowRight />
+            </Button>
+          </div>
+          <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+            {months.map((month, monthIndex) => (
+              <div key={month.key} className={cn("min-w-0", monthIndex === 1 && "hidden sm:block")}>
                 <div className="text-sm font-extrabold text-primary">{month.label}</div>
                 <div className="mt-3 grid grid-cols-7 gap-1 text-center text-[11px] font-bold text-muted-foreground">
                   {["一", "二", "三", "四", "五", "六", "日"].map((day) => (
@@ -3906,11 +3808,13 @@ function DateRangePicker({
             ))}
           </div>
           <div className="mt-4 flex justify-end">
-            <Button variant="trust" size="sm" onClick={() => setOpen(false)}>
+            <Button variant="trust" size="sm" onClick={closeDialog}>
               完成
             </Button>
           </div>
         </div>
+        </div>,
+        document.body
       ) : null}
     </div>
   );
@@ -3920,16 +3824,15 @@ function MessagesScreen({
   contacts,
   activeContact,
   selectedListing,
-  selectedRoommate,
-  roommateThread,
   dealStage,
   dealThread,
   latestViewingRequest,
   narrowPane,
   viewingSlots,
+  pendingActions,
   onSendMessage,
-  onSendRoommateMessage,
   onRequestTour,
+  onViewingDecision,
   onSelectContact,
   onBackToContacts,
   onOpenListing
@@ -3937,16 +3840,19 @@ function MessagesScreen({
   contacts: InboxContact[];
   activeContact: InboxContact | null;
   selectedListing: Listing | null;
-  selectedRoommate: Roommate | null;
-  roommateThread: RoommateDmThread | null;
   dealStage: string;
   dealThread: DealThread | null;
   latestViewingRequest: ViewingRequest | null;
   narrowPane: "contacts" | "conversation";
   viewingSlots: ViewingSlot[];
-  onSendMessage: (listing: Listing, body: string) => void;
-  onSendRoommateMessage: (roommate: Roommate, body: string) => void;
-  onRequestTour: (listing: Listing, slot?: ViewingSlot) => void;
+  pendingActions: Set<string>;
+  onSendMessage: (listing: Listing, body: string) => Promise<boolean>;
+  onRequestTour: (listing: Listing, slot?: ViewingSlot) => Promise<boolean>;
+  onViewingDecision: (
+    listing: Listing,
+    request: ViewingRequest,
+    decision: "confirm" | "decline"
+  ) => Promise<boolean>;
   onSelectContact: (contact: InboxContact) => void;
   onBackToContacts: () => void;
   onOpenListing: (listing: Listing) => void;
@@ -3956,11 +3862,11 @@ function MessagesScreen({
       <aside className={cn("col-span-full min-w-0 lg:col-span-3 xl:col-span-3", narrowPane === "conversation" && "hidden lg:block")}>
         <Card className="h-full min-h-[640px] overflow-hidden shadow-panel">
           <CardHeader>
-            <span className="editorial-kicker">01 / Messages</span>
+            <span className="editorial-kicker">01 / 消息</span>
             <div className="flex items-start justify-between gap-3">
               <div>
-                <CardTitle>Messages</CardTitle>
-                <CardDescription>房东和室友联系人按最近消息排列</CardDescription>
+                <CardTitle>消息</CardTitle>
+                <CardDescription>仅显示服务端已创建的房东会话</CardDescription>
               </div>
               <Badge variant={contacts.length > 0 ? "trust" : "secondary"}>{contacts.length}</Badge>
             </div>
@@ -4002,7 +3908,7 @@ function MessagesScreen({
               })
             ) : (
               <div className="rounded-lg border border-dashed border-blue-200 bg-blue-50/50 p-4 text-sm font-semibold text-muted-foreground">
-                还没有联系人。联系房东或与室友互相 Like 后，会话会出现在这里。
+                还没有联系人。成功联系房东后，会话会出现在这里。室友私信暂未开放。
               </div>
             )}
           </CardContent>
@@ -4011,7 +3917,7 @@ function MessagesScreen({
 
       <div className={cn("col-span-full min-w-0 flex-col gap-4 lg:col-span-5 xl:col-span-9", narrowPane === "conversation" ? "flex" : "hidden lg:flex")}>
         <div className="editorial-toolbar">
-          <span className="editorial-kicker">01 / Messages</span>
+          <span className="editorial-kicker">01 / 消息</span>
         </div>
         {narrowPane === "conversation" ? (
           <Button variant="outline" className="w-fit lg:hidden" onClick={onBackToContacts}>
@@ -4033,7 +3939,7 @@ function MessagesScreen({
                   <div className="flex flex-wrap items-center gap-3 text-sm font-bold text-muted-foreground">
                     <span>{selectedListing.area}</span>
                     <span>${selectedListing.price.toLocaleString()}/月</span>
-                    <span>{selectedListing.beds} Bed · {selectedListing.baths} Bath</span>
+                    <span>{selectedListing.beds} 间卧室 · {selectedListing.baths} 间卫浴</span>
                   </div>
                 </CardContent>
                 <div className="flex items-center p-4 md:justify-end">
@@ -4050,47 +3956,27 @@ function MessagesScreen({
               stage={dealStage}
               viewingSlots={viewingSlots}
               latestViewingRequest={latestViewingRequest}
+              messagePending={pendingActions.has(`message:${selectedListing.id}`)}
+              tourPending={pendingActions.has(`tour:${selectedListing.id}`)}
+              decisionPending={
+                latestViewingRequest
+                  ? pendingActions.has(`viewing-decision:${latestViewingRequest.id}`)
+                  : false
+              }
               onSendMessage={onSendMessage}
               onRequestTour={onRequestTour}
-            />
-          </>
-        ) : activeContact?.kind === "roommate" && selectedRoommate && roommateThread ? (
-          <>
-            <Card className="overflow-hidden shadow-panel">
-              <CardContent className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
-                <div className="flex min-w-0 items-center gap-4">
-                  <Avatar className="size-16 ring-2 ring-blue-100">
-                    <AvatarImage src={selectedRoommate.image} alt="" />
-                    <AvatarFallback>{selectedRoommate.name.slice(0, 1)}</AvatarFallback>
-                  </Avatar>
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Badge variant="trust">室友</Badge>
-                      <Badge variant="secondary">Mutual match</Badge>
-                    </div>
-                    <div className="mt-2 truncate text-xl font-extrabold text-primary">{selectedRoommate.name}</div>
-                    <div className="truncate text-sm font-semibold text-muted-foreground">{selectedRoommate.role}</div>
-                  </div>
-                </div>
-                <div className="text-sm font-bold text-muted-foreground">{selectedRoommate.budget} · {selectedRoommate.commute}</div>
-              </CardContent>
-            </Card>
-            <RoommateDmPanel
-              key={roommateThread.id}
-              roommate={selectedRoommate}
-              thread={roommateThread}
-              onSendMessage={(body) => onSendRoommateMessage(selectedRoommate, body)}
+              onViewingDecision={onViewingDecision}
             />
           </>
         ) : (
           <Card className="shadow-panel">
             <CardHeader>
               <CardTitle>选择联系人</CardTitle>
-              <CardDescription>从左侧选择房东或室友，右侧会打开对应的 DM。</CardDescription>
+              <CardDescription>从左侧选择房东，右侧会打开对应消息。室友私信暂未开放。</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="rounded-[24px] border border-dashed border-blue-200 bg-blue-50/50 p-8 text-center text-sm font-semibold text-muted-foreground">
-                联系房东，或先与室友互相 Like 解锁私信。
+                联系房东后，会话会在服务端创建并显示在这里。
               </div>
             </CardContent>
           </Card>
@@ -4104,37 +3990,83 @@ function PublishScreen({
   isPublishing,
   listings,
   user,
-  onCreate
+  profile,
+  editingListingId,
+  onEditListing,
+  onSave
 }: {
   isPublishing: boolean;
   listings: ApiListing[];
   user: SessionUser | null;
-  onCreate: (draft: PublishDraft) => void;
+  profile: ApiProfile | null;
+  editingListingId: string | null;
+  onEditListing: (listingId: string | null) => void;
+  onSave: (draft: PublishDraft, shouldSubmit: boolean) => Promise<PublishSaveResult | null>;
 }) {
+  const editingListing =
+    listings.find((listing) => listing.id === editingListingId) ?? null;
+
   return (
     <section className="app-shell app-grid w-full items-start py-5 md:py-6">
       <div className="app-section editorial-toolbar">
         <div>
-          <span className="editorial-kicker">01 / Publish</span>
+          <span className="editorial-kicker">01 / 发布</span>
           <h1 className="mt-2 text-3xl font-black tracking-[-0.035em] md:text-4xl">发布房源流程</h1>
         </div>
       </div>
       <div className="col-span-full min-w-0 xl:col-span-8">
-        <PublishingFlow isPublishing={isPublishing} onCreate={onCreate} />
+        {!user ? (
+          <Card className="border-dashed shadow-card">
+            <CardHeader>
+              <CardTitle>请先登录房东账户</CardTitle>
+              <CardDescription>使用上方邮箱验证码登录后，系统会继续检查你的房东身份。</CardDescription>
+            </CardHeader>
+          </Card>
+        ) : !profile ? (
+          <Card className="border-dashed shadow-card">
+            <CardHeader>
+              <CardTitle>正在读取身份资料</CardTitle>
+              <CardDescription>资料确认完成后才会开放发布表单。</CardDescription>
+            </CardHeader>
+          </Card>
+        ) : profile.role !== "lister" && profile.role !== "both" ? (
+          <Card className="border-dashed shadow-card">
+            <CardHeader>
+              <CardTitle>请先设置房东身份</CardTitle>
+              <CardDescription>在个人资料中选择“房东”或“租客兼房东”后即可发布。</CardDescription>
+            </CardHeader>
+          </Card>
+        ) : (
+          <PublishingFlow
+            key={editingListing?.id ?? "new-listing"}
+            initialDraft={editingListing ? mapApiListingToPublishDraft(editingListing) : null}
+            isPublishing={isPublishing}
+            onSave={onSave}
+          />
+        )}
       </div>
       <aside className="col-span-full min-w-0 xl:col-span-4">
-        <LandlordListingsPanel listings={listings} user={user} />
+        <LandlordListingsPanel
+          editingListingId={editingListingId}
+          listings={listings}
+          user={user}
+          onEditListing={onEditListing}
+        />
       </aside>
     </section>
   );
 }
 
 function LandlordListingsPanel({
+  editingListingId,
   listings,
-  user
+  user,
+  onEditListing
 }: {
+  editingListingId: string | null;
   listings: ApiListing[];
   user: SessionUser | null;
+  onEditListing: (listingId: string | null) => void;
 }) {
   return (
     <Card className="h-fit shadow-panel">
@@ -4146,17 +4078,23 @@ function LandlordListingsPanel({
               {user ? `${user.email} · ${listings.length} 套房源` : "登录后显示发布状态"}
             </CardDescription>
           </div>
-          <Badge variant={user ? "trust" : "secondary"}>{user ? "Owner" : "Guest"}</Badge>
+          <Badge variant={user ? "trust" : "secondary"}>{user ? "房东" : "游客"}</Badge>
         </div>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
+        {user && editingListingId ? (
+          <Button variant="outline" onClick={() => onEditListing(null)}>
+            <Plus data-icon="inline-start" />
+            新建房源
+          </Button>
+        ) : null}
         {!user ? (
           <div className="rounded-md border bg-secondary p-4 text-sm font-semibold text-primary">
             先用邮箱验证码登录，再创建房源并查看审核状态。
           </div>
         ) : listings.length === 0 ? (
           <div className="rounded-md border bg-white p-4 text-sm font-semibold text-muted-foreground">
-            还没有发布记录。创建后会先进入审核中，审核通过才会出现在租客 Discover。
+            还没有发布记录。创建后会先进入审核中，审核通过才会出现在租客找房页。
           </div>
         ) : (
           listings.map((listing) => {
@@ -4164,7 +4102,13 @@ function LandlordListingsPanel({
             const meta = getListingStatusMeta(status);
 
             return (
-              <div key={listing.id} className="rounded-md border bg-white p-3">
+              <div
+                key={listing.id}
+                className={cn(
+                  "rounded-md border bg-white p-3",
+                  editingListingId === listing.id && "border-trust-sky bg-trust-sky/5"
+                )}
+              >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <div className="truncate text-sm font-extrabold text-primary">{listing.title}</div>
@@ -4176,13 +4120,22 @@ function LandlordListingsPanel({
                 </div>
                 <div className="mt-3 flex items-center justify-between text-sm font-bold text-primary">
                   <span>${listing.price.toLocaleString()}/月</span>
-                  <span>{listing.media?.length ?? 0} media</span>
+                  <span>{listing.media?.length ?? 0} 张媒体</span>
                 </div>
                 <p className="mt-2 text-xs font-semibold text-muted-foreground">{meta.description}</p>
                 {status === "REJECTED" && listing.rejectionReason ? (
                   <p className="mt-2 rounded-md bg-secondary p-2 text-xs font-semibold text-primary">
                     {listing.rejectionReason}
                   </p>
+                ) : null}
+                {status === "DRAFT" || status === "REJECTED" ? (
+                  <Button
+                    className="mt-3 w-full"
+                    variant="outline"
+                    onClick={() => onEditListing(listing.id)}
+                  >
+                    继续编辑
+                  </Button>
                 ) : null}
               </div>
             );
@@ -4199,86 +4152,68 @@ function normalizeListingStatus(status: ApiListing["status"]): ListingStatus {
 }
 
 function TripsScreen({
-  listing,
-  trips,
   viewingRequests,
-  applications,
-  onAdvance,
+  user,
   onOpenDealRoom
 }: {
-  listing: Listing;
-  trips: ApiTrip[];
   viewingRequests: ViewingRequest[];
-  applications: LocalApplication[];
-  onAdvance: (applicationId: string) => void;
+  user: SessionUser | null;
   onOpenDealRoom: () => void;
 }) {
-  const listingViewingRequests = viewingRequests.filter((request) => request.listingId === listing.id);
-  const application = applications.find((item) => item.listingId === listing.id) ?? applications[0] ?? null;
-  const currentStep = application ? applicationStatuses.indexOf(application.status) : -1;
-
   return (
     <section className="app-shell app-grid w-full items-start py-5 md:py-6">
       <div className="app-section editorial-toolbar">
         <div>
-          <span className="editorial-kicker">01 / Trips</span>
-          <h1 className="mt-2 text-3xl font-black tracking-[-0.035em] md:text-4xl">订单、看房与入住</h1>
+          <span className="editorial-kicker">01 / 看房</span>
+          <h1 className="mt-2 text-3xl font-black tracking-[-0.035em] md:text-4xl">我的看房记录</h1>
         </div>
       </div>
       <aside className="col-span-full min-w-0 lg:col-span-4">
-        {application ? (
-          <EscrowPanel listing={listing} currentStep={currentStep} onAdvance={() => onAdvance(application.id)} />
-        ) : (
-          <Card className="shadow-panel">
-            <CardHeader><CardTitle>还没有申请</CardTitle><CardDescription>预约看房后，可从房源详情明确开始申请。</CardDescription></CardHeader>
-            <CardContent><Badge variant="secondary">No application</Badge></CardContent>
-          </Card>
-        )}
+        <Card className="shadow-panel">
+          <CardHeader>
+            <CardTitle>后续交易功能</CardTitle>
+            <CardDescription>以下能力尚未接通后端，本页不会模拟成功状态。</CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-wrap gap-2">
+            <Badge variant="secondary">在线申请 · 暂未开放</Badge>
+            <Badge variant="secondary">支付 · 暂未开放</Badge>
+            <Badge variant="secondary">资金托管 · 暂未开放</Badge>
+          </CardContent>
+        </Card>
       </aside>
       <div className="col-span-full min-w-0 lg:col-span-4 xl:col-span-8">
         <Card className="shadow-panel">
         <CardHeader>
           <div className="flex items-start justify-between gap-3">
             <div>
-              <CardTitle>订单、看房与入住</CardTitle>
-              <CardDescription>后端返回 {trips.length} 个订单/入住记录 · 本地 {listingViewingRequests.length} 个看房记录</CardDescription>
+              <CardTitle>看房安排</CardTitle>
+              <CardDescription>
+                {user ? `登录账户的 ${viewingRequests.length} 条服务端记录` : "登录后显示你的看房记录"}
+              </CardDescription>
             </div>
             <Button variant="outline" size="sm" onClick={onOpenDealRoom}>
               <MessageCircle data-icon="inline-start" />
-              Messages
+              打开消息
             </Button>
           </div>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-            {[
-              ["定金", `$${listing.price.toLocaleString()}`, "Stripe Connect 托管"],
-              ["入住", "8/20", "首日缺陷可介入"],
-              ["评价", "待完成", "入住后开放"]
-            ].map(([label, value, detail]) => (
-              <div key={label} className="rounded-md border bg-white p-4">
-                <div className="text-xs font-bold text-muted-foreground">{label}</div>
-                <div className="mt-2 text-xl font-extrabold text-primary">{value}</div>
-                <div className="mt-1 text-sm font-semibold text-muted-foreground">{detail}</div>
-              </div>
-            ))}
-          </div>
           <div className="rounded-[24px] border border-blue-100 bg-blue-50/50 p-4">
             <div className="flex items-center justify-between gap-3">
               <div>
                 <div className="text-base font-extrabold text-primary">看房安排</div>
-                <div className="text-sm font-semibold text-muted-foreground">{listing.title}</div>
+                <div className="text-sm font-semibold text-muted-foreground">仅展示当前登录账户在服务端保存的看房请求</div>
               </div>
               <CalendarDays className="size-5 text-[#006AFF]" aria-hidden="true" />
             </div>
             <div className="mt-4 grid gap-3">
-              {listingViewingRequests.length > 0 ? (
-                listingViewingRequests.map((request) => (
+              {viewingRequests.length > 0 ? (
+                viewingRequests.map((request) => (
                   <div key={request.id} className="grid gap-3 rounded-[22px] border border-blue-100 bg-white p-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
                     <div className="min-w-0">
                       <div className="font-extrabold text-primary">{request.timeLabel}</div>
                       <div className="mt-1 text-sm font-semibold text-muted-foreground">
-                        {getViewingModeLabel(request.mode)} · {request.participantNames.join(", ")}
+                        {request.listingTitle} · {getViewingModeLabel(request.mode)} · {request.participantNames.join(", ")}
                       </div>
                     </div>
                     <Badge variant={request.status === "CONFIRMED" ? "success" : "trust"}>
@@ -4288,7 +4223,7 @@ function TripsScreen({
                 ))
               ) : (
                 <div className="rounded-[22px] border border-dashed border-blue-200 bg-white p-4 text-sm font-semibold text-muted-foreground">
-                  还没有看房安排。回到房源详情或 Messages 选择时间。
+                  {user ? "还没有看房安排。回到房源详情或消息中选择时间。" : "请先登录查看个人看房记录。"}
                 </div>
               )}
             </div>
@@ -4306,10 +4241,8 @@ function ListingDetailScreen({
   favoriteIds,
   contactedIds,
   tourRequestedIds,
-  appliedListingId,
   dealStage,
   groupMembers,
-  roommate,
   onBack,
   onFavorite,
   onContact,
@@ -4322,10 +4255,8 @@ function ListingDetailScreen({
   favoriteIds: Set<string>;
   contactedIds: Set<string>;
   tourRequestedIds: Set<string>;
-  appliedListingId: string | null;
   dealStage: string;
   groupMembers: Roommate[];
-  roommate: Roommate;
   onBack: () => void;
   onFavorite: (id: string) => void;
   onContact: (listing: Listing) => void;
@@ -4337,17 +4268,16 @@ function ListingDetailScreen({
   const flow = getListingFlowStatus(listing.id, {
     favoriteIds,
     contactedIds,
-    tourRequestedIds,
-    appliedListingId
+    tourRequestedIds
   });
-  const roommateCount = Math.max(1, groupMembers.length || 1);
+  const roommateCount = groupMembers.length > 0 ? groupMembers.length + 1 : 1;
   const perPersonPrice = Math.round(listing.price / roommateCount);
 
   return (
     <section className="app-shell app-grid w-full items-start py-5 md:py-6">
       <div className="app-section editorial-toolbar">
         <div className="min-w-0">
-          <span className="editorial-kicker">01 / Listing</span>
+          <span className="editorial-kicker">01 / 房源</span>
           <Button variant="outline" className="mt-2 w-fit" onClick={onBack}>
             <ArrowRight className="rotate-180" data-icon="inline-start" />
             返回房源
@@ -4356,7 +4286,6 @@ function ListingDetailScreen({
         <div className="flex flex-wrap gap-2">
           {flow.isContacted ? <Badge variant="success">已联系</Badge> : null}
           {flow.isTourRequested ? <Badge variant="trust">已预约看房</Badge> : null}
-          {flow.isApplied ? <Badge variant="warning">申请中</Badge> : null}
         </div>
       </div>
 
@@ -4405,8 +4334,8 @@ function ListingDetailScreen({
               </div>
 
               <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-                <Metric icon={BedDouble} label="卧室" value={`${listing.beds} Bed`} />
-                <Metric icon={Bath} label="卫浴" value={`${listing.baths} Bath`} />
+                <Metric icon={BedDouble} label="卧室" value={`${listing.beds} 间`} />
+                <Metric icon={Bath} label="卫浴" value={`${listing.baths} 间`} />
                 <Metric icon={Clock3} label="通勤" value={listing.commute} />
                 <Metric icon={ShieldCheck} label="信任" value={listing.trust} />
               </div>
@@ -4426,19 +4355,27 @@ function ListingDetailScreen({
             </CardHeader>
             <CardContent className="grid grid-cols-1 gap-3 md:grid-cols-3">
               <div className="rounded-md border bg-white p-4">
-                <div className="text-xs font-bold text-muted-foreground">当前室友</div>
-                <div className="mt-2 text-lg font-extrabold text-primary">{roommate.name}</div>
-                <div className="mt-1 text-sm font-semibold text-muted-foreground">{roommate.match}% Match</div>
+                <div className="text-xs font-bold text-muted-foreground">当前小组</div>
+                <div className="mt-2 text-lg font-extrabold text-primary">
+                  {groupMembers.length > 0
+                    ? groupMembers.map((member) => member.name).join("、")
+                    : "尚未组成小组"}
+                </div>
+                <div className="mt-1 text-sm font-semibold text-muted-foreground">
+                  {groupMembers.length > 0
+                    ? "仅显示当前明确选择的小组"
+                    : "不会自动加入目录中的室友"}
+                </div>
               </div>
               <div className="rounded-md border bg-white p-4">
-                <div className="text-xs font-bold text-muted-foreground">Group 人均</div>
+                <div className="text-xs font-bold text-muted-foreground">小组人均</div>
                 <div className="mt-2 text-lg font-extrabold text-primary">${perPersonPrice.toLocaleString()}/月</div>
                 <div className="mt-1 text-sm font-semibold text-muted-foreground">{roommateCount} 人预算估算</div>
               </div>
               <div className="rounded-md border bg-white p-4">
                 <div className="text-xs font-bold text-muted-foreground">流程状态</div>
                 <div className="mt-2 text-lg font-extrabold text-primary">
-                  {flow.isApplied ? "申请中" : dealStage}
+                  {dealStage}
                 </div>
                 <div className="mt-1 text-sm font-semibold text-muted-foreground">操作会即时同步到本页</div>
               </div>
@@ -4449,7 +4386,7 @@ function ListingDetailScreen({
         <aside className="col-span-full flex min-w-0 flex-col gap-4 xl:col-span-4 xl:sticky xl:top-24">
           <Card className="shadow-panel">
             <CardHeader>
-              <CardTitle>申请流程</CardTitle>
+              <CardTitle>下一步</CardTitle>
               <CardDescription>{detail.stayLabel}</CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-3">
@@ -4474,7 +4411,7 @@ function ListingDetailScreen({
                 className="w-full justify-between"
                 onClick={() => onRequestTour(listing)}
               >
-                {flow.isTourRequested ? "看房已预约" : "预约看房"}
+                {flow.isTourRequested ? "看房请求已发送" : "选择看房时间"}
                 <CalendarDays data-icon="inline-end" />
               </Button>
               <Button
@@ -4482,7 +4419,7 @@ function ListingDetailScreen({
                 className="w-full justify-between"
                 onClick={() => onApply(listing)}
               >
-                {flow.primaryCta}
+                在线申请（暂未开放）
                 <ArrowRight data-icon="inline-end" />
               </Button>
               <Separator />
@@ -4496,12 +4433,12 @@ function ListingDetailScreen({
                   <span>${listing.price.toLocaleString()}</span>
                 </div>
                 <div className="mt-2 flex justify-between text-muted-foreground">
-                  <span>预计押金</span>
-                  <span>${Math.round(listing.price * 0.5).toLocaleString()}</span>
+                  <span>支付</span>
+                  <span>暂未开放</span>
                 </div>
                 <div className="mt-2 flex justify-between text-muted-foreground">
-                  <span>服务费</span>
-                  <span>${Math.round(listing.price * 0.035).toLocaleString()}</span>
+                  <span>资金托管</span>
+                  <span>暂未开放</span>
                 </div>
               </div>
             </CardContent>
@@ -4509,11 +4446,11 @@ function ListingDetailScreen({
           <Card className="shadow-panel">
             <CardHeader>
               <CardTitle>消息中心</CardTitle>
-              <CardDescription>联系后会跳到独立 Messages 页面，保留房源上下文和看房进度。</CardDescription>
+              <CardDescription>服务端创建会话成功后才会进入消息页面。</CardDescription>
             </CardHeader>
             <CardContent>
               <Button className="w-full justify-between" variant="secondary" onClick={() => onContact(listing)}>
-                打开 Messages
+                打开消息
                 <MessageCircle data-icon="inline-end" />
               </Button>
             </CardContent>
@@ -4529,24 +4466,37 @@ function DealCommunicationPanel({
   stage,
   viewingSlots,
   latestViewingRequest,
+  messagePending,
+  tourPending,
+  decisionPending,
   onSendMessage,
-  onRequestTour
+  onRequestTour,
+  onViewingDecision
 }: {
   listing: Listing;
   thread: DealThread;
   stage: string;
   viewingSlots: ViewingSlot[];
   latestViewingRequest: ViewingRequest | null;
-  onSendMessage: (listing: Listing, body: string) => void;
-  onRequestTour: (listing: Listing, slot?: ViewingSlot) => void;
+  messagePending: boolean;
+  tourPending: boolean;
+  decisionPending: boolean;
+  onSendMessage: (listing: Listing, body: string) => Promise<boolean>;
+  onRequestTour: (listing: Listing, slot?: ViewingSlot) => Promise<boolean>;
+  onViewingDecision: (
+    listing: Listing,
+    request: ViewingRequest,
+    decision: "confirm" | "decline"
+  ) => Promise<boolean>;
 }) {
   const [draft, setDraft] = useState("");
   const [selectedSlotId, setSelectedSlotId] = useState(viewingSlots[0]?.id ?? "");
+  const [confirmTour, setConfirmTour] = useState(false);
   const selectedSlot = viewingSlots.find((slot) => slot.id === selectedSlotId) ?? viewingSlots[0];
   const visibleMessages = thread.messages.slice(-5);
   const quickReplies = [
     "这套现在还可以约看吗？",
-    "可以先发一段视频 walkthrough 吗？",
+    "可以先发一段视频看房吗？",
     "我想和室友一起看房。"
   ];
 
@@ -4556,10 +4506,10 @@ function DealCommunicationPanel({
     }
   }, [selectedSlotId, viewingSlots]);
 
-  function submitMessage(body = draft) {
+  async function submitMessage(body = draft) {
     if (!body.trim()) return;
-    onSendMessage(listing, body);
-    setDraft("");
+    const sent = await onSendMessage(listing, body);
+    if (sent) setDraft("");
   }
 
   return (
@@ -4567,7 +4517,7 @@ function DealCommunicationPanel({
       <CardHeader>
         <div className="flex items-start justify-between gap-3">
           <div>
-            <CardTitle>DM & 看房</CardTitle>
+            <CardTitle>消息与看房</CardTitle>
             <CardDescription>{thread.subject}</CardDescription>
           </div>
           <Badge variant={latestViewingRequest ? "trust" : "secondary"}>{stage}</Badge>
@@ -4576,13 +4526,18 @@ function DealCommunicationPanel({
       <CardContent className="flex flex-col gap-4">
         <div className="flex flex-wrap gap-2">
           {thread.participants.map((participant) => (
-            <Badge key={participant} variant={participant === "You" ? "trust" : "secondary"}>
-              {participant}
+            <Badge key={participant} variant={participant === "You" || participant === "我" ? "trust" : "secondary"}>
+              {participant === "You" ? "我" : participant}
             </Badge>
           ))}
         </div>
 
         <div className="flex max-h-[320px] flex-col gap-3 overflow-y-auto rounded-[24px] border bg-blue-50/50 p-3 app-scrollbar">
+          {visibleMessages.length === 0 ? (
+            <div className="rounded-[18px] border border-dashed bg-white p-4 text-center text-sm font-semibold text-muted-foreground">
+              暂无消息。只有你真正发送成功的内容才会显示在这里。
+            </div>
+          ) : null}
           {visibleMessages.map((message) => (
             <div
               key={message.id}
@@ -4615,11 +4570,11 @@ function DealCommunicationPanel({
             className="min-h-20 resize-none rounded-[22px] border border-blue-100 bg-white px-4 py-3 text-sm font-semibold text-primary shadow-sm outline-none transition-colors placeholder:text-muted-foreground focus:border-[#006AFF]"
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
-            placeholder="输入 DM 给房东 / 室友"
+            placeholder="输入给房东的消息"
           />
-          <Button className="h-20 rounded-[22px] bg-[#006AFF] px-4 text-white hover:bg-[#0D4599]" onClick={() => submitMessage()}>
+          <Button className="h-20 rounded-[22px] bg-[#006AFF] px-4 text-white hover:bg-[#0D4599]" onClick={() => void submitMessage()} disabled={messagePending || !draft.trim()}>
             <Send aria-hidden="true" />
-            <span className="sr-only">发送 DM</span>
+            <span className="sr-only">{messagePending ? "消息提交中" : "发送消息"}</span>
           </Button>
         </div>
 
@@ -4632,7 +4587,7 @@ function DealCommunicationPanel({
               <div className="text-xs font-semibold text-muted-foreground">
                 {latestViewingRequest
                   ? `${latestViewingRequest.timeLabel} · ${getViewingModeLabel(latestViewingRequest.mode)}`
-                  : "选择时间后会同步到 Trips 和 Messages"}
+                  : "选择时间后会同步到看房和消息页面"}
               </div>
             </div>
             {latestViewingRequest ? (
@@ -4641,8 +4596,32 @@ function DealCommunicationPanel({
               </Badge>
             ) : null}
           </div>
-          <div className="grid grid-cols-1 gap-2">
-            {viewingSlots.map((slot) => {
+          {thread.viewerRole === "host" ? (
+            latestViewingRequest && canHostDecideViewing(thread, latestViewingRequest) ? (
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  disabled={decisionPending}
+                  onClick={() => void onViewingDecision(listing, latestViewingRequest, "confirm")}
+                >
+                  确认看房
+                </Button>
+                <Button
+                  variant="outline"
+                  disabled={decisionPending}
+                  onClick={() => void onViewingDecision(listing, latestViewingRequest, "decline")}
+                >
+                  拒绝请求
+                </Button>
+              </div>
+            ) : (
+              <div className="rounded-[20px] border border-dashed p-3 text-sm font-semibold text-muted-foreground">
+                {latestViewingRequest ? "当前看房请求无需处理。" : "房客尚未发起看房请求。"}
+              </div>
+            )
+          ) : (
+            <>
+              <div className="grid grid-cols-1 gap-2">
+                {viewingSlots.map((slot) => {
               const selected = selectedSlot?.id === slot.id;
 
               return (
@@ -4656,22 +4635,39 @@ function DealCommunicationPanel({
                   )}
                   data-testid={`viewing-slot-${slot.id}`}
                   type="button"
+                  aria-pressed={selected}
                   onClick={() => setSelectedSlotId(slot.id)}
                 >
                   <span>{slot.label}</span>
                   <span className="text-xs font-black">{getViewingModeLabel(slot.mode)}</span>
                 </button>
               );
-            })}
-          </div>
-          <Button
-            className="mt-3 h-11 w-full rounded-full bg-gradient-to-r from-[#006AFF] to-[#0D4599] font-extrabold text-white hover:brightness-95"
-            data-testid="confirm-viewing-button"
-            onClick={() => onRequestTour(listing, selectedSlot)}
-          >
-            <CalendarDays data-icon="inline-start" />
-            {latestViewingRequest ? "调整看房时间" : "确认预约看房"}
-          </Button>
+                })}
+              </div>
+              <Button
+                className="mt-3 h-11 w-full rounded-full bg-gradient-to-r from-[#006AFF] to-[#0D4599] font-extrabold text-white hover:brightness-95"
+                data-testid="confirm-viewing-button"
+                disabled={tourPending || !selectedSlot}
+                onClick={async () => {
+                  if (!confirmTour) {
+                    setConfirmTour(true);
+                    return;
+                  }
+                  const saved = await onRequestTour(listing, selectedSlot);
+                  if (saved) setConfirmTour(false);
+                }}
+              >
+                <CalendarDays data-icon="inline-start" />
+                {tourPending
+                  ? "请求提交中"
+                  : confirmTour
+                    ? `再次确认：${selectedSlot?.label ?? ""}`
+                    : latestViewingRequest
+                      ? "调整看房时间"
+                      : "确认预约看房"}
+              </Button>
+            </>
+          )}
         </div>
       </CardContent>
     </Card>
@@ -4716,7 +4712,7 @@ function TrustScreen({
     <section className="app-shell app-grid w-full items-start py-5 md:py-6">
       <div className="app-section editorial-toolbar">
         <div>
-          <span className="editorial-kicker">01 / Trust</span>
+          <span className="editorial-kicker">01 / 信任</span>
           <h1 className="mt-2 text-3xl font-black tracking-[-0.035em] md:text-4xl">信任与三阶段前端范围</h1>
         </div>
       </div>
@@ -4732,6 +4728,8 @@ function TrustScreen({
 
 function MarketToolbar({
   listingCount,
+  heading,
+  summary,
   viewMode,
   onViewModeChange,
   favoriteCount,
@@ -4739,6 +4737,8 @@ function MarketToolbar({
   onOpenRoommates
 }: {
   listingCount: number;
+  heading: string;
+  summary: string;
   viewMode: ViewMode;
   onViewModeChange: (value: ViewMode) => void;
   favoriteCount: number;
@@ -4749,10 +4749,10 @@ function MarketToolbar({
     <Card className="border-0 bg-transparent shadow-none">
       <CardContent className="editorial-toolbar p-0">
         <div>
-          <span className="editorial-kicker">02 / Discover</span>
-          <h1 className="mt-2 text-3xl font-black tracking-[-0.035em] md:text-4xl">Los Angeles 短租发现</h1>
+          <span className="editorial-kicker">02 / 找房</span>
+          <h1 className="mt-2 break-words text-3xl font-black tracking-[-0.035em] md:text-4xl">{heading}</h1>
           <p className="text-sm font-medium text-muted-foreground">
-            {listingCount} 套可匹配房源 · {favoriteCount} 个收藏 · 主页专注找房
+            {summary} · 本页 {listingCount} 套 · {favoriteCount} 个本机收藏
           </p>
           <p className="mt-1 text-xs font-bold text-trust-blue">{dateRangeLabel}</p>
         </div>
@@ -4780,15 +4780,17 @@ function MarketToolbar({
 function MapCanvas({
   className,
   listings,
+  totalResultCount,
   selectedListing,
   onSelect
 }: {
   className?: string;
   listings: Listing[];
+  totalResultCount: number;
   selectedListing: Listing;
   onSelect: (listing: Listing) => void;
 }) {
-  const mapListings = useMemo(() => listings.slice(0, 18), [listings]);
+  const mapListings = listings;
   const defaultCenter = useMemo(() => getMapCenterForListings(mapListings), [mapListings]);
   const mapSummary = useMemo(() => getMapSummary(mapListings), [mapListings]);
   const mapRef = useRef<HTMLDivElement | null>(null);
@@ -4876,9 +4878,9 @@ function MapCanvas({
             </Button>
           </div>
           <div className="absolute right-3 top-3 grid grid-cols-3 overflow-hidden rounded-[18px] border bg-white/95 text-center shadow-card">
-            <MapStat label="结果" value={`${mapSummary.count}`} />
-            <MapStat label="最低" value={mapSummary.minimumPrice ? `$${mapSummary.minimumPrice.toLocaleString()}` : "--"} />
-            <MapStat label="均价" value={mapSummary.averagePrice ? `$${mapSummary.averagePrice.toLocaleString()}` : "--"} />
+	            <MapStat label="总结果" value={`${totalResultCount}`} />
+	            <MapStat label="本页标记" value={`${mapSummary.count}`} />
+	            <MapStat label="最低" value={mapSummary.minimumPrice ? `$${mapSummary.minimumPrice.toLocaleString()}` : "--"} />
           </div>
           {markers.map((marker) => (
 	              <MapMarker
@@ -4938,7 +4940,7 @@ function MapCanvas({
               <div className="grid grid-cols-[repeat(2,minmax(0,1fr))] gap-3">
                 <Metric icon={Clock3} label="通勤" value={selectedListing.commute} />
                 <Metric icon={DollarSign} label="净租金" value={`$${selectedListing.price}/月`} />
-                <Metric icon={BedDouble} label="卧室" value={`${selectedListing.beds} Bed`} />
+                <Metric icon={BedDouble} label="卧室" value={`${selectedListing.beds} 间`} />
                 <Metric icon={ShieldCheck} label="信任" value={selectedListing.trust} />
               </div>
             </>
@@ -5093,12 +5095,12 @@ function ListingCard({
         />
         <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-slate-950/38 via-transparent to-transparent" />
         <div className="absolute left-3 top-3 flex gap-2">
-          <Badge className="border-white/60 bg-white/95 text-[#006AFF] shadow-sm">
+          <Badge className="border-white/60 bg-white/95 text-[#006AFF] shadow-sm" title={`来源：${listing.trust}`}>
             <ShieldCheck className="size-3.5" aria-hidden="true" />
-            Trust
+            {getTrustSourceLabel(listing.trust)}
           </Badge>
           {listing.tags.some((tag) => tag.includes("Group")) ? (
-            <Badge className="border-emerald-100 bg-emerald-50 text-emerald-700 shadow-sm">Group Fit</Badge>
+            <Badge className="border-emerald-100 bg-emerald-50 text-emerald-700 shadow-sm">小组匹配</Badge>
           ) : null}
         </div>
         <div className="absolute inset-x-3 top-1/2 flex -translate-y-1/2 items-center justify-between">
@@ -5185,6 +5187,12 @@ function ListingCard({
   );
 }
 
+function getTrustSourceLabel(trust: string) {
+  if (trust.includes("平台已审核")) return "平台已审核";
+  if (trust.includes("待平台审核") || trust.includes("待审核")) return "待平台审核";
+  return "用户声明";
+}
+
 function EmptyResults({ filters, onClear }: { filters: SearchFilters; onClear: () => void }) {
   const insight = buildSearchInsight(filters, 0);
 
@@ -5215,97 +5223,95 @@ function EmptyResults({ filters, onClear }: { filters: SearchFilters; onClear: (
   );
 }
 
-function EscrowPanel({
-  listing,
-  currentStep,
-  onAdvance
-}: {
-  listing: Listing;
-  currentStep: number;
-  onAdvance: () => void;
-}) {
-  const steps: Array<{ code: string; label: string }> = [
-    { code: "pending_payment", label: "待支付" },
-    { code: "funds_held", label: "托管中" },
-    { code: "confirmed", label: "已确认" },
-    { code: "move_in_pending", label: "入住核销" },
-    { code: "completed", label: "已完成" }
-  ];
-
-  return (
-    <Card className="shadow-panel">
-      <CardHeader>
-        <CardTitle>交易托管</CardTitle>
-        <CardDescription>{listing.title} · Stripe Connect 模拟状态</CardDescription>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-4">
-        {steps.map(({ code, label }, index) => {
-          const active = index <= currentStep;
-          return (
-          <div key={code} className="flex items-center gap-3">
-            <div
-              className={cn(
-                "flex size-8 items-center justify-center rounded-full border",
-                active
-                  ? "border-trust-green bg-trust-green text-white"
-                  : "border-border bg-secondary text-muted-foreground"
-              )}
-            >
-              {active ? (
-                <CheckCircle2 className="size-4" aria-hidden="true" />
-              ) : (
-                <Clock3 className="size-4" aria-hidden="true" />
-              )}
-            </div>
-            <div className="min-w-0">
-              <div className="text-sm font-bold text-primary">{label}</div>
-              <div className="truncate text-xs font-semibold text-muted-foreground">
-                {code}
-              </div>
-            </div>
-          </div>
-          );
-        })}
-        <div className="rounded-md bg-secondary p-3 text-sm font-semibold text-primary">
-          <div className="flex justify-between">
-            <span>托管金额</span>
-            <span>${listing.price.toLocaleString()}</span>
-          </div>
-          <div className="mt-2 flex justify-between text-muted-foreground">
-            <span>平台服务费</span>
-            <span>${Math.round(listing.price * 0.035)}</span>
-          </div>
-        </div>
-        <Button variant="outline" className="w-full justify-between" onClick={onAdvance} disabled={currentStep >= steps.length - 1}>
-          {currentStep >= steps.length - 1 ? "交易已完成" : "推进下一状态"}
-          <ArrowRight data-icon="inline-end" />
-        </Button>
-      </CardContent>
-    </Card>
-  );
-}
-
 function PublishingFlow({
+  initialDraft,
   isPublishing,
-  onCreate
+  onSave
 }: {
+  initialDraft: PublishDraft | null;
   isPublishing: boolean;
-  onCreate: (draft: PublishDraft) => void;
+  onSave: (draft: PublishDraft, shouldSubmit: boolean) => Promise<PublishSaveResult | null>;
 }) {
-  const [step, setStep] = useState(0);
-  const [draft, setDraft] = useState<PublishDraft>({
-    title: "新发布主卧短租",
-    area: "Los Angeles · Westwood",
-    price: 1580,
-    beds: 1,
-    baths: 1
-  });
-  const steps = [
-    ["01", "基础信息", "地址、卧室、卫浴、租期"],
-    ["02", "分类相册", "卧室、客厅、厨房/卫浴、周边"],
-    ["03", "补贴净价", "原租金、首周减免、手净价"],
-    ["04", "合同承诺", "房东知情、三方协议、审核"]
+  const steps: Array<{ key: PublishStep; code: string; title: string; detail: string }> = [
+    { key: "basic", code: "01", title: "基础信息", detail: "标题、区域、房型与交通" },
+    { key: "media", code: "02", title: "图片与分类", detail: "图片 URL、卧室与公共区域" },
+    { key: "pricing", code: "03", title: "价格与设施", detail: "月租、原价、设施与声明" },
+    { key: "review", code: "04", title: "预览与提交", detail: "确认服务端将保存的内容" }
   ];
+  const [stepIndex, setStepIndex] = useState(0);
+  const [draft, setDraft] = useState<PublishDraft>(
+    () =>
+      initialDraft ?? {
+        title: "",
+        area: "",
+        beds: 1,
+        baths: 1,
+        commute: "",
+        transit: "",
+        media: [{ url: "", kind: "卧室" }],
+        price: 0,
+        originalPrice: 0,
+        tags: [],
+        landlordAware: false,
+        remoteListingId: null,
+        uploadedMediaUrls: []
+      }
+  );
+  const [errors, setErrors] = useState<string[]>([]);
+  const [confirmSubmit, setConfirmSubmit] = useState(false);
+  const step = steps[stepIndex];
+
+  function goToStep(nextIndex: number) {
+    if (nextIndex > stepIndex) {
+      const nextErrors = getPublishStepErrors(draft, step.key);
+      if (nextErrors.length > 0) {
+        setErrors(nextErrors);
+        return;
+      }
+    }
+    setErrors([]);
+    setConfirmSubmit(false);
+    setStepIndex(Math.min(Math.max(0, nextIndex), steps.length - 1));
+  }
+
+  async function save(shouldSubmit: boolean) {
+    const nextErrors = getPublishStepErrors(draft, "review");
+    if (nextErrors.length > 0) {
+      setErrors(nextErrors);
+      return;
+    }
+    if (shouldSubmit && !confirmSubmit) {
+      setConfirmSubmit(true);
+      return;
+    }
+
+    const result = await onSave(draft, shouldSubmit);
+    if (!result) return;
+    setDraft((current) => ({
+      ...current,
+      remoteListingId: result.remoteListingId,
+      uploadedMediaUrls: result.uploadedMediaUrls
+    }));
+    setConfirmSubmit(false);
+  }
+
+  function setMedia(index: number, field: "url" | "kind", value: string) {
+    setDraft((current) => ({
+      ...current,
+      media: current.media.map((media, mediaIndex) =>
+        mediaIndex === index ? { ...media, [field]: value } : media
+      )
+    }));
+  }
+
+  function toggleTag(tag: string) {
+    setDraft((current) => ({
+      ...current,
+      tags: current.tags.includes(tag)
+        ? current.tags.filter((item) => item !== tag)
+        : [...current.tags, tag]
+    }));
+  }
 
   return (
     <Card className="shadow-panel">
@@ -5313,78 +5319,200 @@ function PublishingFlow({
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <CardTitle>发布房源流程</CardTitle>
-            <CardDescription>分类相册、净价补贴、房东知情承诺、发布审核</CardDescription>
+            <CardDescription>
+              严格保存到现有房源字段，不展示合同、日期或文件上传。
+              {draft.remoteListingId ? ` 远程草稿：${draft.remoteListingId}` : ""}
+            </CardDescription>
           </div>
-          <Button variant="trust" size="sm" onClick={() => onCreate(draft)} disabled={isPublishing}>
+          <Button variant="outline" size="sm" onClick={() => void save(false)} disabled={isPublishing}>
             <Building2 data-icon="inline-start" />
-            {isPublishing ? "提交中" : "创建并提交"}
+            {isPublishing ? "保存中" : "保存草稿"}
           </Button>
         </div>
       </CardHeader>
       <CardContent>
         <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
-          {steps.map(([stepCode, title, detail], index) => (
+          {steps.map((item, index) => (
             <button
-              key={stepCode}
+              key={item.key}
               className={cn(
                 "rounded-md border bg-white p-4 text-left transition-colors",
-                index === step && "border-trust-sky bg-trust-sky/5"
+                index === stepIndex && "border-trust-sky bg-trust-sky/5"
               )}
               type="button"
-              onClick={() => setStep(index)}
+              aria-current={index === stepIndex ? "step" : undefined}
+              onClick={() => goToStep(index)}
             >
-              <div className="text-xs font-extrabold text-trust-sky">{stepCode}</div>
-              <div className="mt-2 text-sm font-bold text-primary">{title}</div>
-              <div className="mt-1 text-sm font-medium text-muted-foreground">{detail}</div>
+              <div className="text-xs font-extrabold text-trust-sky">{item.code}</div>
+              <div className="mt-2 text-sm font-bold text-primary">{item.title}</div>
+              <div className="mt-1 text-sm font-medium text-muted-foreground">{item.detail}</div>
             </button>
           ))}
         </div>
-        <div className="mt-4 grid grid-cols-1 gap-3 rounded-md border bg-white p-4 md:grid-cols-[minmax(0,1fr)_140px_90px_90px]">
-          <label className="flex flex-col gap-2 text-sm font-semibold">
-            房源标题
-            <Input
-              value={draft.title}
-              onChange={(event) => setDraft({ ...draft, title: event.target.value })}
-            />
-          </label>
-          <label className="flex flex-col gap-2 text-sm font-semibold">
-            区域
-            <Input
-              value={draft.area}
-              onChange={(event) => setDraft({ ...draft, area: event.target.value })}
-            />
-          </label>
-          <label className="flex flex-col gap-2 text-sm font-semibold">
-            价格
-            <Input
-              type="number"
-              value={draft.price}
-              onChange={(event) => setDraft({ ...draft, price: Number(event.target.value) })}
-            />
-          </label>
-          <div className="grid grid-cols-2 gap-2">
-            <label className="flex flex-col gap-2 text-sm font-semibold">
-              Bed
-              <Input
-                type="number"
-                min="1"
-                value={draft.beds}
-                onChange={(event) => setDraft({ ...draft, beds: Number(event.target.value) })}
-              />
-            </label>
-            <label className="flex flex-col gap-2 text-sm font-semibold">
-              Bath
-              <Input
-                type="number"
-                min="1"
-                value={draft.baths}
-                onChange={(event) => setDraft({ ...draft, baths: Number(event.target.value) })}
-              />
-            </label>
+        <div className="mt-4 rounded-md border bg-white p-4">
+          {step.key === "basic" ? (
+            <div className="grid gap-3 md:grid-cols-2">
+              <PublishField label="房源标题" value={draft.title} onChange={(value) => setDraft({ ...draft, title: value })} />
+              <PublishField label="区域" value={draft.area} onChange={(value) => setDraft({ ...draft, area: value })} />
+              <PublishNumberField label="卧室" value={draft.beds} min={0} onChange={(value) => setDraft({ ...draft, beds: value })} />
+              <PublishNumberField label="卫浴" value={draft.baths} min={0} onChange={(value) => setDraft({ ...draft, baths: value })} />
+              <PublishField label="通勤说明" value={draft.commute} onChange={(value) => setDraft({ ...draft, commute: value })} />
+              <PublishField label="交通说明" value={draft.transit} onChange={(value) => setDraft({ ...draft, transit: value })} />
+            </div>
+          ) : null}
+
+          {step.key === "media" ? (
+            <div className="grid gap-3">
+              {draft.media.map((media, index) => {
+                const mediaUploaded = draft.uploadedMediaUrls.includes(media.url);
+
+                return (
+                  <div key={index} className="grid gap-2 rounded-md border p-3 md:grid-cols-[minmax(0,1fr)_160px_auto]">
+                    <PublishField
+                      label={`图片 URL ${index + 1}`}
+                      value={media.url}
+                      disabled={mediaUploaded}
+                      onChange={(value) => setMedia(index, "url", value)}
+                    />
+                    <label className="grid gap-2 text-sm font-semibold">
+                      分类
+                      <select
+                        className="h-10 rounded-md border bg-white px-3 disabled:cursor-not-allowed disabled:opacity-60"
+                        value={media.kind}
+                        disabled={mediaUploaded}
+                        onChange={(event) => setMedia(index, "kind", event.target.value)}
+                      >
+                        {["卧室", "客厅", "厨房", "卫浴", "周边"].map((kind) => <option key={kind}>{kind}</option>)}
+                      </select>
+                    </label>
+                    <Button
+                      variant="ghost"
+                      className="self-end"
+                      disabled={draft.media.length === 1 || mediaUploaded}
+                      onClick={() => setDraft({ ...draft, media: draft.media.filter((_, mediaIndex) => mediaIndex !== index) })}
+                    >
+                      {mediaUploaded ? "已上传" : "移除"}
+                    </Button>
+                    {mediaUploaded ? (
+                      <p className="text-xs font-semibold text-muted-foreground md:col-span-3">
+                        现有接口仅支持追加媒体；已上传图片暂不能修改或删除。
+                      </p>
+                    ) : null}
+                  </div>
+                );
+              })}
+              <Button variant="outline" className="w-fit" onClick={() => setDraft({ ...draft, media: [...draft.media, { url: "", kind: "卧室" }] })}>
+                <Plus data-icon="inline-start" />追加图片 URL
+              </Button>
+            </div>
+          ) : null}
+
+          {step.key === "pricing" ? (
+            <div className="grid gap-4">
+              <div className="grid gap-3 md:grid-cols-2">
+                <PublishNumberField label="月租" value={draft.price} min={1} onChange={(value) => setDraft({ ...draft, price: value })} />
+                <PublishNumberField label="原价" value={draft.originalPrice} min={1} onChange={(value) => setDraft({ ...draft, originalPrice: value })} />
+              </div>
+              <fieldset>
+                <legend className="text-sm font-semibold">设施</legend>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {["Wi-Fi", "带家具", "独卫", "近地铁", "宠物友好", "洗烘"].map((tag) => (
+                    <Button key={tag} variant={draft.tags.includes(tag) ? "secondary" : "outline"} aria-pressed={draft.tags.includes(tag)} onClick={() => toggleTag(tag)}>{tag}</Button>
+                  ))}
+                </div>
+              </fieldset>
+              <label className="flex items-start gap-3 rounded-md border bg-secondary p-3 text-sm font-semibold">
+                <input type="checkbox" className="mt-1" checked={draft.landlordAware} onChange={(event) => setDraft({ ...draft, landlordAware: event.target.checked })} />
+                <span>我声明房东已知情。此信息仅为用户声明，发布后统一显示“待平台审核”。</span>
+              </label>
+            </div>
+          ) : null}
+
+          {step.key === "review" ? (
+            <div className="grid gap-4">
+              <div className="grid gap-3 md:grid-cols-2">
+                <PublishReviewItem label="标题" value={draft.title || "未填写"} />
+                <PublishReviewItem label="区域" value={draft.area || "未填写"} />
+                <PublishReviewItem label="价格" value={`$${draft.price.toLocaleString()} / 月`} />
+                <PublishReviewItem label="图片" value={`${draft.media.length} 张 URL`} />
+                <PublishReviewItem label="设施" value={draft.tags.join("、") || "未选择"} />
+                <PublishReviewItem label="Trust 来源" value={draft.landlordAware ? "用户声明 · 待平台审核" : "未声明 · 待平台审核"} />
+              </div>
+              {confirmSubmit ? (
+                <div className="rounded-md border border-trust-amber bg-amber-50 p-4 text-sm font-semibold text-primary">
+                  请再次确认提交。提交后房源进入平台审核，在审核完成前不会标记为“平台已审核”。
+                </div>
+              ) : null}
+              <div className="flex flex-wrap gap-2">
+                <Button variant="outline" onClick={() => void save(false)} disabled={isPublishing}>保存草稿</Button>
+                <Button variant="trust" onClick={() => void save(true)} disabled={isPublishing}>
+                  {isPublishing ? "提交中" : confirmSubmit ? "确认提交审核" : "提交审核"}
+                </Button>
+              </div>
+            </div>
+          ) : null}
+
+          {errors.length > 0 ? (
+            <div className="mt-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm font-semibold text-red-700" role="alert">
+              {errors.map((error) => <div key={error}>{error}</div>)}
+            </div>
+          ) : null}
+          <div className="mt-4 flex items-center justify-between">
+            <Button variant="ghost" disabled={stepIndex === 0 || isPublishing} onClick={() => goToStep(stepIndex - 1)}>上一步</Button>
+            {stepIndex < steps.length - 1 ? (
+              <Button variant="trust" disabled={isPublishing} onClick={() => goToStep(stepIndex + 1)}>下一步</Button>
+            ) : null}
           </div>
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+function PublishField({
+  label,
+  value,
+  disabled = false,
+  onChange
+}: {
+  label: string;
+  value: string;
+  disabled?: boolean;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label className="grid gap-2 text-sm font-semibold">
+      {label}
+      <Input value={value} disabled={disabled} onChange={(event) => onChange(event.target.value)} />
+    </label>
+  );
+}
+
+function PublishNumberField({
+  label,
+  value,
+  min,
+  onChange
+}: {
+  label: string;
+  value: number;
+  min: number;
+  onChange: (value: number) => void;
+}) {
+  return (
+    <label className="grid gap-2 text-sm font-semibold">
+      {label}
+      <Input type="number" min={min} value={value} onChange={(event) => onChange(Number(event.target.value))} />
+    </label>
+  );
+}
+
+function PublishReviewItem({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-md border bg-secondary p-3">
+      <div className="text-xs font-bold text-muted-foreground">{label}</div>
+      <div className="mt-1 break-words text-sm font-extrabold text-primary">{value}</div>
+    </div>
   );
 }
 
@@ -5441,32 +5569,10 @@ function OperationsPanel({
   initialQueues: ApiTrustQueue[];
   onToast: (message: string) => void;
 }) {
-  const fallbackQueues: QueueItem[] = [
-    { label: "人工认证待审", value: 24, icon: UserCheck, variant: "trust" },
-    { label: "房源媒体审核", value: 11, icon: Coffee, variant: "warning" },
-    { label: "退款/缺陷工单", value: 3, icon: ShieldCheck, variant: "danger" },
-    { label: "信用分重算队列", value: 128, icon: Sparkles, variant: "success" }
-  ];
-  const [queues, setQueues] = useState<QueueItem[]>(
-    initialQueues.length > 0
-      ? initialQueues.map((queue) => ({ ...queue, icon: ShieldCheck }))
-      : fallbackQueues
-  );
-
-  useEffect(() => {
-    if (initialQueues.length > 0) {
-      setQueues(initialQueues.map((queue) => ({ ...queue, icon: ShieldCheck })));
-    }
-  }, [initialQueues]);
-
-  function processQueue(label: string) {
-    setQueues((current) =>
-      current.map((queue) =>
-        queue.label === label ? { ...queue, value: Math.max(0, queue.value - 1) } : queue
-      )
-    );
-    onToast(`${label} 已处理 1 条`);
-  }
+  const queues: QueueItem[] = initialQueues.map((queue) => ({
+    ...queue,
+    icon: ShieldCheck
+  }));
 
   const reviewModules = [
     "举报入口",
@@ -5484,7 +5590,11 @@ function OperationsPanel({
         <CardDescription>审核、举报、信用分和应急保障的静态入口</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
-        {queues.map(({ label, value, icon: Icon, variant }) => (
+        {queues.length === 0 ? (
+          <div className="rounded-md border border-dashed bg-secondary p-4 text-sm font-semibold text-muted-foreground">
+            当前没有服务端审核队列数据，不显示本地模拟指标。
+          </div>
+        ) : queues.map(({ label, value, icon: Icon, variant }) => (
           <div key={label} className="flex items-center justify-between gap-3 rounded-md border bg-white p-3">
             <div className="flex items-center gap-3">
               <div className="flex size-10 items-center justify-center rounded-md bg-secondary text-primary">
@@ -5492,7 +5602,7 @@ function OperationsPanel({
               </div>
               <div>
                 <div className="text-sm font-bold text-primary">{label}</div>
-                <div className="text-xs font-semibold text-muted-foreground">Admin queue</div>
+                <div className="text-xs font-semibold text-muted-foreground">来自平台审核队列</div>
               </div>
             </div>
             <div className="flex items-center gap-2">
@@ -5500,10 +5610,10 @@ function OperationsPanel({
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => processQueue(label)}
-                disabled={value === 0}
+                onClick={() => onToast(`${label} 的后台审核操作暂未开放。`)}
+                disabled
               >
-                处理
+                暂未开放
               </Button>
             </div>
           </div>
@@ -5516,7 +5626,7 @@ function OperationsPanel({
               variant="secondary"
               size="sm"
               className="justify-start"
-              onClick={() => onToast(`${module} 已打开静态面板`)}
+              onClick={() => onToast(`${module} 的后台操作暂未开放。`)}
             >
               <MessageCircle data-icon="inline-start" />
               {module}

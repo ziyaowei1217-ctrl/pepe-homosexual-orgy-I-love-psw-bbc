@@ -28,7 +28,7 @@ const listingStatusMeta: Record<ListingStatus, ListingStatusMeta> = {
   },
   APPROVED: {
     label: "已上线",
-    description: "租客可以在 Discover 中看到这套房源。",
+    description: "租客可以在找房页看到这套房源。",
     variant: "success"
   },
   REJECTED: {

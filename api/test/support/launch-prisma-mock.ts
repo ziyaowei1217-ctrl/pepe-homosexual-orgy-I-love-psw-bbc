@@ -112,6 +112,7 @@ type TourRequestRecord = {
 type DealThreadRecord = {
   id: string;
   ownerId: string;
+  listingOwnerId: string;
   dealRoomId: string | null;
   listingId: string;
   listingTitle: string;
@@ -546,6 +547,8 @@ export function createLaunchPrismaMock() {
         const listing = state.listings.find((record) => record.id === where.id);
         return listing ? withListingIncludes(listing, state.listingMedia, include) : null;
       },
+      findFirst: async ({ where }: { where: ListingWhere }) =>
+        state.listings.find((listing) => matchesListing(listing, where)) ?? null,
       create: async ({ data }: { data: Omit<Partial<ListingRecord>, "id" | "createdAt" | "updatedAt"> & Pick<ListingRecord, "ownerId" | "title"> }) => {
         const created: ListingRecord = {
           id: `listing-${state.listings.length + 1}`,
@@ -737,6 +740,21 @@ export function createLaunchPrismaMock() {
       }
     },
     dealThread: {
+      findUnique: async ({
+        where,
+        include
+      }: {
+        where: { ownerId_listingId: { ownerId: string; listingId: string } };
+        include?: DealThreadInclude;
+      }) => {
+        const thread =
+          state.dealThreads.find(
+            (record) =>
+              record.ownerId === where.ownerId_listingId.ownerId &&
+              record.listingId === where.ownerId_listingId.listingId
+          ) ?? null;
+        return thread ? withDealThreadIncludes(thread, state.dealMessages, state.viewingRequests, include) : null;
+      },
       upsert: async ({
         where,
         create,
@@ -744,7 +762,7 @@ export function createLaunchPrismaMock() {
         include
       }: {
         where: { ownerId_listingId: { ownerId: string; listingId: string } };
-        create: Pick<DealThreadRecord, "ownerId" | "listingId" | "listingTitle" | "area" | "contactName"> &
+        create: Pick<DealThreadRecord, "ownerId" | "listingOwnerId" | "listingId" | "listingTitle" | "area" | "contactName"> &
           Partial<Pick<DealThreadRecord, "dealRoomId" | "participantNames">>;
         update: Partial<Pick<DealThreadRecord, "dealRoomId" | "listingTitle" | "area" | "contactName" | "participantNames">>;
         include?: DealThreadInclude;
@@ -761,6 +779,7 @@ export function createLaunchPrismaMock() {
         const created: DealThreadRecord = {
           id: `deal-thread-${state.dealThreads.length + 1}`,
           ownerId: create.ownerId,
+          listingOwnerId: create.listingOwnerId,
           dealRoomId: create.dealRoomId ?? null,
           listingId: create.listingId,
           listingTitle: create.listingTitle,
@@ -777,14 +796,24 @@ export function createLaunchPrismaMock() {
         where,
         include
       }: {
-        where: { id?: string; ownerId?: string };
+        where: {
+          id?: string;
+          ownerId?: string;
+          OR?: Array<{ ownerId?: string; listingOwnerId?: string }>;
+        };
         include?: DealThreadInclude;
       }) => {
         const thread =
           state.dealThreads.find(
             (record) =>
               (where.id === undefined || record.id === where.id) &&
-              (where.ownerId === undefined || record.ownerId === where.ownerId)
+              (where.ownerId === undefined || record.ownerId === where.ownerId) &&
+              (where.OR === undefined ||
+                where.OR.some(
+                  (clause) =>
+                    (clause.ownerId !== undefined && record.ownerId === clause.ownerId) ||
+                    (clause.listingOwnerId !== undefined && record.listingOwnerId === clause.listingOwnerId)
+                ))
           ) ?? null;
         return thread ? withDealThreadIncludes(thread, state.dealMessages, state.viewingRequests, include) : null;
       },
@@ -793,12 +822,22 @@ export function createLaunchPrismaMock() {
         include,
         orderBy
       }: {
-        where?: { ownerId?: string };
+        where?: {
+          ownerId?: string;
+          OR?: Array<{ ownerId?: string; listingOwnerId?: string }>;
+        };
         include?: DealThreadInclude;
         orderBy?: { updatedAt?: "asc" | "desc" };
       } = {}) => {
         const filtered = state.dealThreads.filter(
-          (thread) => where?.ownerId === undefined || thread.ownerId === where.ownerId
+          (thread) =>
+            (where?.ownerId === undefined || thread.ownerId === where.ownerId) &&
+            (where?.OR === undefined ||
+              where.OR.some(
+                (clause) =>
+                  (clause.ownerId !== undefined && thread.ownerId === clause.ownerId) ||
+                  (clause.listingOwnerId !== undefined && thread.listingOwnerId === clause.listingOwnerId)
+              ))
         );
         return sortByDate(filtered, "updatedAt", orderBy?.updatedAt).map((thread) =>
           withDealThreadIncludes(thread, state.dealMessages, state.viewingRequests, include)
@@ -826,6 +865,8 @@ export function createLaunchPrismaMock() {
       }
     },
     viewingRequest: {
+      findUnique: async ({ where }: { where: { id: string } }) =>
+        state.viewingRequests.find((request) => request.id === where.id) ?? null,
       findFirst: async ({
         where,
         orderBy

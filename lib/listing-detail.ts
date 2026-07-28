@@ -20,7 +20,6 @@ export type ListingFlowInputs = {
   favoriteIds: Set<string>;
   contactedIds: Set<string>;
   tourRequestedIds: Set<string>;
-  appliedListingId: string | null;
 };
 
 const detailGalleryFallbacks = [
@@ -51,32 +50,28 @@ export function buildListingDetail(listing: DetailListing, dateRange: DateRange)
       highlights: [
         listing.commute,
         listing.transit,
-        `${listing.beds} bed · ${listing.baths} bath`,
+        `${listing.beds} 间卧室 · ${listing.baths} 间卫浴`,
         monthlySavings > 0 ? `比原价低 $${monthlySavings.toLocaleString()}/月` : "价格已锁定"
       ],
       houseRules: [
         listing.trust,
-        listing.trust.includes("房东知情") ? "房东知情" : "房东授权待确认",
+        listing.trust.includes("平台已审核") ? "平台已审核房东授权" : "房东知情为用户声明，待平台审核",
         listing.tags.includes("宠物友好") ? "宠物可谈" : "入住前完成室友偏好确认",
         listing.tags.includes("无烟") ? "无烟房源" : "公共区保持安静整洁"
       ],
       moveIn: [
-        dateRange.checkIn ? `${formatDateRangeLabel(dateRange)} 可申请` : "选择日期后可申请",
-        "线上看房后进入托管定金",
-        "入住首日问题可走 Trust 介入"
+        dateRange.checkIn ? `${formatDateRangeLabel(dateRange)} 已用于核对可租范围` : "选择日期可核对房源可租范围",
+        "联系房东并预约看房",
+        "在线申请、支付与资金托管暂未开放"
       ]
     }
   };
 }
 
 export function getListingFlowStatus(listingId: string, flow: ListingFlowInputs) {
-  const isApplied = flow.appliedListingId === listingId;
-
   return {
     isFavorite: flow.favoriteIds.has(listingId),
     isContacted: flow.contactedIds.has(listingId),
-    isTourRequested: flow.tourRequestedIds.has(listingId),
-    isApplied,
-    primaryCta: isApplied ? "继续申请" : "开始申请"
+    isTourRequested: flow.tourRequestedIds.has(listingId)
   };
 }
