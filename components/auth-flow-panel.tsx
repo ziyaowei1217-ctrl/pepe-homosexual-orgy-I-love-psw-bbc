@@ -1,4 +1,4 @@
-import { useEffect, useId, useState, type FormEvent } from "react";
+import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,10 +11,14 @@ import {
   type VerifyEmailResponse
 } from "@/lib/api";
 import {
+  acquireAuthActionLock,
+  getEmailCodeRequestTransition,
   getResendSeconds,
+  getVerificationCodeStatus,
   isValidAuthEmail,
   normalizeAuthEmail,
   normalizeVerificationCode,
+  releaseAuthActionLock,
   type OnboardingReason
 } from "@/lib/auth-flow";
 import { buildProfileUpdateInput, type OnboardingProfileInput } from "@/lib/profile-input";
@@ -64,6 +68,7 @@ export function AuthFlowPanel({
   const [now, setNow] = useState(() => Date.now());
   const [pendingAction, setPendingAction] = useState<PendingAction>(null);
   const [localError, setLocalError] = useState<string | null>(null);
+  const actionLock = useRef(false);
   const [profileDraft, setProfileDraft] = useState<UpdateProfileInput>(() =>
     profileToDraft(profile)
   );
@@ -73,29 +78,37 @@ export function AuthFlowPanel({
   }, [profile]);
 
   useEffect(() => {
-    if (step !== "code" || resendAvailableAt <= now) return;
+    if (step !== "code") return;
 
     const timer = window.setInterval(() => setNow(Date.now()), 1_000);
     return () => window.clearInterval(timer);
-  }, [now, resendAvailableAt, step]);
+  }, [step]);
 
   async function sendCode(value: string) {
     if (!isValidAuthEmail(value)) {
       setLocalError("请输入有效的邮箱地址。");
       return;
     }
+    if (!acquireAuthActionLock(actionLock)) return;
 
     setLocalError(null);
     setPendingAction("request");
     try {
+      const requestedAt = Date.now();
       const response = await requestEmailCode(normalizeAuthEmail(value));
-      setSentEmail(response.email);
-      setExpiresAt(response.expiresAt);
-      setResendAvailableAt(Date.now() + 60_000);
-      setNow(Date.now());
+      const transition = getEmailCodeRequestTransition({
+        currentCode: code,
+        response,
+        requestedAt,
+        isDevelopment: process.env.NODE_ENV === "development"
+      });
+      setSentEmail(transition.sentEmail);
+      setExpiresAt(transition.expiresAt);
+      setResendAvailableAt(transition.resendAvailableAt);
+      setCode(transition.code);
+      setNow(requestedAt);
 
       if (process.env.NODE_ENV === "development" && response.devCode) {
-        setCode(normalizeVerificationCode(response.devCode));
         onToast("本地开发验证码已填入");
       } else {
         onToast("验证码已发送");
@@ -105,6 +118,7 @@ export function AuthFlowPanel({
       setLocalError(toProductApiError(requestError).message);
     } finally {
       setPendingAction(null);
+      releaseAuthActionLock(actionLock);
     }
   }
 
@@ -116,23 +130,30 @@ export function AuthFlowPanel({
   async function handleCodeSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    const normalizedCode = normalizeVerificationCode(code);
-    if (normalizedCode.length !== 6) {
-      setCode(normalizedCode);
-      setLocalError("请输入六位验证码。");
+    const checkedAt = Date.now();
+    const verificationStatus = getVerificationCodeStatus(code, expiresAt, checkedAt);
+    setNow(checkedAt);
+    if (verificationStatus.error) {
+      setCode(verificationStatus.normalizedCode);
+      setLocalError(verificationStatus.error);
       return;
     }
+    if (!acquireAuthActionLock(actionLock)) return;
 
     setLocalError(null);
     setPendingAction("verify");
     try {
-      const response = await verifyEmailCode(sentEmail, normalizedCode);
+      const response = await verifyEmailCode(
+        sentEmail,
+        verificationStatus.normalizedCode
+      );
       onAuthenticated(response);
       onToast(`已登录：${response.user.email}`);
     } catch (verifyError) {
       setLocalError(toProductApiError(verifyError).message);
     } finally {
       setPendingAction(null);
+      releaseAuthActionLock(actionLock);
     }
   }
 
@@ -146,6 +167,7 @@ export function AuthFlowPanel({
   }
 
   async function saveProfile(draft: UpdateProfileInput) {
+    if (!acquireAuthActionLock(actionLock)) return;
     setLocalError(null);
     setPendingAction("profile");
     try {
@@ -159,6 +181,7 @@ export function AuthFlowPanel({
       setLocalError(toProductApiError(saveError).message);
     } finally {
       setPendingAction(null);
+      releaseAuthActionLock(actionLock);
     }
   }
 
@@ -194,6 +217,10 @@ export function AuthFlowPanel({
 
   const visibleError = localError ?? apiError;
   const resendSeconds = getResendSeconds(resendAvailableAt, now);
+  const verificationStatus = getVerificationCodeStatus(code, expiresAt, now);
+  const codeStepError = verificationStatus.expired
+    ? verificationStatus.error
+    : visibleError;
 
   return (
     <section className="border-b border-border bg-background" aria-labelledby={`${panelId}-title`}>
@@ -266,16 +293,16 @@ export function AuthFlowPanel({
                   disabled={pendingAction !== null}
                 />
               </label>
-              {expiresAt ? (
+              {expiresAt && !verificationStatus.expired ? (
                 <p className="text-xs font-semibold text-muted-foreground">
                   请在验证码过期前完成验证。
                 </p>
               ) : null}
-              {visibleError ? <AuthError message={visibleError} /> : null}
+              {codeStepError ? <AuthError message={codeStepError} /> : null}
               <Button
                 type="submit"
                 variant="trust"
-                disabled={pendingAction !== null || code.length !== 6}
+                disabled={pendingAction !== null || !verificationStatus.canSubmit}
               >
                 {pendingAction === "verify" ? "验证中…" : "验证并登录"}
               </Button>
@@ -294,10 +321,15 @@ export function AuthFlowPanel({
                   variant="outline"
                   size="sm"
                   onClick={() => void sendCode(sentEmail)}
-                  disabled={pendingAction !== null || resendSeconds > 0}
+                  disabled={
+                    pendingAction !== null ||
+                    (resendSeconds > 0 && !verificationStatus.expired)
+                  }
                   aria-live="polite"
                 >
-                  {resendSeconds > 0 ? `${resendSeconds} 秒后重新发送` : "重新发送"}
+                  {resendSeconds > 0 && !verificationStatus.expired
+                    ? `${resendSeconds} 秒后重新发送`
+                    : "重新发送"}
                 </Button>
               </div>
             </form>

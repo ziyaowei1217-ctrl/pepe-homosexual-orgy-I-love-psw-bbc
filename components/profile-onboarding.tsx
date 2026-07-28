@@ -1,9 +1,13 @@
-import { useId, useState, type FormEvent } from "react";
+import { useId, useReducer, type FormEvent } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { ApiProfile } from "@/lib/api";
-import { getMissingProfileFields, type OnboardingReason } from "@/lib/auth-flow";
+import {
+  getMissingProfileFields,
+  reduceOnboardingProfileState,
+  type OnboardingReason
+} from "@/lib/auth-flow";
 import {
   buildOnboardingProfileInput,
   type OnboardingProfileInput
@@ -35,38 +39,44 @@ export function ProfileOnboarding({
   onDismiss
 }: ProfileOnboardingProps) {
   const fieldId = useId();
-  const [draft, setDraft] = useState<OnboardingProfileInput>(() => ({
-    displayName: profile?.displayName ?? "",
-    school: profile?.school ?? "",
-    city: profile?.city ?? "",
-    role: profile?.role ?? "renter"
-  }));
-  const [validationError, setValidationError] = useState<string | null>(null);
+  const [formState, dispatch] = useReducer(reduceOnboardingProfileState, {
+    draft: {
+      displayName: profile?.displayName ?? "",
+      school: profile?.school ?? "",
+      city: profile?.city ?? "",
+      role: profile?.role ?? "renter"
+    },
+    error: null
+  });
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    const input = buildOnboardingProfileInput(draft);
+    const input = buildOnboardingProfileInput(formState.draft);
     const missing = getMissingProfileFields(input);
 
     if (missing.length > 0) {
-      setValidationError(
-        `请填写${missing.map((field) => fieldLabels[field]).join("、")}。`
-      );
+      dispatch({
+        type: "set-error",
+        error: `请填写${missing.map((field) => fieldLabels[field]).join("、")}。`
+      });
       return;
     }
 
-    setValidationError(null);
+    dispatch({ type: "set-error", error: null });
     try {
       await onSave(input);
     } catch (saveError) {
-      setValidationError(toProductApiError(saveError).message);
+      dispatch({
+        type: "set-error",
+        error: toProductApiError(saveError).message
+      });
     }
   }
 
   const title = reason === "new-user" ? "先介绍一下自己" : "发布前完善资料";
   const dismissLabel = reason === "new-user" ? "稍后完善" : "暂不发布";
-  const visibleError = validationError ?? error;
+  const visibleError = formState.error ?? error;
 
   return (
     <section
@@ -96,12 +106,13 @@ export function ProfileOnboarding({
                   id={`${fieldId}-display-name`}
                   name="displayName"
                   autoComplete="name"
-                  value={draft.displayName}
+                  value={formState.draft.displayName}
                   onChange={(event) =>
-                    setDraft((current) => ({
-                      ...current,
-                      displayName: event.target.value
-                    }))
+                    dispatch({
+                      type: "change",
+                      field: "displayName",
+                      value: event.target.value
+                    })
                   }
                   placeholder="Maya Chen"
                 />
@@ -116,12 +127,13 @@ export function ProfileOnboarding({
                   id={`${fieldId}-role`}
                   name="role"
                   className="h-11 rounded-[12px] border border-input bg-card px-3 text-sm font-medium normal-case text-foreground shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                  value={draft.role}
+                  value={formState.draft.role}
                   onChange={(event) =>
-                    setDraft((current) => ({
-                      ...current,
-                      role: event.target.value as OnboardingProfileInput["role"]
-                    }))
+                    dispatch({
+                      type: "change",
+                      field: "role",
+                      value: event.target.value as OnboardingProfileInput["role"]
+                    })
                   }
                 >
                   <option value="renter">租客</option>
@@ -139,12 +151,13 @@ export function ProfileOnboarding({
                   id={`${fieldId}-school`}
                   name="school"
                   autoComplete="organization"
-                  value={draft.school}
+                  value={formState.draft.school}
                   onChange={(event) =>
-                    setDraft((current) => ({
-                      ...current,
-                      school: event.target.value
-                    }))
+                    dispatch({
+                      type: "change",
+                      field: "school",
+                      value: event.target.value
+                    })
                   }
                   placeholder="UCLA"
                 />
@@ -159,12 +172,13 @@ export function ProfileOnboarding({
                   id={`${fieldId}-city`}
                   name="city"
                   autoComplete="address-level2"
-                  value={draft.city}
+                  value={formState.draft.city}
                   onChange={(event) =>
-                    setDraft((current) => ({
-                      ...current,
-                      city: event.target.value
-                    }))
+                    dispatch({
+                      type: "change",
+                      field: "city",
+                      value: event.target.value
+                    })
                   }
                   placeholder="Los Angeles"
                 />
