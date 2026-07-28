@@ -1,7 +1,6 @@
 import { Inject, Injectable } from "@nestjs/common";
 
 import { PrismaService } from "../prisma/prisma.service";
-import { seedTrustQueues } from "../seed-data";
 
 @Injectable()
 export class TrustService {
@@ -12,6 +11,6 @@ export class TrustService {
       orderBy: { updatedAt: "desc" }
     });
 
-    return records.length > 0 ? records : seedTrustQueues;
+    return records;
   }
 }

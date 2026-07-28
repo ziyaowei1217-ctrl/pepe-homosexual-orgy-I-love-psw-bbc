@@ -1,7 +1,6 @@
 import { BadRequestException, NotFoundException } from "@nestjs/common";
 import { describe, expect, it } from "vitest";
 
-import { seedListings } from "../src/seed-data";
 import { ListingDto } from "../src/listings/dto";
 import { ListingsService } from "../src/listings/listings.service";
 
@@ -101,13 +100,13 @@ describe("ListingsService", () => {
     await expect(service.findAll()).resolves.toMatchObject([{ id: "approved" }]);
   });
 
-  it("keeps the seed fallback when no approved database listings exist", async () => {
+  it("returns an empty public catalog when no approved database listings exist", async () => {
     const prisma = createPrismaMock({
       listings: [listingRecord({ id: "draft", ownerId: "owner-1", status: "DRAFT" })]
     });
     const service = new ListingsService(prisma as never);
 
-    await expect(service.findAll()).resolves.toEqual(seedListings);
+    await expect(service.findAll()).resolves.toEqual([]);
   });
 
   it("returns approved database listings for public detail reads", async () => {
@@ -147,13 +146,13 @@ describe("ListingsService", () => {
     await expect(service.findOne("draft")).rejects.toThrow(NotFoundException);
   });
 
-  it("does not fall back to seed data when a non-approved database listing uses a seed id", async () => {
+  it("does not expose a non-approved database listing by id", async () => {
     const prisma = createPrismaMock({
-      listings: [listingRecord({ id: seedListings[0].id, ownerId: "owner-1", status: "REJECTED" })]
+      listings: [listingRecord({ id: "rejected", ownerId: "owner-1", status: "REJECTED" })]
     });
     const service = new ListingsService(prisma as never);
 
-    await expect(service.findOne(seedListings[0].id)).rejects.toThrow(NotFoundException);
+    await expect(service.findOne("rejected")).rejects.toThrow(NotFoundException);
   });
 
   it("creates draft listings even when a client sends review status data", async () => {

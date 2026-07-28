@@ -1,7 +1,6 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 
 import { PrismaService } from "../prisma/prisma.service";
-import { seedListings } from "../seed-data";
 import { CreateListingDto, CreateListingMediaDto, UpdateListingDto } from "./dto";
 
 const editableListingStatuses = new Set(["DRAFT", "REJECTED"]);
@@ -23,7 +22,7 @@ export class ListingsService {
       orderBy: { createdAt: "desc" }
     });
 
-    return records.length > 0 ? records : seedListings;
+    return records;
   }
 
   async findOne(id: string) {
@@ -31,10 +30,7 @@ export class ListingsService {
     if (record?.status === "APPROVED") return record;
     if (record) throw new NotFoundException("Listing not found");
 
-    const seeded = seedListings.find((listing) => listing.id === id);
-    if (!seeded) throw new NotFoundException("Listing not found");
-
-    return seeded;
+    throw new NotFoundException("Listing not found");
   }
 
   async create(ownerId: string, dto: CreateListingDto) {

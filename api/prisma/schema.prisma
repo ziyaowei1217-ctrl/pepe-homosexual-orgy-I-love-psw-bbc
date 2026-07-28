@@ -185,6 +185,7 @@ model RoommateProfile {
   budget          String
   commute         String
   tags            String[]
+  localReciprocalLike Boolean          @default(false)
   createdAt       DateTime         @default(now())
   actions         RoommateAction[]
   dealRooms       DealRoom[]

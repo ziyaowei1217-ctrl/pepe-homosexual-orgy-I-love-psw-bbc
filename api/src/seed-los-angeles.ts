@@ -34,11 +34,18 @@ async function main() {
     });
   }
 
-  for (const roommate of seedRoommates) {
+  for (const [index, roommate] of seedRoommates.entries()) {
+    const localReciprocalLike = index < 3;
     await prisma.roommateProfile.upsert({
       where: { id: roommate.id },
-      update: roommate,
-      create: roommate
+      update: {
+        ...roommate,
+        localReciprocalLike
+      },
+      create: {
+        ...roommate,
+        localReciprocalLike
+      }
     });
   }
 

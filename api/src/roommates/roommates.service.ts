@@ -1,8 +1,7 @@
-import { Inject, Injectable } from "@nestjs/common";
+import { Inject, Injectable, NotFoundException } from "@nestjs/common";
 
 import { DealRoomsService } from "../deal-rooms/deal-rooms.service";
 import { PrismaService } from "../prisma/prisma.service";
-import { seedRoommates } from "../seed-data";
 import { RoommateActionDtoValue } from "./dto";
 
 @Injectable()
@@ -19,14 +18,24 @@ export class RoommatesService {
       }
     });
 
-    return records.length > 0 ? records : seedRoommates;
+    return records.map(toPublicRoommate);
   }
 
-  recordAction(userId: string, roommateProfileId: string, action: RoommateActionDtoValue) {
+  async recordAction(userId: string, roommateProfileId: string, action: RoommateActionDtoValue) {
+    const candidate = await this.prisma.roommateProfile.findUnique({
+      where: { id: roommateProfileId }
+    });
+    if (!candidate) throw new NotFoundException("Roommate profile not found");
+
     return this.dealRooms.recordRoommateAction({
       userId,
       roommateProfileId,
-      action
+      action,
+      createDealRoom: action === "LIKE" && candidate.localReciprocalLike
     });
   }
+}
+
+function toPublicRoommate({ localReciprocalLike: _localReciprocalLike, ...roommate }: any) {
+  return roommate;
 }
