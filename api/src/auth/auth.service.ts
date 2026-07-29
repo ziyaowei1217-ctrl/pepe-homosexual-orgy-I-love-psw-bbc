@@ -166,10 +166,9 @@ export class AuthService {
     operation: (transaction: Prisma.TransactionClient) => Promise<T>
   ) {
     return this.prisma.$transaction(async (transaction) => {
-      await transaction.$queryRawUnsafe(
-        "SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))",
-        email
-      );
+      await transaction.$executeRaw`
+        SELECT pg_advisory_xact_lock(hashtextextended(${email}::text, 0))
+      `;
       return operation(transaction);
     });
   }

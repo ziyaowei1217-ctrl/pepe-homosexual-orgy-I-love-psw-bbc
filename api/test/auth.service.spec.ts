@@ -598,7 +598,7 @@ function createPrismaMock() {
   };
 
   type TestTransaction = typeof mock & {
-    $queryRawUnsafe: (_query: string, email: string) => Promise<unknown[]>;
+    $executeRaw: (_query: TemplateStringsArray, email: string) => Promise<number>;
   };
   const transactionalMock = Object.assign(mock, {
     $transaction: async <T>(operation: (transaction: TestTransaction) => Promise<T>) => {
@@ -606,10 +606,10 @@ function createPrismaMock() {
       let snapshot: ReturnType<typeof snapshotState> | undefined;
       const transaction: TestTransaction = {
         ...mock,
-        $queryRawUnsafe: async (_query: string, email: string) => {
+        $executeRaw: async (_query: TemplateStringsArray, email: string) => {
           releaseLock = await acquireEmailLock(email);
           snapshot = snapshotState();
-          return [];
+          return 1;
         }
       };
 

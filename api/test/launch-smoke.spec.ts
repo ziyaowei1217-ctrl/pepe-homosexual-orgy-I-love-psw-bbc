@@ -19,6 +19,7 @@ describeSmoke("launch smoke against real PostgreSQL", () => {
   const runId = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
   const ownerEmail = `launch-owner-${runId}@example.com`;
   const adminEmail = `launch-admin-${runId}@example.com`;
+  const signupEmail = `launch-signup-${runId}@example.com`;
   const roommateId = `launch-roommate-${runId}`;
   let ownerId = "";
   let adminId = "";
@@ -88,12 +89,30 @@ describeSmoke("launch smoke against real PostgreSQL", () => {
         await prisma.listing.deleteMany({ where: { ownerId } });
       }
       await prisma.roommateProfile.deleteMany({ where: { id: roommateId } });
-      await prisma.verificationCode.deleteMany({ where: { email: { in: [ownerEmail, adminEmail] } } });
-      await prisma.profile.deleteMany({ where: { email: { in: [ownerEmail, adminEmail] } } });
-      await prisma.user.deleteMany({ where: { email: { in: [ownerEmail, adminEmail] } } });
+      await prisma.verificationCode.deleteMany({
+        where: { email: { in: [ownerEmail, adminEmail, signupEmail] } }
+      });
+      await prisma.profile.deleteMany({
+        where: { email: { in: [ownerEmail, adminEmail, signupEmail] } }
+      });
+      await prisma.user.deleteMany({
+        where: { email: { in: [ownerEmail, adminEmail, signupEmail] } }
+      });
     }
 
     if (app) await app.close();
+  });
+
+  it("requests a registration code against the real database", async () => {
+    const response = await request(app.getHttpServer())
+      .post("/api/v1/auth/email-code")
+      .send({ email: signupEmail })
+      .expect(201);
+
+    expect(response.body).toMatchObject({
+      email: signupEmail
+    });
+    expect(response.body.devCode).toMatch(/^\d{6}$/);
   });
 
   it("runs the core HTTP flow against the real database", async () => {

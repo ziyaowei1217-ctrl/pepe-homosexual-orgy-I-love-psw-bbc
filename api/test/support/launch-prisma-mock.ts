@@ -321,7 +321,7 @@ export function createLaunchPrismaMock() {
     $transaction: async (operation: (transaction: object) => Promise<unknown>) =>
       operation({
         ...mock,
-        $queryRawUnsafe: async () => []
+        $executeRaw: async () => 1
       }),
     verificationCode: {
       create: async ({ data }: { data: Pick<VerificationCodeRecord, "email" | "codeHash" | "expiresAt" | "attemptCount"> }) => {
