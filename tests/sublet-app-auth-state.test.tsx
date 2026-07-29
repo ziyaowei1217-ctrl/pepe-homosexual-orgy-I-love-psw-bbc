@@ -23,7 +23,7 @@ vi.mock("next/navigation", () => ({
 vi.mock("@/components/auth-flow-panel", () => ({
   AuthFlowPanel: (props: unknown) => {
     authPanelCapture.current = props;
-    return null;
+    return <div data-testid="auth-flow-panel" />;
   }
 }));
 
@@ -183,6 +183,75 @@ describe("SubletApp auth state flow", () => {
     await unmount(renderer);
   });
 
+  it("hands a completed landlord profile from identity saving into the publish form", async () => {
+    writeStoredAuthSession("stored-token");
+    vi.mocked(api.getMyProfile).mockResolvedValue(incompleteListerProfile);
+    vi.mocked(api.updateMyProfile).mockResolvedValue(completeProfile);
+    const renderer = await renderSubletApp("Publish");
+    const saveProfile = capturedAuthPanel().onProfileSave;
+
+    expect(hasAuthPanel(renderer.root)).toBe(true);
+    expect(hasButton(renderer.root, "保存草稿")).toBe(false);
+
+    await act(async () => {
+      await saveProfile({
+        displayName: "Maya Chen",
+        school: "UCLA",
+        city: "Los Angeles",
+        role: "lister"
+      });
+      await flushMicrotasks();
+    });
+
+    expect(hasAuthPanel(renderer.root)).toBe(false);
+    expect(hasButton(renderer.root, "保存草稿")).toBe(true);
+    await unmount(renderer);
+  });
+
+  it("keeps identity visible when the saved profile still lacks publish access", async () => {
+    writeStoredAuthSession("stored-token");
+    vi.mocked(api.getMyProfile).mockResolvedValue(incompleteListerProfile);
+    vi.mocked(api.updateMyProfile).mockResolvedValue(incompleteListerProfile);
+    const renderer = await renderSubletApp("Publish");
+    const saveProfile = capturedAuthPanel().onProfileSave;
+
+    await act(async () => {
+      await saveProfile({
+        displayName: "",
+        school: "",
+        city: "",
+        role: "lister"
+      });
+      await flushMicrotasks();
+    });
+
+    expect(hasAuthPanel(renderer.root)).toBe(true);
+    expect(hasButton(renderer.root, "保存草稿")).toBe(false);
+    await unmount(renderer);
+  });
+
+  it("keeps identity visible when profile saving fails", async () => {
+    writeStoredAuthSession("stored-token");
+    vi.mocked(api.getMyProfile).mockResolvedValue(incompleteListerProfile);
+    vi.mocked(api.updateMyProfile).mockRejectedValue({ status: 503 });
+    const renderer = await renderSubletApp("Publish");
+    const saveProfile = capturedAuthPanel().onProfileSave;
+
+    await act(async () => {
+      await saveProfile({
+        displayName: "Maya Chen",
+        school: "UCLA",
+        city: "Los Angeles",
+        role: "lister"
+      });
+      await flushMicrotasks();
+    });
+
+    expect(hasAuthPanel(renderer.root)).toBe(true);
+    expect(hasButton(renderer.root, "保存草稿")).toBe(false);
+    await unmount(renderer);
+  });
+
   it("keeps a newly saved profile when the older profile request resolves later", async () => {
     const oldProfileRequest = deferred<ApiProfile>();
     vi.mocked(api.getMyProfile).mockReturnValue(oldProfileRequest.promise);
@@ -303,6 +372,10 @@ function hasButton(root: ReactTestInstance, label: string) {
   return root
     .findAllByType("button")
     .some((button) => renderedText(button) === label);
+}
+
+function hasAuthPanel(root: ReactTestInstance) {
+  return root.findAllByProps({ "data-testid": "auth-flow-panel" }).length > 0;
 }
 
 function renderedText(node: ReactTestInstance): string {
