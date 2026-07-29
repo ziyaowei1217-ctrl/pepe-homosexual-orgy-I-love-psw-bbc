@@ -461,6 +461,37 @@ describe("AuthFlowPanel interactions", () => {
     await unmountRenderer(renderer);
   });
 
+  it("leaves successful profile-save feedback to the parent callback", async () => {
+    const onProfileSave = vi.fn().mockResolvedValue({ id: "profile-1" });
+    const onToast = vi.fn();
+    const renderer = await renderAuthPanel({
+      token: "token-1",
+      user: { id: "user-1", email: "maya@example.edu", role: "USER" },
+      onboardingReason: "new-user",
+      onProfileSave,
+      onToast
+    });
+
+    changeInput(renderer.root, "displayName", "Maya Chen");
+    changeInput(renderer.root, "school", "UCLA");
+    changeInput(renderer.root, "city", "Los Angeles");
+    act(() => {
+      renderer.root.findByType("select").props.onChange({
+        target: { value: "lister" }
+      });
+    });
+    await submitCurrentForm(renderer);
+
+    expect(onProfileSave).toHaveBeenCalledWith({
+      displayName: "Maya Chen",
+      school: "UCLA",
+      city: "Los Angeles",
+      role: "lister"
+    });
+    expect(onToast).not.toHaveBeenCalled();
+    await unmountRenderer(renderer);
+  });
+
   it("retains edited onboarding fields after save rejects", async () => {
     const onSave = vi
       .fn()

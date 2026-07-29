@@ -187,6 +187,18 @@ describe("SubletApp auth state flow", () => {
     writeStoredAuthSession("stored-token");
     vi.mocked(api.getMyProfile).mockResolvedValue(incompleteListerProfile);
     vi.mocked(api.updateMyProfile).mockResolvedValue(completeProfile);
+    const scrollIntoView = vi.fn();
+    const getElementById = vi.fn((id: string) =>
+      id === "publish-flow" ? { scrollIntoView } : null
+    );
+    const documentDescriptor = Object.getOwnPropertyDescriptor(
+      globalThis,
+      "document"
+    );
+    Object.defineProperty(globalThis, "document", {
+      configurable: true,
+      value: { getElementById }
+    });
     const renderer = await renderSubletApp("Publish");
     const saveProfile = capturedAuthPanel().onProfileSave;
 
@@ -205,7 +217,18 @@ describe("SubletApp auth state flow", () => {
 
     expect(hasAuthPanel(renderer.root)).toBe(false);
     expect(hasButton(renderer.root, "保存草稿")).toBe(true);
+    expect(renderedText(renderer.root)).toContain("身份已保存，可以开始填写房源");
+    expect(getElementById).toHaveBeenCalledWith("publish-flow");
+    expect(scrollIntoView).toHaveBeenCalledWith({
+      behavior: "smooth",
+      block: "start"
+    });
     await unmount(renderer);
+    if (documentDescriptor) {
+      Object.defineProperty(globalThis, "document", documentDescriptor);
+    } else {
+      delete (globalThis as typeof globalThis & { document?: Document }).document;
+    }
   });
 
   it("keeps identity visible when the saved profile still lacks publish access", async () => {

@@ -187,7 +187,6 @@ export function AuthFlowPanel({
         setLocalError("资料保存失败，请稍后重试。");
         return;
       }
-      onToast("资料已保存");
     } catch (saveError) {
       setLocalError(toProductApiError(saveError).message);
     } finally {
