@@ -318,6 +318,11 @@ export function createLaunchPrismaMock() {
     $connect: async () => undefined,
     $disconnect: async () => undefined,
     $queryRaw: async () => [{ ok: 1 }],
+    $transaction: async (operation: (transaction: object) => Promise<unknown>) =>
+      operation({
+        ...mock,
+        $queryRawUnsafe: async () => []
+      }),
     verificationCode: {
       create: async ({ data }: { data: Pick<VerificationCodeRecord, "email" | "codeHash" | "expiresAt" | "attemptCount"> }) => {
         const created: VerificationCodeRecord = {
@@ -372,11 +377,22 @@ export function createLaunchPrismaMock() {
       }
     },
     user: {
-      findUnique: async ({ where }: { where: { id: string } }) =>
-        state.users.find((user) => user.id === where.id) ?? null,
-      upsert: async ({ where, create }: { where: { email: string }; create: { email: string } }) => {
+      findUnique: async ({ where }: { where: { id?: string; email?: string } }) =>
+        state.users.find((user) => user.id === where.id || user.email === where.email) ?? null,
+      upsert: async ({
+        where,
+        create,
+        update
+      }: {
+        where: { email: string };
+        create: { email: string };
+        update?: { role?: UserRole };
+      }) => {
         const existing = state.users.find((user) => user.email === where.email);
-        if (existing) return existing;
+        if (existing) {
+          if (update?.role) existing.role = update.role;
+          return existing;
+        }
 
         const created: UserRecord = {
           id: `user-${state.users.length + 1}`,

@@ -38,6 +38,7 @@ describe("listing HTTP validation", () => {
 
     token = await signIn(app, "owner@example.com");
     adminToken = await signIn(app, "admin@example.com");
+    await completePublisherProfile(app, token);
   });
 
   afterEach(async () => {
@@ -230,6 +231,19 @@ async function signIn(app: INestApplication, email: string) {
     .send({ email, code: codeResponse.body.devCode })
     .expect(201);
   return sessionResponse.body.accessToken as string;
+}
+
+async function completePublisherProfile(app: INestApplication, token: string) {
+  await request(app.getHttpServer())
+    .patch("/api/v1/profiles/me")
+    .set("Authorization", `Bearer ${token}`)
+    .send({
+      displayName: "Listing Owner",
+      school: "Northeastern",
+      city: "Boston",
+      role: "lister"
+    })
+    .expect(200);
 }
 
 async function createListing(http: ReturnType<typeof request>, token: string) {

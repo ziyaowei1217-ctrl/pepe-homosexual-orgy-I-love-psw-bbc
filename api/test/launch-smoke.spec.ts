@@ -50,6 +50,15 @@ describeSmoke("launch smoke against real PostgreSQL", () => {
     const admin = await prisma.user.create({ data: { email: adminEmail, role: "ADMIN" } });
     ownerId = owner.id;
     adminId = admin.id;
+    await prisma.profile.create({
+      data: {
+        email: ownerEmail,
+        displayName: "Launch Smoke Owner",
+        school: "Northeastern",
+        city: "Boston",
+        role: "lister"
+      }
+    });
 
     await prisma.roommateProfile.create({
       data: {
@@ -80,6 +89,7 @@ describeSmoke("launch smoke against real PostgreSQL", () => {
       }
       await prisma.roommateProfile.deleteMany({ where: { id: roommateId } });
       await prisma.verificationCode.deleteMany({ where: { email: { in: [ownerEmail, adminEmail] } } });
+      await prisma.profile.deleteMany({ where: { email: { in: [ownerEmail, adminEmail] } } });
       await prisma.user.deleteMany({ where: { email: { in: [ownerEmail, adminEmail] } } });
     }
 

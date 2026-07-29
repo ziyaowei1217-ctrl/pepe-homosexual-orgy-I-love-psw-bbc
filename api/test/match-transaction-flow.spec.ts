@@ -184,6 +184,11 @@ function createPrismaMock() {
   };
 
   const mock = {
+    $transaction: async (operation: (transaction: object) => Promise<unknown>) =>
+      operation({
+        ...mock,
+        $queryRawUnsafe: async () => []
+      }),
     verificationCode: {
       create: async ({ data }: { data: { email: string; codeHash: string; expiresAt: Date; attemptCount: number } }) => {
         const created = {
@@ -255,8 +260,8 @@ function createPrismaMock() {
       }
     },
     user: {
-      findUnique: async ({ where }: { where: { email: string } }) =>
-        state.users.find((user) => user.email === where.email) ?? null,
+      findUnique: async ({ where }: { where: { id?: string; email?: string } }) =>
+        state.users.find((user) => user.id === where.id || user.email === where.email) ?? null,
       upsert: async ({
         where,
         create

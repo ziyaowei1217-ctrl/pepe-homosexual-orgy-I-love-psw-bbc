@@ -60,6 +60,74 @@ describe("AuthService", () => {
     expect(session.isNewUser).toBe(false);
   });
 
+  it("allows one successful verification when the same valid code is replayed concurrently", async () => {
+    const prisma = createPrismaMock();
+    const jwt = new JwtService({ secret: "test-secret" });
+    const sender = createEmailSenderMock();
+    const service = createAuthService(prisma, jwt, {
+      nodeEnv: "development",
+      emailSender: sender
+    });
+    const request = await service.requestEmailCode("student@northeastern.edu");
+    if (!request.devCode) throw new Error("Expected development verification code");
+
+    const results = await Promise.allSettled([
+      service.verifyEmailCode({
+        email: "student@northeastern.edu",
+        code: request.devCode
+      }),
+      service.verifyEmailCode({
+        email: "STUDENT@NORTHEASTERN.EDU",
+        code: request.devCode
+      })
+    ]);
+
+    const successful = results.filter(
+      (result): result is PromiseFulfilledResult<Awaited<ReturnType<typeof service.verifyEmailCode>>> =>
+        result.status === "fulfilled"
+    );
+    const rejected = results.filter((result) => result.status === "rejected");
+    expect(successful).toHaveLength(1);
+    expect(successful[0].value.isNewUser).toBe(true);
+    expect(rejected).toHaveLength(1);
+    expect(rejected[0].reason).toBeInstanceOf(UnauthorizedException);
+  });
+
+  it("rolls back account persistence when verification profile creation fails", async () => {
+    const prisma = createPrismaMock();
+    const jwt = new JwtService({ secret: "test-secret" });
+    const sender = createEmailSenderMock();
+    const service = createAuthService(prisma, jwt, {
+      nodeEnv: "development",
+      emailSender: sender
+    });
+    const request = await service.requestEmailCode("student@northeastern.edu");
+    if (!request.devCode) throw new Error("Expected development verification code");
+    prisma.verificationCode.state.failProfileUpsert = true;
+
+    await expect(
+      service.verifyEmailCode({
+        email: "student@northeastern.edu",
+        code: request.devCode
+      })
+    ).rejects.toThrow("profile upsert failed");
+
+    expect(prisma.verificationCode.state.user).toBeUndefined();
+    expect(prisma.verificationCode.state.profile).toBeUndefined();
+    expect(prisma.verificationCode.state.code?.consumedAt).toBeNull();
+
+    prisma.verificationCode.state.failProfileUpsert = false;
+    await expect(
+      service.verifyEmailCode({
+        email: "student@northeastern.edu",
+        code: request.devCode
+      })
+    ).resolves.toMatchObject({
+      isNewUser: true,
+      user: { email: "student@northeastern.edu" }
+    });
+  });
+
   it("assigns the administrator role from the normalized local allowlist", async () => {
     const prisma = createPrismaMock();
     const jwt = new JwtService({ secret: "test-secret" });
@@ -141,6 +209,28 @@ describe("AuthService", () => {
     expect(prisma.verificationCode.state.code?.attemptCount).toBe(5);
   });
 
+  it("serializes concurrent invalid attempts at the five-attempt cap", async () => {
+    const prisma = createPrismaMock();
+    const jwt = new JwtService({ secret: "test-secret" });
+    const sender = createEmailSenderMock();
+    const service = createAuthService(prisma, jwt, {
+      nodeEnv: "development",
+      emailSender: sender
+    });
+
+    await service.requestEmailCode("student@northeastern.edu");
+    await Promise.allSettled(
+      Array.from({ length: 10 }, () =>
+        service.verifyEmailCode({
+          email: "student@northeastern.edu",
+          code: "000000"
+        })
+      )
+    );
+
+    expect(prisma.verificationCode.state.code?.attemptCount).toBe(5);
+  });
+
   it("rejects malformed direct verification codes without consuming attempts", async () => {
     const prisma = createPrismaMock();
     const jwt = new JwtService({ secret: "test-secret" });
@@ -174,6 +264,43 @@ describe("AuthService", () => {
 
     await expect(service.requestEmailCode("student@northeastern.edu")).rejects.toBeInstanceOf(BadRequestException);
     expect(sender.sentCodes).toHaveLength(1);
+  });
+
+  it("allows exactly one concurrent code request per normalized email during cooldown", async () => {
+    const prisma = createPrismaMock();
+    const jwt = new JwtService({ secret: "test-secret" });
+    const sender = createEmailSenderMock();
+    const service = createAuthService(prisma, jwt, {
+      nodeEnv: "development",
+      emailSender: sender,
+      codeRequestCooldownMs: 60_000
+    });
+
+    const results = await Promise.allSettled([
+      service.requestEmailCode(" Student@Northeastern.edu "),
+      service.requestEmailCode("student@northeastern.edu")
+    ]);
+
+    const successful = results.filter(
+      (result): result is PromiseFulfilledResult<Awaited<ReturnType<typeof service.requestEmailCode>>> =>
+        result.status === "fulfilled"
+    );
+    const rejected = results.filter((result) => result.status === "rejected");
+    expect(successful).toHaveLength(1);
+    expect(rejected).toHaveLength(1);
+    expect(rejected[0].reason).toBeInstanceOf(BadRequestException);
+    expect(sender.sentCodes).toHaveLength(1);
+
+    const deliveredCode = successful[0].value.devCode;
+    if (!deliveredCode) throw new Error("Expected development verification code");
+    await expect(
+      service.verifyEmailCode({
+        email: "student@northeastern.edu",
+        code: deliveredCode
+      })
+    ).resolves.toMatchObject({
+      user: { email: "student@northeastern.edu" }
+    });
   });
 
   it("keeps cooldown active after a code is consumed", async () => {
@@ -345,6 +472,7 @@ function createPrismaMock() {
   const state = {
     codes: [] as VerificationCodeRecord[],
     failCreate: false,
+    failProfileUpsert: false,
     get code() {
       return this.codes.at(-1);
     },
@@ -386,10 +514,11 @@ function createPrismaMock() {
         });
 
         if (orderBy?.createdAt === "desc") {
-          return matches.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0] ?? null;
+          const match = matches.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0];
+          return match ? { ...match } : null;
         }
 
-        return matches[0] ?? null;
+        return matches[0] ? { ...matches[0] } : null;
       },
       update: async (args: { where: { id: string }; data: VerificationCodeUpdateData }) => {
         const code = state.codes.find((record) => record.id === args.where.id);
@@ -458,6 +587,7 @@ function createPrismaMock() {
     profile: {
       state,
       upsert: async ({ where, create }: { where: { email: string }; create: { email: string } }) => {
+        if (state.failProfileUpsert) throw new Error("profile upsert failed");
         state.profile ??= {
           id: "profile-1",
           email: where.email || create.email
@@ -467,7 +597,66 @@ function createPrismaMock() {
     }
   };
 
-  return mock;
+  type TestTransaction = typeof mock & {
+    $queryRawUnsafe: (_query: string, email: string) => Promise<unknown[]>;
+  };
+  const transactionalMock = Object.assign(mock, {
+    $transaction: async <T>(operation: (transaction: TestTransaction) => Promise<T>) => {
+      let releaseLock: (() => void) | undefined;
+      let snapshot: ReturnType<typeof snapshotState> | undefined;
+      const transaction: TestTransaction = {
+        ...mock,
+        $queryRawUnsafe: async (_query: string, email: string) => {
+          releaseLock = await acquireEmailLock(email);
+          snapshot = snapshotState();
+          return [];
+        }
+      };
+
+      try {
+        return await operation(transaction);
+      } catch (error) {
+        if (snapshot) restoreState(snapshot);
+        throw error;
+      } finally {
+        releaseLock?.();
+      }
+    }
+  });
+
+  const emailLockTails = new Map<string, Promise<void>>();
+
+  async function acquireEmailLock(email: string) {
+    const previous = emailLockTails.get(email) ?? Promise.resolve();
+    let releaseCurrent = () => {};
+    const current = new Promise<void>((resolve) => {
+      releaseCurrent = resolve;
+    });
+    const tail = previous.then(() => current);
+    emailLockTails.set(email, tail);
+    await previous;
+
+    return () => {
+      releaseCurrent();
+      if (emailLockTails.get(email) === tail) emailLockTails.delete(email);
+    };
+  }
+
+  function snapshotState() {
+    return {
+      codes: state.codes.map((record) => ({ ...record })),
+      user: state.user ? { ...state.user } : undefined,
+      profile: state.profile ? { ...state.profile } : undefined
+    };
+  }
+
+  function restoreState(snapshot: ReturnType<typeof snapshotState>) {
+    state.codes.splice(0, state.codes.length, ...snapshot.codes);
+    state.user = snapshot.user;
+    state.profile = snapshot.profile;
+  }
+
+  return transactionalMock;
 }
 
 function isAttemptIncrement(data: VerificationCodeUpdateData): data is VerificationCodeAttemptUpdate {

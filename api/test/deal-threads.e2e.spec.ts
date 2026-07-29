@@ -33,6 +33,7 @@ describe("two-sided deal thread HTTP API", () => {
     const admin = await signIn(app, "admin@example.com");
     const renter = await signIn(app, "renter@example.com");
     const unrelated = await signIn(app, "other@example.com");
+    await completePublisherProfile(app, host.token);
 
     const listing = await createApprovedListing(http, host, admin);
     const created = await http
@@ -114,6 +115,19 @@ async function signIn(app: INestApplication, email: string) {
     .send({ email, code: code.body.devCode })
     .expect(201);
   return { token: session.body.accessToken as string, user: session.body.user };
+}
+
+async function completePublisherProfile(app: INestApplication, token: string) {
+  await request(app.getHttpServer())
+    .patch("/api/v1/profiles/me")
+    .set("Authorization", `Bearer ${token}`)
+    .send({
+      displayName: "Listing Host",
+      school: "UCLA",
+      city: "Los Angeles",
+      role: "lister"
+    })
+    .expect(200);
 }
 
 async function createApprovedListing(http: any, host: any, admin: any) {

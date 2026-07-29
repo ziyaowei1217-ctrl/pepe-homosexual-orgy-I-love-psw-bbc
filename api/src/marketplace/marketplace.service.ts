@@ -8,6 +8,7 @@ import {
   UpdateProfileDto,
   UpdateRoommateProfileDto
 } from "./dto";
+import { requirePublishCapableProfile } from "./publish-profile";
 
 @Injectable()
 export class MarketplaceService {
@@ -73,7 +74,7 @@ export class MarketplaceService {
   }
 
   async createHousingListing(email: string, dto: CreateHousingListingDto) {
-    const profile = await this.ensureProfile(email);
+    const profile = await requirePublishCapableProfile(this.prisma, email);
 
     return this.prisma.housingListing.create({
       data: {
@@ -109,7 +110,7 @@ export class MarketplaceService {
   }
 
   async updateHousingListing(email: string, id: string, dto: UpdateHousingListingDto) {
-    const profile = await this.ensureProfile(email);
+    const profile = await requirePublishCapableProfile(this.prisma, email);
     const existing = await this.prisma.housingListing.findFirst({
       where: {
         id,

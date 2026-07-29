@@ -124,6 +124,8 @@ describe("marketplace database API", () => {
   it("stores housing listings, exposes only active public listings, and enforces owner updates", async () => {
     const http = request(app.getHttpServer());
     const otherToken = await signIn(app, "other@example.com");
+    await completePublisherProfile(app, token);
+    await completePublisherProfile(app, otherToken);
 
     const createdResponse = await http
       .post("/api/v1/housing-listings")
@@ -177,6 +179,19 @@ async function signIn(app: INestApplication, email: string) {
     .expect(201);
 
   return sessionResponse.body.accessToken as string;
+}
+
+async function completePublisherProfile(app: INestApplication, token: string) {
+  await request(app.getHttpServer())
+    .patch("/api/v1/profiles/me")
+    .set("Authorization", `Bearer ${token}`)
+    .send({
+      displayName: "Housing Owner",
+      school: "USC",
+      city: "LA",
+      role: "lister"
+    })
+    .expect(200);
 }
 
 function roommateProfilePayload() {

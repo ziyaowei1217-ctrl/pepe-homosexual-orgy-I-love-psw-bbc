@@ -77,6 +77,16 @@ describe("backend launch readiness HTTP flow", () => {
       .expect(201);
     const ownerToken = sessionResponse.body.accessToken;
     expect(ownerToken).toEqual(expect.any(String));
+    await http
+      .patch("/api/v1/profiles/me")
+      .set("Authorization", `Bearer ${ownerToken}`)
+      .send({
+        displayName: "Launch Owner",
+        school: "Northeastern",
+        city: "Boston",
+        role: "lister"
+      })
+      .expect(200);
 
     const listingResponse = await http
       .post("/api/v1/listings")

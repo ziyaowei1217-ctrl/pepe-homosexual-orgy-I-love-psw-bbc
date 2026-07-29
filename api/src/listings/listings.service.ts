@@ -1,5 +1,6 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 
+import { requirePublishCapableProfile } from "../marketplace/publish-profile";
 import { PrismaService } from "../prisma/prisma.service";
 import { CreateListingDto, CreateListingMediaDto, UpdateListingDto } from "./dto";
 
@@ -34,6 +35,8 @@ export class ListingsService {
   }
 
   async create(ownerId: string, dto: CreateListingDto) {
+    await this.requirePublishCapableOwner(ownerId);
+
     return this.prisma.listing.create({
       data: {
         ownerId,
@@ -68,6 +71,7 @@ export class ListingsService {
     if (!editableListingStatuses.has(listing.status)) {
       throw new BadRequestException("Listing cannot accept media in its current status");
     }
+    await this.requirePublishCapableOwner(ownerId);
 
     return this.prisma.listingMedia.create({
       data: {
@@ -85,6 +89,7 @@ export class ListingsService {
     if (!editableListingStatuses.has(listing.status)) {
       throw new BadRequestException("Listing cannot be edited in its current status");
     }
+    await this.requirePublishCapableOwner(ownerId);
 
     const data = listingUpdateData(dto);
     if (Object.keys(data).length === 0) {
@@ -103,6 +108,7 @@ export class ListingsService {
     if (!editableListingStatuses.has(listing.status)) {
       throw new BadRequestException("Listing cannot be submitted in its current status");
     }
+    await this.requirePublishCapableOwner(ownerId);
 
     return this.prisma.listing.update({
       where: { id },
@@ -161,6 +167,16 @@ export class ListingsService {
     if (listing.status !== "SUBMITTED") throw new BadRequestException("Listing is not submitted for review");
 
     return listing;
+  }
+
+  private async requirePublishCapableOwner(ownerId: string) {
+    const owner = await this.prisma.user.findUnique({
+      where: { id: ownerId },
+      select: { email: true }
+    });
+    if (!owner) throw new NotFoundException("User not found");
+
+    return requirePublishCapableProfile(this.prisma, owner.email);
   }
 }
 

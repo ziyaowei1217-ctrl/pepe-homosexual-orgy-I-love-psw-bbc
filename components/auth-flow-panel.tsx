@@ -71,10 +71,24 @@ export function AuthFlowPanel({
   const [profileDraft, setProfileDraft] = useState<UpdateProfileInput>(() =>
     profileToDraft(profile)
   );
+  const authenticated = Boolean(token && user);
 
   useEffect(() => {
     setProfileDraft(profileToDraft(profile));
   }, [profile]);
+
+  useEffect(() => {
+    if (!authenticated) return;
+
+    setStep("email");
+    setEmail("");
+    setSentEmail("");
+    setCode("");
+    setExpiresAt(null);
+    setResendAvailableAt(0);
+    setNow(Date.now());
+    setLocalError(null);
+  }, [authenticated]);
 
   useEffect(() => {
     if (step !== "code") return;

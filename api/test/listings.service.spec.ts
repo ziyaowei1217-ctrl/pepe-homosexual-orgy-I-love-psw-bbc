@@ -1,4 +1,4 @@
-import { BadRequestException, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ForbiddenException, NotFoundException } from "@nestjs/common";
 import { describe, expect, it } from "vitest";
 
 import { ListingDto } from "../src/listings/dto";
@@ -87,6 +87,14 @@ type ListingMediaCreateArgs = {
   data: Pick<ListingMediaRecord, "listingId" | "url" | "kind" | "sortOrder">;
 };
 
+type PublishProfile = {
+  email: string;
+  displayName: string | null;
+  school: string | null;
+  city: string | null;
+  role: string;
+};
+
 describe("ListingsService", () => {
   it("returns only approved database listings for public discovery", async () => {
     const prisma = createPrismaMock({
@@ -168,6 +176,33 @@ describe("ListingsService", () => {
     expect(prisma.listing.createCalls[0]?.data.status).toBe("DRAFT");
   });
 
+  it.each([
+    ["blank display name", { displayName: " " }],
+    ["blank school", { school: " " }],
+    ["blank city", { city: " " }],
+    ["renter role", { role: "renter" }]
+  ])("blocks listing creation for a profile with %s", async (_label, profileOverrides) => {
+    const prisma = createPrismaMock({
+      profiles: [publishProfile(profileOverrides)]
+    });
+    const service = new ListingsService(prisma as never);
+
+    await expect(service.create("owner-1", listingDto())).rejects.toThrow(ForbiddenException);
+    expect(prisma.listing.createCalls).toHaveLength(0);
+  });
+
+  it.each(["lister", "both"] as const)("allows a complete %s profile to create listings", async (role) => {
+    const prisma = createPrismaMock({
+      profiles: [publishProfile({ role })]
+    });
+    const service = new ListingsService(prisma as never);
+
+    await expect(service.create("owner-1", listingDto())).resolves.toMatchObject({
+      ownerId: "owner-1",
+      status: "DRAFT"
+    });
+  });
+
   it("lists all listings owned by the current user", async () => {
     const newer = listingRecord({
       id: "newer",
@@ -232,6 +267,58 @@ describe("ListingsService", () => {
       sortOrder: 2
     });
   });
+
+  it.each(["add media", "update", "submit"] as const)(
+    "blocks %s for an owner whose publish profile is incomplete",
+    async (operation) => {
+      const prisma = createPrismaMock({
+        listings: [listingRecord({ id: "listing-1", ownerId: "owner-1", status: "DRAFT" })],
+        profiles: [publishProfile({ school: null })]
+      });
+      const service = new ListingsService(prisma as never);
+
+      const result =
+        operation === "add media"
+          ? service.addMedia("owner-1", "listing-1", {
+              url: "https://example.com/bedroom.jpg",
+              kind: "bedroom",
+              sortOrder: 1
+            })
+          : operation === "update"
+            ? service.update("owner-1", "listing-1", { title: "Updated title" })
+            : service.submit("owner-1", "listing-1");
+
+      await expect(result).rejects.toThrow(ForbiddenException);
+      expect(prisma.listingMedia.createCalls).toHaveLength(0);
+      expect(prisma.listing.updateCalls).toHaveLength(0);
+    }
+  );
+
+  it.each(["add media", "update", "submit"] as const)(
+    "blocks %s for an owner whose complete profile is renter-only",
+    async (operation) => {
+      const prisma = createPrismaMock({
+        listings: [listingRecord({ id: "listing-1", ownerId: "owner-1", status: "DRAFT" })],
+        profiles: [publishProfile({ role: "renter" })]
+      });
+      const service = new ListingsService(prisma as never);
+
+      const result =
+        operation === "add media"
+          ? service.addMedia("owner-1", "listing-1", {
+              url: "https://example.com/bedroom.jpg",
+              kind: "bedroom",
+              sortOrder: 1
+            })
+          : operation === "update"
+            ? service.update("owner-1", "listing-1", { title: "Updated title" })
+            : service.submit("owner-1", "listing-1");
+
+      await expect(result).rejects.toThrow(ForbiddenException);
+      expect(prisma.listingMedia.createCalls).toHaveLength(0);
+      expect(prisma.listing.updateCalls).toHaveLength(0);
+    }
+  );
 
   it("returns not found when a non-owner adds media", async () => {
     const prisma = createPrismaMock({
@@ -489,14 +576,46 @@ function mediaRecord(overrides: Partial<ListingMediaRecord> = {}): ListingMediaR
   };
 }
 
-function createPrismaMock({ listings = [], media = [] }: { listings?: ListingRecord[]; media?: ListingMediaRecord[] } = {}) {
+function publishProfile(overrides: Partial<PublishProfile> = {}): PublishProfile {
+  return {
+    email: "owner-1@example.com",
+    displayName: "Maya Chen",
+    school: "UCLA",
+    city: "Los Angeles",
+    role: "lister",
+    ...overrides
+  };
+}
+
+function createPrismaMock({
+  listings = [],
+  media = [],
+  profiles = [publishProfile(), publishProfile({ email: "owner-2@example.com" })]
+}: {
+  listings?: ListingRecord[];
+  media?: ListingMediaRecord[];
+  profiles?: PublishProfile[];
+} = {}) {
   const records = listings.map((listing) => ({ ...listing }));
   const mediaRecords = media.map((item) => ({ ...item }));
+  const profileRecords = profiles.map((profile) => ({ ...profile }));
   const mock = {
+    user: {
+      findUnique: async ({ where }: { where: { id: string } }) => {
+        if (where.id === "owner-1") return { id: "owner-1", email: "owner-1@example.com" };
+        if (where.id === "owner-2") return { id: "owner-2", email: "owner-2@example.com" };
+        return null;
+      }
+    },
+    profile: {
+      findUnique: async ({ where }: { where: { email: string } }) =>
+        profileRecords.find((profile) => profile.email === where.email) ?? null
+    },
     listing: {
       createCalls: [] as ListingCreateArgs[],
       findManyCalls: [] as ListingFindManyArgs[],
       findUniqueCalls: [] as ListingFindUniqueArgs[],
+      updateCalls: [] as ListingUpdateArgs[],
       findMany: async (args: ListingFindManyArgs = {}) => {
         mock.listing.findManyCalls.push(args);
         const filtered = records.filter((listing) => matchesWhere(listing, args.where));
@@ -520,6 +639,7 @@ function createPrismaMock({ listings = [], media = [] }: { listings?: ListingRec
         return record;
       },
       update: async (args: ListingUpdateArgs) => {
+        mock.listing.updateCalls.push(args);
         const index = records.findIndex((listing) => listing.id === args.where.id);
         if (index === -1) throw new Error(`Missing listing ${args.where.id}`);
 

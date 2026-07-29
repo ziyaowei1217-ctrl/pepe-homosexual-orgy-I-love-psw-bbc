@@ -329,6 +329,56 @@ describe("AuthFlowPanel interactions", () => {
     await unmountRenderer(renderer);
   });
 
+  it("returns to a clean email step when a mounted authenticated panel logs out", async () => {
+    vi.mocked(api.requestEmailCode).mockResolvedValueOnce({
+      email: "maya@example.edu",
+      expiresAt: "2026-07-29T01:05:00.000Z",
+      devCode: "123456"
+    });
+    const verificationResponse = {
+      accessToken: "token-1",
+      user: {
+        id: "user-1",
+        email: "maya@example.edu",
+        role: "USER"
+      },
+      isNewUser: false
+    };
+    vi.mocked(api.verifyEmailCode).mockResolvedValueOnce(verificationResponse);
+    const props = authPanelProps({ isPinnedToPublish: true });
+    const renderer = await renderAuthPanel(props);
+
+    changeInput(renderer.root, "email", "maya@example.edu");
+    await submitCurrentForm(renderer);
+    changeInput(renderer.root, "code", "123456");
+    expect(findInput(renderer.root, "code").props.value).toBe("123456");
+    expect(renderedText(renderer.root)).toContain("maya@example.edu");
+    expect(renderedText(renderer.root)).toContain("60 秒后重新发送");
+
+    await submitCurrentForm(renderer);
+    await act(async () => {
+      renderer.update(
+        <AuthFlowPanel
+          {...props}
+          token={verificationResponse.accessToken}
+          user={verificationResponse.user}
+        />
+      );
+    });
+    expect(renderedText(renderer.root)).toContain("账户与资料");
+
+    await act(async () => {
+      renderer.update(<AuthFlowPanel {...props} token={null} user={null} />);
+    });
+
+    expect(findInput(renderer.root, "email").props.value).toBe("");
+    expect(renderer.root.findAllByProps({ name: "code" })).toHaveLength(0);
+    expect(renderedText(renderer.root)).not.toContain("maya@example.edu");
+    expect(renderedText(renderer.root)).not.toContain("重新发送");
+    expect(renderer.root.findAllByProps({ role: "alert" })).toHaveLength(0);
+    await unmountRenderer(renderer);
+  });
+
   it("clears the code and starts a new 60-second cooldown when resend succeeds", async () => {
     vi.mocked(api.requestEmailCode).mockResolvedValueOnce({
       email: "maya@example.edu",
@@ -467,24 +517,30 @@ async function renderAuthPanel(
   let renderer: ReactTestRenderer | undefined;
   await act(async () => {
     renderer = create(
-      <AuthFlowPanel
-        token={null}
-        user={null}
-        profile={null}
-        apiError={null}
-        onboardingReason={null}
-        isPinnedToPublish={false}
-        onAuthenticated={vi.fn()}
-        onProfileSave={vi.fn()}
-        onOnboardingDismiss={vi.fn()}
-        onLogout={vi.fn()}
-        onClose={vi.fn()}
-        onToast={vi.fn()}
-        {...overrides}
-      />
+      <AuthFlowPanel {...authPanelProps(overrides)} />
     );
   });
   return requireRenderer(renderer);
+}
+
+function authPanelProps(
+  overrides: Partial<React.ComponentProps<typeof AuthFlowPanel>> = {}
+): React.ComponentProps<typeof AuthFlowPanel> {
+  return {
+    token: null,
+    user: null,
+    profile: null,
+    apiError: null,
+    onboardingReason: null,
+    isPinnedToPublish: false,
+    onAuthenticated: vi.fn(),
+    onProfileSave: vi.fn(),
+    onOnboardingDismiss: vi.fn(),
+    onLogout: vi.fn(),
+    onClose: vi.fn(),
+    onToast: vi.fn(),
+    ...overrides
+  };
 }
 
 async function submitCurrentForm(renderer: ReactTestRenderer) {
