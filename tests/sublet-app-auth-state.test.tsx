@@ -275,14 +275,16 @@ describe("SubletApp auth state flow", () => {
     });
 
     expect(savedProfile).toBe(completeProfile);
-    expect(capturedAuthPanel().profile).toBe(completeProfile);
+    expect(hasAuthPanel(renderer.root)).toBe(false);
+    expect(hasButton(renderer.root, "保存草稿")).toBe(true);
 
     await act(async () => {
       oldProfileRequest.resolve(incompleteListerProfile);
       await flushMicrotasks();
     });
 
-    expect(capturedAuthPanel().profile).toBe(completeProfile);
+    expect(hasAuthPanel(renderer.root)).toBe(false);
+    expect(hasButton(renderer.root, "保存草稿")).toBe(true);
     await unmount(renderer);
   });
 

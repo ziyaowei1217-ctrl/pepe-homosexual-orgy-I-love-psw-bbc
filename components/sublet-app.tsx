@@ -1714,8 +1714,31 @@ export default function HomePage({
       invalidateLatestRequests(profileRequestGuard);
       setProfile(updatedProfile);
       setProfileStatus("loaded");
+      const nextPublishAccess = getPublishAccess({
+        authenticated: Boolean(token && user),
+        profile: updatedProfile,
+        profileStatus: "loaded"
+      });
+      const shouldContinuePublishing =
+        activeSection === "Publish" && nextPublishAccess.status === "allowed";
+
       if (isProfileComplete(updatedProfile)) setOnboardingReason(null);
-      setToast("资料已保存");
+
+      if (shouldContinuePublishing) {
+        setAuthPanelOpen(false);
+        setToast("身份已保存，可以开始填写房源");
+        if (typeof window !== "undefined") {
+          window.requestAnimationFrame(() => {
+            if (typeof document === "undefined") return;
+            document.getElementById("publish-flow")?.scrollIntoView({
+              behavior: "smooth",
+              block: "start"
+            });
+          });
+        }
+      } else {
+        setToast("资料已保存");
+      }
       return updatedProfile;
     } catch (error) {
       setToast(toProductApiError(error).message);
@@ -1723,7 +1746,10 @@ export default function HomePage({
     }
   }
 
-  const showAuthStrip = activeSection === "Publish" || authPanelOpen || pathname.startsWith("/account");
+  const showAuthStrip =
+    authPanelOpen ||
+    pathname.startsWith("/account") ||
+    (activeSection === "Publish" && publishAccess.status !== "allowed");
 
   return (
     <main className="min-h-screen bg-background">
@@ -3886,7 +3912,10 @@ export function PublishScreen({
     listings.find((listing) => listing.id === editingListingId) ?? null;
 
   return (
-    <section className="app-shell app-grid w-full items-start py-5 md:py-6">
+    <section
+      id="publish-flow"
+      className="app-shell app-grid w-full scroll-mt-24 items-start py-5 md:py-6"
+    >
       <div className="app-section editorial-toolbar">
         <div>
           <span className="editorial-kicker">01 / 发布</span>
