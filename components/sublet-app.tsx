@@ -686,6 +686,7 @@ export default function HomePage({
   const [apiRoommates, setApiRoommates] = useState<Roommate[]>(roommates);
   const [apiTrustQueues, setApiTrustQueues] = useState<ApiTrustQueue[]>([]);
   const [activeSection, setActiveSection] = useState<AppSection>(startingSection);
+  const activeSectionRef = useRef(activeSection);
   const [viewMode, setViewMode] = useState<ViewMode>("map");
   const [savedOnly, setSavedOnly] = useState(false);
   const [groupTourSelecting, setGroupTourSelecting] = useState(initialGroupTourSelecting);
@@ -773,8 +774,14 @@ export default function HomePage({
   }, [initialMessageListingId, initialRoommateDmId]);
 
   useEffect(() => {
-    setActiveSection(sectionForRoute(pathname, { listingId: initialListingId }));
+    const nextSection = sectionForRoute(pathname, { listingId: initialListingId });
+    activeSectionRef.current = nextSection;
+    setActiveSection(nextSection);
   }, [initialListingId, pathname]);
+
+  useEffect(() => {
+    activeSectionRef.current = activeSection;
+  }, [activeSection]);
 
   useEffect(() => {
     if (!user || userUiHydratedFor !== user.id) return;
@@ -1134,8 +1141,13 @@ export default function HomePage({
     window.scrollTo({ left: 0, top: 0 });
   }, [activeSection, requestedInboxKey]);
 
-  function navigateToSection(section: AppSection) {
+  function setActiveSectionAndTrack(section: AppSection) {
+    activeSectionRef.current = section;
     setActiveSection(section);
+  }
+
+  function navigateToSection(section: AppSection) {
+    setActiveSectionAndTrack(section);
     const route = routeForSection(section);
     if (route !== pathname) router.push(route);
   }
@@ -1143,7 +1155,7 @@ export default function HomePage({
   function handleSelectInboxContact(contact: InboxContact) {
     if (contact.kind !== "listing") return;
     setActiveMessageListingId(contact.targetId);
-    setActiveSection("Messages");
+    setActiveSectionAndTrack("Messages");
     router.push(
       dmRouteForTarget(
         { kind: "listing", id: contact.targetId },
@@ -1154,7 +1166,7 @@ export default function HomePage({
 
   function handleBackToMessageContacts() {
     setActiveMessageListingId(null);
-    setActiveSection("Messages");
+    setActiveSectionAndTrack("Messages");
     router.push("/messages");
   }
 
@@ -1206,7 +1218,7 @@ export default function HomePage({
 
   function openListingDetail(listing: Listing) {
     setSelectedListing(listing);
-    setActiveSection("ListingDetail");
+    setActiveSectionAndTrack("ListingDetail");
     router.push(listingDetailRoute(listing.id));
     setToast(`正在查看房源详情：${listing.title}`);
   }
@@ -1219,7 +1231,7 @@ export default function HomePage({
     setActiveMessageListingId(listing.id);
     setContactedListingIds((current) => new Set(current).add(listing.id));
     router.push(dmRouteForTarget({ kind: "listing", id: listing.id }, options));
-    setActiveSection("Messages");
+    setActiveSectionAndTrack("Messages");
     setToast(`已打开 ${listing.title} 的消息`);
   }
 
@@ -1603,7 +1615,7 @@ export default function HomePage({
     });
     setGroupTourSelecting(true);
     setSavedOnly(false);
-    setActiveSection("Discover");
+    setActiveSectionAndTrack("Discover");
     router.push(discoverRouteForIntent({ groupTour: true, dealRoomId: activeDealRoomId }));
     setToast("请选择一套房源，再到消息页明确选择小组看房时间。");
   }
@@ -1720,7 +1732,8 @@ export default function HomePage({
         profileStatus: "loaded"
       });
       const shouldContinuePublishing =
-        activeSection === "Publish" && nextPublishAccess.status === "allowed";
+        activeSectionRef.current === "Publish" &&
+        nextPublishAccess.status === "allowed";
 
       if (isProfileComplete(updatedProfile)) setOnboardingReason(null);
 
@@ -1747,9 +1760,10 @@ export default function HomePage({
   }
 
   const showAuthStrip =
-    authPanelOpen ||
     pathname.startsWith("/account") ||
-    (activeSection === "Publish" && publishAccess.status !== "allowed");
+    (activeSection === "Publish"
+      ? publishAccess.status !== "allowed"
+      : authPanelOpen);
 
   return (
     <main className="min-h-screen bg-background">
@@ -1763,7 +1777,7 @@ export default function HomePage({
         onSavedHomes={() => {
           if (!requireCapability("favorite-listing")) return;
           setSavedOnly((current) => !current);
-          setActiveSection("Discover");
+          setActiveSectionAndTrack("Discover");
           router.push("/");
         }}
         onNotifications={() => {
@@ -1862,7 +1876,7 @@ export default function HomePage({
           dealStage={selectedDealStage}
           groupMembers={groupMembers}
           onBack={() => {
-            setActiveSection("Discover");
+            setActiveSectionAndTrack("Discover");
             router.push("/");
           }}
           onFavorite={handleFavorite}

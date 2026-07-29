@@ -147,7 +147,7 @@ beforeEach(() => {
 });
 
 describe("SubletApp auth state flow", () => {
-  it("keeps onboarding closed while a stored session profile loads and after a complete existing profile arrives", async () => {
+  it("hides the identity panel when a stored complete landlord profile finishes loading", async () => {
     writeStoredAuthSession("stored-token");
     const profileRequest = deferred<ApiProfile>();
     vi.mocked(api.getMyProfile).mockReturnValue(profileRequest.promise);
@@ -155,14 +155,15 @@ describe("SubletApp auth state flow", () => {
 
     expect(capturedAuthPanel().token).toBe("stored-token");
     expect(capturedAuthPanel().onboardingReason).toBeNull();
+    expect(hasAuthPanel(renderer.root)).toBe(true);
 
     await act(async () => {
       profileRequest.resolve(completeProfile);
       await flushMicrotasks();
     });
 
-    expect(capturedAuthPanel().profile).toBe(completeProfile);
-    expect(capturedAuthPanel().onboardingReason).toBeNull();
+    expect(hasAuthPanel(renderer.root)).toBe(false);
+    expect(hasButton(renderer.root, "保存草稿")).toBe(true);
     await unmount(renderer);
   });
 
@@ -225,6 +226,64 @@ describe("SubletApp auth state flow", () => {
         behavior: "smooth",
         block: "start"
       });
+    } finally {
+      if (renderer) await unmount(renderer);
+      if (documentDescriptor) {
+        Object.defineProperty(globalThis, "document", documentDescriptor);
+      } else {
+        Reflect.deleteProperty(globalThis, "document");
+      }
+    }
+  });
+
+  it("does not apply publish handoff feedback after navigation away during an identity save", async () => {
+    writeStoredAuthSession("stored-token");
+    const saveRequest = deferred<ApiProfile>();
+    vi.mocked(api.getMyProfile).mockResolvedValue(incompleteListerProfile);
+    vi.mocked(api.updateMyProfile).mockReturnValue(saveRequest.promise);
+    const scrollIntoView = vi.fn();
+    const getElementById = vi.fn((id: string) =>
+      id === "publish-flow" ? { scrollIntoView } : null
+    );
+    const documentDescriptor = Object.getOwnPropertyDescriptor(
+      globalThis,
+      "document"
+    );
+    Object.defineProperty(globalThis, "document", {
+      configurable: true,
+      value: { getElementById }
+    });
+    let renderer: ReactTestRenderer | null = null;
+    try {
+      renderer = await renderSubletApp("Publish");
+      const activeRenderer = renderer;
+      const saveProfile = capturedAuthPanel().onProfileSave;
+
+      await act(async () => {
+        void saveProfile({
+          displayName: "Maya Chen",
+          school: "UCLA",
+          city: "Los Angeles",
+          role: "lister"
+        });
+        await flushMicrotasks();
+      });
+
+      await act(async () => {
+        clickButton(activeRenderer.root, "找房");
+        await flushMicrotasks();
+      });
+
+      await act(async () => {
+        saveRequest.resolve(completeProfile);
+        await flushMicrotasks();
+      });
+
+      expect(hasAuthPanel(activeRenderer.root)).toBe(true);
+      expect(renderedText(activeRenderer.root)).toContain("资料已保存");
+      expect(renderedText(activeRenderer.root)).not.toContain("身份已保存，可以开始填写房源");
+      expect(getElementById).not.toHaveBeenCalled();
+      expect(scrollIntoView).not.toHaveBeenCalled();
     } finally {
       if (renderer) await unmount(renderer);
       if (documentDescriptor) {
@@ -401,6 +460,14 @@ function hasButton(root: ReactTestInstance, label: string) {
   return root
     .findAllByType("button")
     .some((button) => renderedText(button) === label);
+}
+
+function clickButton(root: ReactTestInstance, label: string) {
+  const button = root
+    .findAllByType("button")
+    .find((candidate) => renderedText(candidate) === label);
+  if (!button) throw new Error(`Button \"${label}\" was not found`);
+  button.props.onClick();
 }
 
 function hasAuthPanel(root: ReactTestInstance) {
