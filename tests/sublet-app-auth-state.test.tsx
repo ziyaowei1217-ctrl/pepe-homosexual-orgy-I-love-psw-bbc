@@ -199,35 +199,39 @@ describe("SubletApp auth state flow", () => {
       configurable: true,
       value: { getElementById }
     });
-    const renderer = await renderSubletApp("Publish");
-    const saveProfile = capturedAuthPanel().onProfileSave;
+    let renderer: ReactTestRenderer | null = null;
+    try {
+      renderer = await renderSubletApp("Publish");
+      const saveProfile = capturedAuthPanel().onProfileSave;
 
-    expect(hasAuthPanel(renderer.root)).toBe(true);
-    expect(hasButton(renderer.root, "保存草稿")).toBe(false);
+      expect(hasAuthPanel(renderer.root)).toBe(true);
+      expect(hasButton(renderer.root, "保存草稿")).toBe(false);
 
-    await act(async () => {
-      await saveProfile({
-        displayName: "Maya Chen",
-        school: "UCLA",
-        city: "Los Angeles",
-        role: "lister"
+      await act(async () => {
+        await saveProfile({
+          displayName: "Maya Chen",
+          school: "UCLA",
+          city: "Los Angeles",
+          role: "lister"
+        });
+        await flushMicrotasks();
       });
-      await flushMicrotasks();
-    });
 
-    expect(hasAuthPanel(renderer.root)).toBe(false);
-    expect(hasButton(renderer.root, "保存草稿")).toBe(true);
-    expect(renderedText(renderer.root)).toContain("身份已保存，可以开始填写房源");
-    expect(getElementById).toHaveBeenCalledWith("publish-flow");
-    expect(scrollIntoView).toHaveBeenCalledWith({
-      behavior: "smooth",
-      block: "start"
-    });
-    await unmount(renderer);
-    if (documentDescriptor) {
-      Object.defineProperty(globalThis, "document", documentDescriptor);
-    } else {
-      delete (globalThis as typeof globalThis & { document?: Document }).document;
+      expect(hasAuthPanel(renderer.root)).toBe(false);
+      expect(hasButton(renderer.root, "保存草稿")).toBe(true);
+      expect(renderedText(renderer.root)).toContain("身份已保存，可以开始填写房源");
+      expect(getElementById).toHaveBeenCalledWith("publish-flow");
+      expect(scrollIntoView).toHaveBeenCalledWith({
+        behavior: "smooth",
+        block: "start"
+      });
+    } finally {
+      if (renderer) await unmount(renderer);
+      if (documentDescriptor) {
+        Object.defineProperty(globalThis, "document", documentDescriptor);
+      } else {
+        Reflect.deleteProperty(globalThis, "document");
+      }
     }
   });
 
