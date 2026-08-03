@@ -122,11 +122,15 @@ describeMigration("production database foundations migration", () => {
     `)).toThrow(/read-only/i);
     expect(() => executeSql(`DELETE FROM "listings" WHERE "id" = '00000000-0000-0000-0000-000000000002'`)).toThrow(/read-only/i);
     executeSql(`
-      INSERT INTO "AuditEvent" ("id", "actorType", "action", "targetType", "outcome")
-      VALUES ('audit-immutable', 'OPERATOR', 'BETA_INVITE_CREATED', 'BetaInvite', 'SUCCESS');
+      INSERT INTO "AuditEvent" (
+        "id", "actorType", "actorEmail", "action", "targetType", "targetId", "outcome"
+      ) VALUES (
+        'audit-admin-role-granted', 'OPERATOR', 'operator@example.com',
+        'ADMIN_ROLE_GRANTED', 'User', 'existing-user', 'SUCCESS'
+      );
     `);
-    expect(() => executeSql(`UPDATE "AuditEvent" SET "action" = 'mutated' WHERE "id" = 'audit-immutable'`)).toThrow(/immutable/i);
-    expect(() => executeSql(`DELETE FROM "AuditEvent" WHERE "id" = 'audit-immutable'`)).toThrow(/immutable/i);
+    expect(() => executeSql(`UPDATE "AuditEvent" SET "action" = 'mutated' WHERE "id" = 'audit-admin-role-granted'`)).toThrow(/immutable/i);
+    expect(() => executeSql(`DELETE FROM "AuditEvent" WHERE "id" = 'audit-admin-role-granted'`)).toThrow(/immutable/i);
     expect(() => executeSql(`TRUNCATE TABLE "AuditEvent"`)).toThrow(/immutable/i);
   });
 
