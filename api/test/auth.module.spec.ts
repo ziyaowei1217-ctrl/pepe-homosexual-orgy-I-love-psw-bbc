@@ -10,6 +10,23 @@ import { EMAIL_PROVIDER_TOTAL_TIMEOUT_MS, type EmailSender } from "../src/email/
 import { PrismaModule } from "../src/prisma/prisma.module";
 
 describe("AuthModule dependency injection", () => {
+  it("rejects local administrator allowlists in production", () => {
+    expect(() =>
+      createAuthServiceOptions(
+        {
+          otpHashSecret: "otp-test-secret-that-is-at-least-32-bytes",
+          securityIdentifierHashSecret: "identifier-test-secret-at-least-32-bytes",
+          codeTtlMs: 600_000,
+          codeMaxAttempts: 5,
+          codeCooldownMs: 60_000,
+          trustedProxyHops: 0
+        },
+        "production",
+        "admin@example.com"
+      )
+    ).toThrow("LOCAL_ADMIN_EMAILS is not allowed in production");
+  });
+
   it("keeps the production LOGIN response floor beyond the entire provider timeout budget", () => {
     const options = createAuthServiceOptions(
       {

@@ -18,6 +18,11 @@ export function createAuthServiceOptions(
   nodeEnv = process.env.NODE_ENV ?? "development",
   localAdminEmails = process.env.LOCAL_ADMIN_EMAILS ?? ""
 ): AuthServiceOptions {
+  const normalizedLocalAdminEmails = localAdminEmails.trim();
+  if (nodeEnv === "production" && normalizedLocalAdminEmails) {
+    throw new Error("LOCAL_ADMIN_EMAILS is not allowed in production");
+  }
+
   const productionResponseJitterMs = 250;
   const timing =
     nodeEnv === "production"
@@ -35,7 +40,7 @@ export function createAuthServiceOptions(
     codeTtlMs: securityConfig.codeTtlMs,
     codeMaxAttempts: securityConfig.codeMaxAttempts,
     codeRequestCooldownMs: securityConfig.codeCooldownMs,
-    localAdminEmails,
+    localAdminEmails: normalizedLocalAdminEmails,
     ...timing
   };
 }

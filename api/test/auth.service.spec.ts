@@ -197,6 +197,23 @@ describe("AuthService", () => {
     expect(session.user.role).toBe("ADMIN");
   });
 
+  it("creates production users as USER when no local allowlist exists", async () => {
+    const prisma = createPrismaMock();
+    const jwt = new JwtService({ secret: "test-secret" });
+    const sender = createEmailSenderMock();
+    const service = createAuthService(prisma, jwt, {
+      nodeEnv: "production",
+      localAdminEmails: "",
+      emailSender: sender
+    });
+    const request = await service.requestEmailCode("student@northeastern.edu");
+    const code = sender.sentCodes[0].code;
+
+    const session = await service.verifyEmailCode({ email: request.email, code });
+
+    expect(session.user.role).toBe("USER");
+  });
+
   it("never demotes an existing administrator who is absent from the local allowlist", async () => {
     const prisma = createPrismaMock();
     prisma.verificationCode.state.user = {
