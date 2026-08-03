@@ -2,6 +2,7 @@ import { JwtService } from "@nestjs/jwt";
 import { describe, expect, it } from "vitest";
 
 import { AuthService } from "../src/auth/auth.service";
+import { ConsoleEmailSender } from "../src/email/email-sender";
 import { DealRoomsService } from "../src/deal-rooms/deal-rooms.service";
 import { RoommatesService } from "../src/roommates/roommates.service";
 
@@ -9,7 +10,16 @@ describe("match transaction flow", () => {
   it("authenticates a user, likes a roommate, fetches the active room, and requests a tour", async () => {
     const prisma = createPrismaMock();
     const jwt = new JwtService({ secret: "test-secret" });
-    const auth = new AuthService(prisma as never, jwt, { nodeEnv: "development" });
+    const auth = new AuthService(prisma as never, jwt, new ConsoleEmailSender(), {
+      nodeEnv: "development",
+      otpHashSecret: "otp-test-secret-that-is-at-least-32-bytes",
+      codeTtlMs: 600_000,
+      codeMaxAttempts: 5,
+      codeRequestCooldownMs: 60_000,
+      localAdminEmails: "",
+      responseMinimumMs: 0,
+      responseJitterMs: 0
+    });
     const dealRooms = new DealRoomsService(prisma as never);
     const roommates = new RoommatesService(prisma as never, dealRooms);
 
@@ -52,8 +62,15 @@ describe("match transaction flow", () => {
 type VerificationCodeRecord = {
   id: string;
   email: string;
+  purpose: "LOGIN" | "ADMIN_STEP_UP";
   codeHash: string;
+  codeSalt: string;
+  hashVersion: number;
   attemptCount: number;
+  deliveryStatus: "PENDING" | "SENT" | "FAILED";
+  sentAt: Date | null;
+  failedAt: Date | null;
+  providerMessageId: string | null;
   expiresAt: Date;
   consumedAt: Date | null;
   createdAt: Date;
@@ -190,12 +207,21 @@ function createPrismaMock() {
         $executeRaw: async () => 1
       }),
     verificationCode: {
-      create: async ({ data }: { data: { email: string; codeHash: string; expiresAt: Date; attemptCount: number } }) => {
+      create: async ({
+        data
+      }: {
+        data: Omit<
+          VerificationCodeRecord,
+          "id" | "sentAt" | "failedAt" | "providerMessageId" | "consumedAt"
+        >;
+      }) => {
         const created = {
           id: `code-${state.codes.length + 1}`,
           ...data,
-          consumedAt: null,
-          createdAt: new Date()
+          sentAt: null,
+          failedAt: null,
+          providerMessageId: null,
+          consumedAt: null
         };
         state.codes.push(created);
         return created;
@@ -204,13 +230,23 @@ function createPrismaMock() {
         where,
         orderBy
       }: {
-        where: { email: string; consumedAt?: null; expiresAt?: { gt: Date } };
+        where: {
+          email: string;
+          purpose?: "LOGIN" | "ADMIN_STEP_UP";
+          deliveryStatus?: "PENDING" | "SENT" | "FAILED";
+          consumedAt?: null;
+          expiresAt?: { gt: Date };
+          createdAt?: { gt: Date };
+        };
         orderBy?: { createdAt: "desc" };
       }) => {
         const matches = state.codes.filter((code) => {
           if (code.email !== where.email) return false;
+          if (where.purpose && code.purpose !== where.purpose) return false;
+          if (where.deliveryStatus && code.deliveryStatus !== where.deliveryStatus) return false;
           if ("consumedAt" in where && code.consumedAt !== where.consumedAt) return false;
           if (where.expiresAt && code.expiresAt <= where.expiresAt.gt) return false;
+          if (where.createdAt && code.createdAt <= where.createdAt.gt) return false;
           return true;
         });
 
@@ -242,14 +278,24 @@ function createPrismaMock() {
         where,
         data
       }: {
-        where: { email: string; consumedAt: null; id?: { not: string } };
+        where: {
+          email: string;
+          purpose?: "LOGIN" | "ADMIN_STEP_UP";
+          deliveryStatus?: "PENDING" | "SENT" | "FAILED";
+          consumedAt: null;
+          id?: { not: string };
+          createdAt?: { lt: Date };
+        };
         data: { consumedAt: Date };
       }) => {
         let count = 0;
         for (const code of state.codes) {
           if (
             code.email === where.email &&
+            (!where.purpose || code.purpose === where.purpose) &&
+            (!where.deliveryStatus || code.deliveryStatus === where.deliveryStatus) &&
             code.consumedAt === where.consumedAt &&
+            (!where.createdAt || code.createdAt < where.createdAt.lt) &&
             code.id !== where.id?.not
           ) {
             code.consumedAt = data.consumedAt;
@@ -258,6 +304,10 @@ function createPrismaMock() {
         }
         return { count };
       }
+    },
+    betaInvite: {
+      findFirst: async () => ({ id: "invite-1" }),
+      updateMany: async () => ({ count: 1 })
     },
     user: {
       findUnique: async ({ where }: { where: { id?: string; email?: string } }) =>

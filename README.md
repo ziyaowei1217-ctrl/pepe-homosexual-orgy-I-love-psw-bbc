@@ -111,9 +111,10 @@ From `api`:
 ```bash
 npm run launch:check
 RUN_DB_SMOKE=1 DATABASE_URL='postgresql://sublet:sublet@localhost:5432/sublet_pipeline?schema=public' npm run launch:smoke
+VALKEY_URL='redis://127.0.0.1:6379' npm run launch:smoke:valkey
 ```
 
-`launch:check` runs the non-database pre-release checks. `launch:smoke` requires a migrated PostgreSQL database and exercises the core HTTP flow against real Prisma.
+`launch:check` runs the non-database pre-release checks. `launch:smoke` requires a migrated PostgreSQL database and exercises the core HTTP flow against real Prisma. `launch:smoke:valkey` is explicitly opt-in and checks the production Lua script, sliding-window boundary behavior, multi-key atomicity, and retry-after values against a real Redis or Valkey server. Ordinary test runs skip it and make no network connection.
 
 ## Current Scope
 

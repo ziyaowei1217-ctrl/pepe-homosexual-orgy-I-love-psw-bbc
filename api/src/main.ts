@@ -4,6 +4,7 @@ import { ConfigService } from "@nestjs/config";
 import { NestFactory } from "@nestjs/core";
 
 import { AppModule } from "./app.module";
+import { getAuthSecurityConfig } from "./config/env";
 import { getCorsOrigins } from "./config/cors";
 
 type SecurityHeaderResponse = {
@@ -14,6 +15,9 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   const config = app.get(ConfigService);
   const webOrigins = getCorsOrigins(config.get<string>("WEB_ORIGIN"));
+  const securityConfig = getAuthSecurityConfig();
+  const express = app.getHttpAdapter().getInstance() as { set(name: string, value: number): void };
+  express.set("trust proxy", securityConfig.trustedProxyHops);
 
   app.use((_request: unknown, response: SecurityHeaderResponse, next: () => void) => {
     response.setHeader("X-Content-Type-Options", "nosniff");

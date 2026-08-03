@@ -17,6 +17,31 @@ enum ListingStatus {
   SUBMITTED
   APPROVED
   REJECTED
+  SUSPENDED
+}
+
+enum VerificationPurpose {
+  LOGIN
+  ADMIN_STEP_UP
+}
+
+enum VerificationDeliveryStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+enum MediaStorageStatus {
+  PENDING
+  READY
+  PUBLISHED
+  FAILED
+}
+
+enum MediaReviewStatus {
+  PENDING
+  APPROVED
+  REJECTED
 }
 
 enum RoommateActionType {
@@ -87,15 +112,60 @@ model Profile {
 }
 
 model VerificationCode {
-  id           String    @id @default(cuid())
-  email        String
-  codeHash     String
-  attemptCount Int       @default(0)
-  expiresAt    DateTime
-  consumedAt   DateTime?
-  createdAt    DateTime  @default(now())
+  id                String                     @id @default(cuid())
+  email             String
+  purpose           VerificationPurpose        @default(LOGIN)
+  codeHash          String
+  codeSalt          String?
+  hashVersion       Int                        @default(1)
+  attemptCount      Int                        @default(0)
+  deliveryStatus    VerificationDeliveryStatus @default(PENDING)
+  sentAt            DateTime?
+  failedAt          DateTime?
+  providerMessageId String?
+  expiresAt         DateTime
+  consumedAt        DateTime?
+  createdAt         DateTime                   @default(now())
 
   @@index([email, consumedAt, expiresAt])
+  @@index([email, purpose, deliveryStatus, createdAt])
+  @@index([deliveryStatus, createdAt])
+}
+
+model BetaInvite {
+  id               String    @id @default(cuid())
+  normalizedEmail  String    @unique
+  createdBy        String
+  reason           String?
+  invitedAt        DateTime  @default(now())
+  claimedAt        DateTime?
+  revokedAt        DateTime?
+  revokedBy        String?
+  revocationReason String?
+
+  @@index([normalizedEmail, revokedAt])
+  @@index([invitedAt])
+}
+
+model AuditEvent {
+  id          String   @id @default(cuid())
+  actorType   String
+  actorUserId String?
+  actorEmail  String?
+  action      String
+  targetType  String
+  targetId    String?
+  outcome     String
+  requestId   String?
+  ipHash      String?
+  deviceHash  String?
+  metadata    Json     @default("{}")
+  createdAt   DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([actorUserId, createdAt])
+  @@index([targetType, targetId, createdAt])
+  @@index([requestId])
 }
 
 model Listing {
@@ -104,7 +174,7 @@ model Listing {
   owner           User           @relation(fields: [ownerId], references: [id])
   title           String
   area            String
-  image           String
+  image           String?
   price           Int
   originalPrice   Int
   beds            Int
@@ -119,6 +189,9 @@ model Listing {
   reviewedAt      DateTime?
   reviewerId      String?
   rejectionReason String?
+  suspendedAt     DateTime?
+  suspendedBy     String?
+  suspensionReason String?
   media           ListingMedia[]
   dealThreads     DealThread[]
   createdAt       DateTime       @default(now())
@@ -168,13 +241,32 @@ model HousingListing {
 }
 
 model ListingMedia {
-  id        String   @id @default(cuid())
-  listingId String
-  listing   Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
-  url       String
-  kind      String
-  sortOrder Int      @default(0)
-  createdAt DateTime @default(now())
+  id                 String             @id @default(cuid())
+  listingId          String
+  listing            Listing            @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  url                String?
+  kind               String
+  sortOrder          Int                @default(0)
+  originalKey        String?
+  processedKey       String?
+  publicMainKey      String?
+  publicThumbnailKey String?
+  mimeType           String?
+  sizeBytes          Int?
+  width              Int?
+  height             Int?
+  checksum           String?
+  uploadExpiresAt    DateTime?
+  storageStatus      MediaStorageStatus @default(PENDING)
+  reviewStatus       MediaReviewStatus  @default(PENDING)
+  finalizedAt        DateTime?
+  publishedAt        DateTime?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  @@index([listingId, storageStatus, sortOrder])
+  @@index([listingId, reviewStatus, sortOrder])
+  @@index([uploadExpiresAt])
 }
 
 model RoommateProfile {

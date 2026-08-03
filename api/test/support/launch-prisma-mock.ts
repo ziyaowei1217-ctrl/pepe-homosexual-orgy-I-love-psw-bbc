@@ -9,8 +9,15 @@ type ViewingRequestStatus = "REQUESTED" | "CONFIRMED" | "COMPLETED" | "CANCELLED
 type VerificationCodeRecord = {
   id: string;
   email: string;
+  purpose: "LOGIN" | "ADMIN_STEP_UP";
   codeHash: string;
+  codeSalt: string;
+  hashVersion: number;
   attemptCount: number;
+  deliveryStatus: "PENDING" | "SENT" | "FAILED";
+  sentAt: Date | null;
+  failedAt: Date | null;
+  providerMessageId: string | null;
   expiresAt: Date;
   consumedAt: Date | null;
   createdAt: Date;
@@ -254,8 +261,11 @@ type HousingListingRecord = {
 
 type VerificationCodeWhere = {
   email: string;
+  purpose?: "LOGIN" | "ADMIN_STEP_UP";
+  deliveryStatus?: "PENDING" | "SENT" | "FAILED";
   consumedAt?: null;
   expiresAt?: { gt: Date };
+  createdAt?: { gt: Date };
 };
 
 type ListingWhere = {
@@ -324,12 +334,29 @@ export function createLaunchPrismaMock() {
         $executeRaw: async () => 1
       }),
     verificationCode: {
-      create: async ({ data }: { data: Pick<VerificationCodeRecord, "email" | "codeHash" | "expiresAt" | "attemptCount"> }) => {
+      create: async ({
+        data
+      }: {
+        data: Pick<
+          VerificationCodeRecord,
+          | "email"
+          | "purpose"
+          | "codeHash"
+          | "codeSalt"
+          | "hashVersion"
+          | "attemptCount"
+          | "deliveryStatus"
+          | "expiresAt"
+          | "createdAt"
+        >;
+      }) => {
         const created: VerificationCodeRecord = {
           id: `code-${state.codes.length + 1}`,
           ...data,
-          consumedAt: null,
-          createdAt: new Date()
+          sentAt: null,
+          failedAt: null,
+          providerMessageId: null,
+          consumedAt: null
         };
         state.codes.push(created);
         return created;
@@ -363,18 +390,36 @@ export function createLaunchPrismaMock() {
         where,
         data
       }: {
-        where: { email: string; consumedAt: null; id?: { not: string } };
+        where: {
+          email: string;
+          purpose?: "LOGIN" | "ADMIN_STEP_UP";
+          deliveryStatus?: "PENDING" | "SENT" | "FAILED";
+          consumedAt: null;
+          id?: { not: string };
+          createdAt?: { lt: Date };
+        };
         data: { consumedAt: Date };
       }) => {
         let count = 0;
         for (const code of state.codes) {
-          if (code.email === where.email && code.consumedAt === where.consumedAt && code.id !== where.id?.not) {
+          if (
+            code.email === where.email &&
+            (!where.purpose || code.purpose === where.purpose) &&
+            (!where.deliveryStatus || code.deliveryStatus === where.deliveryStatus) &&
+            code.consumedAt === where.consumedAt &&
+            (!where.createdAt || code.createdAt < where.createdAt.lt) &&
+            code.id !== where.id?.not
+          ) {
             code.consumedAt = data.consumedAt;
             count += 1;
           }
         }
         return { count };
       }
+    },
+    betaInvite: {
+      findFirst: async () => ({ id: "launch-invite" }),
+      updateMany: async () => ({ count: 1 })
     },
     user: {
       findUnique: async ({ where }: { where: { id?: string; email?: string } }) =>
@@ -971,8 +1016,11 @@ export function createLaunchPrismaMock() {
 
 function matchesVerificationCode(code: VerificationCodeRecord, where: VerificationCodeWhere) {
   if (code.email !== where.email) return false;
+  if (where.purpose && code.purpose !== where.purpose) return false;
+  if (where.deliveryStatus && code.deliveryStatus !== where.deliveryStatus) return false;
   if ("consumedAt" in where && code.consumedAt !== where.consumedAt) return false;
   if (where.expiresAt && code.expiresAt <= where.expiresAt.gt) return false;
+  if (where.createdAt && code.createdAt <= where.createdAt.gt) return false;
   return true;
 }
 
