@@ -1,3 +1,4 @@
+import { UnauthorizedException } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { VerificationDeliveryStatus, VerificationPurpose } from "@prisma/client";
 import { describe, expect, it } from "vitest";
@@ -6,6 +7,40 @@ import { AuthService } from "../src/auth/auth.service";
 import type { EmailSender, SendVerificationCodeInput } from "../src/email/email-sender";
 
 describe("AuthService production email issuance", () => {
+  it("uses a separate ADMIN_STEP_UP code and returns a 30-minute JWT claim", async () => {
+    const now = 1_912_345_600_000;
+    const prisma = createAuthPrismaMock();
+    const sender = createSender(prisma);
+    const jwt = new JwtService({ secret: "test-secret" });
+    const service = createService(prisma, sender, { codeRequestCooldownMs: 0, now: () => now }, jwt);
+
+    await service.requestAdminStepUpCode("admin@example.com");
+    const code = sender.sent.at(-1)?.code;
+    const result = await service.verifyAdminStepUpCode({
+      userId: "admin-1",
+      email: "admin@example.com",
+      code: code!
+    });
+    const payload = await jwt.verifyAsync<{ sub: string; adminReauthenticatedAt: number }>(result.accessToken);
+
+    expect(payload.sub).toBe("admin-1");
+    expect(payload.adminReauthenticatedAt).toBe(Math.floor(now / 1000));
+    expect(new Date(result.reauthenticatedUntil).getTime()).toBe(now + 30 * 60 * 1000);
+    expect(prisma.state.codes.at(-1)?.purpose).toBe(VerificationPurpose.ADMIN_STEP_UP);
+  });
+
+  it("does not accept a LOGIN code for ADMIN_STEP_UP", async () => {
+    const prisma = createAuthPrismaMock({ invited: ["admin@example.com"] });
+    const sender = createSender(prisma);
+    const service = createService(prisma, sender, { codeRequestCooldownMs: 0 });
+
+    const login = await service.requestEmailCode("admin@example.com");
+
+    await expect(
+      service.verifyAdminStepUpCode({ userId: "admin-1", email: "admin@example.com", code: login.devCode! })
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+  });
+
   it("creates PENDING under the lock, sends outside the transaction, then marks SENT", async () => {
     const prisma = createAuthPrismaMock({ invited: ["student@example.com"] });
     const sender = createSender(prisma);
@@ -276,6 +311,7 @@ function createAuthPrismaMock(
       }: {
         where: {
           email: string;
+          purpose?: VerificationPurpose;
           deliveryStatus?: VerificationDeliveryStatus;
           consumedAt?: null;
           createdAt?: { gt: Date };
@@ -284,6 +320,7 @@ function createAuthPrismaMock(
         [...state.codes].reverse().find(
           (record) =>
             record.email === where.email &&
+            (!where.purpose || record.purpose === where.purpose) &&
             (!where.deliveryStatus || record.deliveryStatus === where.deliveryStatus) &&
             (!("consumedAt" in where) || record.consumedAt === where.consumedAt) &&
             (!where.createdAt || record.createdAt > where.createdAt.gt)
@@ -373,9 +410,10 @@ function createService(
     codeRequestCooldownMs?: number;
     now?: () => number;
     logger?: { warn(...args: unknown[]): unknown };
-  } = {}
+  } = {},
+  jwt = new JwtService({ secret: "test-secret" })
 ) {
-  return new AuthService(prisma as never, new JwtService({ secret: "test-secret" }), sender, {
+  return new AuthService(prisma as never, jwt, sender, {
     nodeEnv: "development",
     otpHashSecret: "otp-test-secret-that-is-at-least-32-bytes",
     codeTtlMs: 600_000,

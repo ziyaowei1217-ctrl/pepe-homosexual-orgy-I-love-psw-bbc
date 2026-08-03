@@ -26,3 +26,11 @@ export class VerifyEmailDto {
   @Matches(/^\d{6}$/)
   code!: string;
 }
+
+export class AdminStepUpCodeDto {
+  @Trim()
+  @IsString()
+  @Length(6, 6)
+  @Matches(/^\d{6}$/)
+  code!: string;
+}

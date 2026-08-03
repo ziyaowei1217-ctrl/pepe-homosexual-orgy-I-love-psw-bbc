@@ -56,6 +56,37 @@ describe("AuthGuard", () => {
 
     expect(request.user.role).toBe("USER");
   });
+
+  it("copies a verified numeric administrator reauthentication timestamp", async () => {
+    const jwt = new JwtService({ secret: "test-secret" });
+    const token = await jwt.signAsync({ sub: "admin-1", adminReauthenticatedAt: 1_912_345_600 });
+    const prisma = createPrismaMock({
+      users: [{ id: "admin-1", email: "admin@example.com", role: "ADMIN" }]
+    });
+    const request = requestWithHeader(`Bearer ${token}`);
+    const guard = new AuthGuard(jwt, prisma as never);
+
+    await guard.canActivate(contextForRequest(request));
+
+    expect(request.user.adminReauthenticatedAt).toBe(1_912_345_600);
+  });
+
+  it.each(["1912345600", 1_912_345_600.5, Number.MAX_SAFE_INTEGER + 1])(
+    "does not copy an unsafe administrator reauthentication timestamp: %s",
+    async (adminReauthenticatedAt) => {
+      const jwt = new JwtService({ secret: "test-secret" });
+      const token = await jwt.signAsync({ sub: "admin-1", adminReauthenticatedAt });
+      const prisma = createPrismaMock({
+        users: [{ id: "admin-1", email: "admin@example.com", role: "ADMIN" }]
+      });
+      const request = requestWithHeader(`Bearer ${token}`);
+      const guard = new AuthGuard(jwt, prisma as never);
+
+      await guard.canActivate(contextForRequest(request));
+
+      expect(request.user).not.toHaveProperty("adminReauthenticatedAt");
+    }
+  );
 });
 
 type TestUser = {

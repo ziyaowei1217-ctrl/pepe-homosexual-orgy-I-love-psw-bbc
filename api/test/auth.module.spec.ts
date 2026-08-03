@@ -4,6 +4,7 @@ import { Test } from "@nestjs/testing";
 import { describe, expect, it } from "vitest";
 
 import { AuthModule, createAuthServiceOptions } from "../src/auth/auth.module";
+import { AdminGuard } from "../src/auth/admin.guard";
 import { AuthService, type AuthServiceOptions } from "../src/auth/auth.service";
 import { AUTH_OPTIONS, EMAIL_SENDER } from "../src/auth/auth.tokens";
 import { EMAIL_PROVIDER_TOTAL_TIMEOUT_MS, type EmailSender } from "../src/email/email-sender";
@@ -75,6 +76,7 @@ describe("AuthModule dependency injection", () => {
     expect(moduleRef.get(EMAIL_SENDER)).toBe(emailSender);
     expect(moduleRef.get(AUTH_OPTIONS)).toBe(authOptions);
     expect(moduleRef.get(AuthService)).toBeInstanceOf(AuthService);
+    expect(moduleRef.get(AdminGuard)).toBeInstanceOf(AdminGuard);
     await moduleRef.close();
   });
 });

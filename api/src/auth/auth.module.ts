@@ -3,6 +3,7 @@ import { Module } from "@nestjs/common";
 import { getAuthSecurityConfig, type AuthSecurityConfig } from "../config/env";
 import { createEmailSender, EMAIL_PROVIDER_TOTAL_TIMEOUT_MS } from "../email/email-sender";
 import { AuthRateLimiter, RateLimitStore } from "./auth-rate-limit";
+import { AdminGuard } from "./admin.guard";
 import { AuthController } from "./auth.controller";
 import { AuthGuard } from "./auth.guard";
 import { AuthService, AuthServiceOptions } from "./auth.service";
@@ -79,6 +80,7 @@ export function createAuthServiceOptions(
     AuthService,
     VerificationCodeCleanupService,
     AuthGuard,
+    AdminGuard,
     OptionalAuthGuard
   ],
   exports: [AuthGuard, OptionalAuthGuard, AuthService, AUTH_OPTIONS, EMAIL_SENDER]
