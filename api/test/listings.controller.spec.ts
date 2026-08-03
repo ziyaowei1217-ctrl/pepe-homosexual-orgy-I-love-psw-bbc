@@ -1,5 +1,7 @@
+import "reflect-metadata";
 import { describe, expect, it } from "vitest";
 
+import { AdminStepUpGuard } from "../src/auth/admin-step-up.guard";
 import { AuthenticatedRequest } from "../src/auth/auth.guard";
 import { AdminListingsController } from "../src/listings/admin-listings.controller";
 import { ListingsController } from "../src/listings/listings.controller";
@@ -36,6 +38,12 @@ describe("ListingsController", () => {
 });
 
 describe("AdminListingsController", () => {
+  it("requires administrator step-up for writes but not review queue reads", () => {
+    expect(guardsFor(AdminListingsController.prototype.findReviewQueue)).not.toContain(AdminStepUpGuard);
+    expect(guardsFor(AdminListingsController.prototype.approve)).toContain(AdminStepUpGuard);
+    expect(guardsFor(AdminListingsController.prototype.reject)).toContain(AdminStepUpGuard);
+  });
+
   it("delegates review queue reads to ListingsService", async () => {
     const listings = createListingsServiceMock();
     const controller = new AdminListingsController(listings as never);
@@ -64,6 +72,10 @@ describe("AdminListingsController", () => {
     ]);
   });
 });
+
+function guardsFor(handler: (...args: never[]) => unknown) {
+  return (Reflect.getMetadata("__guards__", handler) ?? []) as unknown[];
+}
 
 function requestFor(id: string, role = "USER"): AuthenticatedRequest {
   return {

@@ -8,6 +8,7 @@ import { AdminGuard } from "../src/auth/admin.guard";
 import { AuthService, type AuthServiceOptions } from "../src/auth/auth.service";
 import { AUTH_OPTIONS, EMAIL_SENDER } from "../src/auth/auth.tokens";
 import { EMAIL_PROVIDER_TOTAL_TIMEOUT_MS, type EmailSender } from "../src/email/email-sender";
+import { ListingsModule } from "../src/listings/listings.module";
 import { PrismaModule } from "../src/prisma/prisma.module";
 
 describe("AuthModule dependency injection", () => {
@@ -77,6 +78,14 @@ describe("AuthModule dependency injection", () => {
     expect(moduleRef.get(AUTH_OPTIONS)).toBe(authOptions);
     expect(moduleRef.get(AuthService)).toBeInstanceOf(AuthService);
     expect(moduleRef.get(AdminGuard)).toBeInstanceOf(AdminGuard);
+    await moduleRef.close();
+  });
+
+  it("exposes administrator guard dependencies to importing controller modules", async () => {
+    const moduleRef = await Test.createTestingModule({
+      imports: [JwtModule.register({ global: true, secret: "test-secret" }), PrismaModule, ListingsModule]
+    }).compile();
+
     await moduleRef.close();
   });
 });

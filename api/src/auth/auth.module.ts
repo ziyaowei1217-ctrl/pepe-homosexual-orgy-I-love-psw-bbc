@@ -1,7 +1,9 @@
 import { Module } from "@nestjs/common";
 
+import { AuditModule } from "../audit/audit.module";
 import { getAuthSecurityConfig, type AuthSecurityConfig } from "../config/env";
 import { createEmailSender, EMAIL_PROVIDER_TOTAL_TIMEOUT_MS } from "../email/email-sender";
+import { AdminStepUpGuard } from "./admin-step-up.guard";
 import { AuthRateLimiter, RateLimitStore } from "./auth-rate-limit";
 import { AdminGuard } from "./admin.guard";
 import { AuthController } from "./auth.controller";
@@ -9,10 +11,10 @@ import { AuthGuard } from "./auth.guard";
 import { AuthService, AuthServiceOptions } from "./auth.service";
 import { OptionalAuthGuard } from "./optional-auth.guard";
 import { createRateLimitStore } from "./valkey-rate-limit-store";
-import { AUTH_OPTIONS, AUTH_RATE_LIMIT_STORE, AUTH_SECURITY_CONFIG, EMAIL_SENDER } from "./auth.tokens";
+import { ADMIN_STEP_UP_OPTIONS, AUTH_OPTIONS, AUTH_RATE_LIMIT_STORE, AUTH_SECURITY_CONFIG, EMAIL_SENDER } from "./auth.tokens";
 import { VerificationCodeCleanupService } from "./verification-code-cleanup.service";
 
-export { AUTH_OPTIONS, AUTH_RATE_LIMIT_STORE, AUTH_SECURITY_CONFIG, EMAIL_SENDER } from "./auth.tokens";
+export { ADMIN_STEP_UP_OPTIONS, AUTH_OPTIONS, AUTH_RATE_LIMIT_STORE, AUTH_SECURITY_CONFIG, EMAIL_SENDER } from "./auth.tokens";
 
 export function createAuthServiceOptions(
   securityConfig: AuthSecurityConfig,
@@ -47,6 +49,7 @@ export function createAuthServiceOptions(
 }
 
 @Module({
+  imports: [AuditModule],
   controllers: [AuthController],
   providers: [
     {
@@ -68,6 +71,10 @@ export function createAuthServiceOptions(
         createAuthServiceOptions(securityConfig)
     },
     {
+      provide: ADMIN_STEP_UP_OPTIONS,
+      useValue: { now: Date.now }
+    },
+    {
       provide: AuthRateLimiter,
       inject: [AUTH_RATE_LIMIT_STORE, AUTH_SECURITY_CONFIG],
       useFactory: (store: RateLimitStore, securityConfig: ReturnType<typeof getAuthSecurityConfig>) =>
@@ -81,8 +88,19 @@ export function createAuthServiceOptions(
     VerificationCodeCleanupService,
     AuthGuard,
     AdminGuard,
+    AdminStepUpGuard,
     OptionalAuthGuard
   ],
-  exports: [AuthGuard, OptionalAuthGuard, AuthService, AUTH_OPTIONS, EMAIL_SENDER]
+  exports: [
+    AuditModule,
+    AuthGuard,
+    AdminGuard,
+    AdminStepUpGuard,
+    OptionalAuthGuard,
+    AuthService,
+    ADMIN_STEP_UP_OPTIONS,
+    AUTH_OPTIONS,
+    EMAIL_SENDER
+  ]
 })
 export class AuthModule {}
