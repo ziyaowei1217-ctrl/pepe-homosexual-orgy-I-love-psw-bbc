@@ -1,4 +1,5 @@
 import { productErrorForStatus, toProductApiError } from "./product-errors";
+import { getBrowserDeviceId } from "./device-id";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000/api/v1";
 
@@ -350,12 +351,14 @@ export function archiveAdminRoommate(token: string, id: string) {
 
 async function apiRequest<T>(path: string, init: RequestInit, token?: string): Promise<T> {
   let response: Response;
+  const deviceId = getBrowserDeviceId();
   try {
     response = await fetch(`${API_BASE_URL}${path}`, {
       ...init,
       headers: {
         "Content-Type": "application/json",
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(deviceId ? { "X-Device-ID": deviceId } : {}),
         ...init.headers
       }
     });
