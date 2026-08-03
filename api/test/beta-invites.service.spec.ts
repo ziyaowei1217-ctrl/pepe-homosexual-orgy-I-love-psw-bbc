@@ -57,7 +57,12 @@ function createPrismaMock() {
   };
   const auditEvent = {
     rows: [] as Array<Record<string, unknown>>,
+    failNextCreate: false,
     async create({ data }: { data: Record<string, unknown> }) {
+      if (auditEvent.failNextCreate) {
+        auditEvent.failNextCreate = false;
+        throw new Error("audit append failed");
+      }
       const row = { id: `audit-${auditEvent.rows.length + 1}`, ...data };
       auditEvent.rows.push(row);
       return row;
@@ -70,7 +75,19 @@ function createPrismaMock() {
     user: { async findUnique() { return null; } }
   };
   return Object.assign(prisma, {
-    $transaction: async <T>(operation: (transaction: typeof prisma) => Promise<T>) => operation(prisma)
+    $transaction: async <T>(operation: (transaction: typeof prisma) => Promise<T>) => {
+      const inviteSnapshot = betaInvite.rows.map((row) => ({ ...row }));
+      const codeSnapshot = verificationCode.rows.map((row) => ({ ...row }));
+      const auditSnapshot = auditEvent.rows.map((row) => ({ ...row }));
+      try {
+        return await operation(prisma);
+      } catch (error) {
+        betaInvite.rows.splice(0, betaInvite.rows.length, ...inviteSnapshot);
+        verificationCode.rows.splice(0, verificationCode.rows.length, ...codeSnapshot);
+        auditEvent.rows.splice(0, auditEvent.rows.length, ...auditSnapshot);
+        throw error;
+      }
+    }
   });
 }
 
@@ -123,6 +140,15 @@ describe("BetaInvitesService", () => {
     expect(prisma.betaInvite.rows).toHaveLength(0);
   });
 
+  it("rejects a blank normalized operator identity without changing invite state", async () => {
+    const prisma = createPrismaMock();
+    const service = new BetaInvitesService(prisma as never, new AuditService());
+
+    await expect(service.add({ ...input, actorEmail: "  " })).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.betaInvite.rows).toHaveLength(0);
+    expect(prisma.auditEvent.rows).toHaveLength(0);
+  });
+
   it("does not reveal normalized emails from list results", async () => {
     const prisma = createPrismaMock();
     const service = new BetaInvitesService(prisma as never, new AuditService());
@@ -139,5 +165,19 @@ describe("BetaInvitesService", () => {
     const service = new BetaInvitesService(prisma as never, new AuditService());
 
     await expect(service.revoke(input)).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it("rolls back invite revocation and login-code consumption when audit append fails", async () => {
+    const prisma = createPrismaMock();
+    const service = new BetaInvitesService(prisma as never, new AuditService());
+    await service.add(input);
+    prisma.auditEvent.failNextCreate = true;
+
+    await expect(service.revoke({ ...input, reason: "Access withdrawn" })).rejects.toThrow("audit append failed");
+
+    expect(prisma.betaInvite.rows[0].revokedAt).toBeNull();
+    expect(prisma.verificationCode.rows[0].consumedAt).toBeNull();
+    expect(prisma.auditEvent.rows).toHaveLength(1);
+    expect(prisma.auditEvent.rows[0]).toMatchObject({ action: "BETA_INVITE_CREATED" });
   });
 });

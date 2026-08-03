@@ -32,6 +32,7 @@ export function parseBetaInviteCommand(argv: string[]): BetaInviteCommand {
   }
   if (!options["--email"]) return validationError("--email is required");
   if (!options["--actor"] || !options["--reason"]) return validationError("--actor and --reason are required");
+  if (!options["--actor"].trim()) return validationError("--actor must not be blank");
   return { action, email: options["--email"], actorEmail: options["--actor"], reason: options["--reason"] };
 }
 

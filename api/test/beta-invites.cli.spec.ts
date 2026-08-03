@@ -10,6 +10,12 @@ describe("beta invite CLI", () => {
     expect(() => parseBetaInviteCommand(argv)).toThrow("--actor and --reason are required");
   });
 
+  it.each(["add", "revoke"])("rejects %s with a blank actor", (action) => {
+    expect(() =>
+      parseBetaInviteCommand([action, "--email", "student@example.com", "--actor", "  ", "--reason", "Founding beta cohort"])
+    ).toThrow("--actor must not be blank");
+  });
+
   it("prints only masked email addresses for list", async () => {
     const writes: string[] = [];
     await runBetaInviteCommand(

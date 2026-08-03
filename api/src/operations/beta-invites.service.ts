@@ -13,6 +13,12 @@ function requireReason(input: string) {
   return reason;
 }
 
+function requireActorEmail(input: string) {
+  const actorEmail = normalizeEmail(input);
+  if (!actorEmail) throw new BadRequestException("Operator email is required");
+  return actorEmail;
+}
+
 export function maskEmail(input: string) {
   const [local, domain] = normalizeEmail(input).split("@");
   const visibleLocal =
@@ -39,7 +45,7 @@ export class BetaInvitesService {
     return this.prisma.$transaction(async (transaction) => {
       const email = normalizeEmail(input.email);
       const reason = requireReason(input.reason);
-      const actorEmail = normalizeEmail(input.actorEmail);
+      const actorEmail = requireActorEmail(input.actorEmail);
       const existingUser = await transaction.user.findUnique({ where: { email }, select: { id: true } });
       if (existingUser) throw new BadRequestException("Registered users do not need beta invites");
       const existing = await transaction.betaInvite.findUnique({ where: { normalizedEmail: email } });
@@ -79,7 +85,7 @@ export class BetaInvitesService {
     return this.prisma.$transaction(async (transaction) => {
       const email = normalizeEmail(input.email);
       const reason = requireReason(input.reason);
-      const actorEmail = normalizeEmail(input.actorEmail);
+      const actorEmail = requireActorEmail(input.actorEmail);
       const invite = await transaction.betaInvite.findUnique({ where: { normalizedEmail: email } });
       if (!invite) throw new NotFoundException("Beta invite not found");
       const revokedAt = invite.revokedAt ?? new Date();
