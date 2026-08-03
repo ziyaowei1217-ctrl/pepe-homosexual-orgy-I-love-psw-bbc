@@ -72,6 +72,71 @@ describe("Resend email delivery", () => {
     expect(rejectedFetch).toHaveBeenCalledTimes(1);
   });
 
+  it("shares one timeout budget across the initial request and retry", async () => {
+    let now = 10_000;
+    const timeoutBudgets: number[] = [];
+    const fetchImpl = vi
+      .fn()
+      .mockImplementationOnce(async () => {
+        now += 1_200;
+        return new Response("unavailable", { status: 503 });
+      })
+      .mockResolvedValueOnce(new Response(JSON.stringify({ id: "message-within-budget" }), { status: 200 }));
+    const sender = new ResendEmailSender({
+      apiKey: "re_test",
+      from: "login@example.com",
+      fetchImpl,
+      timeoutMs: 5_000,
+      now: () => now,
+      timeoutSignal: (milliseconds: number) => {
+        timeoutBudgets.push(milliseconds);
+        return new AbortController().signal;
+      }
+    });
+
+    await expect(
+      sender.sendVerificationCode({
+        email: "student@example.com",
+        code: "123456",
+        verificationCodeId: "code-total-budget"
+      })
+    ).resolves.toEqual({ providerMessageId: "message-within-budget" });
+    expect(timeoutBudgets).toEqual([5_000, 3_800]);
+  });
+
+  it("does not start a retry after the total timeout budget is exhausted", async () => {
+    let now = 20_000;
+    const timeoutBudgets: number[] = [];
+    const fetchImpl = vi
+      .fn()
+      .mockImplementationOnce(async () => {
+        now += 5_000;
+        throw new DOMException("request timed out", "TimeoutError");
+      })
+      .mockResolvedValueOnce(new Response(JSON.stringify({ id: "must-not-send" }), { status: 200 }));
+    const sender = new ResendEmailSender({
+      apiKey: "re_test",
+      from: "login@example.com",
+      fetchImpl,
+      timeoutMs: 5_000,
+      now: () => now,
+      timeoutSignal: (milliseconds: number) => {
+        timeoutBudgets.push(milliseconds);
+        return new AbortController().signal;
+      }
+    });
+
+    await expect(
+      sender.sendVerificationCode({
+        email: "student@example.com",
+        code: "123456",
+        verificationCodeId: "code-exhausted-budget"
+      })
+    ).rejects.toThrow("Email delivery unavailable");
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(timeoutBudgets).toEqual([5_000]);
+  });
+
   it("retries once when the provider request times out", async () => {
     const fetchImpl = vi
       .fn()

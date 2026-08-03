@@ -176,40 +176,7 @@ export class AuthService {
       return this.acceptAfterBudget(startedAt, email, pending.expiresAt, pending.code);
     }
 
-    await this.withSerializedEmail(email, async (transaction) => {
-      const sentAt = new Date();
-      const newerSentCode = await transaction.verificationCode.findFirst({
-        where: {
-          email,
-          purpose: VerificationPurpose.LOGIN,
-          deliveryStatus: VerificationDeliveryStatus.SENT,
-          consumedAt: null,
-          createdAt: { gt: pending.createdAt }
-        },
-        select: { id: true }
-      });
-      await transaction.verificationCode.update({
-        where: { id: pending.id },
-        data: {
-          deliveryStatus: VerificationDeliveryStatus.SENT,
-          sentAt,
-          providerMessageId: providerMessageId ?? null,
-          ...(newerSentCode ? { consumedAt: sentAt } : {})
-        }
-      });
-      if (newerSentCode) return;
-      await transaction.verificationCode.updateMany({
-        where: {
-          email,
-          purpose: VerificationPurpose.LOGIN,
-          deliveryStatus: VerificationDeliveryStatus.SENT,
-          consumedAt: null,
-          createdAt: { lt: pending.createdAt },
-          id: { not: pending.id }
-        },
-        data: { consumedAt: sentAt }
-      });
-    });
+    await this.finalizeSuccessfulDelivery(pending, providerMessageId);
 
     return this.acceptAfterBudget(startedAt, email, pending.expiresAt, pending.code);
   }
@@ -320,6 +287,53 @@ export class AuthService {
     const remainingMs = this.responseMinimumMs + jitter - (this.now() - startedAt);
     if (remainingMs > 0) await this.delay(remainingMs);
     return this.acceptedResponse(email, expiresAt, code);
+  }
+
+  private async finalizeSuccessfulDelivery(pending: PendingCode, providerMessageId?: string) {
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        await this.withSerializedEmail(pending.email, async (transaction) => {
+          const sentAt = new Date();
+          const newerSentCode = await transaction.verificationCode.findFirst({
+            where: {
+              email: pending.email,
+              purpose: VerificationPurpose.LOGIN,
+              deliveryStatus: VerificationDeliveryStatus.SENT,
+              createdAt: { gt: pending.createdAt }
+            },
+            select: { id: true }
+          });
+          await transaction.verificationCode.update({
+            where: { id: pending.id },
+            data: {
+              deliveryStatus: VerificationDeliveryStatus.SENT,
+              sentAt,
+              providerMessageId: providerMessageId ?? null,
+              ...(newerSentCode ? { consumedAt: sentAt } : {})
+            }
+          });
+          if (newerSentCode) return;
+          await transaction.verificationCode.updateMany({
+            where: {
+              email: pending.email,
+              purpose: VerificationPurpose.LOGIN,
+              deliveryStatus: VerificationDeliveryStatus.SENT,
+              consumedAt: null,
+              createdAt: { lt: pending.createdAt },
+              id: { not: pending.id }
+            },
+            data: { consumedAt: sentAt }
+          });
+        });
+        return;
+      } catch {
+        if (attempt === 1) {
+          this.logger.warn("Verification email finalization failed", {
+            verificationCodeId: pending.id
+          });
+        }
+      }
+    }
   }
 
   private withSerializedEmail<T>(

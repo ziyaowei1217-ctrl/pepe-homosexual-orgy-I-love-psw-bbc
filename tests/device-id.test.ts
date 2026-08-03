@@ -28,6 +28,19 @@ describe("authentication device identifier", () => {
     expect(crypto.randomUUID).toHaveBeenCalledTimes(1);
   });
 
+  it("returns undefined when browser policy blocks the localStorage getter", () => {
+    Object.defineProperty(globalThis, "window", {
+      value: Object.defineProperty({}, "localStorage", {
+        get: () => {
+          throw new DOMException("Access is denied", "SecurityError");
+        }
+      }),
+      configurable: true
+    });
+
+    expect(getBrowserDeviceId()).toBeUndefined();
+  });
+
   it("sends the persisted UUID on both auth requests", async () => {
     const fetchMock = vi.fn().mockImplementation(async () =>
       new Response(JSON.stringify({ email: "student@example.com", expiresAt: "2030-01-01T00:00:00.000Z" }), {

@@ -1,14 +1,16 @@
 const deviceIdStorageKey = "sublet_device_id";
 
 export function getBrowserDeviceId() {
-  if (typeof window === "undefined" || typeof window.localStorage === "undefined") return undefined;
+  if (typeof window === "undefined") return undefined;
 
   try {
-    const stored = window.localStorage.getItem(deviceIdStorageKey);
+    const storage = window.localStorage;
+    if (!storage) return undefined;
+    const stored = storage.getItem(deviceIdStorageKey);
     if (stored && isUuid(stored)) return stored.toLowerCase();
     if (typeof globalThis.crypto?.randomUUID !== "function") return undefined;
     const generated = globalThis.crypto.randomUUID();
-    window.localStorage.setItem(deviceIdStorageKey, generated);
+    storage.setItem(deviceIdStorageKey, generated);
     return generated;
   } catch {
     return undefined;

@@ -24,7 +24,11 @@ type ResendEmailSenderOptions = {
   from: string;
   fetchImpl?: typeof fetch;
   timeoutMs?: number;
+  now?: () => number;
+  timeoutSignal?: (milliseconds: number) => AbortSignal;
 };
+
+export const EMAIL_PROVIDER_TOTAL_TIMEOUT_MS = 5_000;
 
 export class EmailDeliveryUnavailableError extends Error {
   constructor() {
@@ -43,14 +47,18 @@ export class ConsoleEmailSender implements EmailSender {
 export class ResendEmailSender implements EmailSender {
   private readonly fetchImpl: typeof fetch;
   private readonly timeoutMs: number;
+  private readonly now: () => number;
+  private readonly timeoutSignal: (milliseconds: number) => AbortSignal;
 
   constructor(private readonly options: ResendEmailSenderOptions) {
     this.fetchImpl = options.fetchImpl ?? fetch;
-    this.timeoutMs = options.timeoutMs ?? 5_000;
+    this.timeoutMs = options.timeoutMs ?? EMAIL_PROVIDER_TOTAL_TIMEOUT_MS;
+    this.now = options.now ?? Date.now;
+    this.timeoutSignal = options.timeoutSignal ?? AbortSignal.timeout;
   }
 
   async sendVerificationCode(input: SendVerificationCodeInput) {
-    const request = () =>
+    const request = (signal: AbortSignal) =>
       this.fetchImpl("https://api.resend.com/emails", {
         method: "POST",
         headers: {
@@ -65,12 +73,15 @@ export class ResendEmailSender implements EmailSender {
           text: `Your verification code is ${input.code}. It expires soon.`,
           html: `<p>Your verification code is <strong>${input.code}</strong>.</p><p>It expires soon.</p>`
         }),
-        signal: AbortSignal.timeout(this.timeoutMs)
+        signal
       });
 
+    const deadline = this.now() + this.timeoutMs;
     for (let attempt = 0; attempt < 2; attempt += 1) {
+      const remainingMs = deadline - this.now();
+      if (remainingMs <= 0) throw new EmailDeliveryUnavailableError();
       try {
-        const response = await request();
+        const response = await request(this.timeoutSignal(remainingMs));
         if (response.ok) {
           const payload = (await response.json()) as { id?: unknown };
           return { providerMessageId: typeof payload.id === "string" ? payload.id : undefined };

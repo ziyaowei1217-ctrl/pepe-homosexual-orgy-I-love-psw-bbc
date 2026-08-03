@@ -51,6 +51,40 @@ describe("AuthService production email issuance", () => {
     });
   });
 
+  it("generically accepts a provider success when bounded finalization retries fail", async () => {
+    const prisma = createAuthPrismaMock({ invited: ["student@example.com"] });
+    const sender = createSender(prisma);
+    const warnings: unknown[][] = [];
+    const service = createService(prisma, sender, {
+      codeRequestCooldownMs: 0,
+      logger: { warn: (...args: unknown[]) => warnings.push(args) }
+    });
+    await service.requestEmailCode("student@example.com");
+    const previous = prisma.state.codes[0];
+    prisma.state.finalizationFailuresRemaining = 2;
+
+    const accepted = await service.requestEmailCode("student@example.com");
+
+    expect(accepted).toMatchObject({
+      email: "student@example.com",
+      expiresAt: expect.any(Date),
+      devCode: expect.stringMatching(/^\d{6}$/)
+    });
+    expect(sender.sent).toHaveLength(2);
+    expect(prisma.state.finalizationAttempts).toBe(3);
+    expect(previous).toMatchObject({
+      deliveryStatus: VerificationDeliveryStatus.SENT,
+      consumedAt: null
+    });
+    expect(prisma.state.codes[1]).toMatchObject({
+      deliveryStatus: VerificationDeliveryStatus.PENDING,
+      consumedAt: null
+    });
+    expect(warnings).toHaveLength(1);
+    expect(JSON.stringify(warnings)).not.toContain("student@example.com");
+    expect(JSON.stringify(warnings)).not.toContain("finalization db detail");
+  });
+
   it("invalidates older SENT codes only after a newer delivery succeeds", async () => {
     const prisma = createAuthPrismaMock({ invited: ["student@example.com"] });
     const sender = createSender(prisma);
@@ -156,6 +190,44 @@ describe("AuthService production email issuance", () => {
     expect(olderRecord?.consumedAt).toBeInstanceOf(Date);
     expect(newerRecord?.consumedAt).toBeNull();
   });
+
+  it("does not revive an older slow delivery after the newer SENT code was consumed", async () => {
+    const sharedTimestamp = new Date("2020-01-01T00:00:00.000Z");
+    const prisma = createAuthPrismaMock({
+      invited: ["student@example.com"],
+      fixedCodeCreatedAt: sharedTimestamp
+    });
+    let releaseFirst: () => void = () => undefined;
+    const firstBlocked = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    const sent: SendVerificationCodeInput[] = [];
+    const sender: EmailSender = {
+      async sendVerificationCode(input) {
+        sent.push(input);
+        if (sent.length === 1) await firstBlocked;
+        return { providerMessageId: `provider-${sent.length}` };
+      }
+    };
+    const service = createService(prisma, sender, {
+      codeRequestCooldownMs: 0,
+      now: () => sharedTimestamp.getTime()
+    });
+
+    const olderRequest = service.requestEmailCode("student@example.com");
+    while (sent.length === 0) await Promise.resolve();
+    await service.requestEmailCode("student@example.com");
+    const newerRecord = prisma.state.codes.find((record) => record.id === sent[1].verificationCodeId);
+    if (!newerRecord) throw new Error("Expected newer verification code");
+    const consumedAt = new Date("2020-01-01T00:01:00.000Z");
+    newerRecord.consumedAt = consumedAt;
+    releaseFirst();
+    await olderRequest;
+
+    const olderRecord = prisma.state.codes.find((record) => record.id === sent[0].verificationCodeId);
+    expect(newerRecord.consumedAt).toBe(consumedAt);
+    expect(olderRecord?.consumedAt).toBeInstanceOf(Date);
+  });
 });
 
 type CodeRecord = {
@@ -183,7 +255,9 @@ function createAuthPrismaMock(
     invited: new Set(input.invited ?? []),
     existingUsers: new Set(input.existingUsers ?? []),
     inTransaction: false,
-    senderObservedTransaction: undefined as boolean | undefined
+    senderObservedTransaction: undefined as boolean | undefined,
+    finalizationFailuresRemaining: 0,
+    finalizationAttempts: 0
   };
 
   const transaction = {
@@ -236,6 +310,13 @@ function createAuthPrismaMock(
       update: async ({ where, data }: { where: { id: string }; data: Partial<CodeRecord> }) => {
         const record = state.codes.find((candidate) => candidate.id === where.id);
         if (!record) throw new Error("missing code");
+        if (data.deliveryStatus === VerificationDeliveryStatus.SENT) {
+          state.finalizationAttempts += 1;
+          if (state.finalizationFailuresRemaining > 0) {
+            state.finalizationFailuresRemaining -= 1;
+            throw new Error("finalization db detail");
+          }
+        }
         Object.assign(record, data);
         return { ...record };
       },
@@ -288,7 +369,11 @@ function createSender(prisma: ReturnType<typeof createAuthPrismaMock>) {
 function createService(
   prisma: ReturnType<typeof createAuthPrismaMock>,
   sender: EmailSender,
-  options: { codeRequestCooldownMs?: number; now?: () => number } = {}
+  options: {
+    codeRequestCooldownMs?: number;
+    now?: () => number;
+    logger?: { warn(...args: unknown[]): unknown };
+  } = {}
 ) {
   return new AuthService(prisma as never, new JwtService({ secret: "test-secret" }), sender, {
     nodeEnv: "development",
@@ -300,6 +385,6 @@ function createService(
     responseMinimumMs: 0,
     responseJitterMs: 0,
     now: options.now,
-    logger: { warn: () => undefined }
+    logger: options.logger ?? { warn: () => undefined }
   });
 }

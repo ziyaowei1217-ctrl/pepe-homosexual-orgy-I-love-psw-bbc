@@ -1,7 +1,7 @@
 import { Module } from "@nestjs/common";
 
-import { getAuthSecurityConfig } from "../config/env";
-import { createEmailSender } from "../email/email-sender";
+import { getAuthSecurityConfig, type AuthSecurityConfig } from "../config/env";
+import { createEmailSender, EMAIL_PROVIDER_TOTAL_TIMEOUT_MS } from "../email/email-sender";
 import { AuthRateLimiter, RateLimitStore } from "./auth-rate-limit";
 import { AuthController } from "./auth.controller";
 import { AuthGuard } from "./auth.guard";
@@ -12,6 +12,33 @@ import { AUTH_OPTIONS, AUTH_RATE_LIMIT_STORE, AUTH_SECURITY_CONFIG, EMAIL_SENDER
 import { VerificationCodeCleanupService } from "./verification-code-cleanup.service";
 
 export { AUTH_OPTIONS, AUTH_RATE_LIMIT_STORE, AUTH_SECURITY_CONFIG, EMAIL_SENDER } from "./auth.tokens";
+
+export function createAuthServiceOptions(
+  securityConfig: AuthSecurityConfig,
+  nodeEnv = process.env.NODE_ENV ?? "development",
+  localAdminEmails = process.env.LOCAL_ADMIN_EMAILS ?? ""
+): AuthServiceOptions {
+  const productionResponseJitterMs = 250;
+  const timing =
+    nodeEnv === "production"
+      ? {
+          responseMinimumMs: EMAIL_PROVIDER_TOTAL_TIMEOUT_MS + productionResponseJitterMs,
+          responseJitterMs: productionResponseJitterMs
+        }
+      : nodeEnv === "test"
+        ? { responseMinimumMs: 0, responseJitterMs: 0 }
+        : { responseMinimumMs: 350, responseJitterMs: 100 };
+
+  return {
+    nodeEnv,
+    otpHashSecret: securityConfig.otpHashSecret,
+    codeTtlMs: securityConfig.codeTtlMs,
+    codeMaxAttempts: securityConfig.codeMaxAttempts,
+    codeRequestCooldownMs: securityConfig.codeCooldownMs,
+    localAdminEmails,
+    ...timing
+  };
+}
 
 @Module({
   controllers: [AuthController],
@@ -31,19 +58,8 @@ export { AUTH_OPTIONS, AUTH_RATE_LIMIT_STORE, AUTH_SECURITY_CONFIG, EMAIL_SENDER
     {
       provide: AUTH_OPTIONS,
       inject: [AUTH_SECURITY_CONFIG],
-      useFactory: (securityConfig: ReturnType<typeof getAuthSecurityConfig>): AuthServiceOptions => {
-        const nodeEnv = process.env.NODE_ENV ?? "development";
-        return {
-          nodeEnv,
-          otpHashSecret: securityConfig.otpHashSecret,
-          codeTtlMs: securityConfig.codeTtlMs,
-          codeMaxAttempts: securityConfig.codeMaxAttempts,
-          codeRequestCooldownMs: securityConfig.codeCooldownMs,
-          localAdminEmails: process.env.LOCAL_ADMIN_EMAILS ?? "",
-          responseMinimumMs: nodeEnv === "test" ? 0 : 350,
-          responseJitterMs: nodeEnv === "test" ? 0 : 100
-        };
-      }
+      useFactory: (securityConfig: ReturnType<typeof getAuthSecurityConfig>): AuthServiceOptions =>
+        createAuthServiceOptions(securityConfig)
     },
     {
       provide: AuthRateLimiter,
