@@ -14,6 +14,7 @@
     "launch:smoke:valkey": "node -e \"if (!process.env.VALKEY_URL) { console.error('VALKEY_URL is required for launch:smoke:valkey'); process.exit(1) }\" && RUN_VALKEY_SMOKE=1 vitest run test/valkey-rate-limit.integration.spec.ts",
     "seed:la": "DATABASE_URL=\"${DATABASE_URL:-postgresql://sublet:sublet@localhost:5432/sublet_pipeline?schema=public}\" ts-node -r tsconfig-paths/register src/seed-los-angeles.ts",
     "beta:invites": "ts-node -r tsconfig-paths/register src/operations/beta-invites.cli.ts",
+    "admin:roles": "ts-node -r tsconfig-paths/register src/operations/admin-roles.cli.ts",
     "prisma": "prisma"
   },
   "dependencies": {
