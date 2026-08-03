@@ -47,13 +47,13 @@ describe("AuditService", () => {
       outcome: "SUCCESS",
       metadata: {
         reason:
-          "Verification code: 123456; contact admin@example.com; Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJhZG1pbi0xIn0.signature"
+          "Verification 123456; contact admin@example.com; Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJhZG1pbi0xIn0.signature"
       }
     });
 
     expect(create).toHaveBeenCalledWith({
       data: expect.objectContaining({
-        metadata: { reason: "Verification code: [REDACTED]; contact [REDACTED]; [REDACTED]" }
+        metadata: { reason: "Verification [REDACTED]; contact [REDACTED]; [REDACTED]" }
       })
     });
   });
@@ -61,6 +61,9 @@ describe("AuditService", () => {
   it.each([
     "First line\nSecond line",
     "Subject: audit update",
+    "Subject : audit update",
+    "Reply-To: operator",
+    "Content-Type: text/html",
     "<p>email body</p>",
     "<p email body",
     "x".repeat(241)
@@ -90,7 +93,7 @@ describe("AuditService", () => {
       action: "LISTING_APPROVED",
       targetType: "Listing",
       outcome: "SUCCESS",
-      metadata: { code: "verification code", method: "OPTIONS" }
+      metadata: { code: "VERIFICATION_CODE_123456", method: "OPTIONS" }
     });
 
     expect(create).toHaveBeenCalledWith({
@@ -107,12 +110,16 @@ describe("AuditService", () => {
       action: "LISTING_APPROVED",
       targetType: "Listing",
       outcome: "SUCCESS",
-      metadata: { reason: "  Approved after review  ", code: "LISTING_APPROVED", method: "PATCH" }
+      metadata: {
+        reason: "  Approved after review; no escalation.  ",
+        code: "ADMIN_REAUTH_REQUIRED",
+        method: "PATCH"
+      }
     });
 
     expect(create).toHaveBeenCalledWith({
       data: expect.objectContaining({
-        metadata: { reason: "Approved after review", code: "LISTING_APPROVED", method: "PATCH" }
+        metadata: { reason: "Approved after review; no escalation.", code: "ADMIN_REAUTH_REQUIRED", method: "PATCH" }
       })
     });
   });

@@ -35,14 +35,14 @@ function redactSensitiveSubstrings(value: string) {
 }
 
 function sanitizeReason(value: string) {
-  if (/\r|\n|<\/?[a-z][^>]*>?|\b(?:From|To|Subject):/i.test(value) || value.length > 240) {
+  if (/\r|\n|<\/?[a-z][^>]*>?|\b[A-Za-z0-9-]+\s*:/i.test(value) || value.length > 240) {
     return redactedMetadataValue;
   }
   return redactSensitiveSubstrings(value.trim());
 }
 
 function sanitizeCode(value: string) {
-  return /^[A-Z][A-Z0-9_]{0,63}$/.test(value) ? value : redactedMetadataValue;
+  return /^[A-Z][A-Z0-9_]{0,63}$/.test(value) && !/\d{6}/.test(value) ? value : redactedMetadataValue;
 }
 
 function sanitizeMethod(value: string) {
