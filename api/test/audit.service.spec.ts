@@ -36,7 +36,7 @@ describe("AuditService", () => {
     });
   });
 
-  it("redacts sensitive metadata values before appending an audit event", async () => {
+  it("redacts sensitive substrings embedded in a reason before appending an audit event", async () => {
     const create = vi.fn(async ({ data }) => ({ id: "audit-1", ...data }));
     const audit = new AuditService();
 
@@ -46,15 +46,73 @@ describe("AuditService", () => {
       targetType: "Listing",
       outcome: "SUCCESS",
       metadata: {
-        reason: "admin@example.com",
-        code: " 123456 ",
-        method: "Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJhZG1pbi0xIn0.signature"
+        reason:
+          "Verification code: 123456; contact admin@example.com; Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJhZG1pbi0xIn0.signature"
       }
     });
 
     expect(create).toHaveBeenCalledWith({
       data: expect.objectContaining({
-        metadata: { reason: "[REDACTED]", code: "[REDACTED]", method: "[REDACTED]" }
+        metadata: { reason: "Verification code: [REDACTED]; contact [REDACTED]; [REDACTED]" }
+      })
+    });
+  });
+
+  it.each([
+    "First line\nSecond line",
+    "Subject: audit update",
+    "<p>email body</p>",
+    "<p email body",
+    "x".repeat(241)
+  ])("redacts a body-like reason before appending an audit event", async (reason) => {
+    const create = vi.fn(async ({ data }) => ({ id: "audit-1", ...data }));
+    const audit = new AuditService();
+
+    await audit.append({ auditEvent: { create } } as never, {
+      actorType: "SYSTEM",
+      action: "LISTING_APPROVED",
+      targetType: "Listing",
+      outcome: "SUCCESS",
+      metadata: { reason }
+    });
+
+    expect(create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ metadata: { reason: "[REDACTED]" } })
+    });
+  });
+
+  it("redacts invalid code and method metadata before appending an audit event", async () => {
+    const create = vi.fn(async ({ data }) => ({ id: "audit-1", ...data }));
+    const audit = new AuditService();
+
+    await audit.append({ auditEvent: { create } } as never, {
+      actorType: "SYSTEM",
+      action: "LISTING_APPROVED",
+      targetType: "Listing",
+      outcome: "SUCCESS",
+      metadata: { code: "verification code", method: "OPTIONS" }
+    });
+
+    expect(create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ metadata: { code: "[REDACTED]", method: "[REDACTED]" } })
+    });
+  });
+
+  it("preserves benign metadata values before appending an audit event", async () => {
+    const create = vi.fn(async ({ data }) => ({ id: "audit-1", ...data }));
+    const audit = new AuditService();
+
+    await audit.append({ auditEvent: { create } } as never, {
+      actorType: "SYSTEM",
+      action: "LISTING_APPROVED",
+      targetType: "Listing",
+      outcome: "SUCCESS",
+      metadata: { reason: "  Approved after review  ", code: "LISTING_APPROVED", method: "PATCH" }
+    });
+
+    expect(create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        metadata: { reason: "Approved after review", code: "LISTING_APPROVED", method: "PATCH" }
       })
     });
   });
