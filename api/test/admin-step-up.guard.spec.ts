@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import { AdminStepUpGuard } from "../src/auth/admin-step-up.guard";
 import { AuditService } from "../src/audit/audit.service";
+import { AdminListingsController } from "../src/listings/admin-listings.controller";
 
 describe("AdminStepUpGuard", () => {
   it("allows a step-up completed exactly within the 30-minute window", async () => {
@@ -37,7 +38,7 @@ describe("AdminStepUpGuard", () => {
         actorEmail: "admin@example.com",
         action: "ADMIN_WRITE_BLOCKED",
         targetType: "HTTP_ROUTE",
-        targetId: "/admin/listings/listing-1/approve",
+        targetId: "AdminListingsController.approve",
         outcome: "BLOCKED",
         requestId: "request-1",
         metadata: {
@@ -66,25 +67,29 @@ describe("AdminStepUpGuard", () => {
     ).resolves.toBe(true);
   });
 
-  it("strips query strings and caps blocked audit route identifiers at 200 characters", async () => {
+  it("uses static handler identity without persisting sensitive request path values", async () => {
     const { guard, prisma } = createGuard({ nowSeconds: 2_001 });
-    const route = `/${"a".repeat(240)}`;
+    const pathEmail = "victim@example.com";
+    const pathToken = "eyJhbGciOiJIUzI1NiJ9.payload.signature";
 
     await expect(
       guard.canActivate(
         contextFor(
           { role: "ADMIN" },
-          { originalUrl: `${route}?accessToken=private`, method: undefined }
+          { originalUrl: `/admin/listings/${pathEmail}/${pathToken}/approve`, method: undefined }
         )
       )
     ).rejects.toMatchObject({ response: expect.objectContaining({ code: "ADMIN_REAUTH_REQUIRED" }) });
     expect(prisma.auditEvent.rows.at(-1)).toMatchObject({
-      targetId: route.slice(0, 200),
+      targetId: "AdminListingsController.approve",
       metadata: {
         method: "[REDACTED]",
         reason: "ADMIN_REAUTH_REQUIRED"
       }
     });
+    const auditPayload = JSON.stringify(prisma.auditEvent.rows.at(-1));
+    expect(auditPayload).not.toContain(pathEmail);
+    expect(auditPayload).not.toContain(pathToken);
   });
 });
 
@@ -113,6 +118,8 @@ function contextFor(
   request: { originalUrl?: string; method?: string } = {}
 ): ExecutionContext {
   return {
+    getClass: () => AdminListingsController,
+    getHandler: () => AdminListingsController.prototype.approve,
     switchToHttp: () => ({
       getRequest: () => ({
         headers: {},

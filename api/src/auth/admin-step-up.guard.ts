@@ -31,7 +31,7 @@ export class AdminStepUpGuard implements CanActivate {
       actorEmail: request.user.email,
       action: "ADMIN_WRITE_BLOCKED",
       targetType: "HTTP_ROUTE",
-      targetId: stripQuery(request.originalUrl),
+      targetId: routeIdentifier(context),
       outcome: "BLOCKED",
       requestId: request.requestId,
       metadata: {
@@ -48,6 +48,8 @@ export class AdminStepUpGuard implements CanActivate {
   }
 }
 
-function stripQuery(path = "unknown") {
-  return path.split("?", 1)[0].slice(0, 200);
+function routeIdentifier(context: ExecutionContext) {
+  const controllerName = context.getClass().name || "UnknownController";
+  const handlerName = context.getHandler().name || "unknownHandler";
+  return `${controllerName}.${handlerName}`.slice(0, 200);
 }
