@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "nest start --watch",
     "build": "prisma generate && nest build",
+    "test:cli-build": "npm run build && RUN_CLI_BUILD_SMOKE=1 vitest run test/operations-cli-build.spec.ts",
     "start": "node dist/src/main.js",
     "test": "vitest run",
     "typecheck": "prisma generate && tsc --noEmit",
@@ -13,8 +14,10 @@
     "launch:smoke": "RUN_DB_SMOKE=1 vitest run test/launch-smoke.spec.ts",
     "launch:smoke:valkey": "node -e \"if (!process.env.VALKEY_URL) { console.error('VALKEY_URL is required for launch:smoke:valkey'); process.exit(1) }\" && RUN_VALKEY_SMOKE=1 vitest run test/valkey-rate-limit.integration.spec.ts",
     "seed:la": "DATABASE_URL=\"${DATABASE_URL:-postgresql://sublet:sublet@localhost:5432/sublet_pipeline?schema=public}\" ts-node -r tsconfig-paths/register src/seed-los-angeles.ts",
-    "beta:invites": "ts-node -r tsconfig-paths/register src/operations/beta-invites.cli.ts",
-    "admin:roles": "ts-node -r tsconfig-paths/register src/operations/admin-roles.cli.ts",
+    "beta:invites": "node dist/src/operations/beta-invites.cli.js",
+    "beta:invites:dev": "ts-node -r tsconfig-paths/register src/operations/beta-invites.cli.ts",
+    "admin:roles": "node dist/src/operations/admin-roles.cli.js",
+    "admin:roles:dev": "ts-node -r tsconfig-paths/register src/operations/admin-roles.cli.ts",
     "prisma": "prisma"
   },
   "dependencies": {

@@ -137,15 +137,11 @@ export class ListingsService {
 
   async approve(id: string, actor: AuditActor) {
     return this.prisma.$transaction(async (transaction) => {
-      await this.requireSubmittedListing(id, transaction);
-      const listing = await transaction.listing.update({
-        where: { id },
-        data: {
-          status: "APPROVED",
-          reviewedAt: new Date(),
-          reviewerId: actor.actorUserId,
-          rejectionReason: null
-        }
+      const listing = await this.transitionSubmittedListing(transaction, id, {
+        status: "APPROVED",
+        reviewedAt: new Date(),
+        reviewerId: actor.actorUserId,
+        rejectionReason: null
       });
       await this.audit.append(transaction, {
         ...actor,
@@ -164,15 +160,11 @@ export class ListingsService {
     if (!rejectionReason) throw new BadRequestException("Rejection reason is required");
 
     return this.prisma.$transaction(async (transaction) => {
-      await this.requireSubmittedListing(id, transaction);
-      const listing = await transaction.listing.update({
-        where: { id },
-        data: {
-          status: "REJECTED",
-          reviewedAt: new Date(),
-          reviewerId: actor.actorUserId,
-          rejectionReason
-        }
+      const listing = await this.transitionSubmittedListing(transaction, id, {
+        status: "REJECTED",
+        reviewedAt: new Date(),
+        reviewerId: actor.actorUserId,
+        rejectionReason
       });
       await this.audit.append(transaction, {
         ...actor,
@@ -184,6 +176,29 @@ export class ListingsService {
       });
       return listing;
     });
+  }
+
+  private async transitionSubmittedListing(
+    transaction: Pick<Prisma.TransactionClient, "listing">,
+    id: string,
+    data: {
+      status: "APPROVED" | "REJECTED";
+      reviewedAt: Date;
+      reviewerId?: string;
+      rejectionReason: string | null;
+    }
+  ) {
+    const transition = await transaction.listing.updateMany({
+      where: { id, status: "SUBMITTED" },
+      data
+    });
+    if (transition.count !== 1) {
+      await this.requireSubmittedListing(id, transaction);
+      throw new BadRequestException("Listing review transition did not complete");
+    }
+    const listing = await transaction.listing.findUnique({ where: { id } });
+    if (!listing) throw new NotFoundException("Listing not found");
+    return listing;
   }
 
   private async requireSubmittedListing(id: string, transaction: Pick<Prisma.TransactionClient, "listing">) {

@@ -20,6 +20,7 @@ import {
 } from "./code-security";
 import { AUTH_OPTIONS, EMAIL_SENDER } from "./auth.tokens";
 import { VerifyEmailDto } from "./dto";
+import { acquireNormalizedEmailAdvisoryLock } from "./email-advisory-lock";
 
 export type AuthServiceOptions = {
   nodeEnv: string;
@@ -402,7 +403,7 @@ export class AuthService {
     operation: (transaction: Prisma.TransactionClient) => Promise<T>
   ) {
     return this.prisma.$transaction(async (transaction) => {
-      await transaction.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${email}::text, 0))`;
+      await acquireNormalizedEmailAdvisoryLock(transaction, email);
       return operation(transaction);
     });
   }

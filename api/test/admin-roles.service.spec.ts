@@ -95,7 +95,8 @@ describe("AdminRolesService", () => {
   });
 
   it("commits a blocked audit event before rejecting revocation of the final admin", async () => {
-    const prisma = createPrismaMock([user("admin-1", "last-admin@example.com", UserRole.ADMIN)]);
+    const finalAdminId = "cm4w7x8h90001u9p4gn5n7v2b";
+    const prisma = createPrismaMock([user(finalAdminId, "last-admin@example.com", UserRole.ADMIN)]);
     const service = new AdminRolesService(prisma as never, new AuditService());
 
     await expect(
@@ -105,7 +106,7 @@ describe("AdminRolesService", () => {
     expect(prisma.auditEvent.rows.at(-1)).toMatchObject({
       actorEmail: "ops@example.com",
       action: "ADMIN_ROLE_REVOKE_BLOCKED",
-      targetId: "admin-1",
+      targetId: finalAdminId,
       outcome: "BLOCKED",
       metadata: { reason: "Rotation", code: "LAST_ADMIN_REQUIRED" }
     });
@@ -135,16 +136,57 @@ describe("AdminRolesService", () => {
     expect(prisma.auditEvent.rows).toHaveLength(0);
   });
 
-  it("normalizes the target and operator and trims the audited reason", async () => {
+  it("normalizes valid target and operator casing and trims the audited reason", async () => {
     const prisma = createPrismaMock([user("user-1", input.email, UserRole.USER)]);
     const service = new AdminRolesService(prisma as never, new AuditService());
 
-    await service.grant({ email: " User@Example.com ", actorEmail: " OPS@Example.com ", reason: "  Primary reviewer  " });
+    await service.grant({ email: "User@Example.com", actorEmail: "OPS@Example.com", reason: "  Primary reviewer  " });
 
     expect(prisma.auditEvent.rows.at(-1)).toMatchObject({
       actorEmail: "ops@example.com",
       metadata: { reason: "Primary reviewer" }
     });
+  });
+
+  it.each([" user@example.com", "user@example.com ", "user @example.com", "user@example", "user@localhost"])(
+    "rejects an unusable direct target email before changing role state: %s",
+    async (email) => {
+      const prisma = createPrismaMock([user("user-1", input.email, UserRole.USER)]);
+      const service = new AdminRolesService(prisma as never, new AuditService());
+
+      await expect(service.grant({ ...input, email })).rejects.toBeInstanceOf(BadRequestException);
+      expect(prisma.user.rows[0].role).toBe(UserRole.USER);
+      expect(prisma.auditEvent.rows).toHaveLength(0);
+    }
+  );
+
+  it.each([" ops@example.com", "ops@example.com ", "ops @example.com", "ops@example", "ops@localhost"])(
+    "rejects an unusable direct operator email before changing role state: %s",
+    async (actorEmail) => {
+      const prisma = createPrismaMock([user("user-1", input.email, UserRole.USER)]);
+      const service = new AdminRolesService(prisma as never, new AuditService());
+
+      await expect(service.grant({ ...input, actorEmail })).rejects.toBeInstanceOf(BadRequestException);
+      expect(prisma.user.rows[0].role).toBe(UserRole.USER);
+      expect(prisma.auditEvent.rows).toHaveLength(0);
+    }
+  );
+
+  it("validates target and operator emails before direct role revocation", async () => {
+    const prisma = createPrismaMock([
+      user("user-1", input.email, UserRole.ADMIN),
+      user("admin-2", "other-admin@example.com", UserRole.ADMIN)
+    ]);
+    const service = new AdminRolesService(prisma as never, new AuditService());
+
+    await expect(service.revoke({ ...input, email: "user @example.com" })).rejects.toBeInstanceOf(
+      BadRequestException
+    );
+    await expect(service.revoke({ ...input, actorEmail: "ops@localhost" })).rejects.toBeInstanceOf(
+      BadRequestException
+    );
+    expect(prisma.user.rows[0].role).toBe(UserRole.ADMIN);
+    expect(prisma.auditEvent.rows).toHaveLength(0);
   });
 
   it("rolls back the role change when the audit append fails", async () => {

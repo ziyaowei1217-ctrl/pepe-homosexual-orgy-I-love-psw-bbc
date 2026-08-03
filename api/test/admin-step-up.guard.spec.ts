@@ -30,7 +30,12 @@ describe("AdminStepUpGuard", () => {
       await expect(
         guard.canActivate(contextFor({ role: "ADMIN", adminReauthenticatedAt }))
       ).rejects.toMatchObject({
-        response: expect.objectContaining({ code: "ADMIN_REAUTH_REQUIRED" })
+        status: 403,
+        response: {
+          statusCode: 403,
+          code: "ADMIN_REAUTH_REQUIRED",
+          message: "Administrator verification is required"
+        }
       });
       expect(prisma.auditEvent.rows.at(-1)).toMatchObject({
         actorType: "USER",
@@ -55,7 +60,12 @@ describe("AdminStepUpGuard", () => {
     await expect(
       guard.canActivate(contextFor({ role: "ADMIN", adminReauthenticatedAt: 2_061 }))
     ).rejects.toMatchObject({
-      response: expect.objectContaining({ code: "ADMIN_REAUTH_REQUIRED" })
+      status: 403,
+      response: {
+        statusCode: 403,
+        code: "ADMIN_REAUTH_REQUIRED",
+        message: "Administrator verification is required"
+      }
     });
   });
 
@@ -79,7 +89,14 @@ describe("AdminStepUpGuard", () => {
           { originalUrl: `/admin/listings/${pathEmail}/${pathToken}/approve`, method: undefined }
         )
       )
-    ).rejects.toMatchObject({ response: expect.objectContaining({ code: "ADMIN_REAUTH_REQUIRED" }) });
+    ).rejects.toMatchObject({
+      status: 403,
+      response: {
+        statusCode: 403,
+        code: "ADMIN_REAUTH_REQUIRED",
+        message: "Administrator verification is required"
+      }
+    });
     expect(prisma.auditEvent.rows.at(-1)).toMatchObject({
       targetId: "AdminListingsController.approve",
       metadata: {
@@ -91,14 +108,52 @@ describe("AdminStepUpGuard", () => {
     expect(auditPayload).not.toContain(pathEmail);
     expect(auditPayload).not.toContain(pathToken);
   });
+
+  it("waits for the blocked-write audit to persist before throwing HTTP 403", async () => {
+    let releaseAudit!: () => void;
+    const auditRelease = new Promise<void>((resolve) => {
+      releaseAudit = resolve;
+    });
+    const { guard, prisma } = createGuard({ nowSeconds: 2_001, auditRelease });
+    let settled = false;
+
+    const activation = guard.canActivate(contextFor({ role: "ADMIN" }));
+    void activation.then(
+      () => {
+        settled = true;
+      },
+      () => {
+        settled = true;
+      }
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(prisma.auditEvent.createCalls).toBe(1);
+    expect(settled).toBe(false);
+
+    releaseAudit();
+    await expect(activation).rejects.toMatchObject({
+      status: 403,
+      response: {
+        statusCode: 403,
+        code: "ADMIN_REAUTH_REQUIRED",
+        message: "Administrator verification is required"
+      }
+    });
+    expect(prisma.auditEvent.rows).toHaveLength(1);
+  });
 });
 
-function createGuard({ nowSeconds }: { nowSeconds: number }) {
+function createGuard({ nowSeconds, auditRelease }: { nowSeconds: number; auditRelease?: Promise<void> }) {
   const rows: Array<Record<string, unknown>> = [];
   const prisma = {
     auditEvent: {
       rows,
+      createCalls: 0,
       create: async ({ data }: { data: Record<string, unknown> }) => {
+        prisma.auditEvent.createCalls += 1;
+        await auditRelease;
         rows.push(data);
         return { id: `audit-${rows.length}`, ...data };
       }

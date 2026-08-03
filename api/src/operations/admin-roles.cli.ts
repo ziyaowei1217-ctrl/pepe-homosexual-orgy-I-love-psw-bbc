@@ -1,12 +1,14 @@
 import { AuditService } from "../audit/audit.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { AdminRolesService, type RoleMutationInput } from "./admin-roles.service";
+import { CliValidationError, formatCliFailure, runCliEntrypoint, runCliLifecycle } from "./cli-runtime";
+import { requireOperationsEmail } from "./operations-input";
 
 export type AdminRoleCommand = ({ action: "grant" } | { action: "revoke" }) & RoleMutationInput;
 type AdminRoleOperations = Pick<AdminRolesService, "grant" | "revoke">;
 
 function validationError(message: string): never {
-  throw new Error(`Validation error: ${message}`);
+  throw new CliValidationError(message);
 }
 
 export function parseAdminRoleCommand(argv: string[]): AdminRoleCommand {
@@ -30,7 +32,9 @@ export function parseAdminRoleCommand(argv: string[]): AdminRoleCommand {
   if (!options["--email"].trim()) return validationError("--email must not be blank");
   if (!options["--actor"].trim()) return validationError("--actor must not be blank");
   if (!options["--reason"].trim()) return validationError("--reason must not be blank");
-  return { action, email: options["--email"], actorEmail: options["--actor"], reason: options["--reason"] };
+  const email = parseOperationsEmail(options["--email"], "Target", "--email");
+  const actorEmail = parseOperationsEmail(options["--actor"], "Operator", "--actor");
+  return { action, email, actorEmail, reason: options["--reason"] };
 }
 
 export async function runAdminRoleCommand(
@@ -52,33 +56,61 @@ export async function runAdminRoleCli(
     await runAdminRoleCommand(parseAdminRoleCommand(argv), service, write);
     return 0;
   } catch (error: unknown) {
-    writeError(error instanceof Error ? error.message : "Administrator role command failed");
+    writeError(formatCliFailure(error, "Administrator role command failed"));
     return 1;
   }
 }
 
-async function main() {
-  let command: AdminRoleCommand;
-  try {
-    command = parseAdminRoleCommand(process.argv.slice(2));
-  } catch (error: unknown) {
-    console.error(error instanceof Error ? error.message : "Administrator role command failed");
-    process.exitCode = 1;
-    return;
-  }
+type AdminRoleMainOptions = {
+  argv: string[];
+  createPrisma: () => PrismaService;
+  createService: (prisma: PrismaService) => AdminRoleOperations;
+  write: (line: string) => void;
+  writeError: (line: string) => void;
+};
 
-  const prisma = new PrismaService();
+export function runAdminRoleMain(options: Partial<AdminRoleMainOptions> = {}) {
+  const resolved: AdminRoleMainOptions = {
+    argv: process.argv.slice(2),
+    createPrisma: () => new PrismaService(),
+    createService: (prisma) => new AdminRolesService(prisma, new AuditService()),
+    write: (line) => console.log(line),
+    writeError: (line) => console.error(line),
+    ...options
+  };
+  return runCliLifecycle({
+    argv: resolved.argv,
+    parse: parseAdminRoleCommand,
+    createDatabase: resolved.createPrisma,
+    createOperations: resolved.createService,
+    execute: runAdminRoleCommand,
+    write: resolved.write,
+    writeError: resolved.writeError,
+    fallbackMessage: "Administrator role command failed"
+  });
+}
+
+export function runAdminRoleEntrypoint(options: {
+  runMain?: () => Promise<number>;
+  writeError?: (line: string) => void;
+} = {}) {
+  return runCliEntrypoint({
+    runMain: options.runMain ?? (() => runAdminRoleMain()),
+    writeError: options.writeError ?? ((line) => console.error(line)),
+    fallbackMessage: "Administrator role command failed"
+  });
+}
+
+function parseOperationsEmail(input: string, field: "Target" | "Operator", flag: "--email" | "--actor") {
   try {
-    await prisma.$connect();
-    await runAdminRoleCommand(command, new AdminRolesService(prisma, new AuditService()), (line) => console.log(line));
-  } catch (error: unknown) {
-    console.error(error instanceof Error ? error.message : "Administrator role command failed");
-    process.exitCode = 1;
-  } finally {
-    await prisma.$disconnect();
+    return requireOperationsEmail(input, field);
+  } catch {
+    return validationError(`${flag} must be a valid email without whitespace`);
   }
 }
 
 if (require.main === module) {
-  void main();
+  void runAdminRoleEntrypoint().then((status) => {
+    process.exitCode = status;
+  });
 }

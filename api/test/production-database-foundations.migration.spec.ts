@@ -10,6 +10,26 @@ const migrationsDir = join(__dirname, "../prisma/migrations");
 const databaseName = `production_foundations_${randomUUID().replaceAll("-", "")}`;
 const deployDatabaseName = `production_foundations_deploy_${randomUUID().replaceAll("-", "")}`;
 const productionFoundationsMigration = "20260803120000_production_database_foundations";
+const operatorAttributionRedactionMigration = "20260803122000_redact_beta_invite_operator_attribution";
+
+describe("operator attribution redaction migration source", () => {
+  it("installs non-validating checks before targeted cleanup, then validates atomically", () => {
+    const sql = readFileSync(
+      join(migrationsDir, operatorAttributionRedactionMigration, "migration.sql"),
+      "utf8"
+    );
+    const addConstraint = sql.indexOf("NOT VALID");
+    const cleanup = sql.indexOf('UPDATE "BetaInvite"');
+    const validate = sql.indexOf("VALIDATE CONSTRAINT");
+
+    expect(sql.trimStart().toUpperCase()).toMatch(/^BEGIN;/);
+    expect(sql.trimEnd().toUpperCase()).toMatch(/COMMIT;$/);
+    expect(addConstraint).toBeGreaterThan(-1);
+    expect(addConstraint).toBeLessThan(cleanup);
+    expect(cleanup).toBeLessThan(validate);
+    expect(sql).toContain("WHERE");
+  });
+});
 
 function dockerPsql(args: string[], input?: string) {
   const result = spawnSync(
@@ -92,6 +112,20 @@ describeMigration("production database foundations migration", () => {
         `);
       }
 
+      if (migration === operatorAttributionRedactionMigration) {
+        executeSql(`
+          INSERT INTO "BetaInvite" (
+            "id", "normalizedEmail", "createdBy", "reason", "revokedAt", "revokedBy", "revocationReason"
+          ) VALUES (
+            'legacy-private-operator-invite', 'invite-target@example.com', 'creator@example.com',
+            'Legacy cohort', CURRENT_TIMESTAMP, 'revoker@example.com', 'Legacy withdrawal'
+          ), (
+            'legacy-safe-operator-invite', 'safe-target@example.com', 'SYSTEM',
+            'Legacy safe cohort', CURRENT_TIMESTAMP, 'SYSTEM', 'Legacy safe withdrawal'
+          );
+        `);
+      }
+
       executeSql(readFileSync(join(migrationsDir, migration, "migration.sql"), "utf8"));
     }
   }, 30_000);
@@ -106,6 +140,16 @@ describeMigration("production database foundations migration", () => {
     expect(query(`SELECT "title" FROM "Listing" WHERE "id" = 'existing-listing'`)).toBe("Existing listing");
     expect(query(`SELECT "title" FROM "listings" WHERE "id" = '00000000-0000-0000-0000-000000000002'`)).toBe("Legacy housing listing");
     expect(query(`SELECT "consumedAt" IS NOT NULL FROM "VerificationCode" WHERE "id" = 'existing-code'`)).toBe("t");
+    expect(
+      query(
+        `SELECT "createdBy" || ':' || "revokedBy" FROM "BetaInvite" WHERE "id" = 'legacy-private-operator-invite'`
+      )
+    ).toBe("[REDACTED]:[REDACTED]");
+    expect(
+      query(
+        `SELECT "createdBy" || ':' || "revokedBy" FROM "BetaInvite" WHERE "id" = 'legacy-safe-operator-invite'`
+      )
+    ).toBe("SYSTEM:SYSTEM");
 
     expect(() => executeSql(`UPDATE "listings" SET "title" = 'mutated' WHERE "id" = '00000000-0000-0000-0000-000000000002'`)).toThrow(
       /read-only/i
@@ -135,9 +179,16 @@ describeMigration("production database foundations migration", () => {
   });
 
   it("creates the new production records with their safe defaults", () => {
+    expect(() =>
+      executeSql(`
+        INSERT INTO "BetaInvite" ("id", "normalizedEmail", "createdBy")
+        VALUES ('unsafe-operator-attribution', 'unsafe-target@example.com', 'operator@example.com');
+      `)
+    ).toThrow(/BetaInvite_createdBy_no_full_email/i);
+
     executeSql(`
       INSERT INTO "BetaInvite" ("id", "normalizedEmail", "createdBy")
-      VALUES ('invite-1', 'invite@example.com', 'operator@example.com');
+      VALUES ('invite-1', 'invite@example.com', '[REDACTED]');
 
       INSERT INTO "ListingMedia" ("id", "listingId", "kind")
       VALUES ('media-1', 'existing-listing', 'image');

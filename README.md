@@ -52,14 +52,17 @@ emails may be added to `LOCAL_ADMIN_EMAILS` in `api/.env`. Production startup re
 
 Run production invitation and role commands only in the server environment, with `DATABASE_URL`
 pointing to the intended production database. Every mutation requires an operator email and a reason,
-is recorded in the immutable audit log, and prints masked email addresses in command output.
+is recorded in the immutable audit log, and prints masked email addresses in command output. Build the
+API before running a production command; the production scripts execute only the compiled JavaScript
+artifacts and do not require TypeScript development dependencies.
 
 ```bash
-pnpm --filter sublet-pipeline-api beta:invites -- add --email user@example.com --actor operator@example.com --reason "Founding beta cohort"
-pnpm --filter sublet-pipeline-api beta:invites -- list
-pnpm --filter sublet-pipeline-api beta:invites -- revoke --email user@example.com --actor operator@example.com --reason "Access withdrawn"
-pnpm --filter sublet-pipeline-api admin:roles -- grant --email reviewer@example.com --actor operator@example.com --reason "Primary reviewer"
-pnpm --filter sublet-pipeline-api admin:roles -- revoke --email reviewer@example.com --actor operator@example.com --reason "Rotation complete"
+pnpm --filter sublet-pipeline-api build
+pnpm --silent --filter sublet-pipeline-api beta:invites add --email user@example.com --actor operator@example.com --reason "Founding beta cohort"
+pnpm --silent --filter sublet-pipeline-api beta:invites list
+pnpm --silent --filter sublet-pipeline-api beta:invites revoke --email user@example.com --actor operator@example.com --reason "Access withdrawn"
+pnpm --silent --filter sublet-pipeline-api admin:roles grant --email reviewer@example.com --actor operator@example.com --reason "Primary reviewer"
+pnpm --silent --filter sublet-pipeline-api admin:roles revoke --email reviewer@example.com --actor operator@example.com --reason "Rotation complete"
 ```
 
 Masked output resembles:

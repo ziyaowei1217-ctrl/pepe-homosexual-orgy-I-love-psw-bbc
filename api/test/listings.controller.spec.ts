@@ -2,8 +2,9 @@ import "reflect-metadata";
 import { describe, expect, it } from "vitest";
 
 import { AuditActor } from "../src/audit/audit.service";
+import { AdminGuard } from "../src/auth/admin.guard";
 import { AdminStepUpGuard } from "../src/auth/admin-step-up.guard";
-import { AuthenticatedRequest } from "../src/auth/auth.guard";
+import { AuthGuard, AuthenticatedRequest } from "../src/auth/auth.guard";
 import { RequestWithId } from "../src/http/request-id";
 import { AdminListingsController } from "../src/listings/admin-listings.controller";
 import { ListingsController } from "../src/listings/listings.controller";
@@ -40,6 +41,10 @@ describe("ListingsController", () => {
 });
 
 describe("AdminListingsController", () => {
+  it("pins class-level authentication and administrator guards", () => {
+    expect(guardsFor(AdminListingsController)).toEqual([AuthGuard, AdminGuard]);
+  });
+
   it("requires administrator step-up for writes but not review queue reads", () => {
     expect(guardsFor(AdminListingsController.prototype.findReviewQueue)).not.toContain(AdminStepUpGuard);
     expect(guardsFor(AdminListingsController.prototype.approve)).toContain(AdminStepUpGuard);
@@ -94,8 +99,8 @@ describe("AdminListingsController", () => {
   });
 });
 
-function guardsFor(handler: (...args: never[]) => unknown) {
-  return (Reflect.getMetadata("__guards__", handler) ?? []) as unknown[];
+function guardsFor(target: object) {
+  return (Reflect.getMetadata("__guards__", target) ?? []) as unknown[];
 }
 
 function requestFor(id: string, role = "USER"): AuthenticatedRequest & RequestWithId {

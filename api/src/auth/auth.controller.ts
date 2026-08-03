@@ -40,7 +40,7 @@ export class AuthController {
     @Req() request: RequestWithIdentity,
     @Res({ passthrough: true }) response: HeaderResponse
   ) {
-    await this.enforceRateLimit("send", dto.email, request, response);
+    await this.enforceRateLimit("send", "LOGIN", dto.email, request, response);
     return this.auth.requestEmailCode(dto.email);
   }
 
@@ -50,7 +50,7 @@ export class AuthController {
     @Req() request: RequestWithIdentity,
     @Res({ passthrough: true }) response: HeaderResponse
   ) {
-    await this.enforceRateLimit("verify", dto.email, request, response);
+    await this.enforceRateLimit("verify", "LOGIN", dto.email, request, response);
     return this.auth.verifyEmailCode(dto);
   }
 
@@ -60,7 +60,7 @@ export class AuthController {
     @Req() request: AuthenticatedRequest,
     @Res({ passthrough: true }) response: HeaderResponse
   ) {
-    await this.enforceRateLimit("send", request.user.email, request, response);
+    await this.enforceRateLimit("send", "ADMIN_STEP_UP", request.user.email, request, response);
     return this.auth.requestAdminStepUpCode(request.user.email);
   }
 
@@ -71,7 +71,7 @@ export class AuthController {
     @Body(adminStepUpBodyPipe) dto: AdminStepUpCodeDto,
     @Res({ passthrough: true }) response: HeaderResponse
   ) {
-    await this.enforceRateLimit("verify", request.user.email, request, response);
+    await this.enforceRateLimit("verify", "ADMIN_STEP_UP", request.user.email, request, response);
     return this.auth.verifyAdminStepUpCode({
       userId: request.user.id,
       email: request.user.email,
@@ -87,13 +87,14 @@ export class AuthController {
 
   private async enforceRateLimit(
     action: "send" | "verify",
+    purpose: "LOGIN" | "ADMIN_STEP_UP",
     email: string,
     request: RequestWithIdentity,
     response: HeaderResponse
   ) {
     const identity = getRequestIdentity(request);
     try {
-      await this.rateLimiter.enforce(action, { email, ...identity });
+      await this.rateLimiter.enforce(action, purpose, { email, ...identity });
     } catch (error) {
       if (error instanceof AuthRateLimitException) {
         response.setHeader("Retry-After", String(error.retryAfterSeconds));

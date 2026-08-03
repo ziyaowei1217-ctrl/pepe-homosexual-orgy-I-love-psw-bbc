@@ -29,9 +29,9 @@ describe("administrator step-up HTTP routes", () => {
     }
   };
   const rateLimiter = {
-    calls: [] as Array<{ action: "send" | "verify"; email: string }>,
-    async enforce(action: "send" | "verify", input: { email: string }) {
-      this.calls.push({ action, email: input.email });
+    calls: [] as Array<{ action: "send" | "verify"; purpose: "LOGIN" | "ADMIN_STEP_UP"; email: string }>,
+    async enforce(action: "send" | "verify", purpose: "LOGIN" | "ADMIN_STEP_UP", input: { email: string }) {
+      this.calls.push({ action, purpose, email: input.email });
     }
   };
 
@@ -81,7 +81,9 @@ describe("administrator step-up HTTP routes", () => {
       .expect(201);
 
     expect(auth.requestCalls).toEqual(["current-admin@example.com"]);
-    expect(rateLimiter.calls).toEqual([{ action: "send", email: "current-admin@example.com" }]);
+    expect(rateLimiter.calls).toEqual([
+      { action: "send", purpose: "ADMIN_STEP_UP", email: "current-admin@example.com" }
+    ]);
   });
 
   it("rejects a client-selected email and verifies against the current administrator identity", async () => {
@@ -103,6 +105,8 @@ describe("administrator step-up HTTP routes", () => {
     expect(auth.verifyCalls).toEqual([
       { userId: "admin-1", email: "current-admin@example.com", code: "123456" }
     ]);
-    expect(rateLimiter.calls).toEqual([{ action: "verify", email: "current-admin@example.com" }]);
+    expect(rateLimiter.calls).toEqual([
+      { action: "verify", purpose: "ADMIN_STEP_UP", email: "current-admin@example.com" }
+    ]);
   });
 });
