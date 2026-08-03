@@ -27,7 +27,7 @@ type ListingSnapshot = {
   id: string;
   title: string;
   area: string;
-  image: string;
+  image: string | null;
   price: number;
   beds: number;
   baths: number;
