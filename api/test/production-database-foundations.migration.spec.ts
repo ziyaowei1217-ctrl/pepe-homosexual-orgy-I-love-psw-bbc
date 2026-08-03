@@ -8,6 +8,8 @@ const runDatabaseMigrationTests = process.env.RUN_DB_SMOKE === "1";
 const describeMigration = runDatabaseMigrationTests ? describe : describe.skip;
 const migrationsDir = join(__dirname, "../prisma/migrations");
 const databaseName = `production_foundations_${randomUUID().replaceAll("-", "")}`;
+const deployDatabaseName = `production_foundations_deploy_${randomUUID().replaceAll("-", "")}`;
+const productionFoundationsMigration = "20260803120000_production_database_foundations";
 
 function dockerPsql(args: string[], input?: string) {
   const result = spawnSync(
@@ -31,16 +33,36 @@ function query(sql: string) {
   return dockerPsql(["-d", databaseName, "-tAc", sql]);
 }
 
+function queryDeployDatabase(sql: string) {
+  return dockerPsql(["-d", deployDatabaseName, "-tAc", sql]);
+}
+
+function runPrismaMigrate(database: string, ...args: string[]) {
+  const result = spawnSync("pnpm", ["exec", "prisma", "migrate", ...args, "--schema", "prisma/schema.prisma"], {
+    cwd: join(__dirname, ".."),
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      DATABASE_URL: `postgresql://sublet:sublet@localhost:5432/${database}?schema=public`
+    }
+  });
+
+  if (result.status !== 0) {
+    throw new Error(`prisma migrate ${args.join(" ")} failed: ${result.stderr || result.stdout}`);
+  }
+
+  return result.stdout;
+}
+
 describeMigration("production database foundations migration", () => {
   beforeAll(() => {
     dockerPsql(["-d", "postgres", "-c", `CREATE DATABASE \"${databaseName}\"`]);
+    expect(query("SHOW server_version_num")).toMatch(/^16/);
 
     const migrations = readdirSync(migrationsDir).sort();
-    for (const [index, migration] of migrations.entries()) {
-      executeSql(readFileSync(join(migrationsDir, migration, "migration.sql"), "utf8"));
-
+    for (const migration of migrations) {
       // These rows emulate data present before the additive production migration.
-      if (index === 5) {
+      if (migration === productionFoundationsMigration) {
         executeSql(`
           INSERT INTO "User" ("id", "email", "updatedAt")
           VALUES ('existing-user', 'existing@example.com', CURRENT_TIMESTAMP);
@@ -69,6 +91,8 @@ describeMigration("production database foundations migration", () => {
           );
         `);
       }
+
+      executeSql(readFileSync(join(migrationsDir, migration, "migration.sql"), "utf8"));
     }
   }, 30_000);
 
@@ -86,11 +110,24 @@ describeMigration("production database foundations migration", () => {
     expect(() => executeSql(`UPDATE "listings" SET "title" = 'mutated' WHERE "id" = '00000000-0000-0000-0000-000000000002'`)).toThrow(
       /read-only/i
     );
+    expect(() => executeSql(`
+      INSERT INTO "listings" (
+        "id", "owner_id", "title", "listing_type", "property_type", "room_type",
+        "price_monthly", "city", "move_in_date", "bedrooms", "bathrooms"
+      ) VALUES (
+        '00000000-0000-0000-0000-000000000003', '00000000-0000-0000-0000-000000000001',
+        'Blocked legacy listing', 'sublet', 'apartment', 'private_room', 1900, 'Los Angeles',
+        CURRENT_DATE, 1, 1
+      )
+    `)).toThrow(/read-only/i);
+    expect(() => executeSql(`DELETE FROM "listings" WHERE "id" = '00000000-0000-0000-0000-000000000002'`)).toThrow(/read-only/i);
     executeSql(`
       INSERT INTO "AuditEvent" ("id", "actorType", "action", "targetType", "outcome")
       VALUES ('audit-immutable', 'OPERATOR', 'BETA_INVITE_CREATED', 'BetaInvite', 'SUCCESS');
     `);
     expect(() => executeSql(`UPDATE "AuditEvent" SET "action" = 'mutated' WHERE "id" = 'audit-immutable'`)).toThrow(/immutable/i);
+    expect(() => executeSql(`DELETE FROM "AuditEvent" WHERE "id" = 'audit-immutable'`)).toThrow(/immutable/i);
+    expect(() => executeSql(`TRUNCATE TABLE "AuditEvent"`)).toThrow(/immutable/i);
   });
 
   it("creates the new production records with their safe defaults", () => {
@@ -105,4 +142,26 @@ describeMigration("production database foundations migration", () => {
     expect(query(`SELECT "deliveryStatus"::text FROM "VerificationCode" WHERE "id" = 'existing-code'`)).toBe("PENDING");
     expect(query(`SELECT "storageStatus"::text || ':' || "reviewStatus"::text FROM "ListingMedia" WHERE "id" = 'media-1'`)).toBe("PENDING:PENDING");
   });
+});
+
+describeMigration("production database foundations migrate deploy smoke", () => {
+  beforeAll(() => {
+    dockerPsql(["-d", "postgres", "-c", `CREATE DATABASE \"${deployDatabaseName}\"`]);
+  });
+
+  afterAll(() => {
+    dockerPsql(["-d", "postgres", "-c", `DROP DATABASE IF EXISTS \"${deployDatabaseName}\" WITH (FORCE)`]);
+  });
+
+  it("uses Prisma migrate deploy to record every migration on an empty PostgreSQL 16 database", () => {
+    expect(queryDeployDatabase("SHOW server_version_num")).toMatch(/^16/);
+
+    runPrismaMigrate(deployDatabaseName, "deploy");
+    const status = runPrismaMigrate(deployDatabaseName, "status");
+
+    expect(status).toContain("Database schema is up to date");
+    expect(queryDeployDatabase(`SELECT COUNT(*) FROM "_prisma_migrations" WHERE "finished_at" IS NOT NULL AND "rolled_back_at" IS NULL`)).toBe(
+      String(readdirSync(migrationsDir).length)
+    );
+  }, 30_000);
 });
