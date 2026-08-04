@@ -44,8 +44,38 @@ Open the web app at `http://localhost:3000`. The API is available at
 `http://localhost:4000/api/v1`.
 
 The frontend uses `NEXT_PUBLIC_API_BASE_URL`; by default it points to `http://localhost:4000/api/v1`.
-Local email codes are shown in the login panel. Add comma-separated administrator emails to
-`LOCAL_ADMIN_EMAILS` in `api/.env`.
+Local email codes are shown in the login panel. For development only, comma-separated administrator
+emails may be added to `LOCAL_ADMIN_EMAILS` in `api/.env`. Production startup rejects a non-empty
+`LOCAL_ADMIN_EMAILS`; use the audited role commands below instead.
+
+## Secure Invitation and Administrator Operations
+
+Run production invitation and role commands only in the server environment, with `DATABASE_URL`
+pointing to the intended production database. Every mutation requires an operator email and a reason,
+is recorded in the immutable audit log, and prints masked email addresses in command output. Build the
+API before running a production command; the production scripts execute only the compiled JavaScript
+artifacts and do not require TypeScript development dependencies.
+
+```bash
+pnpm --filter sublet-pipeline-api build
+pnpm --silent --filter sublet-pipeline-api beta:invites add --email user@example.com --actor operator@example.com --reason "Founding beta cohort"
+pnpm --silent --filter sublet-pipeline-api beta:invites list
+pnpm --silent --filter sublet-pipeline-api beta:invites revoke --email user@example.com --actor operator@example.com --reason "Access withdrawn"
+pnpm --silent --filter sublet-pipeline-api admin:roles grant --email reviewer@example.com --actor operator@example.com --reason "Primary reviewer"
+pnpm --silent --filter sublet-pipeline-api admin:roles revoke --email reviewer@example.com --actor operator@example.com --reason "Rotation complete"
+```
+
+Masked output resembles:
+
+```text
+{"id":"...","maskedEmail":"u**r@example.com","status":"ACTIVE",...}
+{"maskedEmail":"r******r@example.com","role":"ADMIN","outcome":"SUCCESS"}
+```
+
+Administrator HTTP writes require a fresh step-up token. Authenticate normally, request a code with
+`POST /api/v1/auth/admin-step-up/email-code`, verify it with
+`POST /api/v1/auth/admin-step-up/verify`, and use the returned access token for the administrator
+write. Ordinary login tokens intentionally do not contain the step-up claim.
 
 ## Roommate Matching Deck
 

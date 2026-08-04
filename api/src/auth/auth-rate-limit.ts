@@ -4,6 +4,7 @@ import { HttpException, ServiceUnavailableException } from "@nestjs/common";
 import { hashSecurityIdentifier, normalizeEmail } from "./code-security";
 
 export type AuthRateLimitAction = "send" | "verify";
+export type AuthRateLimitPurpose = "LOGIN" | "ADMIN_STEP_UP";
 export type AuthRateLimitIdentity = { email: string; ip: string; deviceId?: string };
 export type RateLimitRule = {
   key: string;
@@ -47,9 +48,9 @@ export class AuthRateLimitException extends HttpException {
 export class AuthRateLimiter {
   constructor(private readonly options: AuthRateLimiterOptions) {}
 
-  async enforce(action: AuthRateLimitAction, identity: AuthRateLimitIdentity) {
+  async enforce(action: AuthRateLimitAction, purpose: AuthRateLimitPurpose, identity: AuthRateLimitIdentity) {
     try {
-      const result = await this.options.store.consume(this.rules(action, identity));
+      const result = await this.options.store.consume(this.rules(action, purpose, identity));
       if (!result.allowed) throw new AuthRateLimitException(Math.max(1, result.retryAfterSeconds));
     } catch (error) {
       if (error instanceof AuthRateLimitException) throw error;
@@ -63,16 +64,21 @@ export class AuthRateLimiter {
     }
   }
 
-  private rules(action: AuthRateLimitAction, identity: AuthRateLimitIdentity): RateLimitRule[] {
+  private rules(
+    action: AuthRateLimitAction,
+    purpose: AuthRateLimitPurpose,
+    identity: AuthRateLimitIdentity
+  ): RateLimitRule[] {
     const hash = (value: string) => hashSecurityIdentifier(value, this.options.identifierHashSecret);
     const emailHash = hash(normalizeEmail(identity.email));
+    const purposeEmailHash = `${purpose.toLowerCase()}:${emailHash}`;
     const ipHash = hash(identity.ip);
     const deviceHash = hash(identity.deviceId ?? `ip-fallback:${identity.ip}`);
 
     if (action === "send") {
       return [
-        rule("send", "email-hour", emailHash, 5, 3_600),
-        rule("send", "email-day", emailHash, 10, 86_400),
+        rule("send", "email-hour", purposeEmailHash, 5, 3_600),
+        rule("send", "email-day", purposeEmailHash, 10, 86_400),
         rule("send", "device-hour", deviceHash, 10, 3_600),
         rule("send", "ip-hour", ipHash, 30, 3_600),
         rule("send", "global-minute", "all", 100, 60)
@@ -80,7 +86,7 @@ export class AuthRateLimiter {
     }
 
     return [
-      rule("verify", "email-15m", emailHash, 15, 900),
+      rule("verify", "email-15m", purposeEmailHash, 15, 900),
       rule("verify", "device-15m", deviceHash, 30, 900),
       rule("verify", "ip-15m", ipHash, 100, 900),
       rule("verify", "global-minute", "all", 300, 60)

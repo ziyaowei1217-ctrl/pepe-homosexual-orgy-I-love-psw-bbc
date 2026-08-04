@@ -6,6 +6,7 @@ import { NestFactory } from "@nestjs/core";
 import { AppModule } from "./app.module";
 import { getAuthSecurityConfig } from "./config/env";
 import { getCorsOrigins } from "./config/cors";
+import { requestIdMiddleware } from "./http/request-id";
 
 type SecurityHeaderResponse = {
   setHeader(name: string, value: string): unknown;
@@ -19,6 +20,7 @@ async function bootstrap() {
   const express = app.getHttpAdapter().getInstance() as { set(name: string, value: number): void };
   express.set("trust proxy", securityConfig.trustedProxyHops);
 
+  app.use(requestIdMiddleware);
   app.use((_request: unknown, response: SecurityHeaderResponse, next: () => void) => {
     response.setHeader("X-Content-Type-Options", "nosniff");
     response.setHeader("X-Frame-Options", "DENY");

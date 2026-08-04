@@ -1,5 +1,7 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from "@nestjs/common";
+import { Prisma } from "@prisma/client";
 
+import { AuditActor, AuditService } from "../audit/audit.service";
 import { requirePublishCapableProfile } from "../marketplace/publish-profile";
 import { PrismaService } from "../prisma/prisma.service";
 import { CreateListingDto, CreateListingMediaDto, UpdateListingDto } from "./dto";
@@ -15,7 +17,10 @@ const listingMediaInclude = {
 
 @Injectable()
 export class ListingsService {
-  constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
+  constructor(
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(AuditService) private readonly audit: AuditService
+  ) {}
 
   async findAll() {
     const records = await this.prisma.listing.findMany({
@@ -130,39 +135,74 @@ export class ListingsService {
     });
   }
 
-  async approve(id: string, reviewerId: string) {
-    await this.requireSubmittedListing(id);
-
-    return this.prisma.listing.update({
-      where: { id },
-      data: {
+  async approve(id: string, actor: AuditActor) {
+    return this.prisma.$transaction(async (transaction) => {
+      const listing = await this.transitionSubmittedListing(transaction, id, {
         status: "APPROVED",
         reviewedAt: new Date(),
-        reviewerId,
+        reviewerId: actor.actorUserId,
         rejectionReason: null
-      }
+      });
+      await this.audit.append(transaction, {
+        ...actor,
+        action: "LISTING_APPROVED",
+        targetType: "Listing",
+        targetId: id,
+        outcome: "SUCCESS",
+        metadata: { reason: "manual_review_approved" }
+      });
+      return listing;
     });
   }
 
-  async reject(id: string, reviewerId: string, reason: string) {
+  async reject(id: string, actor: AuditActor, reason: string) {
     const rejectionReason = reason.trim();
     if (!rejectionReason) throw new BadRequestException("Rejection reason is required");
 
-    await this.requireSubmittedListing(id);
-
-    return this.prisma.listing.update({
-      where: { id },
-      data: {
+    return this.prisma.$transaction(async (transaction) => {
+      const listing = await this.transitionSubmittedListing(transaction, id, {
         status: "REJECTED",
         reviewedAt: new Date(),
-        reviewerId,
+        reviewerId: actor.actorUserId,
         rejectionReason
-      }
+      });
+      await this.audit.append(transaction, {
+        ...actor,
+        action: "LISTING_REJECTED",
+        targetType: "Listing",
+        targetId: id,
+        outcome: "SUCCESS",
+        metadata: { reason: rejectionReason }
+      });
+      return listing;
     });
   }
 
-  private async requireSubmittedListing(id: string) {
-    const listing = await this.prisma.listing.findUnique({ where: { id } });
+  private async transitionSubmittedListing(
+    transaction: Pick<Prisma.TransactionClient, "listing">,
+    id: string,
+    data: {
+      status: "APPROVED" | "REJECTED";
+      reviewedAt: Date;
+      reviewerId?: string;
+      rejectionReason: string | null;
+    }
+  ) {
+    const transition = await transaction.listing.updateMany({
+      where: { id, status: "SUBMITTED" },
+      data
+    });
+    if (transition.count !== 1) {
+      await this.requireSubmittedListing(id, transaction);
+      throw new BadRequestException("Listing review transition did not complete");
+    }
+    const listing = await transaction.listing.findUnique({ where: { id } });
+    if (!listing) throw new NotFoundException("Listing not found");
+    return listing;
+  }
+
+  private async requireSubmittedListing(id: string, transaction: Pick<Prisma.TransactionClient, "listing">) {
+    const listing = await transaction.listing.findUnique({ where: { id } });
     if (!listing) throw new NotFoundException("Listing not found");
     if (listing.status !== "SUBMITTED") throw new BadRequestException("Listing is not submitted for review");
 

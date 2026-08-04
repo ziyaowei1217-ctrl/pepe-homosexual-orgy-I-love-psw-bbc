@@ -4,6 +4,7 @@ import { ConfigModule } from "@nestjs/config";
 import { JwtModule } from "@nestjs/jwt";
 
 import { AuthModule } from "./auth/auth.module";
+import { AuditModule } from "./audit/audit.module";
 import { getJwtSecret } from "./config/env";
 import { DealThreadsModule } from "./deal-threads/deal-threads.module";
 import { DealRoomsModule } from "./deal-rooms/deal-rooms.module";
@@ -26,6 +27,7 @@ import { UsersModule } from "./users/users.module";
       signOptions: { expiresIn: "7d" }
     }),
     PrismaModule,
+    AuditModule,
     AuthModule,
     HealthModule,
     DealThreadsModule,

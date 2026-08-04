@@ -1,5 +1,6 @@
 import "reflect-metadata";
 import { INestApplication, ValidationPipe } from "@nestjs/common";
+import { JwtService } from "@nestjs/jwt";
 import { Test } from "@nestjs/testing";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
@@ -30,7 +31,7 @@ describe("two-sided deal thread HTTP API", () => {
   it("supports renter-to-host messages and host viewing confirmation", async () => {
     const http = request(app.getHttpServer());
     const host = await signIn(app, "host@example.com");
-    const admin = await signIn(app, "admin@example.com");
+    const admin = await signInAsAdmin(app, "admin@example.com");
     const renter = await signIn(app, "renter@example.com");
     const unrelated = await signIn(app, "other@example.com");
     await completePublisherProfile(app, host.token);
@@ -115,6 +116,20 @@ async function signIn(app: INestApplication, email: string) {
     .send({ email, code: code.body.devCode })
     .expect(201);
   return { token: session.body.accessToken as string, user: session.body.user };
+}
+
+async function signInAsAdmin(app: INestApplication, email: string) {
+  const session = await signIn(app, email);
+  const jwt = app.get(JwtService);
+  const adminId = session.user.id as string;
+  const adminEmail = session.user.email as string;
+  const adminToken = await jwt.signAsync({
+    sub: adminId,
+    email: adminEmail,
+    role: "ADMIN",
+    adminReauthenticatedAt: Math.floor(Date.now() / 1000)
+  });
+  return { ...session, token: adminToken };
 }
 
 async function completePublisherProfile(app: INestApplication, token: string) {

@@ -321,7 +321,8 @@ export function createLaunchPrismaMock() {
     trustQueueItems: [] as TrustQueueItemRecord[],
     profiles: [] as ProfileRecord[],
     roommateMatchingProfiles: [] as RoommateMatchingProfileRecord[],
-    housingListings: [] as HousingListingRecord[]
+    housingListings: [] as HousingListingRecord[],
+    auditEvents: [] as Array<Record<string, unknown>>
   };
 
   const mock = {
@@ -333,6 +334,23 @@ export function createLaunchPrismaMock() {
         ...mock,
         $executeRaw: async () => 1
       }),
+    auditEvent: {
+      create: async ({ data }: { data: Record<string, unknown> }) => {
+        const created = {
+          id: `audit-${state.auditEvents.length + 1}`,
+          actorUserId: null,
+          actorEmail: null,
+          targetId: null,
+          requestId: null,
+          ipHash: null,
+          deviceHash: null,
+          ...data,
+          createdAt: new Date()
+        };
+        state.auditEvents.push(created);
+        return created;
+      }
+    },
     verificationCode: {
       create: async ({
         data
@@ -645,6 +663,13 @@ export function createLaunchPrismaMock() {
 
         Object.assign(listing, definedData(data), { updatedAt: new Date() });
         return listing;
+      },
+      updateMany: async ({ where, data }: { where: ListingWhere; data: Partial<ListingRecord> }) => {
+        const matches = state.listings.filter((listing) => matchesListing(listing, where));
+        for (const listing of matches) {
+          Object.assign(listing, definedData(data), { updatedAt: new Date() });
+        }
+        return { count: matches.length };
       }
     },
     listingMedia: {

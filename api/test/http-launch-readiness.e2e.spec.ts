@@ -121,10 +121,20 @@ describe("backend launch readiness HTTP flow", () => {
       .send({ email: "admin@example.com", code: adminCodeResponse.body.devCode })
       .expect(201);
     const adminToken = adminSessionResponse.body.accessToken;
+    const adminStepUpCodeResponse = await http
+      .post("/api/v1/auth/admin-step-up/email-code")
+      .set("Authorization", `Bearer ${adminToken}`)
+      .expect(201);
+    const adminStepUpResponse = await http
+      .post("/api/v1/auth/admin-step-up/verify")
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({ code: adminStepUpCodeResponse.body.devCode })
+      .expect(201);
+    const steppedUpAdminToken = adminStepUpResponse.body.accessToken;
 
     await http
       .post(`/api/v1/admin/listings/${listingResponse.body.id}/approve`)
-      .set("Authorization", `Bearer ${adminToken}`)
+      .set("Authorization", `Bearer ${steppedUpAdminToken}`)
       .expect(201)
       .expect(({ body }: { body: Record<string, unknown> }) => {
         expect(body).toMatchObject({

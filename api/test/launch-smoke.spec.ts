@@ -118,7 +118,12 @@ describeSmoke("launch smoke against real PostgreSQL", () => {
   it("runs the core HTTP flow against the real database", async () => {
     const http = request(app.getHttpServer());
     const ownerToken = await jwt.signAsync({ sub: ownerId, email: ownerEmail, role: "USER" });
-    const adminToken = await jwt.signAsync({ sub: adminId, email: adminEmail, role: "ADMIN" });
+    const adminToken = await jwt.signAsync({
+      sub: adminId,
+      email: adminEmail,
+      role: "ADMIN",
+      adminReauthenticatedAt: Math.floor(Date.now() / 1000)
+    });
 
     await http.get("/api/v1/ready").expect(200).expect({
       status: "ok",

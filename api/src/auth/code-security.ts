@@ -1,7 +1,8 @@
 import { createHmac, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
+import { normalizeEmailAddress } from "../security/email-address";
 
 export function normalizeEmail(emailInput: string) {
-  return emailInput.trim().toLowerCase();
+  return normalizeEmailAddress(emailInput);
 }
 
 export function generateEmailCode() {

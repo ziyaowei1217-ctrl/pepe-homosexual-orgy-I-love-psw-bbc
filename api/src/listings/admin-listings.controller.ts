@@ -1,7 +1,10 @@
 import { Body, Controller, Get, Inject, Param, Post, Req, UseGuards, ValidationPipe } from "@nestjs/common";
 
+import { AuditActor } from "../audit/audit.service";
 import { AdminGuard } from "../auth/admin.guard";
+import { AdminStepUpGuard } from "../auth/admin-step-up.guard";
 import { AuthGuard, AuthenticatedRequest } from "../auth/auth.guard";
+import { RequestWithId } from "../http/request-id";
 import { RejectListingDto } from "./dto";
 import { ListingsService } from "./listings.service";
 
@@ -23,12 +26,27 @@ export class AdminListingsController {
   }
 
   @Post(":id/approve")
-  approve(@Req() request: AuthenticatedRequest, @Param("id") id: string) {
-    return this.listings.approve(id, request.user.id);
+  @UseGuards(AdminStepUpGuard)
+  approve(@Req() request: AuthenticatedRequest & RequestWithId, @Param("id") id: string) {
+    return this.listings.approve(id, requestAuditActor(request));
   }
 
   @Post(":id/reject")
-  reject(@Req() request: AuthenticatedRequest, @Param("id") id: string, @Body(rejectListingBodyPipe) dto: RejectListingDto) {
-    return this.listings.reject(id, request.user.id, dto.reason);
+  @UseGuards(AdminStepUpGuard)
+  reject(
+    @Req() request: AuthenticatedRequest & RequestWithId,
+    @Param("id") id: string,
+    @Body(rejectListingBodyPipe) dto: RejectListingDto
+  ) {
+    return this.listings.reject(id, requestAuditActor(request), dto.reason);
   }
+}
+
+function requestAuditActor(request: AuthenticatedRequest & RequestWithId): AuditActor {
+  return {
+    actorType: "USER",
+    actorUserId: request.user.id,
+    actorEmail: request.user.email,
+    requestId: request.requestId
+  };
 }

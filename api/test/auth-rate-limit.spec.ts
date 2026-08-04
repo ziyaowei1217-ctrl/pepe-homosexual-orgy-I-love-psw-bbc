@@ -15,34 +15,34 @@ describe("authentication abuse controls", () => {
     let now = 1_800_000_000_000;
     const limiter = createLimiter(() => now);
     for (let index = 0; index < 5; index += 1) {
-      await limiter.enforce("send", identity("student@example.com", `ip-${index}`, `device-${index}`));
+      await limiter.enforce("send", "LOGIN", identity("student@example.com", `ip-${index}`, `device-${index}`));
     }
-    await expectLimited(limiter.enforce("send", identity("student@example.com", "new-ip", "new-device")));
+    await expectLimited(limiter.enforce("send", "LOGIN", identity("student@example.com", "new-ip", "new-device")));
 
     now += 3_600_001;
     for (let index = 0; index < 5; index += 1) {
-      await limiter.enforce("send", identity("student@example.com", `later-ip-${index}`, `later-device-${index}`));
+      await limiter.enforce("send", "LOGIN", identity("student@example.com", `later-ip-${index}`, `later-device-${index}`));
     }
-    await expectLimited(limiter.enforce("send", identity("student@example.com", "last-ip", "last-device")));
+    await expectLimited(limiter.enforce("send", "LOGIN", identity("student@example.com", "last-ip", "last-device")));
   });
 
   it("uses a sliding window across fixed-clock boundaries with an accurate retry delay", async () => {
     let now = 3_599_999;
     const limiter = createLimiter(() => now);
     for (let index = 0; index < 5; index += 1) {
-      await limiter.enforce("send", identity("student@example.com", `ip-${index}`, `device-${index}`));
+      await limiter.enforce("send", "LOGIN", identity("student@example.com", `ip-${index}`, `device-${index}`));
     }
 
     now = 3_600_001;
     const failure = await limiter
-      .enforce("send", identity("student@example.com", "new-ip", "new-device"))
+      .enforce("send", "LOGIN", identity("student@example.com", "new-ip", "new-device"))
       .catch((error) => error);
     expect(failure).toBeInstanceOf(AuthRateLimitException);
     expect((failure as AuthRateLimitException).retryAfterSeconds).toBe(3_600);
 
     now = 7_199_999;
     await expect(
-      limiter.enforce("send", identity("student@example.com", "last-ip", "last-device"))
+      limiter.enforce("send", "LOGIN", identity("student@example.com", "last-ip", "last-device"))
     ).resolves.toBeUndefined();
   });
 
@@ -85,7 +85,7 @@ describe("authentication abuse controls", () => {
       identifierHashSecret: "identifier-secret",
       nodeEnv: "production"
     });
-    await limiter.enforce("send", identity("student@example.com", "203.0.113.5", "550e8400-e29b-41d4-a716-446655440000"));
+    await limiter.enforce("send", "LOGIN", identity("student@example.com", "203.0.113.5", "550e8400-e29b-41d4-a716-446655440000"));
 
     const keys = captured[0].map((rule) => rule.key).join(" ");
     expect(keys).not.toContain("student@example.com");
@@ -108,8 +108,8 @@ describe("authentication abuse controls", () => {
       nodeEnv: "production"
     });
 
-    await limiter.enforce("send", identity("first@example.com", "203.0.113.5", undefined));
-    await limiter.enforce("send", identity("second@example.com", "203.0.113.5", undefined));
+    await limiter.enforce("send", "LOGIN", identity("first@example.com", "203.0.113.5", undefined));
+    await limiter.enforce("send", "LOGIN", identity("second@example.com", "203.0.113.5", undefined));
 
     const firstDevice = captured[0].find((rule) => rule.dimension === "device-hour");
     const secondDevice = captured[1].find((rule) => rule.dimension === "device-hour");
@@ -134,11 +134,94 @@ describe("authentication abuse controls", () => {
       nodeEnv: "development"
     });
 
-    const failure = await production.enforce("send", identity("a@b.co", "127.0.0.1", undefined)).catch((error) => error);
+    const failure = await production.enforce("send", "LOGIN", identity("a@b.co", "127.0.0.1", undefined)).catch((error) => error);
     expect(failure).toBeInstanceOf(ServiceUnavailableException);
     expect((failure as ServiceUnavailableException).getResponse()).toMatchObject({ code: "AUTH_DELIVERY_UNAVAILABLE" });
     expect(JSON.stringify((failure as ServiceUnavailableException).getResponse())).not.toContain("connection details");
-    await expect(development.enforce("send", identity("a@b.co", "127.0.0.1", undefined))).resolves.toBeUndefined();
+    await expect(development.enforce("send", "LOGIN", identity("a@b.co", "127.0.0.1", undefined))).resolves.toBeUndefined();
+  });
+
+  it("does not let LOGIN traffic exhaust ADMIN_STEP_UP per-email quotas", async () => {
+    const limiter = createLimiter();
+    for (let index = 0; index < 5; index += 1) {
+      await limiter.enforce(
+        "send",
+        "LOGIN",
+        identity("admin@example.com", `203.0.113.${index + 1}`, `login-device-${index}`)
+      );
+    }
+
+    await expectLimited(
+      limiter.enforce("send", "LOGIN", identity("admin@example.com", "198.51.100.1", "login-device-blocked"))
+    );
+    await expect(
+      limiter.enforce("send", "ADMIN_STEP_UP", identity("admin@example.com", "198.51.100.2", "step-up-device"))
+    ).resolves.toBeUndefined();
+  });
+
+  it("keeps device, IP, and global buckets shared across LOGIN and ADMIN_STEP_UP", async () => {
+    const captured: RateLimitRule[][] = [];
+    const store: RateLimitStore = {
+      async consume(rules) {
+        captured.push(rules);
+        return { allowed: true, retryAfterSeconds: 0 };
+      }
+    };
+    const limiter = new AuthRateLimiter({
+      store,
+      identifierHashSecret: "identifier-secret",
+      nodeEnv: "production"
+    });
+    const sharedIdentity = identity(
+      "admin@example.com",
+      "203.0.113.5",
+      "550e8400-e29b-41d4-a716-446655440000"
+    );
+
+    await limiter.enforce("send", "LOGIN", sharedIdentity);
+    await limiter.enforce("send", "ADMIN_STEP_UP", sharedIdentity);
+
+    const keysByDimension = (rules: RateLimitRule[]) =>
+      Object.fromEntries(rules.map((entry) => [entry.dimension, entry.key]));
+    const loginKeys = keysByDimension(captured[0]);
+    const stepUpKeys = keysByDimension(captured[1]);
+    expect(stepUpKeys["email-hour"]).not.toBe(loginKeys["email-hour"]);
+    expect(stepUpKeys["email-day"]).not.toBe(loginKeys["email-day"]);
+    expect(stepUpKeys["device-hour"]).toBe(loginKeys["device-hour"]);
+    expect(stepUpKeys["ip-hour"]).toBe(loginKeys["ip-hour"]);
+    expect(stepUpKeys["global-minute"]).toBe(loginKeys["global-minute"]);
+  });
+
+  it("purpose-separates verify email buckets while retaining shared verify protections", async () => {
+    const captured: RateLimitRule[][] = [];
+    const store: RateLimitStore = {
+      async consume(rules) {
+        captured.push(rules);
+        return { allowed: true, retryAfterSeconds: 0 };
+      }
+    };
+    const limiter = new AuthRateLimiter({
+      store,
+      identifierHashSecret: "identifier-secret",
+      nodeEnv: "production"
+    });
+    const sharedIdentity = identity(
+      "admin@example.com",
+      "203.0.113.5",
+      "550e8400-e29b-41d4-a716-446655440000"
+    );
+
+    await limiter.enforce("verify", "LOGIN", sharedIdentity);
+    await limiter.enforce("verify", "ADMIN_STEP_UP", sharedIdentity);
+
+    const keysByDimension = (rules: RateLimitRule[]) =>
+      Object.fromEntries(rules.map((entry) => [entry.dimension, entry.key]));
+    const loginKeys = keysByDimension(captured[0]);
+    const stepUpKeys = keysByDimension(captured[1]);
+    expect(stepUpKeys["email-15m"]).not.toBe(loginKeys["email-15m"]);
+    expect(stepUpKeys["device-15m"]).toBe(loginKeys["device-15m"]);
+    expect(stepUpKeys["ip-15m"]).toBe(loginKeys["ip-15m"]);
+    expect(stepUpKeys["global-minute"]).toBe(loginKeys["global-minute"]);
   });
 
   it("uses only the framework-parsed validated IP and normalizes device UUIDs", () => {
@@ -178,8 +261,8 @@ async function expectNthDenied(
   input: (index: number) => ReturnType<typeof identity>
 ) {
   const limiter = createLimiter();
-  for (let index = 1; index < deniedAttempt; index += 1) await limiter.enforce(action, input(index));
-  await expectLimited(limiter.enforce(action, input(deniedAttempt)));
+  for (let index = 1; index < deniedAttempt; index += 1) await limiter.enforce(action, "LOGIN", input(index));
+  await expectLimited(limiter.enforce(action, "LOGIN", input(deniedAttempt)));
 }
 
 async function expectLimited(promise: Promise<void>) {

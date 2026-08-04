@@ -1,6 +1,11 @@
+import "reflect-metadata";
 import { describe, expect, it } from "vitest";
 
-import { AuthenticatedRequest } from "../src/auth/auth.guard";
+import { AuditActor } from "../src/audit/audit.service";
+import { AdminGuard } from "../src/auth/admin.guard";
+import { AdminStepUpGuard } from "../src/auth/admin-step-up.guard";
+import { AuthGuard, AuthenticatedRequest } from "../src/auth/auth.guard";
+import { RequestWithId } from "../src/http/request-id";
 import { AdminListingsController } from "../src/listings/admin-listings.controller";
 import { ListingsController } from "../src/listings/listings.controller";
 
@@ -36,6 +41,16 @@ describe("ListingsController", () => {
 });
 
 describe("AdminListingsController", () => {
+  it("pins class-level authentication and administrator guards", () => {
+    expect(guardsFor(AdminListingsController)).toEqual([AuthGuard, AdminGuard]);
+  });
+
+  it("requires administrator step-up for writes but not review queue reads", () => {
+    expect(guardsFor(AdminListingsController.prototype.findReviewQueue)).not.toContain(AdminStepUpGuard);
+    expect(guardsFor(AdminListingsController.prototype.approve)).toContain(AdminStepUpGuard);
+    expect(guardsFor(AdminListingsController.prototype.reject)).toContain(AdminStepUpGuard);
+  });
+
   it("delegates review queue reads to ListingsService", async () => {
     const listings = createListingsServiceMock();
     const controller = new AdminListingsController(listings as never);
@@ -44,15 +59,25 @@ describe("AdminListingsController", () => {
     expect(listings.findReviewQueueCalls).toBe(1);
   });
 
-  it("delegates approvals with the admin reviewer id", async () => {
+  it("delegates approvals with the authenticated request audit actor", async () => {
     const listings = createListingsServiceMock();
     const controller = new AdminListingsController(listings as never);
 
     await expect(controller.approve(requestFor("admin-1", "ADMIN"), "listing-1")).resolves.toEqual({ id: "listing-1" });
-    expect(listings.approveCalls).toEqual([{ id: "listing-1", reviewerId: "admin-1" }]);
+    expect(listings.approveCalls).toEqual([
+      {
+        id: "listing-1",
+        actor: {
+          actorType: "USER",
+          actorUserId: "admin-1",
+          actorEmail: "admin-1@example.com",
+          requestId: "request-1"
+        }
+      }
+    ]);
   });
 
-  it("delegates rejections with the admin reviewer id and reason", async () => {
+  it("delegates rejections with the authenticated request audit actor and reason", async () => {
     const listings = createListingsServiceMock();
     const controller = new AdminListingsController(listings as never);
 
@@ -60,14 +85,28 @@ describe("AdminListingsController", () => {
       controller.reject(requestFor("admin-1", "ADMIN"), "listing-1", { reason: "Please add clearer bedroom photos" })
     ).resolves.toEqual({ id: "listing-1" });
     expect(listings.rejectCalls).toEqual([
-      { id: "listing-1", reviewerId: "admin-1", reason: "Please add clearer bedroom photos" }
+      {
+        id: "listing-1",
+        actor: {
+          actorType: "USER",
+          actorUserId: "admin-1",
+          actorEmail: "admin-1@example.com",
+          requestId: "request-1"
+        },
+        reason: "Please add clearer bedroom photos"
+      }
     ]);
   });
 });
 
-function requestFor(id: string, role = "USER"): AuthenticatedRequest {
+function guardsFor(target: object) {
+  return (Reflect.getMetadata("__guards__", target) ?? []) as unknown[];
+}
+
+function requestFor(id: string, role = "USER"): AuthenticatedRequest & RequestWithId {
   return {
     headers: {},
+    requestId: "request-1",
     user: {
       id,
       email: `${id}@example.com`,
@@ -82,8 +121,8 @@ function createListingsServiceMock() {
     submitCalls: [] as Array<{ ownerId: string; id: string }>,
     addMediaCalls: [] as Array<{ ownerId: string; id: string; dto: { url: string; kind: string; sortOrder?: number } }>,
     findReviewQueueCalls: 0,
-    approveCalls: [] as Array<{ id: string; reviewerId: string }>,
-    rejectCalls: [] as Array<{ id: string; reviewerId: string; reason: string }>,
+    approveCalls: [] as Array<{ id: string; actor: AuditActor }>,
+    rejectCalls: [] as Array<{ id: string; actor: AuditActor; reason: string }>,
     findMine: async (ownerId: string) => {
       service.findMineCalls.push(ownerId);
       return [{ id: "listing-1" }];
@@ -100,12 +139,12 @@ function createListingsServiceMock() {
       service.findReviewQueueCalls += 1;
       return [{ id: "submitted-1" }];
     },
-    approve: async (id: string, reviewerId: string) => {
-      service.approveCalls.push({ id, reviewerId });
+    approve: async (id: string, actor: AuditActor) => {
+      service.approveCalls.push({ id, actor });
       return { id };
     },
-    reject: async (id: string, reviewerId: string, reason: string) => {
-      service.rejectCalls.push({ id, reviewerId, reason });
+    reject: async (id: string, actor: AuditActor, reason: string) => {
+      service.rejectCalls.push({ id, actor, reason });
       return { id };
     }
   };

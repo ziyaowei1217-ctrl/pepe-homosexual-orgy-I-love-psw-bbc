@@ -4,12 +4,31 @@ import { Test } from "@nestjs/testing";
 import { describe, expect, it } from "vitest";
 
 import { AuthModule, createAuthServiceOptions } from "../src/auth/auth.module";
+import { AdminGuard } from "../src/auth/admin.guard";
 import { AuthService, type AuthServiceOptions } from "../src/auth/auth.service";
 import { AUTH_OPTIONS, EMAIL_SENDER } from "../src/auth/auth.tokens";
 import { EMAIL_PROVIDER_TOTAL_TIMEOUT_MS, type EmailSender } from "../src/email/email-sender";
+import { ListingsModule } from "../src/listings/listings.module";
 import { PrismaModule } from "../src/prisma/prisma.module";
 
 describe("AuthModule dependency injection", () => {
+  it("rejects local administrator allowlists in production", () => {
+    expect(() =>
+      createAuthServiceOptions(
+        {
+          otpHashSecret: "otp-test-secret-that-is-at-least-32-bytes",
+          securityIdentifierHashSecret: "identifier-test-secret-at-least-32-bytes",
+          codeTtlMs: 600_000,
+          codeMaxAttempts: 5,
+          codeCooldownMs: 60_000,
+          trustedProxyHops: 0
+        },
+        "production",
+        "admin@example.com"
+      )
+    ).toThrow("LOCAL_ADMIN_EMAILS is not allowed in production");
+  });
+
   it("keeps the production LOGIN response floor beyond the entire provider timeout budget", () => {
     const options = createAuthServiceOptions(
       {
@@ -58,6 +77,15 @@ describe("AuthModule dependency injection", () => {
     expect(moduleRef.get(EMAIL_SENDER)).toBe(emailSender);
     expect(moduleRef.get(AUTH_OPTIONS)).toBe(authOptions);
     expect(moduleRef.get(AuthService)).toBeInstanceOf(AuthService);
+    expect(moduleRef.get(AdminGuard)).toBeInstanceOf(AdminGuard);
+    await moduleRef.close();
+  });
+
+  it("exposes administrator guard dependencies to importing controller modules", async () => {
+    const moduleRef = await Test.createTestingModule({
+      imports: [JwtModule.register({ global: true, secret: "test-secret" }), PrismaModule, ListingsModule]
+    }).compile();
+
     await moduleRef.close();
   });
 });

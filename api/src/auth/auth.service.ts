@@ -20,6 +20,7 @@ import {
 } from "./code-security";
 import { AUTH_OPTIONS, EMAIL_SENDER } from "./auth.tokens";
 import { VerifyEmailDto } from "./dto";
+import { acquireNormalizedEmailAdvisoryLock } from "./email-advisory-lock";
 
 export type AuthServiceOptions = {
   nodeEnv: string;
@@ -88,25 +89,47 @@ export class AuthService {
     );
   }
 
-  async requestEmailCode(emailInput: string) {
+  requestEmailCode(email: string) {
+    return this.requestVerificationCode({
+      emailInput: email,
+      purpose: VerificationPurpose.LOGIN,
+      requireExistingUserOrInvite: true
+    });
+  }
+
+  requestAdminStepUpCode(email: string) {
+    return this.requestVerificationCode({
+      emailInput: email,
+      purpose: VerificationPurpose.ADMIN_STEP_UP,
+      requireExistingUserOrInvite: false
+    });
+  }
+
+  private async requestVerificationCode(input: {
+    emailInput: string;
+    purpose: VerificationPurpose;
+    requireExistingUserOrInvite: boolean;
+  }) {
     const startedAt = this.now();
     const acceptedExpiresAt = new Date(startedAt + this.codeTtlMs);
-    const email = normalizeEmail(emailInput);
+    const email = normalizeEmail(input.emailInput);
     if (!email) throw new BadRequestException("Email is required");
 
     const pending = await this.withSerializedEmail(email, async (transaction) => {
-      const existingUser = await transaction.user.findUnique({ where: { email }, select: { id: true } });
-      const activeInvite = existingUser
-        ? null
-        : await transaction.betaInvite.findFirst({
-            where: { normalizedEmail: email, revokedAt: null, claimedAt: null },
-            select: { id: true }
-          });
+      if (input.requireExistingUserOrInvite) {
+        const existingUser = await transaction.user.findUnique({ where: { email }, select: { id: true } });
+        const activeInvite = existingUser
+          ? null
+          : await transaction.betaInvite.findFirst({
+              where: { normalizedEmail: email, revokedAt: null, claimedAt: null },
+              select: { id: true }
+            });
 
-      if (!existingUser && !activeInvite) return null;
+        if (!existingUser && !activeInvite) return null;
+      }
 
       const latestCode = await transaction.verificationCode.findFirst({
-        where: { email, purpose: VerificationPurpose.LOGIN },
+        where: { email, purpose: input.purpose },
         orderBy: { createdAt: "desc" }
       });
 
@@ -132,10 +155,10 @@ export class AuthService {
       const record = await transaction.verificationCode.create({
         data: {
           email,
-          purpose: VerificationPurpose.LOGIN,
+          purpose: input.purpose,
           codeHash: hashEmailCode({
             email,
-            purpose: VerificationPurpose.LOGIN,
+            purpose: input.purpose,
             salt: codeSalt,
             code,
             secret: this.otpHashSecret
@@ -176,7 +199,7 @@ export class AuthService {
       return this.acceptAfterBudget(startedAt, email, pending.expiresAt, pending.code);
     }
 
-    await this.finalizeSuccessfulDelivery(pending, providerMessageId);
+    await this.finalizeSuccessfulDelivery(pending, input.purpose, providerMessageId);
 
     return this.acceptAfterBudget(startedAt, email, pending.expiresAt, pending.code);
   }
@@ -197,73 +220,35 @@ export class AuthService {
   }
 
   async verifyEmailCode(dto: VerifyEmailDto) {
-    const email = normalizeEmail(dto.email);
-    const code = dto.code.trim();
-    if (!/^\d{6}$/.test(code)) throw new BadRequestException("Verification code must be 6 digits");
-
-    const result = await this.withSerializedEmail(email, async (transaction) => {
-      const record = await transaction.verificationCode.findFirst({
-        where: {
-          email,
-          purpose: VerificationPurpose.LOGIN,
-          deliveryStatus: VerificationDeliveryStatus.SENT,
-          consumedAt: null,
-          expiresAt: { gt: new Date() }
-        },
-        orderBy: { createdAt: "desc" }
-      });
-
-      if (
-        !record ||
-        record.attemptCount >= this.codeMaxAttempts ||
-        record.hashVersion !== 2 ||
-        !record.codeSalt
-      ) {
-        return { status: "invalid" as const };
-      }
-
-      if (
-        !verifyEmailCodeHash({
-          email,
-          purpose: VerificationPurpose.LOGIN,
-          salt: record.codeSalt,
-          code,
-          secret: this.otpHashSecret,
-          codeHash: record.codeHash
-        })
-      ) {
-        await transaction.verificationCode.update({
-          where: { id: record.id },
-          data: { attemptCount: { increment: 1 } }
+    const result = await this.verifyCode({
+      emailInput: dto.email,
+      codeInput: dto.code,
+      purpose: VerificationPurpose.LOGIN,
+      onVerified: async (transaction, email) => {
+        const isLocalAdmin = this.localAdminEmails.has(email);
+        const existingUser = await transaction.user.findUnique({
+          where: { email },
+          select: { id: true }
         });
-        return { status: "invalid" as const };
-      }
-
-      const isLocalAdmin = this.localAdminEmails.has(email);
-      const existingUser = await transaction.user.findUnique({ where: { email }, select: { id: true } });
-      const isNewUser = existingUser === null;
-      if (isNewUser) {
-        const claimedInvite = await transaction.betaInvite.updateMany({
-          where: { normalizedEmail: email, claimedAt: null, revokedAt: null },
-          data: { claimedAt: new Date() }
+        const isNewUser = existingUser === null;
+        if (isNewUser) {
+          const claimedInvite = await transaction.betaInvite.updateMany({
+            where: { normalizedEmail: email, claimedAt: null, revokedAt: null },
+            data: { claimedAt: new Date(this.now()) }
+          });
+          if (claimedInvite.count !== 1) {
+            throw new UnauthorizedException("Invalid or expired verification code");
+          }
+        }
+        const user = await transaction.user.upsert({
+          where: { email },
+          update: isLocalAdmin ? { role: "ADMIN" } : {},
+          create: { email, role: isLocalAdmin ? "ADMIN" : "USER" }
         });
-        if (claimedInvite.count !== 1) return { status: "invalid" as const };
+        await transaction.profile.upsert({ where: { email }, update: {}, create: { email } });
+        return { user, isNewUser };
       }
-      const user = await transaction.user.upsert({
-        where: { email },
-        update: isLocalAdmin ? { role: "ADMIN" } : {},
-        create: { email, role: isLocalAdmin ? "ADMIN" : "USER" }
-      });
-      await transaction.profile.upsert({ where: { email }, update: {}, create: { email } });
-      await transaction.verificationCode.update({
-        where: { id: record.id },
-        data: { consumedAt: new Date() }
-      });
-
-      return { status: "verified" as const, user, isNewUser };
     });
-
-    if (result.status === "invalid") throw new UnauthorizedException("Invalid or expired verification code");
 
     return {
       accessToken: await this.jwt.signAsync({
@@ -273,6 +258,25 @@ export class AuthService {
       }),
       user: result.user,
       isNewUser: result.isNewUser
+    };
+  }
+
+  async verifyAdminStepUpCode(input: { userId: string; email: string; code: string }) {
+    await this.verifyCode({
+      emailInput: input.email,
+      codeInput: input.code,
+      purpose: VerificationPurpose.ADMIN_STEP_UP,
+      onVerified: async () => undefined
+    });
+    const adminReauthenticatedAt = Math.floor(this.now() / 1000);
+    return {
+      accessToken: await this.jwt.signAsync({
+        sub: input.userId,
+        email: normalizeEmail(input.email),
+        role: "ADMIN",
+        adminReauthenticatedAt
+      }),
+      reauthenticatedUntil: new Date((adminReauthenticatedAt + 30 * 60) * 1000)
     };
   }
 
@@ -289,7 +293,11 @@ export class AuthService {
     return this.acceptedResponse(email, expiresAt, code);
   }
 
-  private async finalizeSuccessfulDelivery(pending: PendingCode, providerMessageId?: string) {
+  private async finalizeSuccessfulDelivery(
+    pending: PendingCode,
+    purpose: VerificationPurpose,
+    providerMessageId?: string
+  ) {
     for (let attempt = 0; attempt < 2; attempt += 1) {
       try {
         await this.withSerializedEmail(pending.email, async (transaction) => {
@@ -297,7 +305,7 @@ export class AuthService {
           const newerSentCode = await transaction.verificationCode.findFirst({
             where: {
               email: pending.email,
-              purpose: VerificationPurpose.LOGIN,
+              purpose,
               deliveryStatus: VerificationDeliveryStatus.SENT,
               createdAt: { gt: pending.createdAt }
             },
@@ -316,7 +324,7 @@ export class AuthService {
           await transaction.verificationCode.updateMany({
             where: {
               email: pending.email,
-              purpose: VerificationPurpose.LOGIN,
+              purpose,
               deliveryStatus: VerificationDeliveryStatus.SENT,
               consumedAt: null,
               createdAt: { lt: pending.createdAt },
@@ -336,12 +344,66 @@ export class AuthService {
     }
   }
 
+  private async verifyCode<T>(input: {
+    emailInput: string;
+    codeInput: string;
+    purpose: VerificationPurpose;
+    onVerified: (transaction: Prisma.TransactionClient, email: string) => Promise<T>;
+  }) {
+    const email = normalizeEmail(input.emailInput);
+    const code = input.codeInput.trim();
+    if (!/^\d{6}$/.test(code)) throw new BadRequestException("Verification code must be 6 digits");
+    const outcome = await this.withSerializedEmail(email, async (transaction) => {
+      const record = await transaction.verificationCode.findFirst({
+        where: {
+          email,
+          purpose: input.purpose,
+          deliveryStatus: VerificationDeliveryStatus.SENT,
+          consumedAt: null,
+          expiresAt: { gt: new Date(this.now()) }
+        },
+        orderBy: { createdAt: "desc" }
+      });
+      if (
+        !record ||
+        record.attemptCount >= this.codeMaxAttempts ||
+        record.hashVersion !== 2 ||
+        !record.codeSalt
+      ) {
+        return { status: "invalid" as const };
+      }
+      const valid = verifyEmailCodeHash({
+        email,
+        purpose: input.purpose,
+        salt: record.codeSalt,
+        code,
+        secret: this.otpHashSecret,
+        codeHash: record.codeHash
+      });
+      if (!valid) {
+        await transaction.verificationCode.update({
+          where: { id: record.id },
+          data: { attemptCount: { increment: 1 } }
+        });
+        return { status: "invalid" as const };
+      }
+      const result = await input.onVerified(transaction, email);
+      await transaction.verificationCode.update({
+        where: { id: record.id },
+        data: { consumedAt: new Date(this.now()) }
+      });
+      return { status: "verified" as const, value: result };
+    });
+    if (outcome.status === "invalid") throw new UnauthorizedException("Invalid or expired verification code");
+    return outcome.value;
+  }
+
   private withSerializedEmail<T>(
     email: string,
     operation: (transaction: Prisma.TransactionClient) => Promise<T>
   ) {
     return this.prisma.$transaction(async (transaction) => {
-      await transaction.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${email}::text, 0))`;
+      await acquireNormalizedEmailAdvisoryLock(transaction, email);
       return operation(transaction);
     });
   }

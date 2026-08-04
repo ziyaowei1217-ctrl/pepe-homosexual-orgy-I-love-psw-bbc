@@ -1,5 +1,6 @@
 import "reflect-metadata";
 import { INestApplication, ValidationPipe } from "@nestjs/common";
+import { JwtService } from "@nestjs/jwt";
 import { Test } from "@nestjs/testing";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
@@ -37,7 +38,7 @@ describe("listing HTTP validation", () => {
     await app.init();
 
     token = await signIn(app, "owner@example.com");
-    adminToken = await signIn(app, "admin@example.com");
+    adminToken = await signInAsAdmin(app, "admin@example.com");
     await completePublisherProfile(app, token);
   });
 
@@ -231,6 +232,24 @@ async function signIn(app: INestApplication, email: string) {
     .send({ email, code: codeResponse.body.devCode })
     .expect(201);
   return sessionResponse.body.accessToken as string;
+}
+
+async function signInAsAdmin(app: INestApplication, email: string) {
+  const http = request(app.getHttpServer());
+  const codeResponse = await http.post("/api/v1/auth/email-code").send({ email }).expect(201);
+  const sessionResponse = await http
+    .post("/api/v1/auth/verify-email")
+    .send({ email, code: codeResponse.body.devCode })
+    .expect(201);
+  const jwt = app.get(JwtService);
+  const adminId = sessionResponse.body.user.id as string;
+  const adminEmail = sessionResponse.body.user.email as string;
+  return jwt.signAsync({
+    sub: adminId,
+    email: adminEmail,
+    role: "ADMIN",
+    adminReauthenticatedAt: Math.floor(Date.now() / 1000)
+  });
 }
 
 async function completePublisherProfile(app: INestApplication, token: string) {
