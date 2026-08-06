@@ -131,7 +131,7 @@ describe("marketplace database API", () => {
     };
     const requestFactories = [
       () => http.get("/api/v1/housing-listings?city=LA"),
-      () => http.post("/api/v1/housing-listings").set("Authorization", `Bearer ${token}`).send(housingListingPayload()),
+      () => http.post("/api/v1/housing-listings").set("Authorization", `Bearer ${token}`).send({ ignored: true }),
       () => http.put("/api/v1/housing-listings/legacy-id").send({ title: "ignored" }),
       () =>
         http
@@ -158,19 +158,6 @@ async function signIn(app: INestApplication, email: string) {
   return sessionResponse.body.accessToken as string;
 }
 
-async function completePublisherProfile(app: INestApplication, token: string) {
-  await request(app.getHttpServer())
-    .patch("/api/v1/profiles/me")
-    .set("Authorization", `Bearer ${token}`)
-    .send({
-      displayName: "Housing Owner",
-      school: "USC",
-      city: "LA",
-      role: "lister"
-    })
-    .expect(200);
-}
-
 function roommateProfilePayload() {
   return {
     school: "USC",
@@ -188,35 +175,5 @@ function roommateProfilePayload() {
     guests: "sometimes",
     intro: "Grad student looking for a calm home base.",
     lookingFor: "Respectful roommate near campus."
-  };
-}
-
-function housingListingPayload() {
-  return {
-    title: "USC private room sublet",
-    listingType: "sublet",
-    propertyType: "apartment",
-    roomType: "private_room",
-    priceMonthly: 1650,
-    depositAmount: 1000,
-    city: "LA",
-    neighborhood: "Koreatown",
-    schoolNearby: "USC",
-    addressApprox: "Near Vermont Ave",
-    lat: 34.0522,
-    lng: -118.2437,
-    moveInDate: "2026-08-15",
-    moveOutDate: "2027-05-15",
-    flexibleDates: true,
-    bedrooms: 2,
-    bathrooms: 1,
-    furnished: true,
-    utilitiesIncluded: false,
-    laundry: true,
-    parking: false,
-    petsAllowed: true,
-    leaseApproved: true,
-    description: "Bright room with desk and closet.",
-    photoUrls: ["https://example.com/room.jpg"]
   };
 }

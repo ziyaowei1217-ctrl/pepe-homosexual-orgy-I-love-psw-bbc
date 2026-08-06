@@ -1,14 +1,7 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 
 import { PrismaService } from "../prisma/prisma.service";
-import {
-  CreateHousingListingDto,
-  CreateRoommateProfileDto,
-  UpdateHousingListingDto,
-  UpdateProfileDto,
-  UpdateRoommateProfileDto
-} from "./dto";
-import { requirePublishCapableProfile } from "./publish-profile";
+import { CreateRoommateProfileDto, UpdateProfileDto, UpdateRoommateProfileDto } from "./dto";
 
 @Injectable()
 export class MarketplaceService {
@@ -73,58 +66,6 @@ export class MarketplaceService {
     });
   }
 
-  async createHousingListing(email: string, dto: CreateHousingListingDto) {
-    const profile = await requirePublishCapableProfile(this.prisma, email);
-
-    return this.prisma.housingListing.create({
-      data: {
-        ownerId: profile.id,
-        ...housingListingData(dto),
-        status: "draft"
-      }
-    });
-  }
-
-  findHousingListings(query: { city?: string; schoolNearby?: string; neighborhood?: string }) {
-    return this.prisma.housingListing.findMany({
-      where: definedData({
-        city: query.city,
-        schoolNearby: query.schoolNearby,
-        neighborhood: query.neighborhood,
-        status: "active"
-      }),
-      orderBy: { updatedAt: "desc" }
-    });
-  }
-
-  async findHousingListing(id: string) {
-    const listing = await this.prisma.housingListing.findFirst({
-      where: {
-        id,
-        status: "active"
-      }
-    });
-    if (!listing) throw new NotFoundException("Listing not found");
-
-    return listing;
-  }
-
-  async updateHousingListing(email: string, id: string, dto: UpdateHousingListingDto) {
-    const profile = await requirePublishCapableProfile(this.prisma, email);
-    const existing = await this.prisma.housingListing.findFirst({
-      where: {
-        id,
-        ownerId: profile.id
-      }
-    });
-    if (!existing) throw new NotFoundException("Listing not found");
-
-    return this.prisma.housingListing.update({
-      where: { id },
-      data: housingListingUpdateData(dto)
-    });
-  }
-
   private async ensureProfile(email: string) {
     return this.prisma.profile.upsert({
       where: { email },
@@ -166,67 +107,6 @@ function roommateProfileUpdateData(dto: UpdateRoommateProfileDto | CreateRoommat
     intro: dto.intro,
     lookingFor: dto.lookingFor,
     status: "status" in dto ? dto.status : undefined
-  });
-}
-
-function housingListingData(dto: CreateHousingListingDto) {
-  return {
-    title: dto.title,
-    listingType: dto.listingType,
-    propertyType: dto.propertyType,
-    roomType: dto.roomType,
-    priceMonthly: dto.priceMonthly,
-    depositAmount: dto.depositAmount,
-    city: dto.city,
-    neighborhood: dto.neighborhood,
-    schoolNearby: dto.schoolNearby,
-    addressApprox: dto.addressApprox,
-    lat: dto.lat,
-    lng: dto.lng,
-    moveInDate: new Date(dto.moveInDate),
-    moveOutDate: dateValue(dto.moveOutDate),
-    flexibleDates: dto.flexibleDates ?? false,
-    bedrooms: dto.bedrooms,
-    bathrooms: dto.bathrooms,
-    furnished: dto.furnished ?? false,
-    utilitiesIncluded: dto.utilitiesIncluded ?? false,
-    laundry: dto.laundry ?? false,
-    parking: dto.parking ?? false,
-    petsAllowed: dto.petsAllowed ?? false,
-    leaseApproved: dto.leaseApproved ?? false,
-    description: dto.description,
-    photoUrls: dto.photoUrls ?? []
-  };
-}
-
-function housingListingUpdateData(dto: UpdateHousingListingDto) {
-  return definedData({
-    title: dto.title,
-    listingType: dto.listingType,
-    propertyType: dto.propertyType,
-    roomType: dto.roomType,
-    priceMonthly: dto.priceMonthly,
-    depositAmount: dto.depositAmount,
-    city: dto.city,
-    neighborhood: dto.neighborhood,
-    schoolNearby: dto.schoolNearby,
-    addressApprox: dto.addressApprox,
-    lat: dto.lat,
-    lng: dto.lng,
-    moveInDate: dateValue(dto.moveInDate),
-    moveOutDate: dateValue(dto.moveOutDate),
-    flexibleDates: dto.flexibleDates,
-    bedrooms: dto.bedrooms,
-    bathrooms: dto.bathrooms,
-    furnished: dto.furnished,
-    utilitiesIncluded: dto.utilitiesIncluded,
-    laundry: dto.laundry,
-    parking: dto.parking,
-    petsAllowed: dto.petsAllowed,
-    leaseApproved: dto.leaseApproved,
-    description: dto.description,
-    photoUrls: dto.photoUrls,
-    status: dto.status
   });
 }
 
