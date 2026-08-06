@@ -3,7 +3,6 @@ import {
   Body,
   Controller,
   Get,
-  GoneException,
   Inject,
   Param,
   Patch,
@@ -15,6 +14,7 @@ import {
 } from "@nestjs/common";
 
 import { AuthGuard, AuthenticatedRequest } from "../auth/auth.guard";
+import { legacyListingsRetired } from "../http/legacy-listings-retirement";
 import {
   CreateRoommateProfileDto,
   UpdateProfileDto,
@@ -97,13 +97,4 @@ export class HousingListingsController {
   retiredItem(): never {
     return legacyListingsRetired();
   }
-}
-
-function legacyListingsRetired(): never {
-  throw new GoneException({
-    statusCode: 410,
-    code: "LEGACY_LISTINGS_RETIRED",
-    message: "Legacy housing listings API has been retired",
-    replacement: "/api/v1/listings"
-  });
 }

@@ -5,7 +5,7 @@ import { NestFactory } from "@nestjs/core";
 
 import { AppModule } from "./app.module";
 import { getAuthSecurityConfig } from "./config/env";
-import { getCorsOrigins } from "./config/cors";
+import { configureCors, getCorsOrigins } from "./config/cors";
 import { requestIdMiddleware } from "./http/request-id";
 
 type SecurityHeaderResponse = {
@@ -28,10 +28,7 @@ async function bootstrap() {
     response.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
     next();
   });
-  app.enableCors({
-    origin: webOrigins,
-    credentials: true
-  });
+  configureCors(app, webOrigins);
   app.setGlobalPrefix("api/v1");
   app.useGlobalPipes(
     new ValidationPipe({

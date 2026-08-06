@@ -4,6 +4,7 @@ import { Test } from "@nestjs/testing";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { AppModule } from "../src/app.module";
+import { configureCors } from "../src/config/cors";
 import { PrismaService } from "../src/prisma/prisma.service";
 import { createLaunchPrismaMock } from "./support/launch-prisma-mock";
 
@@ -26,6 +27,7 @@ describe("marketplace database API", () => {
 
     app = moduleRef.createNestApplication();
     app.setGlobalPrefix("api/v1");
+    configureCors(app, ["http://localhost:3000"]);
     app.useGlobalPipes(
       new ValidationPipe({
         whitelist: true,
@@ -131,12 +133,13 @@ describe("marketplace database API", () => {
     };
     const requestFactories = [
       () => http.get("/api/v1/housing-listings?city=LA"),
-      () => http.post("/api/v1/housing-listings").set("Authorization", `Bearer ${token}`).send({ ignored: true }),
+      () => http.get("/api/v1/housing-listings/legacy-id"),
+      () => http.post("/api/v1/housing-listings").send({ ignored: true }),
       () => http.put("/api/v1/housing-listings/legacy-id").send({ title: "ignored" }),
       () =>
         http
           .patch("/api/v1/housing-listings/legacy-id")
-          .set("Authorization", `Bearer ${token}`)
+          .set("Authorization", "Bearer invalid-token")
           .send({ status: "active" }),
       () => http.delete("/api/v1/housing-listings/legacy-id")
     ];
@@ -144,6 +147,25 @@ describe("marketplace database API", () => {
     for (const createRequest of requestFactories) {
       await createRequest().expect(410).expect(expected);
     }
+
+    await http.head("/api/v1/housing-listings/legacy-id").expect(410);
+    await http
+      .options("/api/v1/housing-listings/legacy-id")
+      .set("Origin", "http://localhost:3000")
+      .set("Access-Control-Request-Method", "PATCH")
+      .expect("Access-Control-Allow-Origin", "http://localhost:3000")
+      .expect(410)
+      .expect(expected);
+
+  });
+
+  it("preserves successful CORS preflights for active APIs", async () => {
+    await request(app.getHttpServer())
+      .options("/api/v1/profiles/me")
+      .set("Origin", "http://localhost:3000")
+      .set("Access-Control-Request-Method", "GET")
+      .expect("Access-Control-Allow-Origin", "http://localhost:3000")
+      .expect(204);
   });
 });
 
