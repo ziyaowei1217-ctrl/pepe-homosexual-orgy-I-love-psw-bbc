@@ -145,34 +145,11 @@ git commit -m "fix: retire legacy housing listing routes"
 - Removes: `CreateHousingListingDto` and `UpdateHousingListingDto`.
 - Preserves: every profile and roommate-profile method and DTO.
 
-- [ ] **Step 1: Add a source regression that forbids legacy Prisma calls from the marketplace service**
+- [ ] **Step 1: Confirm the HTTP regression protects the only supported legacy behavior**
 
-Add this non-database test to `api/test/marketplace-api.e2e.spec.ts`:
+The Task 1 e2e test is the regression for this refactor: changing the controller back to any legacy service call must make GET, POST, PUT, PATCH, or DELETE stop returning the literal 410 contract. Do not add a test that merely checks for missing class methods or source symbols; the active HTTP behavior and the absence of TypeScript callers are the meaningful boundaries.
 
-```ts
-it("does not expose legacy housing-listing operations through MarketplaceService", async () => {
-  const service = app.get(MarketplaceService) as MarketplaceService & Record<string, unknown>;
-
-  expect(service.createHousingListing).toBeUndefined();
-  expect(service.findHousingListings).toBeUndefined();
-  expect(service.findHousingListing).toBeUndefined();
-  expect(service.updateHousingListing).toBeUndefined();
-});
-```
-
-Import `MarketplaceService` from `../src/marketplace/marketplace.service`.
-
-- [ ] **Step 2: Run the focused test and verify RED**
-
-Run:
-
-```bash
-pnpm --filter sublet-pipeline-api test -- test/marketplace-api.e2e.spec.ts
-```
-
-Expected: FAIL because all four legacy service methods still exist.
-
-- [ ] **Step 3: Delete the legacy service methods and mapping helpers**
+- [ ] **Step 2: Delete the legacy service methods and mapping helpers**
 
 In `api/src/marketplace/marketplace.service.ts`:
 
@@ -184,7 +161,7 @@ In `api/src/marketplace/marketplace.service.ts`:
 
 Do not remove the Prisma `HousingListing` model or alter archived rows.
 
-- [ ] **Step 4: Delete housing-listing-only DTO definitions and imports**
+- [ ] **Step 3: Delete housing-listing-only DTO definitions and imports**
 
 In `api/src/marketplace/dto.ts`:
 
@@ -196,7 +173,7 @@ In `api/src/marketplace/dto.ts`:
 
 Delete `api/test/marketplace.service.spec.ts`; the file tests only the legacy service contract that is being intentionally removed.
 
-- [ ] **Step 5: Remove the now-unused legacy payload fixture from the e2e test**
+- [ ] **Step 4: Remove the now-unused legacy payload fixture from the e2e test**
 
 Delete `housingListingPayload()` from `api/test/marketplace-api.e2e.spec.ts` after confirming no active test calls it. In the 410 POST request, send a minimal ignored object instead:
 
@@ -206,7 +183,7 @@ http.post("/api/v1/housing-listings").set("Authorization", `Bearer ${token}`).se
 
 This proves retirement occurs before request-body validation.
 
-- [ ] **Step 6: Run focused tests and typecheck**
+- [ ] **Step 5: Run focused tests and typecheck**
 
 Run:
 
@@ -217,7 +194,7 @@ pnpm --filter sublet-pipeline-api typecheck
 
 Expected: the retirement e2e suite passes and TypeScript reports no dangling legacy imports or helpers.
 
-- [ ] **Step 7: Commit the dead application surface removal**
+- [ ] **Step 6: Commit the dead application surface removal**
 
 ```bash
 git add api/src/marketplace/marketplace.service.ts api/src/marketplace/dto.ts api/test/marketplace-api.e2e.spec.ts api/test/marketplace.service.spec.ts
@@ -293,5 +270,5 @@ git commit -m "docs: document retired listing archive"
 
 - Specification coverage: covers the design's complete legacy API retirement and existing database write-protection requirements; secure media upload/processing and publish/suspend behavior remain separate follow-on backend plans.
 - Placeholder scan: every implementation and verification step contains concrete code, commands, and expected outcomes.
-- Type consistency: controller methods, exception body, service method removals, DTO removals, tests, and documentation all use the same legacy route and stable error code.
+- Type consistency: controller methods, exception body, service and DTO removals, behavior tests, and documentation all use the same legacy route and stable error code.
 - Scope: one independently deployable subproject; no R2 credentials, image library, frontend change, or production hosting decision is required.
