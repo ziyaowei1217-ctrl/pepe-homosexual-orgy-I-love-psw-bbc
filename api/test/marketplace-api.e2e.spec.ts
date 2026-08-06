@@ -121,52 +121,29 @@ describe("marketplace database API", () => {
       });
   });
 
-  it("stores housing listings, exposes only active public listings, and enforces owner updates", async () => {
+  it("retires every legacy housing-listing collection and item operation", async () => {
     const http = request(app.getHttpServer());
-    const otherToken = await signIn(app, "other@example.com");
-    await completePublisherProfile(app, token);
-    await completePublisherProfile(app, otherToken);
+    const expected = {
+      statusCode: 410,
+      code: "LEGACY_LISTINGS_RETIRED",
+      message: "Legacy housing listings API has been retired",
+      replacement: "/api/v1/listings"
+    };
+    const requestFactories = [
+      () => http.get("/api/v1/housing-listings?city=LA"),
+      () => http.post("/api/v1/housing-listings").set("Authorization", `Bearer ${token}`).send(housingListingPayload()),
+      () => http.put("/api/v1/housing-listings/legacy-id").send({ title: "ignored" }),
+      () =>
+        http
+          .patch("/api/v1/housing-listings/legacy-id")
+          .set("Authorization", `Bearer ${token}`)
+          .send({ status: "active" }),
+      () => http.delete("/api/v1/housing-listings/legacy-id")
+    ];
 
-    const createdResponse = await http
-      .post("/api/v1/housing-listings")
-      .set("Authorization", `Bearer ${token}`)
-      .send(housingListingPayload())
-      .expect(201);
-
-    expect(createdResponse.body).toMatchObject({
-      title: "USC private room sublet",
-      status: "draft",
-      priceMonthly: 1650,
-      photoUrls: ["https://example.com/room.jpg"]
-    });
-
-    await http.get("/api/v1/housing-listings").expect(200).expect([]);
-
-    await http
-      .patch(`/api/v1/housing-listings/${createdResponse.body.id}`)
-      .set("Authorization", `Bearer ${otherToken}`)
-      .send({ status: "active" })
-      .expect(404);
-
-    await http
-      .patch(`/api/v1/housing-listings/${createdResponse.body.id}`)
-      .set("Authorization", `Bearer ${token}`)
-      .send({ status: "active" })
-      .expect(200)
-      .expect(({ body }: { body: Record<string, unknown> }) => {
-        expect(body.status).toBe("active");
-      });
-
-    await http
-      .get("/api/v1/housing-listings?city=LA&schoolNearby=USC")
-      .expect(200)
-      .expect(({ body }: { body: Array<Record<string, unknown>> }) => {
-        expect(body).toHaveLength(1);
-        expect(body[0]).toMatchObject({
-          title: "USC private room sublet",
-          status: "active"
-        });
-      });
+    for (const createRequest of requestFactories) {
+      await createRequest().expect(410).expect(expected);
+    }
   });
 });
 

@@ -1,10 +1,22 @@
-import { Body, Controller, Get, Inject, Param, Patch, Post, Query, Req, UseGuards, ValidationPipe } from "@nestjs/common";
+import {
+  All,
+  Body,
+  Controller,
+  Get,
+  GoneException,
+  Inject,
+  Param,
+  Patch,
+  Post,
+  Query,
+  Req,
+  UseGuards,
+  ValidationPipe
+} from "@nestjs/common";
 
 import { AuthGuard, AuthenticatedRequest } from "../auth/auth.guard";
 import {
-  CreateHousingListingDto,
   CreateRoommateProfileDto,
-  UpdateHousingListingDto,
   UpdateProfileDto,
   UpdateRoommateProfileDto
 } from "./dto";
@@ -29,20 +41,6 @@ const updateRoommateProfileBodyPipe = new ValidationPipe({
   forbidNonWhitelisted: true,
   transform: true,
   expectedType: UpdateRoommateProfileDto
-});
-
-const createHousingListingBodyPipe = new ValidationPipe({
-  whitelist: true,
-  forbidNonWhitelisted: true,
-  transform: true,
-  expectedType: CreateHousingListingDto
-});
-
-const updateHousingListingBodyPipe = new ValidationPipe({
-  whitelist: true,
-  forbidNonWhitelisted: true,
-  transform: true,
-  expectedType: UpdateHousingListingDto
 });
 
 @Controller("profiles")
@@ -90,35 +88,22 @@ export class RoommateProfilesController {
 
 @Controller("housing-listings")
 export class HousingListingsController {
-  constructor(@Inject(MarketplaceService) private readonly marketplace: MarketplaceService) {}
-
-  @Get()
-  findAll(
-    @Query("city") city?: string,
-    @Query("schoolNearby") schoolNearby?: string,
-    @Query("neighborhood") neighborhood?: string
-  ) {
-    return this.marketplace.findHousingListings({ city, schoolNearby, neighborhood });
+  @All()
+  retiredCollection(): never {
+    return legacyListingsRetired();
   }
 
-  @Get(":id")
-  findOne(@Param("id") id: string) {
-    return this.marketplace.findHousingListing(id);
+  @All(":id")
+  retiredItem(): never {
+    return legacyListingsRetired();
   }
+}
 
-  @UseGuards(AuthGuard)
-  @Post()
-  create(@Req() request: AuthenticatedRequest, @Body(createHousingListingBodyPipe) dto: CreateHousingListingDto) {
-    return this.marketplace.createHousingListing(request.user.email, dto);
-  }
-
-  @UseGuards(AuthGuard)
-  @Patch(":id")
-  update(
-    @Req() request: AuthenticatedRequest,
-    @Param("id") id: string,
-    @Body(updateHousingListingBodyPipe) dto: UpdateHousingListingDto
-  ) {
-    return this.marketplace.updateHousingListing(request.user.email, id, dto);
-  }
+function legacyListingsRetired(): never {
+  throw new GoneException({
+    statusCode: 410,
+    code: "LEGACY_LISTINGS_RETIRED",
+    message: "Legacy housing listings API has been retired",
+    replacement: "/api/v1/listings"
+  });
 }
