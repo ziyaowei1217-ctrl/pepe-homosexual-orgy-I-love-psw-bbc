@@ -77,6 +77,13 @@ Administrator HTTP writes require a fresh step-up token. Authenticate normally, 
 `POST /api/v1/auth/admin-step-up/verify`, and use the returned access token for the administrator
 write. Ordinary login tokens intentionally do not contain the step-up claim.
 
+## Listing API Migration
+
+The former `/api/v1/housing-listings` API is retired. Collection and item requests return HTTP 410
+with `LEGACY_LISTINGS_RETIRED` and point clients to `/api/v1/listings`. The old PostgreSQL table
+remains available only as a write-protected archive; new application code must not read from or
+write to it.
+
 ## Roommate Matching Deck
 
 The roommate discovery flow is intentionally Tinder-like: quick cards, one-tap decisions, match reasons, tradeoffs, icebreakers, and a ranked queue.
