@@ -87,6 +87,11 @@ model User {
   ownedListingThreads DealThread[]      @relation("ListingOwnerDealThreads")
   dealMessages    DealMessage[]
   viewingRequests ViewingRequest[]
+  roommateProfile RoommateProfile? @relation("RoommateProfileOwner")
+  firstRoommateMatches RoommateMatch[] @relation("RoommateMatchFirstUser")
+  secondRoommateMatches RoommateMatch[] @relation("RoommateMatchSecondUser")
+  roommateConversationMemberships RoommateConversationMember[]
+  sentRoommateMessages RoommateMessage[]
 }
 
 model Profile {
@@ -271,6 +276,8 @@ model ListingMedia {
 
 model RoommateProfile {
   id              String           @id @default(cuid())
+  ownerId         String?          @unique
+  owner           User?            @relation("RoommateProfileOwner", fields: [ownerId], references: [id], onDelete: SetNull)
   name            String
   age             Int
   role            String
@@ -288,6 +295,67 @@ model RoommateProfile {
   dealRoomMembers DealRoomMember[]
 
   @@index([status, match])
+}
+
+enum RoommateMatchStatus {
+  ACTIVE
+  CLOSED
+}
+
+model RoommateMatch {
+  id           String              @id @default(cuid())
+  firstUserId  String
+  secondUserId String
+  status       RoommateMatchStatus @default(ACTIVE)
+  matchedAt    DateTime            @default(now())
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+  firstUser    User                @relation("RoommateMatchFirstUser", fields: [firstUserId], references: [id], onDelete: Cascade)
+  secondUser   User                @relation("RoommateMatchSecondUser", fields: [secondUserId], references: [id], onDelete: Cascade)
+  conversation RoommateConversation?
+
+  @@unique([firstUserId, secondUserId])
+  @@index([firstUserId, status, updatedAt])
+  @@index([secondUserId, status, updatedAt])
+}
+
+model RoommateConversation {
+  id            String   @id @default(cuid())
+  matchId       String   @unique
+  lastMessageAt DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  match         RoommateMatch @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  members       RoommateConversationMember[]
+  messages      RoommateMessage[]
+}
+
+model RoommateConversationMember {
+  id             String               @id @default(cuid())
+  conversationId String
+  userId         String
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+  conversation   RoommateConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user           User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([conversationId, userId])
+  @@index([userId, updatedAt])
+}
+
+model RoommateMessage {
+  id              String               @id @default(cuid())
+  conversationId  String
+  senderId        String
+  clientMessageId String
+  body            String
+  createdAt       DateTime             @default(now())
+  conversation    RoommateConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender          User                 @relation(fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@unique([senderId, clientMessageId])
+  @@index([conversationId, createdAt, id])
+  @@index([senderId])
 }
 
 model RoommateMatchingProfile {
