@@ -3,10 +3,7 @@ import { Prisma } from "@prisma/client";
 import { describe, expect, it } from "vitest";
 
 import { encodeRoommateMessageCursor } from "../src/roommate-conversations/dto";
-import {
-  RoommateConversationsService,
-  type RoommateConversationSummary
-} from "../src/roommate-conversations/roommate-conversations.service";
+import { RoommateConversationsService } from "../src/roommate-conversations/roommate-conversations.service";
 import type {
   RoommateConversationEvent,
   RoommateConversationEvents
@@ -31,12 +28,14 @@ describe("RoommateConversationsService", () => {
     expect(summaries[0]).toMatchObject({
       id: "conversation-a-b",
       matchId: "match-a-b",
-      peer: { id: "user-b", name: "User B", image: "https://example.test/b.jpg" },
+      peer: { id: "profile-b", name: "User B", image: "https://example.test/b.jpg" },
       latestMessage: { id: "message-4", body: "Newest unread" },
       unreadCount: 2,
       lastReadMessageId: "message-1",
       writable: true
     });
+    expect(JSON.stringify(summaries)).not.toContain("user-a");
+    expect(JSON.stringify(summaries)).not.toContain("user-b");
   });
 
   it("returns identical not-found errors for missing and inaccessible conversations", async () => {
@@ -68,6 +67,9 @@ describe("RoommateConversationsService", () => {
     const third = await service.listMessages("user-a", "conversation-a-b", { limit: 2, cursor: second.nextCursor! });
 
     expect(first.messages.map((message) => message.id)).toEqual(["message-5", "message-4"]);
+    expect(first.messages.map((message) => message.senderRole)).toEqual(["self", "peer"]);
+    expect(JSON.stringify(first)).not.toContain("user-a");
+    expect(JSON.stringify(first)).not.toContain("user-b");
     expect(second.messages.map((message) => message.id)).toEqual(["message-3", "message-2"]);
     expect(third.messages.map((message) => message.id)).toEqual(["message-1"]);
     expect(third.nextCursor).toBeNull();
@@ -87,6 +89,31 @@ describe("RoommateConversationsService", () => {
     expect(retried.id).toBe(first.id);
     expect(retried.body).toBe("Hello");
     expect(database.messages).toHaveLength(1);
+  });
+
+  it("returns the committed idempotent message after the match closes", async () => {
+    const database = createConversationDatabase();
+    const service = createService(database);
+    const command = { clientMessageId: "fb2e1d53-7e57-4e2b-aa3b-2593f57dc43e", body: "Committed before close" };
+    const sent = await service.sendMessage("user-a", "conversation-a-b", command);
+    database.match.status = "CLOSED";
+
+    const retried = await service.sendMessage("user-a", "conversation-a-b", command);
+
+    expect(retried).toEqual(sent);
+    expect(database.messages).toHaveLength(1);
+  });
+
+  it("rejects a new send when the match closes before the write transaction checks it", async () => {
+    const database = createConversationDatabase({ closeBeforeTransaction: true });
+
+    await expect(
+      createService(database).sendMessage("user-a", "conversation-a-b", {
+        clientMessageId: "d3ef21aa-6570-4440-811c-51f0a7082b7a",
+        body: "Must not cross the close"
+      })
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(database.messages).toHaveLength(0);
   });
 
   it("returns the winning row when concurrent insertion loses the client-message unique race", async () => {
@@ -138,6 +165,23 @@ describe("RoommateConversationsService", () => {
     expect(publishCommitStates).toEqual([true]);
   });
 
+  it("keeps routing user IDs outside each recipient's public event payload", async () => {
+    const database = createConversationDatabase();
+    const published: RoommateConversationEvent[] = [];
+    const service = createService(database, { publish: async (event) => void published.push(event) });
+
+    await service.sendMessage("user-a", "conversation-a-b", {
+      clientMessageId: "856778a4-e68f-4577-a657-d92419ea81c3",
+      body: "Public event"
+    });
+
+    const event = published[0] as any;
+    const publicPayloads = event.deliveries?.map((delivery: any) => delivery.payload) ?? [event.payload];
+    expect(publicPayloads.map((payload: any) => payload.message.senderRole)).toEqual(["self", "peer"]);
+    expect(JSON.stringify(publicPayloads)).not.toContain("user-a");
+    expect(JSON.stringify(publicPayloads)).not.toContain("user-b");
+  });
+
   it("keeps a committed send successful when publishing fails", async () => {
     const database = createConversationDatabase();
     const events: RoommateConversationEvents = {
@@ -166,12 +210,16 @@ describe("RoommateConversationsService", () => {
     const advanced = await service.markRead("user-a", "conversation-a-b", { lastReadMessageId: "message-2" });
     const stale = await service.markRead("user-a", "conversation-a-b", { lastReadMessageId: "message-1" });
 
-    expect(advanced).toMatchObject({ lastReadMessageId: "message-2", lastReadAt: at(2) });
+    expect(advanced).toMatchObject({ self: { lastReadMessageId: "message-2", lastReadAt: at(2) } });
     expect(stale).toEqual(advanced);
     expect(database.memberFor("user-a")).toMatchObject({ lastReadMessageId: "message-2", lastReadAt: at(2) });
-    expect(published).toEqual([
-      expect.objectContaining({ name: "roommate.message.read", payload: expect.objectContaining({ lastReadMessageId: "message-2" }) })
-    ]);
+    expect(JSON.stringify(advanced)).not.toContain("user-a");
+    expect(JSON.stringify(advanced)).not.toContain("user-b");
+    const publicPayloads = (published[0] as any).deliveries?.map((delivery: any) => delivery.payload) ?? [
+      (published[0] as any).payload
+    ];
+    expect(JSON.stringify(publicPayloads)).not.toContain("user-a");
+    expect(JSON.stringify(publicPayloads)).not.toContain("user-b");
   });
 
   it("enforces a 20-message sliding window per user and conversation", async () => {
@@ -246,7 +294,7 @@ type Message = {
   createdAt: Date;
 };
 
-function createConversationDatabase(options: { loseNextMessageRace?: boolean } = {}) {
+function createConversationDatabase(options: { loseNextMessageRace?: boolean; closeBeforeTransaction?: boolean } = {}) {
   const match: Match = { id: "match-a-b", status: "ACTIVE" };
   const conversation: Conversation = {
     id: "conversation-a-b",
@@ -282,6 +330,7 @@ function createConversationDatabase(options: { loseNextMessageRace?: boolean } =
   }
 
   const transaction = {
+    $queryRaw: async () => [{ status: match.status }],
     roommateMessage: {
       create: async ({ data }: { data: Omit<Message, "id" | "createdAt"> }) => {
         if (loseNextMessageRace) {
@@ -315,6 +364,7 @@ function createConversationDatabase(options: { loseNextMessageRace?: boolean } =
   const prisma = {
     $transaction: async <T>(operation: (client: typeof transaction) => Promise<T>) => {
       transactionCommitted = false;
+      if (options.closeBeforeTransaction) match.status = "CLOSED";
       try {
         const result = await operation(transaction);
         transactionCommitted = true;
@@ -440,7 +490,7 @@ function user(id: string, name: string, image: string) {
   return {
     id,
     roommateProfile: {
-      id: `profile-${id}`,
+      id: id === "user-a" ? "profile-a" : id === "user-b" ? "profile-b" : "profile-c",
       name,
       age: 24,
       role: "Student",

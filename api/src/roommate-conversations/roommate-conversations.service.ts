@@ -64,8 +64,7 @@ export type RoommateConversationSummary = {
   id: string;
   matchId: string;
   peer: {
-    id: string;
-    profileId: string | null;
+    id: string | null;
     name: string | null;
     age: number | null;
     role: string | null;
@@ -117,8 +116,7 @@ export class RoommateConversationsService {
           id: membership.conversation.id,
           matchId: membership.conversation.matchId,
           peer: {
-            id: peerMember?.user.id ?? "",
-            profileId: profile?.id ?? null,
+            id: profile?.id ?? null,
             name: profile?.name ?? null,
             age: profile?.age ?? null,
             role: profile?.role ?? null,
@@ -128,7 +126,7 @@ export class RoommateConversationsService {
             commute: profile?.commute ?? null,
             tags: profile?.tags ?? []
           },
-          latestMessage: latestMessage ? serializeMessage(latestMessage) : null,
+          latestMessage: latestMessage ? serializeMessage(latestMessage, userId) : null,
           unreadCount,
           lastReadMessageId: membership.lastReadMessageId,
           lastReadAt: membership.lastReadAt,
@@ -150,7 +148,7 @@ export class RoommateConversationsService {
   async listMessages(userId: string, conversationId: string, query: Partial<RoommateMessagePageQueryDto>) {
     await this.findMembership(userId, conversationId);
     const limit = query.limit ?? 50;
-    const cursor = query.cursor ? decodeRoommateMessageCursor(query.cursor) : null;
+    const cursor = query.cursor !== undefined ? decodeRoommateMessageCursor(query.cursor) : null;
     const rows = (await this.prisma.roommateMessage.findMany({
       where: {
         conversationId,
@@ -167,7 +165,7 @@ export class RoommateConversationsService {
       take: limit + 1
     })) as MessageRecord[];
     const hasMore = rows.length > limit;
-    const messages = rows.slice(0, limit).map(serializeMessage);
+    const messages = rows.slice(0, limit).map((message) => serializeMessage(message, userId));
     const last = messages.at(-1);
 
     return {
@@ -178,10 +176,6 @@ export class RoommateConversationsService {
 
   async sendMessage(userId: string, conversationId: string, dto: SendRoommateMessageDto) {
     const membership = await this.findMembership(userId, conversationId);
-    if (membership.conversation.match.status !== "ACTIVE") {
-      throw new BadRequestException("Roommate conversation is read-only");
-    }
-
     const body = typeof dto.body === "string" ? dto.body.trim() : "";
     if (!body || body.length > 2000) throw new BadRequestException("Message body must contain 1 to 2000 characters");
 
@@ -190,7 +184,7 @@ export class RoommateConversationsService {
     })) as MessageRecord | null;
     if (existing) {
       if (existing.conversationId !== conversationId) throw new BadRequestException("clientMessageId was already used");
-      return serializeMessage(existing);
+      return serializeMessage(existing, userId);
     }
 
     await this.rateLimiter.consume({ userId, conversationId, now: new Date() });
@@ -198,6 +192,16 @@ export class RoommateConversationsService {
     let created: MessageRecord;
     try {
       created = (await this.prisma.$transaction(async (transaction) => {
+        const [lockedMatch] = await transaction.$queryRaw<Array<{ status: "ACTIVE" | "CLOSED" }>>(Prisma.sql`
+          SELECT rm."status"::text AS "status"
+          FROM "RoommateMatch" rm
+          INNER JOIN "RoommateConversation" rc ON rc."matchId" = rm."id"
+          WHERE rc."id" = ${conversationId}
+          FOR UPDATE OF rm
+        `);
+        if (lockedMatch?.status !== "ACTIVE") {
+          throw new BadRequestException("Roommate conversation is read-only");
+        }
         const message = (await transaction.roommateMessage.create({
           data: { conversationId, senderId: userId, clientMessageId: dto.clientMessageId, body }
         })) as MessageRecord;
@@ -213,14 +217,16 @@ export class RoommateConversationsService {
         where: { senderId_clientMessageId: { senderId: userId, clientMessageId: dto.clientMessageId } }
       })) as MessageRecord | null;
       if (!winner || winner.conversationId !== conversationId) throw error;
-      return serializeMessage(winner);
+      return serializeMessage(winner, userId);
     }
 
-    const message = serializeMessage(created);
+    const message = serializeMessage(created, userId);
     await this.publishBestEffort({
       name: "roommate.message.created",
-      userIds: membership.conversation.members.map((member) => member.userId),
-      payload: { conversationId, message }
+      deliveries: membership.conversation.members.map((member) => ({
+        userId: member.userId,
+        payload: { conversationId, message: serializeMessage(created, member.userId) }
+      }))
     });
     return message;
   }
@@ -242,18 +248,19 @@ export class RoommateConversationsService {
       data: { lastReadMessageId: target.id, lastReadAt: target.createdAt }
     });
     const current = await this.findMembership(userId, conversationId);
-    const state = {
-      conversationId,
-      userId,
-      lastReadMessageId: current.lastReadMessageId,
-      lastReadAt: current.lastReadAt
-    };
+    const state = serializeReadState(conversationId, current, findPeerMember(current, userId));
 
     if (updated.count > 0) {
       await this.publishBestEffort({
         name: "roommate.message.read",
-        userIds: current.conversation.members.map((member) => member.userId),
-        payload: state
+        deliveries: current.conversation.members.map((member) => ({
+          userId: member.userId,
+          payload: serializeReadState(
+            conversationId,
+            member,
+            current.conversation.members.find((candidate) => candidate.userId !== member.userId)
+          )
+        }))
       });
     }
     return state;
@@ -306,14 +313,30 @@ function messagesAfter(lastReadAt: Date | null, lastReadMessageId: string | null
   };
 }
 
-function serializeMessage(message: MessageRecord) {
+function serializeMessage(message: MessageRecord, viewerUserId: string) {
   return {
     id: message.id,
     conversationId: message.conversationId,
-    senderId: message.senderId,
+    senderRole: message.senderId === viewerUserId ? ("self" as const) : ("peer" as const),
     clientMessageId: message.clientMessageId,
     body: message.body,
     createdAt: message.createdAt
+  };
+}
+
+function findPeerMember(membership: MemberRecord, userId: string) {
+  return membership.conversation.members.find((member) => member.userId !== userId);
+}
+
+function serializeReadState(
+  conversationId: string,
+  self: { lastReadMessageId: string | null; lastReadAt: Date | null },
+  peer?: { lastReadMessageId: string | null; lastReadAt: Date | null }
+) {
+  return {
+    conversationId,
+    self: { lastReadMessageId: self.lastReadMessageId, lastReadAt: self.lastReadAt },
+    peer: { lastReadMessageId: peer?.lastReadMessageId ?? null, lastReadAt: peer?.lastReadAt ?? null }
   };
 }
 

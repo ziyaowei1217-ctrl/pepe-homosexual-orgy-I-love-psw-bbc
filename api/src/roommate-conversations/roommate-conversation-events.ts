@@ -9,8 +9,10 @@ export type RoommateConversationEventName =
 
 export type RoommateConversationEvent = {
   name: RoommateConversationEventName;
-  userIds: string[];
-  payload: Record<string, unknown>;
+  deliveries: Array<{
+    userId: string;
+    payload: Record<string, unknown>;
+  }>;
 };
 
 export interface RoommateConversationEvents {
@@ -20,4 +22,3 @@ export interface RoommateConversationEvents {
 export class NoopRoommateConversationEvents implements RoommateConversationEvents {
   async publish(_event: RoommateConversationEvent) {}
 }
-

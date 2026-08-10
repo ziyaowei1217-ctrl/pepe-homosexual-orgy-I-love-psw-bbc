@@ -52,7 +52,7 @@ describe("roommate conversation HTTP API", () => {
 
     const initial = await http.get("/api/v1/roommate-conversations").auth(tokens["user-a"], { type: "bearer" }).expect(200);
     expect(initial.body).toEqual([
-      expect.objectContaining({ id: "conversation-a-b", peer: expect.objectContaining({ id: "user-b" }), unreadCount: 0 })
+      expect.objectContaining({ id: "conversation-a-b", peer: expect.objectContaining({ id: "profile-b" }), unreadCount: 0 })
     ]);
 
     const command = {
@@ -76,7 +76,7 @@ describe("roommate conversation HTTP API", () => {
       .get("/api/v1/roommate-conversations")
       .auth(tokens["user-b"], { type: "bearer" })
       .expect(200);
-    expect(recipientInbox.body[0]).toMatchObject({ peer: { id: "user-a" }, unreadCount: 1 });
+    expect(recipientInbox.body[0]).toMatchObject({ peer: { id: "profile-a" }, unreadCount: 1 });
 
     const offlineHistory = await http
       .get("/api/v1/roommate-conversations/conversation-a-b/messages")
@@ -89,7 +89,11 @@ describe("roommate conversation HTTP API", () => {
       .auth(tokens["user-b"], { type: "bearer" })
       .send({ lastReadMessageId: sent.body.id })
       .expect(201);
-    expect(read.body).toMatchObject({ userId: "user-b", lastReadMessageId: sent.body.id });
+    expect(read.body).toMatchObject({ self: { lastReadMessageId: sent.body.id } });
+    for (const body of [initial.body, sent.body, recipientInbox.body, offlineHistory.body, read.body]) {
+      expect(JSON.stringify(body)).not.toContain("user-a");
+      expect(JSON.stringify(body)).not.toContain("user-b");
+    }
   });
 
   it("makes inaccessible and missing conversations indistinguishable", async () => {
@@ -117,6 +121,10 @@ describe("roommate conversation HTTP API", () => {
       .expect(400);
     await http
       .get("/api/v1/roommate-conversations/conversation-a-b/messages?cursor=malformed")
+      .auth(tokens["user-a"], { type: "bearer" })
+      .expect(400);
+    await http
+      .get("/api/v1/roommate-conversations/conversation-a-b/messages?cursor=")
       .auth(tokens["user-a"], { type: "bearer" })
       .expect(400);
   });
@@ -158,6 +166,7 @@ function createHttpDatabase() {
   }
 
   const transaction = {
+    $queryRaw: async () => [{ status: match.status }],
     roommateMessage: {
       create: async ({ data }: { data: Omit<HttpMessage, "id" | "createdAt"> }) => {
         const message = {
@@ -225,11 +234,11 @@ function httpUser(id: string, name: string) {
     email: `${id}@example.test`,
     role: "USER",
     roommateProfile: {
-      id: `profile-${id}`,
+      id: id === "user-a" ? "profile-a" : id === "user-b" ? "profile-b" : "profile-c",
       name,
       age: 24,
       role: "Student",
-      image: `https://example.test/${id}.jpg`,
+      image: id === "user-a" ? "https://example.test/a.jpg" : id === "user-b" ? "https://example.test/b.jpg" : "https://example.test/c.jpg",
       match: 90,
       budget: "$1,500",
       commute: "20 min",
@@ -253,4 +262,3 @@ function httpMember(id: string, userId: string) {
 function newestFirst(left: HttpMessage, right: HttpMessage) {
   return right.createdAt.getTime() - left.createdAt.getTime() || right.id.localeCompare(left.id);
 }
-

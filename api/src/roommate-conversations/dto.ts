@@ -29,6 +29,7 @@ export class RoommateMessagePageQueryDto {
 
   @IsOptional()
   @IsString()
+  @IsNotEmpty()
   cursor?: string;
 }
 
@@ -54,4 +55,3 @@ export function decodeRoommateMessageCursor(value: string): RoommateMessageCurso
     throw new BadRequestException("Invalid roommate message cursor");
   }
 }
-
