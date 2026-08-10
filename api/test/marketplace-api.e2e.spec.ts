@@ -87,6 +87,13 @@ describe("marketplace database API", () => {
 
   it("stores roommate profiles and keeps protected classes out of the API contract", async () => {
     const http = request(app.getHttpServer());
+    const { age: _age, ...payloadWithoutAge } = roommateProfilePayload();
+
+    await http
+      .post("/api/v1/roommate-profiles")
+      .set("Authorization", `Bearer ${token}`)
+      .send(payloadWithoutAge)
+      .expect(400);
 
     await http
       .post("/api/v1/roommate-profiles")
@@ -117,8 +124,9 @@ describe("marketplace database API", () => {
       .expect(200)
       .expect(({ body }: { body: Array<Record<string, unknown>> }) => {
         expect(body).toHaveLength(1);
-        expect(body[0]).toMatchObject({ name: "owner", commute: "LA", budget: "$1,200–$1,800/month" });
+        expect(body[0]).toMatchObject({ name: "owner", age: 26, commute: "LA", budget: "$1,200–$1,800/month" });
         expect(body[0]).not.toHaveProperty("ownerId");
+        expect(body[0]).not.toHaveProperty("localReciprocalLike");
       });
 
     await http
@@ -130,6 +138,16 @@ describe("marketplace database API", () => {
         expect(body[0]).not.toHaveProperty("race");
         expect(body[0]).not.toHaveProperty("religion");
       });
+
+    await http
+      .patch(`/api/v1/roommate-profiles/${createdResponse.body.id}`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({ status: "matched" })
+      .expect(200)
+      .expect(({ body }: { body: Record<string, unknown> }) => expect(body.status).toBe("matched"));
+
+    await http.get("/api/v1/roommates").expect(200).expect([]);
+    await http.get("/api/v1/roommate-profiles?city=LA&school=USC").expect(200).expect([]);
   });
 
   it("retires every legacy housing-listing collection and item operation", async () => {
@@ -191,6 +209,7 @@ async function signIn(app: INestApplication, email: string) {
 
 function roommateProfilePayload() {
   return {
+    age: 26,
     school: "USC",
     city: "LA",
     budgetMin: 1200,

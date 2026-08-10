@@ -33,6 +33,17 @@ describe("RoommatesService", () => {
     }
   });
 
+  it("does not leak server-owned fields from owned profiles in the deck", async () => {
+    const prisma = createPrismaMock([candidate({ ownerId: "user-2", localReciprocalLike: true })]);
+    const service = new RoommatesService(prisma as never, createDealRoomsMock() as never, createRoommateMatchesMock() as never);
+
+    const deck = await service.findDeck({ limit: 1 });
+
+    expect(deck.items).toHaveLength(1);
+    expect(deck.items[0]).not.toHaveProperty("ownerId");
+    expect(deck.items[0]).not.toHaveProperty("localReciprocalLike");
+  });
+
   it("records a pending like without creating a deal room", async () => {
     const prisma = createPrismaMock([candidate({ localReciprocalLike: false })]);
     const dealRooms = createDealRoomsMock();

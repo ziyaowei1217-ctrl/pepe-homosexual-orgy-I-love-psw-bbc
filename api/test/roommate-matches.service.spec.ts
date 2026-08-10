@@ -1,4 +1,5 @@
 import { BadRequestException } from "@nestjs/common";
+import { Prisma } from "@prisma/client";
 import { describe, expect, it } from "vitest";
 
 import { RoommateMatchService, normalizeUserPair } from "../src/roommates/roommate-match.service";
@@ -85,6 +86,24 @@ describe("RoommateMatchService", () => {
     expect(database.conversations).toHaveLength(1);
     expect(database.conversationMembers).toHaveLength(2);
   });
+
+  it("retries a serializable transaction conflict before recording the action", async () => {
+    const database = createDatabase({ transactionFailures: [transactionConflict()] });
+    const service = new RoommateMatchService(database.prisma as never);
+
+    const result = await service.recordAction("user-a", "profile-b", "LIKE");
+
+    expect(result.action).toMatchObject({ userId: "user-a", roommateProfileId: "profile-b", action: "LIKE" });
+    expect(database.transactionAttempts).toBe(2);
+  });
+
+  it("does not retry a non-transaction error", async () => {
+    const database = createDatabase({ transactionFailures: [new Error("database unavailable")] });
+    const service = new RoommateMatchService(database.prisma as never);
+
+    await expect(service.recordAction("user-a", "profile-b", "LIKE")).rejects.toThrow("database unavailable");
+    expect(database.transactionAttempts).toBe(1);
+  });
 });
 
 type Action = { id: string; userId: string; roommateProfileId: string; action: "LIKE" | "PASS" | "LATER" };
@@ -92,7 +111,7 @@ type Match = { id: string; firstUserId: string; secondUserId: string; status: "A
 type Conversation = { id: string; matchId: string };
 type ConversationMember = { conversationId: string; userId: string };
 
-function createDatabase() {
+function createDatabase(options: { transactionFailures?: Error[] } = {}) {
   const profiles = [
     profile("profile-a", "user-a"),
     profile("profile-b", "user-b"),
@@ -102,9 +121,15 @@ function createDatabase() {
   const matches: Match[] = [];
   const conversations: Conversation[] = [];
   const conversationMembers: ConversationMember[] = [];
+  let transactionAttempts = 0;
 
   const prisma = {
-    $transaction: async <T>(operation: (transaction: any) => Promise<T>) => operation(transaction)
+    $transaction: async <T>(operation: (transaction: any) => Promise<T>) => {
+      transactionAttempts += 1;
+      const error = options.transactionFailures?.shift();
+      if (error) throw error;
+      return operation(transaction);
+    }
   };
   const transaction = {
     roommateProfile: {
@@ -181,7 +206,23 @@ function createDatabase() {
     }
   };
 
-  return { prisma, actions, matches, conversations, conversationMembers };
+  return {
+    prisma,
+    actions,
+    matches,
+    conversations,
+    conversationMembers,
+    get transactionAttempts() {
+      return transactionAttempts;
+    }
+  };
+}
+
+function transactionConflict() {
+  return new Prisma.PrismaClientKnownRequestError("Transaction conflict", {
+    code: "P2034",
+    clientVersion: "test"
+  });
 }
 
 function profile(id: string, ownerId: string | null) {

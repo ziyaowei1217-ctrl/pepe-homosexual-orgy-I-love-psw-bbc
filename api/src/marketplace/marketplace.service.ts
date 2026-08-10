@@ -1,4 +1,5 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from "@nestjs/common";
+import { Prisma } from "@prisma/client";
 
 import { PrismaService } from "../prisma/prisma.service";
 import { CreateRoommateProfileDto, UpdateProfileDto, UpdateRoommateProfileDto } from "./dto";
@@ -33,11 +34,13 @@ export class MarketplaceService {
     this.assertBudgetRange(dto.budgetMin, dto.budgetMax);
     const profile = await this.ensureProfile(email);
 
-    const matchingProfile = await this.prisma.roommateMatchingProfile.create({
-      data: roommateProfileData(profile.id, dto)
+    return this.prisma.$transaction(async (transaction) => {
+      const matchingProfile = await transaction.roommateMatchingProfile.create({
+        data: roommateProfileData(profile.id, dto)
+      });
+      await this.projectOwnedRoommateProfile(transaction, ownerId, profile, matchingProfile, dto.age);
+      return matchingProfile;
     });
-    await this.projectOwnedRoommateProfile(ownerId, profile, matchingProfile);
-    return matchingProfile;
   }
 
   findRoommateProfiles(query: { city?: string; school?: string }) {
@@ -54,20 +57,22 @@ export class MarketplaceService {
   async updateRoommateProfile(ownerId: string, email: string, id: string, dto: UpdateRoommateProfileDto) {
     this.assertBudgetRange(dto.budgetMin, dto.budgetMax);
     const profile = await this.ensureProfile(email);
-    const existing = await this.prisma.roommateMatchingProfile.findFirst({
-      where: {
-        id,
-        userId: profile.id
-      }
-    });
-    if (!existing) throw new NotFoundException("Roommate profile not found");
+    return this.prisma.$transaction(async (transaction) => {
+      const existing = await transaction.roommateMatchingProfile.findFirst({
+        where: {
+          id,
+          userId: profile.id
+        }
+      });
+      if (!existing) throw new NotFoundException("Roommate profile not found");
 
-    const matchingProfile = await this.prisma.roommateMatchingProfile.update({
-      where: { id },
-      data: roommateProfileUpdateData(dto)
+      const matchingProfile = await transaction.roommateMatchingProfile.update({
+        where: { id },
+        data: roommateProfileUpdateData(dto)
+      });
+      await this.projectOwnedRoommateProfile(transaction, ownerId, profile, matchingProfile, dto.age);
+      return matchingProfile;
     });
-    await this.projectOwnedRoommateProfile(ownerId, profile, matchingProfile);
-    return matchingProfile;
   }
 
   private async ensureProfile(email: string) {
@@ -84,7 +89,8 @@ export class MarketplaceService {
     }
   }
 
-  private projectOwnedRoommateProfile(
+  private async projectOwnedRoommateProfile(
+    transaction: Pick<Prisma.TransactionClient, "roommateProfile">,
     ownerId: string,
     profile: { email: string; displayName: string | null; avatarUrl: string | null; role: string; city: string | null; school: string | null },
     matchingProfile: {
@@ -97,12 +103,17 @@ export class MarketplaceService {
       sleepSchedule: string | null;
       pets: string | null;
       status: string;
-    }
+    },
+    age?: number
   ) {
-    const data = ownedRoommateProfileData(profile, matchingProfile);
-    return this.prisma.roommateProfile.upsert({
+    const data = ownedRoommateProfileData(profile, matchingProfile, age);
+    const existing = await transaction.roommateProfile.findUnique({ where: { ownerId } });
+    const publicAge = age ?? existing?.age;
+    if (publicAge === undefined) throw new BadRequestException("Roommate profile age is required");
+
+    return transaction.roommateProfile.upsert({
       where: { ownerId },
-      create: { ownerId, ...data },
+      create: { ownerId, ...data, age: publicAge },
       update: data
     });
   }
@@ -157,7 +168,8 @@ function ownedRoommateProfileData(
     sleepSchedule: string | null;
     pets: string | null;
     status: string;
-  }
+  },
+  age?: number
 ) {
   const atSignIndex = profile.email.indexOf("@");
   const name = profile.displayName ?? (atSignIndex > 0 ? profile.email.slice(0, atSignIndex) : profile.email);
@@ -167,16 +179,22 @@ function ownedRoommateProfileData(
 
   return {
     name,
-    age: 18,
+    ...(age !== undefined ? { age } : {}),
     role: profile.role,
     image: profile.avatarUrl ?? `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(name)}`,
     match: 0,
     budget: formatBudget(matchingProfile.budgetMin, matchingProfile.budgetMax),
     commute: matchingProfile.city ?? profile.city ?? "Flexible",
     tags: tags.length > 0 ? tags : ["roommate search"],
-    status: matchingProfile.status === "hidden" ? "hidden" : "active",
-    archivedAt: matchingProfile.status === "hidden" ? new Date() : null
+    ...ownedRoommateProfileStatus(matchingProfile.status)
   };
+}
+
+function ownedRoommateProfileStatus(status: string) {
+  if (status === "active") return { status: "active", archivedAt: null };
+  if (status === "hidden") return { status: "hidden", archivedAt: new Date() };
+  if (status === "matched") return { status: "matched", archivedAt: new Date() };
+  throw new BadRequestException("Unsupported roommate profile status");
 }
 
 function formatBudget(budgetMin: number | null, budgetMax: number | null) {

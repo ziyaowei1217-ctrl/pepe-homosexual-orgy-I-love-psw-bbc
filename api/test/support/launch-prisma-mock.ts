@@ -695,8 +695,8 @@ export function createLaunchPrismaMock() {
               .filter((roommate) => !where?.status || (roommate.status ?? "active") === where.status)
               .sort((a, b) => b.match - a.match)
           : [],
-      findUnique: async ({ where }: { where: { id: string } }) =>
-        state.roommates.find((roommate) => roommate.id === where.id) ?? null,
+      findUnique: async ({ where }: { where: { id?: string; ownerId?: string } }) =>
+        state.roommates.find((roommate) => roommate.id === where.id || roommate.ownerId === where.ownerId) ?? null,
       upsert: async ({
         where,
         create,

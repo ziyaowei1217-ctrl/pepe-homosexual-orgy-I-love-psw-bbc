@@ -9,7 +9,7 @@ import {
   RoommateDeckQueryDto,
   UpdateRoommateProfileDto
 } from "./dto";
-import { buildRoommateDeck, getActionFeedback } from "./matching";
+import { buildRoommateDeck, getActionFeedback, toPublicRoommate } from "./matching";
 import { RoommateMatchService } from "./roommate-match.service";
 
 @Injectable()
@@ -184,8 +184,4 @@ function getRoommateProfileStatusFields(status?: string) {
   }
 
   return {};
-}
-
-function toPublicRoommate({ ownerId: _ownerId, localReciprocalLike: _localReciprocalLike, ...roommate }: any) {
-  return roommate;
 }

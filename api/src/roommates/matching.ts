@@ -113,6 +113,14 @@ export type RoommateDeckResponse = {
   };
 };
 
+export function toPublicRoommate<T extends object>(roommate: T): Omit<T, "ownerId" | "localReciprocalLike"> {
+  const { ownerId: _ownerId, localReciprocalLike: _localReciprocalLike, ...publicRoommate } = roommate as T & {
+    ownerId?: unknown;
+    localReciprocalLike?: unknown;
+  };
+  return publicRoommate as Omit<T, "ownerId" | "localReciprocalLike">;
+}
+
 type RoommateDeckPreference = {
   budgetMin: number;
   budgetMax: number;
@@ -319,7 +327,6 @@ function scoreDeckCandidate(
   profile: RoommateDeckBaseProfile & { actionTargetId?: string; deckBatch: string },
   preference: RoommateDeckPreference
 ): RoommateDeckCandidate {
-  const { ownerId: _ownerId, ...publicProfile } = profile as typeof profile & { ownerId?: string };
   const budget = getBudgetNumber(profile);
   const dimensions = buildCompatibilityDimensions(profile, budget, preference);
   const compatibilityScore = getWeightedCompatibilityScore(dimensions);
@@ -331,7 +338,7 @@ function scoreDeckCandidate(
   const profileQualityScore = getProfileQualityScore(profile, dimensions);
 
   return {
-    ...publicProfile,
+    ...toPublicRoommate(profile),
     compatibilityScore,
     ranking: {
       finalScore: compatibilityScore,

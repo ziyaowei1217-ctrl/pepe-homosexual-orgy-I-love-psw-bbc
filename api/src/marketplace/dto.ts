@@ -3,6 +3,7 @@ import {
   ArrayMaxSize,
   IsArray,
   IsDateString,
+  IsDefined,
   IsIn,
   IsInt,
   IsNotEmpty,
@@ -22,6 +23,7 @@ const maxShortTextLength = 140;
 const maxLongTextLength = 1000;
 const maxPrice = 100_000;
 const maxArrayItems = 12;
+const maxRoommateAge = 80;
 
 function Trim() {
   return Transform(({ value }) => (typeof value === "string" ? value.trim() : value));
@@ -88,7 +90,7 @@ export class UpdateProfileDto {
   bio?: string;
 }
 
-export class CreateRoommateProfileDto {
+class RoommateProfileFieldsDto {
   @IsOptional()
   @Trim()
   @IsString()
@@ -186,7 +188,21 @@ export class CreateRoommateProfileDto {
   lookingFor?: string;
 }
 
-export class UpdateRoommateProfileDto extends CreateRoommateProfileDto {
+export class CreateRoommateProfileDto extends RoommateProfileFieldsDto {
+  @IsDefined()
+  @IsInt()
+  @Min(18)
+  @Max(maxRoommateAge)
+  age!: number;
+}
+
+export class UpdateRoommateProfileDto extends RoommateProfileFieldsDto {
+  @IsOptional()
+  @IsInt()
+  @Min(18)
+  @Max(maxRoommateAge)
+  age?: number;
+
   @IsOptional()
   @IsIn(roommateStatuses)
   status?: string;
