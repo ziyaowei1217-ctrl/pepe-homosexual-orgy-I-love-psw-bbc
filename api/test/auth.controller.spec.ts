@@ -5,6 +5,7 @@ import { Test } from "@nestjs/testing";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { AdminGuard } from "../src/auth/admin.guard";
+import { AuthenticatedUserService } from "../src/auth/authenticated-user.service";
 import { AuthRateLimiter } from "../src/auth/auth-rate-limit";
 import { AuthController } from "../src/auth/auth.controller";
 import { AuthGuard } from "../src/auth/auth.guard";
@@ -44,6 +45,7 @@ describe("administrator step-up HTTP routes", () => {
       controllers: [AuthController],
       providers: [
         AuthGuard,
+        AuthenticatedUserService,
         AdminGuard,
         { provide: AuthService, useValue: auth },
         { provide: AuthRateLimiter, useValue: rateLimiter },

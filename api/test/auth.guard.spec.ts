@@ -2,17 +2,18 @@ import { ExecutionContext, UnauthorizedException } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { describe, expect, it } from "vitest";
 
+import { AuthenticatedUserService } from "../src/auth/authenticated-user.service";
 import { AuthenticatedRequest, AuthGuard } from "../src/auth/auth.guard";
 
 describe("AuthGuard", () => {
   it("rejects missing bearer tokens", async () => {
-    const guard = new AuthGuard(new JwtService({ secret: "test-secret" }), createPrismaMock() as never);
+    const guard = createGuard(new JwtService({ secret: "test-secret" }), createPrismaMock());
 
     await expect(guard.canActivate(contextWithHeader(undefined))).rejects.toBeInstanceOf(UnauthorizedException);
   });
 
   it("rejects invalid bearer tokens", async () => {
-    const guard = new AuthGuard(new JwtService({ secret: "test-secret" }), createPrismaMock() as never);
+    const guard = createGuard(new JwtService({ secret: "test-secret" }), createPrismaMock());
 
     await expect(guard.canActivate(contextWithHeader("Bearer nope"))).rejects.toBeInstanceOf(UnauthorizedException);
   });
@@ -20,7 +21,7 @@ describe("AuthGuard", () => {
   it("rejects valid tokens when the user no longer exists", async () => {
     const jwt = new JwtService({ secret: "test-secret" });
     const token = await jwt.signAsync({ sub: "missing-user", email: "old@example.com", role: "ADMIN" });
-    const guard = new AuthGuard(jwt, createPrismaMock() as never);
+    const guard = createGuard(jwt, createPrismaMock());
 
     await expect(guard.canActivate(contextWithHeader(`Bearer ${token}`))).rejects.toBeInstanceOf(UnauthorizedException);
   });
@@ -32,7 +33,7 @@ describe("AuthGuard", () => {
       users: [{ id: "user-1", email: "current@example.com", role: "USER" }]
     });
     const request = requestWithHeader(`Bearer ${token}`);
-    const guard = new AuthGuard(jwt, prisma as never);
+    const guard = createGuard(jwt, prisma);
 
     await expect(guard.canActivate(contextForRequest(request))).resolves.toBe(true);
 
@@ -50,7 +51,7 @@ describe("AuthGuard", () => {
       users: [{ id: "user-1", email: "admin@example.com", role: "USER" }]
     });
     const request = requestWithHeader(`Bearer ${token}`);
-    const guard = new AuthGuard(jwt, prisma as never);
+    const guard = createGuard(jwt, prisma);
 
     await guard.canActivate(contextForRequest(request));
 
@@ -64,7 +65,7 @@ describe("AuthGuard", () => {
       users: [{ id: "admin-1", email: "admin@example.com", role: "ADMIN" }]
     });
     const request = requestWithHeader(`Bearer ${token}`);
-    const guard = new AuthGuard(jwt, prisma as never);
+    const guard = createGuard(jwt, prisma);
 
     await guard.canActivate(contextForRequest(request));
 
@@ -80,7 +81,7 @@ describe("AuthGuard", () => {
         users: [{ id: "admin-1", email: "admin@example.com", role: "ADMIN" }]
       });
       const request = requestWithHeader(`Bearer ${token}`);
-      const guard = new AuthGuard(jwt, prisma as never);
+      const guard = createGuard(jwt, prisma);
 
       await guard.canActivate(contextForRequest(request));
 
@@ -101,6 +102,10 @@ function createPrismaMock({ users = [] }: { users?: TestUser[] } = {}) {
       findUnique: async ({ where }: { where: { id: string } }) => users.find((user) => user.id === where.id) ?? null
     }
   };
+}
+
+function createGuard(jwt: JwtService, prisma: ReturnType<typeof createPrismaMock>) {
+  return new AuthGuard(new AuthenticatedUserService(jwt, prisma as never));
 }
 
 function requestWithHeader(authorization?: string): AuthenticatedRequest {

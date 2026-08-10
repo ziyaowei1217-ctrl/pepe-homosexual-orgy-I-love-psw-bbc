@@ -5,6 +5,7 @@ import { Test } from "@nestjs/testing";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { AuthRateLimiter, InMemoryRateLimitStore, type RateLimitStore } from "../src/auth/auth-rate-limit";
+import { AuthenticatedUserService } from "../src/auth/authenticated-user.service";
 import { AUTH_SECURITY_CONFIG } from "../src/auth/auth.module";
 import { AuthController } from "../src/auth/auth.controller";
 import { AuthGuard } from "../src/auth/auth.guard";
@@ -75,6 +76,7 @@ describe("auth HTTP abuse controls", () => {
       controllers: [AuthController],
       providers: [
         { provide: AuthService, useValue: auth },
+        { provide: AuthenticatedUserService, useValue: {} },
         { provide: AuthGuard, useValue: { canActivate: () => true } },
         { provide: PrismaService, useValue: {} },
         {

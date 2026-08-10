@@ -4,6 +4,7 @@ import { AuditModule } from "../audit/audit.module";
 import { getAuthSecurityConfig, type AuthSecurityConfig } from "../config/env";
 import { createEmailSender, EMAIL_PROVIDER_TOTAL_TIMEOUT_MS } from "../email/email-sender";
 import { AdminStepUpGuard } from "./admin-step-up.guard";
+import { AuthenticatedUserService } from "./authenticated-user.service";
 import { AuthRateLimiter, RateLimitStore } from "./auth-rate-limit";
 import { AdminGuard } from "./admin.guard";
 import { AuthController } from "./auth.controller";
@@ -85,6 +86,7 @@ export function createAuthServiceOptions(
         })
     },
     AuthService,
+    AuthenticatedUserService,
     VerificationCodeCleanupService,
     AuthGuard,
     AdminGuard,
@@ -98,6 +100,7 @@ export function createAuthServiceOptions(
     AdminStepUpGuard,
     OptionalAuthGuard,
     AuthService,
+    AuthenticatedUserService,
     ADMIN_STEP_UP_OPTIONS,
     AUTH_OPTIONS,
     EMAIL_SENDER

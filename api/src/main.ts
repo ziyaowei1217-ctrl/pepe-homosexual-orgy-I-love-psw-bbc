@@ -7,6 +7,7 @@ import { AppModule } from "./app.module";
 import { getAuthSecurityConfig } from "./config/env";
 import { configureCors, getCorsOrigins } from "./config/cors";
 import { requestIdMiddleware } from "./http/request-id";
+import { createRoommateSocketAdapter } from "./roommate-conversations/socket-adapter";
 
 type SecurityHeaderResponse = {
   setHeader(name: string, value: string): unknown;
@@ -15,6 +16,11 @@ type SecurityHeaderResponse = {
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   const config = app.get(ConfigService);
+  const socketAdapter = await createRoommateSocketAdapter(app, {
+    valkeyUrl: config.get<string>("VALKEY_URL")
+  });
+  if (socketAdapter) app.useWebSocketAdapter(socketAdapter);
+  app.enableShutdownHooks();
   const webOrigins = getCorsOrigins(config.get<string>("WEB_ORIGIN"));
   const securityConfig = getAuthSecurityConfig();
   const express = app.getHttpAdapter().getInstance() as { set(name: string, value: number): void };

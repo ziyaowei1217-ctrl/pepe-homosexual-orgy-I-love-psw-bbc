@@ -5,6 +5,7 @@ import { Test } from "@nestjs/testing";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { AuthGuard } from "../src/auth/auth.guard";
+import { AuthenticatedUserService } from "../src/auth/authenticated-user.service";
 import { PrismaService } from "../src/prisma/prisma.service";
 import { ROOMMATE_CONVERSATION_EVENTS } from "../src/roommate-conversations/roommate-conversation-events";
 import { RoommateConversationsController } from "../src/roommate-conversations/roommate-conversations.controller";
@@ -28,6 +29,7 @@ describe("roommate conversation HTTP API", () => {
       controllers: [RoommateConversationsController],
       providers: [
         AuthGuard,
+        AuthenticatedUserService,
         RoommateConversationsService,
         { provide: PrismaService, useValue: database.prisma },
         { provide: ROOMMATE_CONVERSATION_EVENTS, useValue: { publish: async () => undefined } },
