@@ -113,6 +113,15 @@ describe("marketplace database API", () => {
     });
 
     await http
+      .get("/api/v1/roommates")
+      .expect(200)
+      .expect(({ body }: { body: Array<Record<string, unknown>> }) => {
+        expect(body).toHaveLength(1);
+        expect(body[0]).toMatchObject({ name: "owner", commute: "LA", budget: "$1,200–$1,800/month" });
+        expect(body[0]).not.toHaveProperty("ownerId");
+      });
+
+    await http
       .get("/api/v1/roommate-profiles?city=LA&school=USC")
       .expect(200)
       .expect(({ body }: { body: Array<Record<string, unknown>> }) => {

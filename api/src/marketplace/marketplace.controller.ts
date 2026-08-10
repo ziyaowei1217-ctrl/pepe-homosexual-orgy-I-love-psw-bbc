@@ -72,7 +72,7 @@ export class RoommateProfilesController {
   @UseGuards(AuthGuard)
   @Post()
   create(@Req() request: AuthenticatedRequest, @Body(createRoommateProfileBodyPipe) dto: CreateRoommateProfileDto) {
-    return this.marketplace.createRoommateProfile(request.user.email, dto);
+    return this.marketplace.createRoommateProfile(request.user.id, request.user.email, dto);
   }
 
   @UseGuards(AuthGuard)
@@ -82,7 +82,7 @@ export class RoommateProfilesController {
     @Param("id") id: string,
     @Body(updateRoommateProfileBodyPipe) dto: UpdateRoommateProfileDto
   ) {
-    return this.marketplace.updateRoommateProfile(request.user.email, id, dto);
+    return this.marketplace.updateRoommateProfile(request.user.id, request.user.email, id, dto);
   }
 }
 

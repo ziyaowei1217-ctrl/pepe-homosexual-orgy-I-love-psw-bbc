@@ -66,6 +66,7 @@ type ListingMediaRecord = {
 
 type RoommateRecord = {
   id: string;
+  ownerId?: string | null;
   name: string;
   age: number;
   role: string;
@@ -696,6 +697,33 @@ export function createLaunchPrismaMock() {
           : [],
       findUnique: async ({ where }: { where: { id: string } }) =>
         state.roommates.find((roommate) => roommate.id === where.id) ?? null,
+      upsert: async ({
+        where,
+        create,
+        update
+      }: {
+        where: { ownerId: string };
+        create: Omit<RoommateRecord, "id" | "createdAt" | "localReciprocalLike"> & { localReciprocalLike?: boolean };
+        update: Partial<RoommateRecord>;
+      }) => {
+        const existing = state.roommates.find((roommate) => roommate.ownerId === where.ownerId);
+        if (existing) {
+          Object.assign(existing, definedData(update));
+          return existing;
+        }
+
+        const created: RoommateRecord = {
+          id: `roommate-${state.roommates.length + 1}`,
+          status: "active",
+          archivedAt: null,
+          ...create,
+          ownerId: where.ownerId,
+          localReciprocalLike: create.localReciprocalLike ?? false,
+          createdAt: new Date()
+        };
+        state.roommates.push(created);
+        return created;
+      },
       create: async ({
         data
       }: {

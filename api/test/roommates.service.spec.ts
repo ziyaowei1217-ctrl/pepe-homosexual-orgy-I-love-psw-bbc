@@ -5,14 +5,14 @@ import { RoommatesService } from "../src/roommates/roommates.service";
 describe("RoommatesService", () => {
   it("returns an empty list when the candidate table is empty", async () => {
     const prisma = createPrismaMock([]);
-    const service = new RoommatesService(prisma as never, createDealRoomsMock() as never);
+    const service = new RoommatesService(prisma as never, createDealRoomsMock() as never, createRoommateMatchesMock() as never);
 
     await expect(service.findAll()).resolves.toEqual([]);
   });
 
   it("omits the server-owned reciprocal flag from public candidates", async () => {
     const prisma = createPrismaMock([candidate({ localReciprocalLike: true })]);
-    const service = new RoommatesService(prisma as never, createDealRoomsMock() as never);
+    const service = new RoommatesService(prisma as never, createDealRoomsMock() as never, createRoommateMatchesMock() as never);
 
     const [result] = await service.findAll();
 
@@ -20,10 +20,23 @@ describe("RoommatesService", () => {
     expect(result).not.toHaveProperty("localReciprocalLike");
   });
 
+  it("excludes ownerless development candidates from production discovery", async () => {
+    const previousNodeEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = "production";
+    const prisma = createPrismaMock([candidate({ id: "real-profile", ownerId: "user-2" }), candidate({ id: "demo-profile" })]);
+    const service = new RoommatesService(prisma as never, createDealRoomsMock() as never, createRoommateMatchesMock() as never);
+
+    try {
+      await expect(service.findAll()).resolves.toEqual([expect.objectContaining({ id: "real-profile" })]);
+    } finally {
+      process.env.NODE_ENV = previousNodeEnv;
+    }
+  });
+
   it("records a pending like without creating a deal room", async () => {
     const prisma = createPrismaMock([candidate({ localReciprocalLike: false })]);
     const dealRooms = createDealRoomsMock();
-    const service = new RoommatesService(prisma as never, dealRooms as never);
+    const service = new RoommatesService(prisma as never, dealRooms as never, createRoommateMatchesMock() as never);
 
     const result = await service.recordAction("user-1", "roommate-1", "LIKE");
 
@@ -41,7 +54,7 @@ describe("RoommatesService", () => {
   it("creates a deal room only for a reciprocal like", async () => {
     const prisma = createPrismaMock([candidate({ localReciprocalLike: true })]);
     const dealRooms = createDealRoomsMock();
-    const service = new RoommatesService(prisma as never, dealRooms as never);
+    const service = new RoommatesService(prisma as never, dealRooms as never, createRoommateMatchesMock() as never);
 
     const result = await service.recordAction("user-1", "roommate-1", "LIKE");
 
@@ -62,6 +75,7 @@ function candidate(overrides: Record<string, unknown> = {}) {
     commute: "Fenway",
     tags: ["quiet"],
     localReciprocalLike: false,
+    ownerId: null as string | null,
     createdAt: new Date(),
     ...overrides
   };
@@ -70,7 +84,8 @@ function candidate(overrides: Record<string, unknown> = {}) {
 function createPrismaMock(candidates: ReturnType<typeof candidate>[]) {
   return {
     roommateProfile: {
-      findMany: async () => candidates,
+      findMany: async ({ where }: { where?: { ownerId?: { not: null } } } = {}) =>
+        where?.ownerId ? candidates.filter((item) => item.ownerId) : candidates,
       findUnique: async ({ where }: { where: { id: string } }) =>
         candidates.find((item) => item.id === where.id) ?? null
     }
@@ -89,4 +104,14 @@ function createDealRoomsMock() {
     }
   };
   return mock;
+}
+
+function createRoommateMatchesMock() {
+  return {
+    recordAction: async (userId: string, roommateProfileId: string, action: string) => ({
+      action: { userId, roommateProfileId, action },
+      match: null,
+      conversation: null
+    })
+  };
 }

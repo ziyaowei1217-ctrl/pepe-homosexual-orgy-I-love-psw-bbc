@@ -10,31 +10,30 @@ import {
   UpdateRoommateProfileDto
 } from "./dto";
 import { buildRoommateDeck, getActionFeedback } from "./matching";
+import { RoommateMatchService } from "./roommate-match.service";
 
 @Injectable()
 export class RoommatesService {
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
-    @Inject(DealRoomsService) private readonly dealRooms: DealRoomsService
+    @Inject(DealRoomsService) private readonly dealRooms: DealRoomsService,
+    @Inject(RoommateMatchService) private readonly roommateMatches?: RoommateMatchService
   ) {}
 
   async findAll() {
-    const records = await this.prisma.roommateProfile.findMany({
-      where: {
-        status: "active"
-      },
-      orderBy: {
-        match: "desc"
-      }
-    });
+    const records = await this.findDiscoverableProfiles();
 
     return records.map(toPublicRoommate);
   }
 
   async findDeck(query: RoommateDeckQueryDto, userId?: string) {
-    const profiles = await this.findAll();
+    const profiles = await this.findDiscoverableProfiles();
     const excludedRoommateProfileIds = userId ? await this.findUserActionRoommateProfileIds(userId) : new Set<string>();
-    const eligibleProfiles = profiles.filter((profile) => !profile.id || !excludedRoommateProfileIds.has(profile.id));
+    const eligibleProfiles = profiles.filter(
+      (profile) =>
+        (!userId || profile.ownerId !== userId) &&
+        (!profile.id || !excludedRoommateProfileIds.has(profile.id))
+    );
 
     if (eligibleProfiles.length === 0) {
       return buildRoommateDeck([], query);
@@ -92,6 +91,16 @@ export class RoommatesService {
     });
     if (!candidate) throw new NotFoundException("Roommate profile not found");
 
+    if (candidate.ownerId || process.env.NODE_ENV === "production") {
+      if (!this.roommateMatches) throw new Error("Roommate match service is not configured");
+      const result = await this.roommateMatches.recordAction(userId, roommateProfileId, action);
+      return {
+        ...result,
+        dealRoom: null,
+        feedback: getActionFeedback(action, candidate.name)
+      };
+    }
+
     const result = await this.dealRooms.recordRoommateAction({
       userId,
       roommateProfileId,
@@ -113,6 +122,18 @@ export class RoommatesService {
     });
 
     return new Set(actions.map((action) => action.roommateProfileId));
+  }
+
+  private findDiscoverableProfiles() {
+    return this.prisma.roommateProfile.findMany({
+      where: {
+        status: "active",
+        ...(process.env.NODE_ENV === "production" ? { ownerId: { not: null } } : {})
+      },
+      orderBy: {
+        match: "desc"
+      }
+    });
   }
 }
 
@@ -165,6 +186,6 @@ function getRoommateProfileStatusFields(status?: string) {
   return {};
 }
 
-function toPublicRoommate({ localReciprocalLike: _localReciprocalLike, ...roommate }: any) {
+function toPublicRoommate({ ownerId: _ownerId, localReciprocalLike: _localReciprocalLike, ...roommate }: any) {
   return roommate;
 }

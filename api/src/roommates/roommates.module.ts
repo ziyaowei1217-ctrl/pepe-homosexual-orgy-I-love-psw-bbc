@@ -4,11 +4,12 @@ import { AuthModule } from "../auth/auth.module";
 import { DealRoomsModule } from "../deal-rooms/deal-rooms.module";
 import { AdminRoommatesController } from "./admin-roommates.controller";
 import { RoommatesController } from "./roommates.controller";
+import { RoommateMatchService } from "./roommate-match.service";
 import { RoommatesService } from "./roommates.service";
 
 @Module({
   imports: [AuthModule, DealRoomsModule],
   controllers: [RoommatesController, AdminRoommatesController],
-  providers: [RoommatesService]
+  providers: [RoommatesService, RoommateMatchService]
 })
 export class RoommatesModule {}

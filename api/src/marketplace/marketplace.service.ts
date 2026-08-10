@@ -29,13 +29,15 @@ export class MarketplaceService {
     });
   }
 
-  async createRoommateProfile(email: string, dto: CreateRoommateProfileDto) {
+  async createRoommateProfile(ownerId: string, email: string, dto: CreateRoommateProfileDto) {
     this.assertBudgetRange(dto.budgetMin, dto.budgetMax);
     const profile = await this.ensureProfile(email);
 
-    return this.prisma.roommateMatchingProfile.create({
+    const matchingProfile = await this.prisma.roommateMatchingProfile.create({
       data: roommateProfileData(profile.id, dto)
     });
+    await this.projectOwnedRoommateProfile(ownerId, profile, matchingProfile);
+    return matchingProfile;
   }
 
   findRoommateProfiles(query: { city?: string; school?: string }) {
@@ -49,7 +51,7 @@ export class MarketplaceService {
     });
   }
 
-  async updateRoommateProfile(email: string, id: string, dto: UpdateRoommateProfileDto) {
+  async updateRoommateProfile(ownerId: string, email: string, id: string, dto: UpdateRoommateProfileDto) {
     this.assertBudgetRange(dto.budgetMin, dto.budgetMax);
     const profile = await this.ensureProfile(email);
     const existing = await this.prisma.roommateMatchingProfile.findFirst({
@@ -60,10 +62,12 @@ export class MarketplaceService {
     });
     if (!existing) throw new NotFoundException("Roommate profile not found");
 
-    return this.prisma.roommateMatchingProfile.update({
+    const matchingProfile = await this.prisma.roommateMatchingProfile.update({
       where: { id },
       data: roommateProfileUpdateData(dto)
     });
+    await this.projectOwnedRoommateProfile(ownerId, profile, matchingProfile);
+    return matchingProfile;
   }
 
   private async ensureProfile(email: string) {
@@ -78,6 +82,29 @@ export class MarketplaceService {
     if (budgetMin !== undefined && budgetMax !== undefined && budgetMin > budgetMax) {
       throw new BadRequestException("budgetMin cannot be greater than budgetMax");
     }
+  }
+
+  private projectOwnedRoommateProfile(
+    ownerId: string,
+    profile: { email: string; displayName: string | null; avatarUrl: string | null; role: string; city: string | null; school: string | null },
+    matchingProfile: {
+      school: string | null;
+      city: string | null;
+      budgetMin: number | null;
+      budgetMax: number | null;
+      roomType: string | null;
+      cleanliness: string | null;
+      sleepSchedule: string | null;
+      pets: string | null;
+      status: string;
+    }
+  ) {
+    const data = ownedRoommateProfileData(profile, matchingProfile);
+    return this.prisma.roommateProfile.upsert({
+      where: { ownerId },
+      create: { ownerId, ...data },
+      update: data
+    });
   }
 }
 
@@ -116,4 +143,45 @@ function dateValue(value?: string) {
 
 function definedData<T extends Record<string, unknown>>(data: T) {
   return Object.fromEntries(Object.entries(data).filter(([, value]) => value !== undefined));
+}
+
+function ownedRoommateProfileData(
+  profile: { email: string; displayName: string | null; avatarUrl: string | null; role: string; city: string | null; school: string | null },
+  matchingProfile: {
+    school: string | null;
+    city: string | null;
+    budgetMin: number | null;
+    budgetMax: number | null;
+    roomType: string | null;
+    cleanliness: string | null;
+    sleepSchedule: string | null;
+    pets: string | null;
+    status: string;
+  }
+) {
+  const atSignIndex = profile.email.indexOf("@");
+  const name = profile.displayName ?? (atSignIndex > 0 ? profile.email.slice(0, atSignIndex) : profile.email);
+  const tags = [matchingProfile.school ?? profile.school, matchingProfile.roomType, matchingProfile.cleanliness, matchingProfile.sleepSchedule, matchingProfile.pets]
+    .filter((value): value is string => Boolean(value))
+    .slice(0, 8);
+
+  return {
+    name,
+    age: 18,
+    role: profile.role,
+    image: profile.avatarUrl ?? `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(name)}`,
+    match: 0,
+    budget: formatBudget(matchingProfile.budgetMin, matchingProfile.budgetMax),
+    commute: matchingProfile.city ?? profile.city ?? "Flexible",
+    tags: tags.length > 0 ? tags : ["roommate search"],
+    status: matchingProfile.status === "hidden" ? "hidden" : "active",
+    archivedAt: matchingProfile.status === "hidden" ? new Date() : null
+  };
+}
+
+function formatBudget(budgetMin: number | null, budgetMax: number | null) {
+  if (budgetMin !== null && budgetMax !== null) return `$${budgetMin.toLocaleString()}–$${budgetMax.toLocaleString()}/month`;
+  if (budgetMin !== null) return `From $${budgetMin.toLocaleString()}/month`;
+  if (budgetMax !== null) return `Up to $${budgetMax.toLocaleString()}/month`;
+  return "Flexible";
 }

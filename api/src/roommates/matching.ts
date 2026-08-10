@@ -187,7 +187,12 @@ export function buildRoommateDeck(
   const limit = clampInteger(query.limit, defaultLimit, 1, maxLimit);
   const cursor = clampInteger(query.cursor, 0, 0, Number.MAX_SAFE_INTEGER);
   const preference = buildPreference(query);
-  const catalog = buildLargeRoommateCatalog(baseProfiles, targetCatalogSize);
+  const realProfiles = baseProfiles.filter((profile) => "ownerId" in profile && Boolean(profile.ownerId));
+  const developmentProfiles = baseProfiles.filter((profile) => !("ownerId" in profile) || !profile.ownerId);
+  const catalog = [
+    ...realProfiles.map((profile) => ({ ...profile, deckBatch: "owned" })),
+    ...buildLargeRoommateCatalog(developmentProfiles, targetCatalogSize)
+  ];
   const ranked = rankDeckCandidates(catalog.map((profile) => scoreDeckCandidate(profile, preference)), preference.strategy);
   const page = ranked.slice(cursor, cursor + limit);
   const nextCursor = cursor + page.length < ranked.length ? cursor + page.length : null;
@@ -314,6 +319,7 @@ function scoreDeckCandidate(
   profile: RoommateDeckBaseProfile & { actionTargetId?: string; deckBatch: string },
   preference: RoommateDeckPreference
 ): RoommateDeckCandidate {
+  const { ownerId: _ownerId, ...publicProfile } = profile as typeof profile & { ownerId?: string };
   const budget = getBudgetNumber(profile);
   const dimensions = buildCompatibilityDimensions(profile, budget, preference);
   const compatibilityScore = getWeightedCompatibilityScore(dimensions);
@@ -325,7 +331,7 @@ function scoreDeckCandidate(
   const profileQualityScore = getProfileQualityScore(profile, dimensions);
 
   return {
-    ...profile,
+    ...publicProfile,
     compatibilityScore,
     ranking: {
       finalScore: compatibilityScore,
