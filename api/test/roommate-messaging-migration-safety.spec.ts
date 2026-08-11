@@ -4,7 +4,10 @@ import { join } from "node:path";
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { createDisposablePostgres } from "./support/disposable-postgres";
+import {
+  createDisposablePostgres,
+  DISPOSABLE_POSTGRES_PROCESS_TIMEOUT_MS
+} from "./support/disposable-postgres";
 
 const runSmoke = process.env.RUN_DB_SMOKE === "1";
 const describeSmoke = runSmoke ? describe : describe.skip;
@@ -146,7 +149,7 @@ function dockerPsql(databaseName: string, args: string[], input?: string) {
       databaseName,
       ...args
     ],
-    { encoding: "utf8", input }
+    { encoding: "utf8", input, timeout: DISPOSABLE_POSTGRES_PROCESS_TIMEOUT_MS }
   );
   if (result.status !== 0) throw new Error(`psql failed: ${result.stderr || result.stdout}`);
   return result.stdout.trim();

@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 
+export const DISPOSABLE_POSTGRES_PROCESS_TIMEOUT_MS = 10_000;
+
 export function createDisposablePostgres(prefix: string) {
   const safePrefix = prefix.replace(/[^a-z0-9_]/gi, "_").toLowerCase();
   const databaseName = `${safePrefix}_${randomUUID().replaceAll("-", "")}`;
@@ -19,7 +21,8 @@ export function createDisposablePostgres(prefix: string) {
       const result = spawnSync("pnpm", ["exec", "prisma", "migrate", "deploy", "--schema", "prisma/schema.prisma"], {
         cwd: join(__dirname, "../.."),
         encoding: "utf8",
-        env: { ...process.env, DATABASE_URL: databaseUrl }
+        env: { ...process.env, DATABASE_URL: databaseUrl },
+        timeout: DISPOSABLE_POSTGRES_PROCESS_TIMEOUT_MS
       });
       if (result.status !== 0) {
         throw new Error(`prisma migrate deploy failed: ${result.stderr || result.stdout}`);
@@ -35,7 +38,7 @@ function dockerPsql(args: string[]) {
   const result = spawnSync(
     "docker",
     ["exec", "-i", "sublet-pipeline-db", "psql", "-v", "ON_ERROR_STOP=1", "-U", "sublet", ...args],
-    { encoding: "utf8" }
+    { encoding: "utf8", timeout: DISPOSABLE_POSTGRES_PROCESS_TIMEOUT_MS }
   );
   if (result.status !== 0) throw new Error(`psql failed: ${result.stderr || result.stdout}`);
   return result.stdout.trim();

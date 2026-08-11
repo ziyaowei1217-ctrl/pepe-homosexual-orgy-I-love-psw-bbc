@@ -5,7 +5,7 @@ import type { AddressInfo } from "node:net";
 import { INestApplication, ValidationPipe } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { JwtService } from "@nestjs/jwt";
-import { Test } from "@nestjs/testing";
+import { Test, type TestingModule } from "@nestjs/testing";
 import type { Namespace } from "socket.io";
 import { io, type Socket } from "socket.io-client";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -14,13 +14,18 @@ import { configureCors, getCorsOrigins } from "../src/config/cors";
 import { MessagingInfrastructureHealth } from "../src/health/messaging-infrastructure-health";
 import { PrismaService } from "../src/prisma/prisma.service";
 import { RoommateConversationGateway } from "../src/roommate-conversations/roommate-conversations.gateway";
-import { createRoommateSocketAdapter } from "../src/roommate-conversations/socket-adapter";
+import {
+  createRoommateSocketAdapter,
+  type RoommateSocketIoAdapter
+} from "../src/roommate-conversations/socket-adapter";
+import { runWithDeadline } from "./support/bounded-operation";
 import { createDisposablePostgres } from "./support/disposable-postgres";
 
 const request = require("supertest") as (server: unknown) => any;
 
 const runSmoke = process.env.RUN_DB_SMOKE === "1";
 const describeSmoke = runSmoke ? describe : describe.skip;
+const ASYNC_CLEANUP_TIMEOUT_MS = 2_000;
 
 type MessageCreatedEvent = {
   conversationId: string;
@@ -46,7 +51,9 @@ describeSmoke("roommate realtime launch journey against real PostgreSQL", () => 
   let app: INestApplication | undefined;
   let gateway: RoommateConversationGateway | undefined;
   let messagingInfrastructure: MessagingInfrastructureHealth | undefined;
+  let moduleRef: TestingModule | undefined;
   let prisma: PrismaService | undefined;
+  let socketAdapter: RoommateSocketIoAdapter | undefined;
   let baseUrl = "";
   let tokenA = "";
   let tokenB = "";
@@ -70,18 +77,22 @@ describeSmoke("roommate realtime launch journey against real PostgreSQL", () => 
     delete process.env.VALKEY_URL;
 
     const { AppModule } = await import("../src/app.module");
-    const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
+    const compiledModule = await Test.createTestingModule({ imports: [AppModule] }).compile();
+    moduleRef = compiledModule;
 
-    app = moduleRef.createNestApplication();
+    app = compiledModule.createNestApplication();
     const config = app.get(ConfigService);
+    const activePrisma = app.get(PrismaService);
+    prisma = activePrisma;
     const activeMessagingInfrastructure = app.get(MessagingInfrastructureHealth);
     messagingInfrastructure = activeMessagingInfrastructure;
     activeMessagingInfrastructure.markDistributed("realtime");
-    const socketAdapter = await createRoommateSocketAdapter(app, {
+    const selectedSocketAdapter = await createRoommateSocketAdapter(app, {
       valkeyUrl: config.get<string>("VALKEY_URL"),
       health: activeMessagingInfrastructure
     });
-    if (socketAdapter) app.useWebSocketAdapter(socketAdapter);
+    socketAdapter = selectedSocketAdapter;
+    if (selectedSocketAdapter) app.useWebSocketAdapter(selectedSocketAdapter);
     configureCors(app, getCorsOrigins(config.get<string>("WEB_ORIGIN")));
     app.setGlobalPrefix("api/v1");
     app.useGlobalPipes(
@@ -96,8 +107,6 @@ describeSmoke("roommate realtime launch journey against real PostgreSQL", () => 
     const address = app.getHttpServer().address() as AddressInfo;
     baseUrl = `http://127.0.0.1:${address.port}`;
     gateway = app.get(RoommateConversationGateway);
-    const activePrisma = app.get(PrismaService);
-    prisma = activePrisma;
     const jwt = app.get(JwtService);
 
     await activePrisma.user.createMany({ data: [userA, userB, userC] });
@@ -116,26 +125,45 @@ describeSmoke("roommate realtime launch journey against real PostgreSQL", () => 
   }, 30_000);
 
   afterAll(async () => {
+    const cleanupErrors: unknown[] = [];
     try {
-      for (const socket of sockets) socket.close();
-      sockets.clear();
-    } finally {
-      try {
-        if (app) await app.close();
-      } finally {
+      for (const socket of sockets) {
         try {
-          if (prisma) await prisma.$disconnect();
-        } finally {
-          try {
-            if (databaseCreated) database.drop();
-          } finally {
-            restoreEnvironment("DATABASE_URL", originalEnvironment.databaseUrl);
-            restoreEnvironment("JWT_SECRET", originalEnvironment.jwtSecret);
-            restoreEnvironment("NODE_ENV", originalEnvironment.nodeEnv);
-            restoreEnvironment("VALKEY_URL", originalEnvironment.valkeyUrl);
-          }
+          socket.close();
+        } catch (error) {
+          cleanupErrors.push(error);
         }
       }
+      sockets.clear();
+
+      const applicationClosed = app
+        ? await attemptBoundedCleanup("Nest application close", () => app!.close(), cleanupErrors)
+        : false;
+      if (!applicationClosed && moduleRef) {
+        await attemptBoundedCleanup("TestingModule fallback close", () => moduleRef!.close(), cleanupErrors);
+      }
+      if (socketAdapter) {
+        await attemptBoundedCleanup("Socket.IO adapter dispose", () => socketAdapter!.dispose(), cleanupErrors);
+      }
+      if (prisma) {
+        await attemptBoundedCleanup("Prisma disconnect", () => prisma!.$disconnect(), cleanupErrors);
+      }
+      if (databaseCreated) {
+        try {
+          database.drop();
+        } catch (error) {
+          cleanupErrors.push(error);
+        }
+      }
+    } finally {
+      restoreEnvironment("DATABASE_URL", originalEnvironment.databaseUrl);
+      restoreEnvironment("JWT_SECRET", originalEnvironment.jwtSecret);
+      restoreEnvironment("NODE_ENV", originalEnvironment.nodeEnv);
+      restoreEnvironment("VALKEY_URL", originalEnvironment.valkeyUrl);
+    }
+
+    if (cleanupErrors.length > 0) {
+      throw new AggregateError(cleanupErrors, "Roommate realtime smoke cleanup failed");
     }
   }, 30_000);
 
@@ -252,9 +280,10 @@ describeSmoke("roommate realtime launch journey against real PostgreSQL", () => 
       .auth(tokenC, { type: "bearer" })
       .expect(404);
     expect(inaccessible.body).toEqual(missing.body);
-    expect(missing.body).toMatchObject({
+    expect(missing.body).toEqual({
       statusCode: 404,
-      message: "Roommate conversation not found"
+      message: "Roommate conversation not found",
+      error: "Not Found"
     });
   }, 20_000);
 });
@@ -350,4 +379,18 @@ function waitForSocketRoom(
 function restoreEnvironment(name: string, value: string | undefined) {
   if (value === undefined) delete process.env[name];
   else process.env[name] = value;
+}
+
+async function attemptBoundedCleanup(
+  label: string,
+  operation: () => Promise<unknown>,
+  errors: unknown[]
+): Promise<boolean> {
+  try {
+    await runWithDeadline(label, operation, ASYNC_CLEANUP_TIMEOUT_MS);
+    return true;
+  } catch (error) {
+    errors.push(error);
+    return false;
+  }
 }
