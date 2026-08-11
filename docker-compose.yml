@@ -72,6 +72,20 @@ services:
     networks:
       - sublet_pipeline
 
+  valkey:
+    image: valkey/valkey:8-alpine
+    container_name: sublet-pipeline-valkey
+    profiles: ["realtime"]
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    networks:
+      - sublet_pipeline
+
   adminer:
     image: adminer:4
     container_name: sublet-pipeline-adminer

@@ -130,7 +130,7 @@ export function categorizeValkeyFailure(error: unknown): MessagingInfrastructure
 }
 
 export class ValkeyRoommateMessageRateLimiter extends RoommateMessageRateLimiter {
-  private connectPromise?: Promise<unknown>;
+  private connectOperation?: Promise<unknown>;
   private readonly operationTimeoutMs: number;
 
   constructor(
@@ -143,15 +143,7 @@ export class ValkeyRoommateMessageRateLimiter extends RoommateMessageRateLimiter
 
   async consume(request: RoommateMessageRateLimitRequest): Promise<void> {
     if (!this.client.isOpen) {
-      const connection = (this.connectPromise ??= settleWithin(
-        Promise.resolve().then(() => this.client.connect()),
-        this.operationTimeoutMs
-      ));
-      try {
-        await connection;
-      } finally {
-        if (this.connectPromise === connection) this.connectPromise = undefined;
-      }
+      await settleWithin(this.connectOperation ?? this.startConnect(), this.operationTimeoutMs);
     }
 
     const result = await settleWithin(
@@ -179,12 +171,27 @@ export class ValkeyRoommateMessageRateLimiter extends RoommateMessageRateLimiter
   }
 
   async onModuleDestroy(): Promise<void> {
+    if (!this.client.isOpen && !this.connectOperation) return;
     if (this.client.destroy) {
       this.client.destroy();
       return;
     }
     if (!this.client.isOpen) return;
     if (this.client.quit) await this.client.quit();
+  }
+
+  private startConnect(): Promise<unknown> {
+    const operation = Promise.resolve().then(() => this.client.connect());
+    this.connectOperation = operation;
+    void operation.then(
+      () => this.clearConnectOperation(operation),
+      () => this.clearConnectOperation(operation)
+    );
+    return operation;
+  }
+
+  private clearConnectOperation(operation: Promise<unknown>): void {
+    if (this.connectOperation === operation) this.connectOperation = undefined;
   }
 }
 

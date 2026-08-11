@@ -87,6 +87,62 @@ describe("roommate message rate limiter selection", () => {
     expect(client.quit).toHaveBeenCalledTimes(1);
   });
 
+  it("leaves a cold never-used command client untouched during shutdown", async () => {
+    const client = {
+      isOpen: false,
+      isReady: false,
+      connect: vi.fn(),
+      eval: vi.fn(),
+      quit: vi.fn(),
+      destroy: vi.fn()
+    };
+    const limiter = new ValkeyRoommateMessageRateLimiter(client);
+
+    await limiter.onModuleDestroy();
+
+    expect(client.connect).not.toHaveBeenCalled();
+    expect(client.quit).not.toHaveBeenCalled();
+    expect(client.destroy).not.toHaveBeenCalled();
+  });
+
+  it("retains an underlying connect after its caller times out and destroys it during shutdown", async () => {
+    vi.useFakeTimers();
+    try {
+      let rejectConnect!: (error: Error) => void;
+      const underlyingConnect = new Promise<never>((_resolve, reject) => {
+        rejectConnect = reject;
+      });
+      const client = {
+        isOpen: false,
+        connect: vi.fn().mockReturnValue(underlyingConnect),
+        eval: vi.fn(),
+        destroy: vi.fn()
+      };
+      const limiter = new ValkeyRoommateMessageRateLimiter(client, { operationTimeoutMs: 10 });
+
+      const firstConsume = rejectionOf(
+        limiter.consume({ userId: "user-a", conversationId: "conversation-a-b" })
+      );
+      await vi.advanceTimersByTimeAsync(10);
+      expect(categorizeValkeyFailure(await firstConsume)).toBe("timeout");
+
+      const secondConsume = rejectionOf(
+        limiter.consume({ userId: "user-a", conversationId: "conversation-a-b" })
+      );
+      await Promise.resolve();
+      expect(client.connect).toHaveBeenCalledTimes(1);
+
+      await limiter.onModuleDestroy();
+      expect(client.destroy).toHaveBeenCalledTimes(1);
+
+      const lateRejection = new Error("connect aborted after destroy");
+      rejectConnect(lateRejection);
+      expect(await secondConsume).toBe(lateRejection);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("destroys an in-flight connecting command client during shutdown and lets its operation settle", async () => {
     vi.useFakeTimers();
     try {
