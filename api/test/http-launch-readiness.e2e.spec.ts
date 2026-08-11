@@ -61,7 +61,11 @@ describe("backend launch readiness HTTP flow", () => {
     await http.get("/api/v1/health").expect(200).expect({ status: "ok" });
     await http.get("/api/v1/ready").expect(200).expect({
       status: "ok",
-      checks: { database: "ok" }
+      checks: {
+        database: "ok",
+        realtime: { status: "ok", mode: "single-instance" },
+        messageRateLimit: { status: "ok", mode: "single-instance" }
+      }
     });
 
     const codeResponse = await http
