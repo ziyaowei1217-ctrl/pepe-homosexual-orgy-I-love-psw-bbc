@@ -4,6 +4,9 @@ import { createAdapter } from "@socket.io/redis-adapter";
 import { createClient } from "redis";
 import type { Server, ServerOptions } from "socket.io";
 
+import { MessagingInfrastructureHealth } from "../health/messaging-infrastructure-health";
+import { categorizeValkeyFailure, ValkeyOperationTimeoutError } from "./roommate-message-rate-limit";
+
 type ValkeyPubSubClient = {
   isOpen: boolean;
   isReady?: boolean;
@@ -18,7 +21,8 @@ type SocketAdapterOptions = {
   valkeyUrl?: string;
   clientFactory?: (url: string) => ValkeyPubSubClient;
   connectTimeoutMs?: number;
-  logger?: { warn(message: string): unknown };
+  health?: MessagingInfrastructureHealth;
+  logger?: { warn(message: Record<string, string>): unknown };
 };
 
 const DEFAULT_CONNECT_TIMEOUT_MS = 5_000;
@@ -51,30 +55,42 @@ export async function createRoommateSocketAdapter(
   options: SocketAdapterOptions = {}
 ): Promise<RoommateSocketIoAdapter | undefined> {
   const valkeyUrl = options.valkeyUrl ?? process.env.VALKEY_URL;
-  if (!valkeyUrl) return undefined;
+  if (!valkeyUrl) {
+    options.health?.markSingleInstance("realtime");
+    return undefined;
+  }
 
   const clientFactory =
     options.clientFactory ??
     ((url: string) => createClient({ url, disableOfflineQueue: true }) as unknown as ValkeyPubSubClient);
   const pubClient = clientFactory(valkeyUrl);
   const subClient = clientFactory(valkeyUrl);
+  const logger = options.logger ?? new Logger("RoommateSocketAdapter");
+  const markRuntimeFallback = () => {
+    options.health?.markLocalFallback("realtime", "runtime");
+    logger.warn({ component: "realtime", mode: "local-fallback", reason: "runtime" });
+  };
   handleIgnoredPublishRejections(pubClient);
-  pubClient.on?.("error", () => undefined);
-  subClient.on?.("error", () => undefined);
+  pubClient.on?.("error", markRuntimeFallback);
+  subClient.on?.("error", markRuntimeFallback);
 
   const connectTimeoutMs = options.connectTimeoutMs ?? DEFAULT_CONNECT_TIMEOUT_MS;
   const connections = await Promise.allSettled([
     connectWithin(pubClient, connectTimeoutMs),
     connectWithin(subClient, connectTimeoutMs)
   ]);
-  if (connections.some((connection) => connection.status === "rejected")) {
+  const failedConnection = connections.find(
+    (connection): connection is PromiseRejectedResult => connection.status === "rejected"
+  );
+  if (failedConnection) {
+    const reason = categorizeValkeyFailure(failedConnection.reason);
     await Promise.allSettled([closeClient(pubClient), closeClient(subClient)]);
-    (options.logger ?? new Logger("RoommateSocketAdapter")).warn(
-      "Valkey Socket.IO adapter unavailable; realtime is degraded"
-    );
+    options.health?.markLocalFallback("realtime", reason);
+    logger.warn({ component: "realtime", mode: "local-fallback", reason });
     return undefined;
   }
 
+  options.health?.markDistributed("realtime");
   return new RoommateSocketIoAdapter(app, pubClient, subClient);
 }
 
@@ -96,7 +112,7 @@ async function settleWithin<T>(operation: Promise<T>, timeoutMs: number): Promis
     return await Promise.race([
       operation,
       new Promise<never>((_resolve, reject) => {
-        timer = setTimeout(() => reject(new Error("Valkey operation timed out")), timeoutMs);
+        timer = setTimeout(() => reject(new ValkeyOperationTimeoutError()), timeoutMs);
       })
     ]);
   } finally {

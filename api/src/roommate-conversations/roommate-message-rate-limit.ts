@@ -102,7 +102,7 @@ redis.call('PEXPIRE', KEYS[1], window_ms)
 return {1, 0}
 `;
 
-class ValkeyOperationTimeoutError extends Error {}
+export class ValkeyOperationTimeoutError extends Error {}
 
 class ValkeyProtocolError extends Error {}
 
