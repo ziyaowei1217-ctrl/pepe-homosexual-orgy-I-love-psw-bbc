@@ -164,7 +164,18 @@ export class ValkeyRoommateMessageRateLimiter extends RoommateMessageRateLimiter
       this.operationTimeoutMs
     );
     if (!Array.isArray(result) || result.length < 2) throw new ValkeyProtocolError();
-    if (Number(result[0]) !== 1) throw rateLimitExceeded(Math.max(1, Number(result[1])));
+    const [allowed, retryAfterSeconds] = result;
+    if (
+      (allowed !== 0 && allowed !== 1) ||
+      typeof retryAfterSeconds !== "number" ||
+      !Number.isFinite(retryAfterSeconds) ||
+      !Number.isInteger(retryAfterSeconds) ||
+      (allowed === 1 && retryAfterSeconds !== 0) ||
+      (allowed === 0 && retryAfterSeconds < 1)
+    ) {
+      throw new ValkeyProtocolError();
+    }
+    if (allowed === 0) throw rateLimitExceeded(retryAfterSeconds);
   }
 
   async onModuleDestroy(): Promise<void> {

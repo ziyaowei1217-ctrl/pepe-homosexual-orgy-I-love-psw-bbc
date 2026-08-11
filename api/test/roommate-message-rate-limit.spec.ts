@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { MessagingInfrastructureHealth } from "../src/health/messaging-infrastructure-health";
 import {
+  categorizeValkeyFailure,
   createRoommateMessageRateLimiter,
   LocalRoommateMessageRateLimiter,
   ResilientRoommateMessageRateLimiter,
@@ -86,18 +87,66 @@ describe("roommate message rate limiter selection", () => {
     expect(client.quit).toHaveBeenCalledTimes(1);
   });
 
-  it("destroys a connecting command client during shutdown without waiting for it to open", async () => {
-    const client = {
-      isOpen: false,
-      connect: vi.fn().mockReturnValue(new Promise(() => undefined)),
-      eval: vi.fn(),
-      destroy: vi.fn()
-    };
-    const limiter = new ValkeyRoommateMessageRateLimiter(client);
+  it("destroys an in-flight connecting command client during shutdown and lets its operation settle", async () => {
+    vi.useFakeTimers();
+    try {
+      let markConnectStarted!: () => void;
+      const connectStarted = new Promise<void>((resolve) => {
+        markConnectStarted = resolve;
+      });
+      const client = {
+        isOpen: false,
+        connect: vi.fn().mockImplementation(() => {
+          markConnectStarted();
+          return new Promise(() => undefined);
+        }),
+        eval: vi.fn(),
+        destroy: vi.fn()
+      };
+      const limiter = new ValkeyRoommateMessageRateLimiter(client, { operationTimeoutMs: 10 });
+      const consume = limiter.consume({ userId: "user-a", conversationId: "conversation-a-b" });
 
-    await limiter.onModuleDestroy();
+      await connectStarted;
+      await limiter.onModuleDestroy();
 
-    expect(client.destroy).toHaveBeenCalledTimes(1);
+      expect(client.destroy).toHaveBeenCalledTimes(1);
+      const settled = rejectionOf(consume);
+      await vi.advanceTimersByTimeAsync(10);
+      expect(categorizeValkeyFailure(await settled)).toBe("timeout");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("destroys an in-flight evaluation during shutdown and lets its operation settle", async () => {
+    vi.useFakeTimers();
+    try {
+      let markEvaluationStarted!: () => void;
+      const evaluationStarted = new Promise<void>((resolve) => {
+        markEvaluationStarted = resolve;
+      });
+      const client = {
+        isOpen: true,
+        connect: vi.fn(),
+        eval: vi.fn().mockImplementation(() => {
+          markEvaluationStarted();
+          return new Promise(() => undefined);
+        }),
+        destroy: vi.fn()
+      };
+      const limiter = new ValkeyRoommateMessageRateLimiter(client, { operationTimeoutMs: 10 });
+      const consume = limiter.consume({ userId: "user-a", conversationId: "conversation-a-b" });
+
+      await evaluationStarted;
+      await limiter.onModuleDestroy();
+
+      expect(client.destroy).toHaveBeenCalledTimes(1);
+      const settled = rejectionOf(consume);
+      await vi.advanceTimersByTimeAsync(10);
+      expect(categorizeValkeyFailure(await settled)).toBe("timeout");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("destroys a reconnecting command client without waiting for queued QUIT", async () => {
@@ -225,6 +274,32 @@ describe("resilient roommate message rate limiter", () => {
       });
     } finally {
       vi.useRealTimers();
+    }
+  });
+
+  it("falls back when a two-value Valkey response has an invalid flag, type, or retry value", async () => {
+    const malformedReplies: unknown[] = [[2, 0], ["invalid", "invalid"], [0, Number.NaN]];
+
+    for (const reply of malformedReplies) {
+      const health = new MessagingInfrastructureHealth();
+      const limiter = new ResilientRoommateMessageRateLimiter({
+        distributed: new ValkeyRoommateMessageRateLimiter({
+          isOpen: true,
+          connect: vi.fn(),
+          eval: vi.fn().mockResolvedValue(reply)
+        }),
+        local: new LocalRoommateMessageRateLimiter({ limit: 1 }),
+        health,
+        logger: silentLogger
+      });
+
+      await limiter.consume({ userId: "user-a", conversationId: "conversation-a-b" });
+
+      expect(health.snapshot().messageRateLimit).toMatchObject({
+        status: "degraded",
+        mode: "local-fallback",
+        reason: "protocol"
+      });
     }
   });
 
