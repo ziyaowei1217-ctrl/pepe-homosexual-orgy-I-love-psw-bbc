@@ -1,10 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { createClient } from "redis";
 
+import { constructValkeyClient } from "../valkey/valkey-client-construction";
 import { InMemoryRateLimitStore, RateLimitRule, RateLimitStore } from "./auth-rate-limit";
 
 type ValkeyCommandClient = {
   isOpen: boolean;
+  isReady?: boolean;
   connect(): Promise<unknown>;
   eval(script: string, options: { keys: string[]; arguments: string[] }): Promise<unknown>;
   quit?(): Promise<unknown>;
@@ -58,6 +60,9 @@ export class ValkeyRateLimitStore implements RateLimitStore {
         if (this.connectPromise === connection) this.connectPromise = undefined;
       }
     }
+    if (!this.client.isOpen || this.client.isReady === false) {
+      throw new Error("Valkey command client is not ready");
+    }
     const keys = rules.map((rule) => rule.key);
     const args = [
       ...rules.flatMap((rule) => [String(rule.limit), String(rule.windowSeconds * 1000)]),
@@ -81,8 +86,13 @@ export function createRateLimitStore(input: RateLimitStoreFactoryInput = {}): Ra
   if (nodeEnv !== "production") return new InMemoryRateLimitStore();
 
   const valkeyUrl = input.valkeyUrl ?? process.env.VALKEY_URL;
-  if (!valkeyUrl) throw new Error("VALKEY_URL is required in production");
-  const client = input.clientFactory?.(valkeyUrl) ?? (createClient({ url: valkeyUrl }) as ValkeyCommandClient);
+  if (!valkeyUrl) return new InMemoryRateLimitStore();
+  const clientCreation = constructValkeyClient(
+    valkeyUrl,
+    input.clientFactory ?? ((url) => createClient({ url, disableOfflineQueue: true }) as ValkeyCommandClient)
+  );
+  if (!clientCreation.ok) return new InMemoryRateLimitStore();
+  const client = clientCreation.client;
   client.on?.("error", () => undefined);
   return new ValkeyRateLimitStore(client);
 }

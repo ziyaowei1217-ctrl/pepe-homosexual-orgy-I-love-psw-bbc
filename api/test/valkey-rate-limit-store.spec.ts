@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 
+const redis = vi.hoisted(() => ({ createClient: vi.fn() }));
+vi.mock("redis", () => redis);
+
+import { InMemoryRateLimitStore } from "../src/auth/auth-rate-limit";
 import { createRateLimitStore, ValkeyRateLimitStore } from "../src/auth/valkey-rate-limit-store";
 
 describe("Valkey rate limit store", () => {
@@ -45,6 +49,21 @@ describe("Valkey rate limit store", () => {
     expect(client.connect).toHaveBeenCalledTimes(1);
   });
 
+  it("does not evaluate while an auth command client reports that it is not ready", async () => {
+    const client = {
+      isOpen: true,
+      isReady: false,
+      connect: vi.fn(),
+      eval: vi.fn().mockResolvedValue([1, 0])
+    };
+    const store = new ValkeyRateLimitStore(client);
+
+    await expect(
+      store.consume([{ key: "key", dimension: "global", limit: 1, windowSeconds: 60 }])
+    ).rejects.toThrow("Valkey command client is not ready");
+    expect(client.eval).not.toHaveBeenCalled();
+  });
+
   it("can reconnect after a transient initial connection failure", async () => {
     const client = {
       isOpen: false,
@@ -65,11 +84,46 @@ describe("Valkey rate limit store", () => {
     expect(client.connect).toHaveBeenCalledTimes(2);
   });
 
-  it("requires Valkey in production and uses memory outside production", () => {
-    expect(() => createRateLimitStore({ nodeEnv: "production", valkeyUrl: "" })).toThrow(
-      "VALKEY_URL is required in production"
-    );
-    expect(createRateLimitStore({ nodeEnv: "test" }).constructor.name).toBe("InMemoryRateLimitStore");
+  it("uses the bounded in-memory store when production has no Valkey", async () => {
+    const store = createRateLimitStore({ nodeEnv: "production", valkeyUrl: "" });
+    const rule = { key: "auth:send:global-minute:all", dimension: "global-minute", limit: 1, windowSeconds: 60 };
+
+    expect(store).toBeInstanceOf(InMemoryRateLimitStore);
+    await expect(store.consume([rule])).resolves.toEqual({ allowed: true, retryAfterSeconds: 0 });
+    await expect(store.consume([rule])).resolves.toMatchObject({ allowed: false });
+    expect(createRateLimitStore({ nodeEnv: "test" })).toBeInstanceOf(InMemoryRateLimitStore);
+  });
+
+  it("contains credential-bearing malformed Valkey configuration in bounded local auth", () => {
+    const credential = "auth-construction-secret";
+    const malformedUrl = `redis://user:${credential}@[`;
+    redis.createClient.mockReset();
+    redis.createClient.mockImplementation(() => {
+      throw Object.assign(new TypeError("Invalid URL"), { input: malformedUrl });
+    });
+
+    const store = createRateLimitStore({ nodeEnv: "production", valkeyUrl: malformedUrl });
+
+    expect(store).toBeInstanceOf(InMemoryRateLimitStore);
+  });
+
+  it("disables the default auth command client's offline queue", () => {
+    redis.createClient.mockReset();
+    const client = {
+      isOpen: false,
+      connect: vi.fn(),
+      eval: vi.fn(),
+      on: vi.fn()
+    };
+    redis.createClient.mockReturnValue(client);
+
+    const store = createRateLimitStore({ nodeEnv: "production", valkeyUrl: "redis://valkey.internal:6379" });
+
+    expect(store).toBeInstanceOf(ValkeyRateLimitStore);
+    expect(redis.createClient).toHaveBeenCalledWith({
+      url: "redis://valkey.internal:6379",
+      disableOfflineQueue: true
+    });
   });
 
   it("handles client error events without logging connection details", () => {

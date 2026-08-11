@@ -1,6 +1,9 @@
 import { HttpException } from "@nestjs/common";
 import { describe, expect, it, vi } from "vitest";
 
+const redis = vi.hoisted(() => ({ createClient: vi.fn() }));
+vi.mock("redis", () => redis);
+
 import { MessagingInfrastructureHealth } from "../src/health/messaging-infrastructure-health";
 import {
   categorizeValkeyFailure,
@@ -20,6 +23,66 @@ describe("roommate message rate limiter selection", () => {
     expect(limiter).toBeInstanceOf(LocalRoommateMessageRateLimiter);
     expect(clientFactory).not.toHaveBeenCalled();
     expect(health.snapshot().messageRateLimit).toEqual({ status: "ok", mode: "single-instance" });
+  });
+
+  it("contains malformed credential-bearing construction in bounded local fallback", async () => {
+    const credential = "limiter-construction-secret";
+    const valkeyUrl = `redis://user:${credential}@[`;
+    const constructionFailure = Object.assign(new TypeError("Invalid URL"), { input: valkeyUrl });
+    const health = new MessagingInfrastructureHealth();
+    const logger = { warn: vi.fn() };
+    const limiter = createRoommateMessageRateLimiter({
+      valkeyUrl,
+      clientFactory: () => {
+        throw constructionFailure;
+      },
+      health,
+      logger
+    });
+    const request = { userId: "user-a", conversationId: "conversation-a-b" };
+
+    expect(limiter).toBeInstanceOf(LocalRoommateMessageRateLimiter);
+    for (let index = 0; index < 20; index += 1) await limiter.consume(request);
+    const rejection = await rejectionOf(limiter.consume(request));
+
+    expect(rejection).toBeInstanceOf(HttpException);
+    expect((rejection as HttpException).getStatus()).toBe(429);
+    expect(logger.warn).toHaveBeenCalledWith({
+      component: "messageRateLimit",
+      mode: "local-fallback",
+      reason: "protocol"
+    });
+    expect(health.snapshot().messageRateLimit).toMatchObject({
+      status: "degraded",
+      mode: "local-fallback",
+      reason: "protocol"
+    });
+    expect(JSON.stringify(logger.warn.mock.calls)).not.toContain(credential);
+    expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("redis://");
+  });
+
+  it("disables the default command client's offline queue", async () => {
+    redis.createClient.mockReset();
+    const client = {
+      isOpen: true,
+      isReady: true,
+      connect: vi.fn(),
+      eval: vi.fn().mockResolvedValue([1, 0]),
+      destroy: vi.fn(),
+      on: vi.fn()
+    };
+    redis.createClient.mockReturnValue(client);
+    const limiter = createRoommateMessageRateLimiter({
+      valkeyUrl: "redis://valkey.internal:6379",
+      health: new MessagingInfrastructureHealth()
+    });
+
+    await limiter.consume({ userId: "user-a", conversationId: "conversation-a-b" });
+
+    expect(redis.createClient).toHaveBeenCalledWith({
+      url: "redis://valkey.internal:6379",
+      disableOfflineQueue: true
+    });
   });
 
   it("uses one atomic Valkey sliding-window evaluation with the 20 per 60 second policy", async () => {
@@ -67,6 +130,24 @@ describe("roommate message rate limiter selection", () => {
     });
   });
 
+  it("does not evaluate while a command client reports that it is not ready", async () => {
+    const client = {
+      isOpen: true,
+      isReady: false,
+      connect: vi.fn(),
+      eval: vi.fn().mockResolvedValue([1, 0]),
+      destroy: vi.fn()
+    };
+    const limiter = new ValkeyRoommateMessageRateLimiter(client);
+
+    const rejection = await rejectionOf(
+      limiter.consume({ userId: "user-a", conversationId: "conversation-a-b" })
+    );
+
+    expect(categorizeValkeyFailure(rejection)).toBe("connection");
+    expect(client.eval).not.toHaveBeenCalled();
+  });
+
   it("connects lazily and closes its command client during shutdown", async () => {
     const client = {
       isOpen: false,
@@ -105,39 +186,117 @@ describe("roommate message rate limiter selection", () => {
     expect(client.destroy).not.toHaveBeenCalled();
   });
 
-  it("retains an underlying connect after its caller times out and destroys it during shutdown", async () => {
+  it("invalidates a timed-out connect, observes its late rejection, and recovers with a replacement client", async () => {
     vi.useFakeTimers();
     try {
+      let now = 1_000;
       let rejectConnect!: (error: Error) => void;
       const underlyingConnect = new Promise<never>((_resolve, reject) => {
         rejectConnect = reject;
       });
-      const client = {
+      const firstClient = {
         isOpen: false,
+        isReady: false,
         connect: vi.fn().mockReturnValue(underlyingConnect),
         eval: vi.fn(),
         destroy: vi.fn()
       };
-      const limiter = new ValkeyRoommateMessageRateLimiter(client, { operationTimeoutMs: 10 });
+      const replacementClient = {
+        isOpen: false,
+        isReady: false,
+        connect: vi.fn().mockImplementation(function (this: { isOpen: boolean; isReady: boolean }) {
+          this.isOpen = true;
+          this.isReady = true;
+          return Promise.resolve();
+        }),
+        eval: vi.fn().mockResolvedValue([1, 0]),
+        destroy: vi.fn()
+      };
+      const clientFactory = vi.fn().mockReturnValueOnce(firstClient).mockReturnValueOnce(replacementClient);
+      const health = new MessagingInfrastructureHealth();
+      const limiter = createRoommateMessageRateLimiter({
+        valkeyUrl: "redis://valkey.internal:6379",
+        clientFactory,
+        health,
+        now: () => now,
+        operationTimeoutMs: 10,
+        retryCooldownMs: 20,
+        logger: silentLogger
+      });
 
-      const firstConsume = rejectionOf(
-        limiter.consume({ userId: "user-a", conversationId: "conversation-a-b" })
-      );
+      const firstConsume = limiter.consume({ userId: "user-a", conversationId: "conversation-a-b" });
       await vi.advanceTimersByTimeAsync(10);
-      expect(categorizeValkeyFailure(await firstConsume)).toBe("timeout");
+      await firstConsume;
 
-      const secondConsume = rejectionOf(
-        limiter.consume({ userId: "user-a", conversationId: "conversation-a-b" })
-      );
+      expect(firstClient.destroy).toHaveBeenCalledTimes(1);
+      expect(clientFactory).toHaveBeenCalledTimes(1);
+      expect(health.snapshot().messageRateLimit).toMatchObject({ mode: "local-fallback", reason: "timeout" });
+
+      rejectConnect(new Error("late connect rejection with secret material"));
       await Promise.resolve();
-      expect(client.connect).toHaveBeenCalledTimes(1);
+      now += 20;
+      await limiter.consume({ userId: "user-b", conversationId: "conversation-b-c" });
 
-      await limiter.onModuleDestroy();
-      expect(client.destroy).toHaveBeenCalledTimes(1);
+      expect(clientFactory).toHaveBeenCalledTimes(2);
+      expect(firstClient.connect).toHaveBeenCalledTimes(1);
+      expect(replacementClient.connect).toHaveBeenCalledTimes(1);
+      expect(replacementClient.eval).toHaveBeenCalledTimes(1);
+      expect(health.snapshot().messageRateLimit).toEqual({ status: "ok", mode: "distributed" });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 
-      const lateRejection = new Error("connect aborted after destroy");
-      rejectConnect(lateRejection);
-      expect(await secondConsume).toBe(lateRejection);
+  it("invalidates a timed-out evaluation and never reuses it after late settlement", async () => {
+    vi.useFakeTimers();
+    try {
+      let now = 1_000;
+      let resolveLateEvaluation!: (value: unknown) => void;
+      const lateEvaluation = new Promise<unknown>((resolve) => {
+        resolveLateEvaluation = resolve;
+      });
+      const firstClient = {
+        isOpen: true,
+        isReady: true,
+        connect: vi.fn(),
+        eval: vi.fn().mockReturnValue(lateEvaluation),
+        destroy: vi.fn()
+      };
+      const replacementClient = {
+        isOpen: true,
+        isReady: true,
+        connect: vi.fn(),
+        eval: vi.fn().mockResolvedValue([1, 0]),
+        destroy: vi.fn()
+      };
+      const clientFactory = vi.fn().mockReturnValueOnce(firstClient).mockReturnValueOnce(replacementClient);
+      const health = new MessagingInfrastructureHealth();
+      const limiter = createRoommateMessageRateLimiter({
+        valkeyUrl: "redis://valkey.internal:6379",
+        clientFactory,
+        health,
+        now: () => now,
+        operationTimeoutMs: 10,
+        retryCooldownMs: 20,
+        logger: silentLogger
+      });
+
+      const firstConsume = limiter.consume({ userId: "user-a", conversationId: "conversation-a-b" });
+      await vi.advanceTimersByTimeAsync(10);
+      await firstConsume;
+
+      expect(firstClient.destroy).toHaveBeenCalledTimes(1);
+      expect(health.snapshot().messageRateLimit).toMatchObject({ mode: "local-fallback", reason: "timeout" });
+
+      resolveLateEvaluation([1, 0]);
+      await Promise.resolve();
+      now += 20;
+      await limiter.consume({ userId: "user-b", conversationId: "conversation-b-c" });
+
+      expect(clientFactory).toHaveBeenCalledTimes(2);
+      expect(firstClient.eval).toHaveBeenCalledTimes(1);
+      expect(replacementClient.eval).toHaveBeenCalledTimes(1);
+      expect(health.snapshot().messageRateLimit).toEqual({ status: "ok", mode: "distributed" });
     } finally {
       vi.useRealTimers();
     }
@@ -383,6 +542,45 @@ describe("resilient roommate message rate limiter", () => {
     expect(client.eval).not.toHaveBeenCalled();
   });
 
+  it("allows only one recovery probe while concurrent requests stay on bounded local fallback", async () => {
+    let now = 1_000;
+    let resolveProbe!: () => void;
+    const recoveryProbe = new Promise<void>((resolve) => {
+      resolveProbe = resolve;
+    });
+    const distributed = {
+      consume: vi.fn().mockRejectedValueOnce(new Error("socket closed")).mockReturnValueOnce(recoveryProbe)
+    } as unknown as ValkeyRoommateMessageRateLimiter;
+    const limiter = new ResilientRoommateMessageRateLimiter({
+      distributed,
+      local: new LocalRoommateMessageRateLimiter({ now: () => now, limit: 2 }),
+      health: new MessagingInfrastructureHealth(),
+      now: () => now,
+      retryCooldownMs: 30_000,
+      logger: silentLogger
+    });
+    const request = { userId: "user-a", conversationId: "conversation-a-b" };
+    await limiter.consume(request);
+    now += 30_000;
+
+    const attempts = Array.from({ length: 5 }, () => limiter.consume(request));
+    await Promise.resolve();
+    const localSettlements = await Promise.allSettled(attempts.slice(1));
+
+    expect(distributed.consume).toHaveBeenCalledTimes(2);
+    expect(localSettlements.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+    expect(localSettlements.filter((result) => result.status === "rejected")).toHaveLength(3);
+    for (const result of localSettlements) {
+      if (result.status === "rejected") {
+        expect(result.reason).toBeInstanceOf(HttpException);
+        expect((result.reason as HttpException).getStatus()).toBe(429);
+      }
+    }
+
+    resolveProbe();
+    await attempts[0];
+  });
+
   it("returns a genuine distributed 429 without consuming local fallback capacity", async () => {
     let now = 1_000;
     const distributed = {
@@ -403,6 +601,41 @@ describe("resilient roommate message rate limiter", () => {
 
     expect(rejection).toBeInstanceOf(HttpException);
     expect((rejection as HttpException).getStatus()).toBe(429);
+  });
+
+  it("treats an authoritative recovery 429 as distributed health and clears recovery state", async () => {
+    let now = 1_000;
+    const distributed = {
+      consume: vi
+        .fn()
+        .mockRejectedValueOnce(new Error("socket closed"))
+        .mockRejectedValueOnce(rateLimitError())
+        .mockRejectedValueOnce(new Error("socket closed again"))
+    } as unknown as ValkeyRoommateMessageRateLimiter;
+    const health = new MessagingInfrastructureHealth();
+    const limiter = new ResilientRoommateMessageRateLimiter({
+      distributed,
+      local: new LocalRoommateMessageRateLimiter({ now: () => now, limit: 1 }),
+      health,
+      now: () => now,
+      retryCooldownMs: 30_000,
+      logger: silentLogger
+    });
+
+    await limiter.consume({ userId: "user-a", conversationId: "conversation-a-b" });
+    now += 30_000;
+    const authoritative = await rejectionOf(
+      limiter.consume({ userId: "user-b", conversationId: "conversation-b-c" })
+    );
+
+    expect(authoritative).toBeInstanceOf(HttpException);
+    expect((authoritative as HttpException).getStatus()).toBe(429);
+    expect(health.snapshot().messageRateLimit).toEqual({ status: "ok", mode: "distributed" });
+
+    await expect(
+      limiter.consume({ userId: "user-b", conversationId: "conversation-b-c" })
+    ).resolves.toBeUndefined();
+    expect(distributed.consume).toHaveBeenCalledTimes(3);
   });
 
   it("marks the limiter distributed again after a successful recovery probe", async () => {

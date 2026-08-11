@@ -124,6 +124,32 @@ describe("optional roommate Socket.IO Valkey adapter", () => {
     });
   });
 
+  it("contains malformed credential-bearing client construction and closes a partially constructed client", async () => {
+    const credential = "realtime-construction-secret";
+    const valkeyUrl = `redis://user:${credential}@[`;
+    const pubClient = valkeyClient();
+    const constructionFailure = Object.assign(new TypeError("Invalid URL"), { input: valkeyUrl });
+    const clientFactory = vi.fn().mockReturnValueOnce(pubClient).mockImplementationOnce(() => {
+      throw constructionFailure;
+    });
+    const logger = { warn: vi.fn() };
+    const health = messagingHealth();
+
+    await expect(
+      createRoommateSocketAdapter(appContext(), { valkeyUrl, clientFactory, logger, health })
+    ).resolves.toBeUndefined();
+
+    expect(pubClient.destroy).toHaveBeenCalledTimes(1);
+    expect(logger.warn).toHaveBeenCalledWith({ component: "realtime", mode: "local-fallback", reason: "protocol" });
+    expect(health.snapshot().realtime).toMatchObject({
+      status: "degraded",
+      mode: "local-fallback",
+      reason: "protocol"
+    });
+    expect(JSON.stringify(logger.warn.mock.calls)).not.toContain(credential);
+    expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("redis://");
+  });
+
   it("keeps a connection rejection as the only fallback when a client errors during bootstrap", async () => {
     const pubClient = valkeyClient();
     const subClient = valkeyClient();
@@ -334,6 +360,69 @@ describe("optional roommate Socket.IO Valkey adapter", () => {
     });
   });
 
+  it("reports and contains a rejected publish without a client error event", async () => {
+    const leaked = "publish-rejection-secret redis://user:pass@valkey.internal:6379";
+    const pubClient = {
+      ...valkeyClient(),
+      publish: vi.fn().mockRejectedValue(new Error(leaked))
+    };
+    const subClient = valkeyClient();
+    const health = messagingHealth();
+    const logger = { warn: vi.fn() };
+    await createRoommateSocketAdapter(appContext(), {
+      valkeyUrl: "redis://valkey.internal:6379",
+      clientFactory: vi.fn().mockReturnValueOnce(pubClient).mockReturnValueOnce(subClient),
+      health,
+      logger
+    });
+
+    await expect(pubClient.publish("roommate-channel", "payload")).resolves.toBeUndefined();
+
+    expect(logger.warn).toHaveBeenCalledTimes(1);
+    expect(logger.warn).toHaveBeenCalledWith({ component: "realtime", mode: "local-fallback", reason: "runtime" });
+    expect(health.snapshot().realtime).toMatchObject({
+      status: "degraded",
+      mode: "local-fallback",
+      reason: "runtime"
+    });
+    expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("publish-rejection-secret");
+    expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("redis://");
+  });
+
+  it("reports and contains a synchronous publish throw without a client error event", async () => {
+    const pubClient = {
+      ...valkeyClient(),
+      publish: vi.fn((..._arguments: unknown[]) => {
+        throw new Error("synchronous publish secret redis://user:pass@valkey.internal:6379");
+      })
+    };
+    const subClient = valkeyClient();
+    const health = messagingHealth();
+    const logger = { warn: vi.fn() };
+    await createRoommateSocketAdapter(appContext(), {
+      valkeyUrl: "redis://valkey.internal:6379",
+      clientFactory: vi.fn().mockReturnValueOnce(pubClient).mockReturnValueOnce(subClient),
+      health,
+      logger
+    });
+
+    let publication: unknown;
+    expect(() => {
+      publication = pubClient.publish("roommate-channel", "payload");
+    }).not.toThrow();
+    await expect(Promise.resolve(publication)).resolves.toBeUndefined();
+
+    expect(logger.warn).toHaveBeenCalledTimes(1);
+    expect(logger.warn).toHaveBeenCalledWith({ component: "realtime", mode: "local-fallback", reason: "runtime" });
+    expect(health.snapshot().realtime).toMatchObject({
+      status: "degraded",
+      mode: "local-fallback",
+      reason: "runtime"
+    });
+    expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("synchronous publish secret");
+    expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("redis://");
+  });
+
   it("does not include the raw client error or Valkey URL in warnings", async () => {
     const pubClient = valkeyClient();
     const subClient = valkeyClient();
@@ -408,9 +497,8 @@ describe("optional roommate Socket.IO Valkey adapter", () => {
     expect(subClient.destroy).toHaveBeenCalledTimes(1);
   });
 
-  it("disables the default client's offline queue and handles ignored publish rejections", async () => {
-    const publication = { catch: vi.fn() };
-    const pubClient = { ...valkeyClient(), publish: vi.fn().mockReturnValue(publication) };
+  it("disables the default pub/sub clients' offline queues", async () => {
+    const pubClient = { ...valkeyClient(), publish: vi.fn().mockResolvedValue(1) };
     const subClient = valkeyClient();
     redis.createClient.mockReturnValueOnce(pubClient).mockReturnValueOnce(subClient);
 
@@ -427,7 +515,6 @@ describe("optional roommate Socket.IO Valkey adapter", () => {
       url: "redis://valkey.internal:6379",
       disableOfflineQueue: true
     });
-    expect(publication.catch).toHaveBeenCalledWith(expect.any(Function));
   });
 });
 

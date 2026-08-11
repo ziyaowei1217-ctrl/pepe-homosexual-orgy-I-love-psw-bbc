@@ -6,6 +6,7 @@ import {
   MessagingInfrastructureHealth,
   type MessagingInfrastructureReason
 } from "../health/messaging-infrastructure-health";
+import { constructValkeyClient } from "../valkey/valkey-client-construction";
 
 export type RoommateMessageRateLimitRequest = {
   userId: string;
@@ -45,6 +46,7 @@ type LocalRoommateMessageRateLimiterOptions = {
 
 type ValkeyRoommateMessageRateLimiterOptions = {
   operationTimeoutMs?: number;
+  clientFactory?: () => RoommateMessageValkeyClient | undefined;
 };
 
 type ResilientLimiterOptions = {
@@ -105,14 +107,23 @@ return {1, 0}
 export class ValkeyOperationTimeoutError extends Error {}
 
 class ValkeyProtocolError extends Error {}
+class ValkeyCommandNotReadyError extends Error {}
 
-async function settleWithin<T>(operation: Promise<T>, timeoutMs: number): Promise<T> {
+async function settleWithin<T>(
+  operation: Promise<T>,
+  timeoutMs: number,
+  onTimeout?: () => void
+): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
+  void operation.catch(() => undefined);
   try {
     return await Promise.race([
       operation,
       new Promise<never>((_resolve, reject) => {
-        timer = setTimeout(() => reject(new ValkeyOperationTimeoutError()), timeoutMs);
+        timer = setTimeout(() => {
+          reject(new ValkeyOperationTimeoutError());
+          onTimeout?.();
+        }, timeoutMs);
       })
     ]);
   } finally {
@@ -123,6 +134,7 @@ async function settleWithin<T>(operation: Promise<T>, timeoutMs: number): Promis
 export function categorizeValkeyFailure(error: unknown): MessagingInfrastructureReason {
   if (error instanceof ValkeyOperationTimeoutError) return "timeout";
   if (error instanceof ValkeyProtocolError) return "protocol";
+  if (error instanceof ValkeyCommandNotReadyError) return "connection";
   if (error instanceof Error && /connect|socket|closed|ECONN/i.test(error.name + " " + error.message)) {
     return "connection";
   }
@@ -130,30 +142,44 @@ export function categorizeValkeyFailure(error: unknown): MessagingInfrastructure
 }
 
 export class ValkeyRoommateMessageRateLimiter extends RoommateMessageRateLimiter {
-  private connectOperation?: Promise<unknown>;
+  private client?: RoommateMessageValkeyClient;
+  private connectOperation?: { client: RoommateMessageValkeyClient; operation: Promise<unknown> };
   private readonly operationTimeoutMs: number;
+  private readonly clientFactory?: () => RoommateMessageValkeyClient | undefined;
+  private readonly destroyedClients = new Set<RoommateMessageValkeyClient>();
+  private closed = false;
 
   constructor(
-    private readonly client: RoommateMessageValkeyClient,
+    client: RoommateMessageValkeyClient,
     options: ValkeyRoommateMessageRateLimiterOptions = {}
   ) {
     super();
+    this.client = client;
     this.operationTimeoutMs = options.operationTimeoutMs ?? 1_000;
+    this.clientFactory = options.clientFactory;
   }
 
   async consume(request: RoommateMessageRateLimitRequest): Promise<void> {
-    if (!this.client.isOpen) {
-      await settleWithin(this.connectOperation ?? this.startConnect(), this.operationTimeoutMs);
+    const client = this.currentClient();
+    if (!client.isOpen) {
+      const connection =
+        this.connectOperation?.client === client ? this.connectOperation.operation : this.startConnect(client);
+      await settleWithin(connection, this.operationTimeoutMs, () => this.invalidateClient(client));
+    }
+    if (this.client !== client || !client.isOpen || client.isReady === false) {
+      throw new ValkeyCommandNotReadyError();
     }
 
+    const evaluation = Promise.resolve().then(() =>
+      client.eval(consumeScript, {
+        keys: [`roommate-message-rate-limit:${request.userId}:${request.conversationId}`],
+        arguments: ["20", "60000", randomUUID()]
+      })
+    );
     const result = await settleWithin(
-      Promise.resolve().then(() =>
-        this.client.eval(consumeScript, {
-          keys: [`roommate-message-rate-limit:${request.userId}:${request.conversationId}`],
-          arguments: ["20", "60000", randomUUID()]
-        })
-      ),
-      this.operationTimeoutMs
+      evaluation,
+      this.operationTimeoutMs,
+      () => this.invalidateClient(client)
     );
     if (!Array.isArray(result) || result.length < 2) throw new ValkeyProtocolError();
     const [allowed, retryAfterSeconds] = result;
@@ -171,32 +197,78 @@ export class ValkeyRoommateMessageRateLimiter extends RoommateMessageRateLimiter
   }
 
   async onModuleDestroy(): Promise<void> {
-    if (!this.client.isOpen && !this.connectOperation) return;
-    if (this.client.destroy) {
-      this.client.destroy();
+    this.closed = true;
+    const client = this.client;
+    this.client = undefined;
+    if (!client) return;
+    const isConnecting = this.connectOperation?.client === client;
+    if (!client.isOpen && !isConnecting) return;
+    if (client.destroy) {
+      this.destroyClient(client);
       return;
     }
-    if (!this.client.isOpen) return;
-    if (this.client.quit) await this.client.quit();
+    if (!client.isOpen) return;
+    if (client.quit) await client.quit();
   }
 
-  private startConnect(): Promise<unknown> {
-    const operation = Promise.resolve().then(() => this.client.connect());
-    this.connectOperation = operation;
+  private currentClient(): RoommateMessageValkeyClient {
+    if (this.client) return this.client;
+    if (this.closed) throw new ValkeyCommandNotReadyError();
+    const replacement = this.clientFactory?.();
+    if (!replacement) throw new ValkeyProtocolError();
+    this.client = replacement;
+    return replacement;
+  }
+
+  private startConnect(client: RoommateMessageValkeyClient): Promise<unknown> {
+    const operation = Promise.resolve().then(() => client.connect());
+    const tracked = { client, operation };
+    this.connectOperation = tracked;
     void operation.then(
-      () => this.clearConnectOperation(operation),
-      () => this.clearConnectOperation(operation)
+      () => this.clearConnectOperation(tracked),
+      () => this.clearConnectOperation(tracked)
     );
     return operation;
   }
 
-  private clearConnectOperation(operation: Promise<unknown>): void {
-    if (this.connectOperation === operation) this.connectOperation = undefined;
+  private clearConnectOperation(tracked: {
+    client: RoommateMessageValkeyClient;
+    operation: Promise<unknown>;
+  }): void {
+    if (this.connectOperation === tracked) this.connectOperation = undefined;
+  }
+
+  private invalidateClient(client: RoommateMessageValkeyClient): void {
+    if (this.client === client) this.client = undefined;
+    this.destroyClient(client);
+  }
+
+  private destroyClient(client: RoommateMessageValkeyClient): void {
+    if (this.destroyedClients.has(client)) return;
+    this.destroyedClients.add(client);
+    if (client.destroy) {
+      try {
+        client.destroy();
+      } catch {
+        // The client remains invalidated even when its driver reports that it was already closed.
+      }
+      return;
+    }
+    if (client.isOpen && client.quit) {
+      void Promise.resolve()
+        .then(() => client.quit?.())
+        .catch(() => undefined);
+    }
   }
 }
 
+type DistributedRecoveryState =
+  | { mode: "distributed" }
+  | { mode: "cooldown"; nextProbeAt: number }
+  | { mode: "probing" };
+
 export class ResilientRoommateMessageRateLimiter extends RoommateMessageRateLimiter {
-  private nextDistributedProbeAt = 0;
+  private recoveryState: DistributedRecoveryState = { mode: "distributed" };
   private readonly distributed: RoommateMessageRateLimiter;
   private readonly local: LocalRoommateMessageRateLimiter;
   private readonly health: MessagingInfrastructureHealth;
@@ -215,16 +287,22 @@ export class ResilientRoommateMessageRateLimiter extends RoommateMessageRateLimi
   }
 
   async consume(request: RoommateMessageRateLimitRequest): Promise<void> {
-    const now = this.now();
-    if (now < this.nextDistributedProbeAt) return this.local.consume(request);
+    if (this.recoveryState.mode === "probing") return this.local.consume(request);
+    if (this.recoveryState.mode === "cooldown") {
+      if (this.now() < this.recoveryState.nextProbeAt) return this.local.consume(request);
+      this.recoveryState = { mode: "probing" };
+    }
 
     try {
       await this.distributed.consume(request);
-      this.health.markDistributed("messageRateLimit");
+      this.markDistributed();
     } catch (error) {
-      if (isRateLimitExceeded(error)) throw error;
+      if (isRateLimitExceeded(error)) {
+        this.markDistributed();
+        throw error;
+      }
       const reason = categorizeValkeyFailure(error);
-      this.nextDistributedProbeAt = now + this.retryCooldownMs;
+      this.recoveryState = { mode: "cooldown", nextProbeAt: this.now() + this.retryCooldownMs };
       this.health.markLocalFallback("messageRateLimit", reason);
       this.logger.warn({ component: "messageRateLimit", mode: "local-fallback", reason });
       await this.local.consume(request);
@@ -234,6 +312,11 @@ export class ResilientRoommateMessageRateLimiter extends RoommateMessageRateLimi
   async onModuleDestroy(): Promise<void> {
     const destroy = (this.distributed as { onModuleDestroy?: () => Promise<void> }).onModuleDestroy;
     if (destroy) await destroy.call(this.distributed);
+  }
+
+  private markDistributed(): void {
+    this.recoveryState = { mode: "distributed" };
+    this.health.markDistributed("messageRateLimit");
   }
 }
 
@@ -247,17 +330,49 @@ export function createRoommateMessageRateLimiter(
     return new LocalRoommateMessageRateLimiter({ now: input.now });
   }
 
-  const client = input.clientFactory?.(valkeyUrl) ?? (createClient({ url: valkeyUrl }) as RoommateMessageValkeyClient);
-  client.on?.("error", () => undefined);
+  const logger = input.logger ?? new Logger("RoommateMessageRateLimiter");
+  const clientFactory = () => {
+    const creation = constructValkeyClient(
+      valkeyUrl,
+      input.clientFactory ??
+        ((url) => createClient({ url, disableOfflineQueue: true }) as RoommateMessageValkeyClient)
+    );
+    if (!creation.ok) return undefined;
+    const client = creation.client;
+    try {
+      client.on?.("error", () => undefined);
+    } catch {
+      safelyDestroyConstructedClient(client);
+      return undefined;
+    }
+    return client;
+  };
+  const client = clientFactory();
+  if (!client) {
+    health.markLocalFallback("messageRateLimit", "protocol");
+    logger.warn({ component: "messageRateLimit", mode: "local-fallback", reason: "protocol" });
+    return new LocalRoommateMessageRateLimiter({ now: input.now });
+  }
   health.markDistributed("messageRateLimit");
   return new ResilientRoommateMessageRateLimiter({
-    distributed: new ValkeyRoommateMessageRateLimiter(client, { operationTimeoutMs: input.operationTimeoutMs }),
+    distributed: new ValkeyRoommateMessageRateLimiter(client, {
+      operationTimeoutMs: input.operationTimeoutMs,
+      clientFactory
+    }),
     local: new LocalRoommateMessageRateLimiter({ now: input.now }),
     health,
     now: input.now,
     retryCooldownMs: input.retryCooldownMs,
-    logger: input.logger
+    logger
   });
+}
+
+function safelyDestroyConstructedClient(client: RoommateMessageValkeyClient): void {
+  try {
+    client.destroy?.();
+  } catch {
+    // No raw construction or cleanup failure crosses the sanitized fallback boundary.
+  }
 }
 
 function isRateLimitExceeded(error: unknown): error is HttpException {

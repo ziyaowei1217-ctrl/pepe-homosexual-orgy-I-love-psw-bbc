@@ -5,6 +5,7 @@ import { createClient } from "redis";
 import type { Server, ServerOptions } from "socket.io";
 
 import { MessagingInfrastructureHealth } from "../health/messaging-infrastructure-health";
+import { constructValkeyClient } from "../valkey/valkey-client-construction";
 import { categorizeValkeyFailure, ValkeyOperationTimeoutError } from "./roommate-message-rate-limit";
 
 type ValkeyPubSubClient = {
@@ -13,7 +14,7 @@ type ValkeyPubSubClient = {
   connect(): Promise<unknown>;
   quit(): Promise<unknown>;
   destroy?(): void;
-  publish?(...arguments_: unknown[]): { catch(onRejected: (error: unknown) => unknown): unknown };
+  publish?(...arguments_: unknown[]): unknown;
   on?(event: "error", listener: (error: unknown) => void): unknown;
 };
 
@@ -65,9 +66,24 @@ export async function createRoommateSocketAdapter(
   const clientFactory =
     options.clientFactory ??
     ((url: string) => createClient({ url, disableOfflineQueue: true }) as unknown as ValkeyPubSubClient);
-  const pubClient = clientFactory(valkeyUrl);
-  const subClient = clientFactory(valkeyUrl);
   const logger = options.logger ?? new Logger("RoommateSocketAdapter");
+  const reportStartupFallback = (reason: "protocol" | ReturnType<typeof categorizeValkeyFailure>) => {
+    options.health?.markLocalFallback("realtime", reason);
+    logger.warn({ component: "realtime", mode: "local-fallback", reason });
+  };
+  const pubCreation = constructValkeyClient(valkeyUrl, clientFactory);
+  if (!pubCreation.ok) {
+    reportStartupFallback(pubCreation.reason);
+    return undefined;
+  }
+  const pubClient = pubCreation.client;
+  const subCreation = constructValkeyClient(valkeyUrl, clientFactory);
+  if (!subCreation.ok) {
+    await Promise.allSettled([closeClient(pubClient)]);
+    reportStartupFallback(subCreation.reason);
+    return undefined;
+  }
+  const subClient = subCreation.client;
   let lifecycle: "connecting" | "active" | "closed" = "connecting";
   let runtimeFallbackReported = false;
   const markRuntimeFallback = () => {
@@ -76,7 +92,7 @@ export async function createRoommateSocketAdapter(
     options.health?.markLocalFallback("realtime", "runtime");
     logger.warn({ component: "realtime", mode: "local-fallback", reason: "runtime" });
   };
-  handleIgnoredPublishRejections(pubClient);
+  containPublishFailures(pubClient, markRuntimeFallback);
   pubClient.on?.("error", markRuntimeFallback);
   subClient.on?.("error", markRuntimeFallback);
 
@@ -92,8 +108,7 @@ export async function createRoommateSocketAdapter(
     const reason = categorizeValkeyFailure(failedConnection.reason);
     lifecycle = "closed";
     await Promise.allSettled([closeClient(pubClient), closeClient(subClient)]);
-    options.health?.markLocalFallback("realtime", reason);
-    logger.warn({ component: "realtime", mode: "local-fallback", reason });
+    reportStartupFallback(reason);
     return undefined;
   }
 
@@ -130,12 +145,18 @@ async function settleWithin<T>(operation: Promise<T>, timeoutMs: number): Promis
   }
 }
 
-function handleIgnoredPublishRejections(client: ValkeyPubSubClient): void {
+function containPublishFailures(client: ValkeyPubSubClient, reportRuntimeFallback: () => void): void {
   if (!client.publish) return;
   const publish = client.publish.bind(client);
   client.publish = (...arguments_: unknown[]) => {
-    const result = publish(...arguments_);
-    void result.catch(() => undefined);
-    return result;
+    try {
+      return Promise.resolve(publish(...arguments_)).catch(() => {
+        reportRuntimeFallback();
+        return undefined;
+      });
+    } catch {
+      reportRuntimeFallback();
+      return Promise.resolve(undefined);
+    }
   };
 }

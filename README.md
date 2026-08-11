@@ -135,7 +135,8 @@ The developer UI is available at `/admin/roommates`.
 ## Roommate Messaging Backend
 
 The backend wires authenticated direct messages between reciprocal roommate matches, durable message
-history in PostgreSQL, unread counts, monotonic read cursors, and realtime message/read/unread events.
+history in PostgreSQL, unread counts, monotonic read cursors, and realtime message/read events. Unread
+state is derived through the HTTP conversation APIs; there is no separate realtime unread event.
 The HTTP collection starts at `/api/v1/roommate-conversations`; Socket.IO clients connect to the
 `/roommate-messaging` namespace. HTTP history and unread state are authoritative on initial load and
 are the recovery path after a reconnect or any offline period; realtime events accelerate the online
