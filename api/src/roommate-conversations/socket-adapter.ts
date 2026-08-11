@@ -33,7 +33,8 @@ export class RoommateSocketIoAdapter extends IoAdapter {
   constructor(
     app: INestApplicationContext,
     private readonly pubClient: ValkeyPubSubClient,
-    private readonly subClient: ValkeyPubSubClient
+    private readonly subClient: ValkeyPubSubClient,
+    private readonly deactivateRuntimeErrorReporting?: () => void
   ) {
     super(app);
     this.redisAdapter = createAdapter(pubClient as never, subClient as never);
@@ -46,6 +47,7 @@ export class RoommateSocketIoAdapter extends IoAdapter {
   }
 
   async dispose(): Promise<void> {
+    this.deactivateRuntimeErrorReporting?.();
     await Promise.allSettled([closeClient(this.pubClient), closeClient(this.subClient)]);
   }
 }
@@ -66,7 +68,11 @@ export async function createRoommateSocketAdapter(
   const pubClient = clientFactory(valkeyUrl);
   const subClient = clientFactory(valkeyUrl);
   const logger = options.logger ?? new Logger("RoommateSocketAdapter");
+  let lifecycle: "connecting" | "active" | "closed" = "connecting";
+  let runtimeFallbackReported = false;
   const markRuntimeFallback = () => {
+    if (lifecycle !== "active" || runtimeFallbackReported) return;
+    runtimeFallbackReported = true;
     options.health?.markLocalFallback("realtime", "runtime");
     logger.warn({ component: "realtime", mode: "local-fallback", reason: "runtime" });
   };
@@ -84,6 +90,7 @@ export async function createRoommateSocketAdapter(
   );
   if (failedConnection) {
     const reason = categorizeValkeyFailure(failedConnection.reason);
+    lifecycle = "closed";
     await Promise.allSettled([closeClient(pubClient), closeClient(subClient)]);
     options.health?.markLocalFallback("realtime", reason);
     logger.warn({ component: "realtime", mode: "local-fallback", reason });
@@ -91,7 +98,10 @@ export async function createRoommateSocketAdapter(
   }
 
   options.health?.markDistributed("realtime");
-  return new RoommateSocketIoAdapter(app, pubClient, subClient);
+  lifecycle = "active";
+  return new RoommateSocketIoAdapter(app, pubClient, subClient, () => {
+    lifecycle = "closed";
+  });
 }
 
 async function closeClient(client: ValkeyPubSubClient): Promise<void> {

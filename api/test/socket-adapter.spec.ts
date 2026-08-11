@@ -124,6 +124,38 @@ describe("optional roommate Socket.IO Valkey adapter", () => {
     });
   });
 
+  it("keeps a connection rejection as the only fallback when a client errors during bootstrap", async () => {
+    const pubClient = valkeyClient();
+    const subClient = valkeyClient();
+    const health = messagingHealth();
+    const logger = { warn: vi.fn() };
+    subClient.connect.mockImplementation(() => {
+      subClient.emitError(new Error("transient client error"));
+      return Promise.reject(new Error("socket connection unavailable"));
+    });
+
+    await expect(
+      createRoommateSocketAdapter(appContext(), {
+        valkeyUrl: "redis://valkey.internal:6379",
+        clientFactory: vi.fn().mockReturnValueOnce(pubClient).mockReturnValueOnce(subClient),
+        health,
+        logger
+      })
+    ).resolves.toBeUndefined();
+
+    expect(logger.warn).toHaveBeenCalledTimes(1);
+    expect(logger.warn).toHaveBeenCalledWith({ component: "realtime", mode: "local-fallback", reason: "connection" });
+    expect(health.snapshot()).toEqual({
+      realtime: {
+        status: "degraded",
+        mode: "local-fallback",
+        reason: "connection",
+        changedAt: "2026-08-11T00:00:00.000Z"
+      },
+      messageRateLimit: { status: "ok", mode: "single-instance" }
+    });
+  });
+
   it("marks realtime local-fallback when adapter connection times out", async () => {
     vi.useFakeTimers();
     try {
@@ -160,6 +192,41 @@ describe("optional roommate Socket.IO Valkey adapter", () => {
     }
   });
 
+  it("keeps a timeout as the only fallback when a client errors during bootstrap", async () => {
+    vi.useFakeTimers();
+    try {
+      const pubClient = valkeyClient({ pendingConnect: true });
+      const subClient = valkeyClient({ pendingConnect: true });
+      const health = messagingHealth();
+      const logger = { warn: vi.fn() };
+      const adapterPromise = createRoommateSocketAdapter(appContext(), {
+        valkeyUrl: "redis://valkey.internal:6379",
+        clientFactory: vi.fn().mockReturnValueOnce(pubClient).mockReturnValueOnce(subClient),
+        connectTimeoutMs: 5,
+        health,
+        logger
+      });
+
+      pubClient.emitError(new Error("transient client error"));
+      await vi.advanceTimersByTimeAsync(5);
+      await expect(adapterPromise).resolves.toBeUndefined();
+
+      expect(logger.warn).toHaveBeenCalledTimes(1);
+      expect(logger.warn).toHaveBeenCalledWith({ component: "realtime", mode: "local-fallback", reason: "timeout" });
+      expect(health.snapshot()).toEqual({
+        realtime: {
+          status: "degraded",
+          mode: "local-fallback",
+          reason: "timeout",
+          changedAt: "2026-08-11T00:00:00.000Z"
+        },
+        messageRateLimit: { status: "ok", mode: "single-instance" }
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("marks realtime local-fallback on a runtime pub/sub client error", async () => {
     const pubClient = valkeyClient();
     const subClient = valkeyClient();
@@ -174,6 +241,87 @@ describe("optional roommate Socket.IO Valkey adapter", () => {
 
     pubClient.emitError(new Error("unexpected adapter fault"));
 
+    expect(logger.warn).toHaveBeenCalledWith({ component: "realtime", mode: "local-fallback", reason: "runtime" });
+    expect(health.snapshot()).toEqual({
+      realtime: {
+        status: "degraded",
+        mode: "local-fallback",
+        reason: "runtime",
+        changedAt: "2026-08-11T00:00:00.000Z"
+      },
+      messageRateLimit: { status: "ok", mode: "single-instance" }
+    });
+  });
+
+  it("ignores client errors after failed adapter cleanup", async () => {
+    const pubClient = valkeyClient();
+    const subClient = valkeyClient({ connectError: new Error("socket connection unavailable") });
+    const health = messagingHealth();
+    const logger = { warn: vi.fn() };
+
+    await createRoommateSocketAdapter(appContext(), {
+      valkeyUrl: "redis://valkey.internal:6379",
+      clientFactory: vi.fn().mockReturnValueOnce(pubClient).mockReturnValueOnce(subClient),
+      health,
+      logger
+    });
+    pubClient.emitError(new Error("late pub error"));
+    subClient.emitError(new Error("late sub error"));
+
+    expect(logger.warn).toHaveBeenCalledTimes(1);
+    expect(health.snapshot()).toEqual({
+      realtime: {
+        status: "degraded",
+        mode: "local-fallback",
+        reason: "connection",
+        changedAt: "2026-08-11T00:00:00.000Z"
+      },
+      messageRateLimit: { status: "ok", mode: "single-instance" }
+    });
+  });
+
+  it("ignores client errors after adapter disposal", async () => {
+    const pubClient = valkeyClient();
+    const subClient = valkeyClient();
+    const health = messagingHealth();
+    const logger = { warn: vi.fn() };
+    const adapter = await createRoommateSocketAdapter(appContext(), {
+      valkeyUrl: "redis://valkey.internal:6379",
+      clientFactory: vi.fn().mockReturnValueOnce(pubClient).mockReturnValueOnce(subClient),
+      health,
+      logger
+    });
+
+    await adapter?.dispose();
+    pubClient.emitError(new Error("late pub error"));
+    subClient.emitError(new Error("late sub error"));
+
+    expect(logger.warn).not.toHaveBeenCalled();
+    expect(health.snapshot()).toEqual({
+      realtime: { status: "ok", mode: "distributed" },
+      messageRateLimit: { status: "ok", mode: "single-instance" }
+    });
+  });
+
+  it("reports only the first runtime pub/sub error after activation", async () => {
+    let timestamp = "2026-08-11T00:00:00.000Z";
+    const health = new MessagingInfrastructureHealth(() => new Date(timestamp));
+    const pubClient = valkeyClient();
+    const subClient = valkeyClient();
+    const logger = { warn: vi.fn() };
+    await createRoommateSocketAdapter(appContext(), {
+      valkeyUrl: "redis://valkey.internal:6379",
+      clientFactory: vi.fn().mockReturnValueOnce(pubClient).mockReturnValueOnce(subClient),
+      health,
+      logger
+    });
+
+    pubClient.emitError(new Error("first runtime error"));
+    timestamp = "2026-08-11T00:00:01.000Z";
+    subClient.emitError(new Error("second runtime error"));
+    pubClient.emitError(new Error("third runtime error"));
+
+    expect(logger.warn).toHaveBeenCalledTimes(1);
     expect(logger.warn).toHaveBeenCalledWith({ component: "realtime", mode: "local-fallback", reason: "runtime" });
     expect(health.snapshot()).toEqual({
       realtime: {
