@@ -18,6 +18,11 @@ import {
 } from "../src/roommate-conversations/socket-adapter";
 import { createDisposablePostgres } from "./support/disposable-postgres";
 import { closeOwnedNestLifecycle } from "./support/owned-nest-lifecycle";
+import {
+  disposeDetachedSocketAdapter,
+  installSocketAdapter,
+  isolatedValkeySmokeFailureMessage
+} from "./support/roommate-valkey-realtime-smoke";
 
 const request = require("supertest") as (server: unknown) => any;
 
@@ -38,13 +43,13 @@ type RunningInstance = {
 
 type NestOwnership = {
   app?: INestApplication;
+  detachedSocketAdapter?: RoommateSocketIoAdapter;
   module: TestingModule;
 };
 
 function defineTwoInstanceValkeySmoke() {
   const sockets = new Set<Socket>();
   const ownerships: NestOwnership[] = [];
-  const adapters: RoommateSocketIoAdapter[] = [];
   const uniqueRunId = randomUUID();
   const userA = {
     id: `valkey-realtime-user-a-${uniqueRunId}`,
@@ -71,8 +76,8 @@ function defineTwoInstanceValkeySmoke() {
     process.env.NODE_ENV = "development";
 
     const { AppModule } = await import("../src/app.module");
-    instanceA = await startApplication(AppModule, ownerships, adapters);
-    instanceB = await startApplication(AppModule, ownerships, adapters);
+    instanceA = await startApplication(AppModule, ownerships);
+    instanceB = await startApplication(AppModule, ownerships);
 
     const prisma = instanceA.app.get(PrismaService);
     await prisma.user.createMany({ data: [userA, userB] });
@@ -114,18 +119,18 @@ function defineTwoInstanceValkeySmoke() {
       );
       cleanupErrors.push(...rejectedReasons(applicationResults));
 
-      const adapterResults = await Promise.allSettled(
-        adapters.map((adapter, index) =>
+      const detachedAdapterResults = await Promise.allSettled(
+        ownerships.map((ownership, index) =>
           settleWithin(
-            adapter.dispose().catch((error) => {
-              throw new Error(`Valkey adapter ${index + 1} cleanup failed: ${describeError(error)}`);
+            disposeDetachedSocketAdapter(ownership).catch((error) => {
+              throw new Error(`Detached Valkey adapter ${index + 1} cleanup failed: ${describeError(error)}`);
             }),
             5_000,
-            `Valkey adapter ${index + 1} cleanup`
+            `Detached Valkey adapter ${index + 1} cleanup`
           )
         )
       );
-      cleanupErrors.push(...rejectedReasons(adapterResults));
+      cleanupErrors.push(...rejectedReasons(detachedAdapterResults));
     } finally {
       restoreEnvironment("JWT_SECRET", originalEnvironment.jwtSecret);
       restoreEnvironment("NODE_ENV", originalEnvironment.nodeEnv);
@@ -139,7 +144,7 @@ function defineTwoInstanceValkeySmoke() {
     }
   }, 15_000);
 
-  it("delivers one committed message from instance A through instance B with distributed readiness", async () => {
+  it("delivers the first committed message exactly once before a later committed barrier event", async () => {
     const httpA = request(instanceA!.app.getHttpServer());
     const httpB = request(instanceB!.app.getHttpServer());
 
@@ -173,25 +178,45 @@ function defineTwoInstanceValkeySmoke() {
     const recordForB = (event: MessageCreatedEvent) => eventsForB.push(event);
     socketB.on("roommate.message.created", recordForB);
     try {
-      const eventForB = onceEvent<MessageCreatedEvent>(socketB, "roommate.message.created");
-      const committedRequest = httpA
+      const firstEventForB = onceEvent<MessageCreatedEvent>(socketB, "roommate.message.created");
+      const firstCommittedRequest = httpA
         .post(`/api/v1/roommate-conversations/${conversationId}/messages`)
         .auth(tokenA, { type: "bearer" })
-        .send({ clientMessageId: randomUUID(), body: "cross-instance Valkey message" })
+        .send({ clientMessageId: randomUUID(), body: "first cross-instance Valkey message" })
         .expect(201);
-      const [committed, deliveredToB] = await Promise.all([committedRequest, eventForB]);
-
-      expect(deliveredToB).toMatchObject({
-        conversationId,
-        message: { id: committed.body.id, body: "cross-instance Valkey message", senderRole: "peer" }
-      });
-      await wait(250);
-      expect(eventsForB).toEqual([
-        expect.objectContaining({
-          conversationId,
-          message: expect.objectContaining({ id: committed.body.id })
-        })
+      const [firstCommitted, firstDeliveredToB] = await Promise.all([
+        firstCommittedRequest,
+        firstEventForB
       ]);
+
+      expect(firstDeliveredToB).toMatchObject({
+        conversationId,
+        message: {
+          id: firstCommitted.body.id,
+          body: "first cross-instance Valkey message",
+          senderRole: "peer"
+        }
+      });
+
+      const barrierEventForB = onceEvent<MessageCreatedEvent>(socketB, "roommate.message.created");
+      const barrierCommittedRequest = httpA
+        .post(`/api/v1/roommate-conversations/${conversationId}/messages`)
+        .auth(tokenA, { type: "bearer" })
+        .send({ clientMessageId: randomUUID(), body: "causal barrier Valkey message" })
+        .expect(201);
+      const [barrierCommitted, barrierDeliveredToB] = await Promise.all([
+        barrierCommittedRequest,
+        barrierEventForB
+      ]);
+      expect(barrierDeliveredToB).toMatchObject({
+        conversationId,
+        message: {
+          id: barrierCommitted.body.id,
+          body: "causal barrier Valkey message",
+          senderRole: "peer"
+        }
+      });
+      expect(eventsForB.filter((event) => event.message.id === firstCommitted.body.id)).toHaveLength(1);
     } finally {
       socketB.off("roommate.message.created", recordForB);
     }
@@ -237,8 +262,7 @@ if (runIsolatedChild) {
 
 async function startApplication(
   AppModule: Type<unknown>,
-  ownerships: NestOwnership[],
-  adapters: RoommateSocketIoAdapter[]
+  ownerships: NestOwnership[]
 ): Promise<RunningInstance> {
   const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
   const ownership: NestOwnership = { module: moduleRef };
@@ -252,8 +276,7 @@ async function startApplication(
     health
   });
   expect(adapter).toBeDefined();
-  adapters.push(adapter!);
-  app.useWebSocketAdapter(adapter!);
+  installSocketAdapter((selectedAdapter) => app.useWebSocketAdapter(selectedAdapter), ownership, adapter!);
   app.setGlobalPrefix("api/v1");
   app.useGlobalPipes(
     new ValidationPipe({
@@ -296,9 +319,7 @@ function runIsolatedValkeyRealtimeSmoke(databaseUrl: string): void {
     }
   );
   if (result.status !== 0) {
-    throw new Error(
-      `isolated Valkey realtime smoke failed: ${result.error?.message || result.stderr || result.stdout}`
-    );
+    throw new Error(isolatedValkeySmokeFailureMessage(result));
   }
 }
 
@@ -388,8 +409,4 @@ function describeError(error: unknown) {
 function restoreEnvironment(name: string, value: string | undefined) {
   if (value === undefined) delete process.env[name];
   else process.env[name] = value;
-}
-
-function wait(milliseconds: number) {
-  return new Promise<void>((resolve) => setTimeout(resolve, milliseconds));
 }
