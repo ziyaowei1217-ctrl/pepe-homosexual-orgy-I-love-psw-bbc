@@ -127,7 +127,11 @@ describeSmoke("launch smoke against real PostgreSQL", () => {
 
     await http.get("/api/v1/ready").expect(200).expect({
       status: "ok",
-      checks: { database: "ok" }
+      checks: {
+        database: "ok",
+        realtime: { status: "ok", mode: "single-instance" },
+        messageRateLimit: { status: "ok", mode: "single-instance" }
+      }
     });
 
     const listingResponse = await http

@@ -13,6 +13,8 @@ Frontend + backend MVP for a high-trust sublet marketplace and co-living matchin
 - NestJS API
 - Prisma
 - PostgreSQL
+- Socket.IO
+- Valkey (optional, for distributed roommate messaging)
 
 ## Run Full Local Stack With Docker
 
@@ -130,37 +132,83 @@ Admin/developer management endpoints:
 See [docs/roommate-matching-admin.md](docs/roommate-matching-admin.md) for the exact payload and the safe way to add or edit deck profiles.
 The developer UI is available at `/admin/roommates`.
 
+## Roommate Messaging Backend
+
+The backend wires authenticated direct messages between reciprocal roommate matches, durable message
+history in PostgreSQL, unread counts, monotonic read cursors, and realtime message/read/unread events.
+The HTTP collection starts at `/api/v1/roommate-conversations`; Socket.IO clients connect to the
+`/roommate-messaging` namespace. HTTP history and unread state are authoritative on initial load and
+are the recovery path after a reconnect or any offline period; realtime events accelerate the online
+experience but do not replace an HTTP refresh.
+
+This backend scope intentionally does not include email or Web Push offline notifications,
+attachments, group chat, typing indicators, message editing, message recall, or presence claims.
+Frontend messaging integration is outside this backend launch gate.
+
 ## Verify
 
 ```bash
 pnpm typecheck
 pnpm build
-pnpm --dir api test
-pnpm --dir api typecheck
-pnpm --dir api build
-DATABASE_URL='postgresql://sublet:sublet@localhost:5432/sublet_pipeline?schema=public' pnpm --dir api prisma validate
+pnpm -C api test
+pnpm -C api typecheck
+pnpm -C api build
+DATABASE_URL='postgresql://sublet:sublet@localhost:5432/sublet_pipeline?schema=public' pnpm -C api prisma validate
 ```
 
 ## Launch Readiness
 
-From `api`:
+`GET /api/v1/health` is a process-liveness check and does not query PostgreSQL. `GET /api/v1/ready`
+queries PostgreSQL and reports the sanitized roommate-messaging infrastructure state. A database
+failure makes readiness fail; messaging fallback leaves the database-backed API available with
+`status: "degraded"`. Health responses and operational logs must never contain credentials, raw
+configuration values, message bodies, or caught-error text.
+
+The `realtime` and `messageRateLimit` readiness components each report one of these modes:
+
+- `single-instance`: `VALKEY_URL` is empty; Socket.IO fan-out and message rate limiting are local to
+  one API process. This is a supported local and single-instance deployment mode.
+- `distributed`: `VALKEY_URL` is configured and that component is using Valkey successfully.
+- `local-fallback`: Valkey was configured but a connection, timeout, protocol, or runtime failure
+  caused a component to fall back to local behavior. The API remains usable, but cross-instance
+  realtime delivery or globally shared rate-limit accounting is degraded until recovery.
+
+Run the always-on release checks and real PostgreSQL 16 smoke tests from the repository root:
 
 ```bash
-npm run launch:check
-RUN_DB_SMOKE=1 DATABASE_URL='postgresql://sublet:sublet@localhost:5432/sublet_pipeline?schema=public' npm run launch:smoke
-VALKEY_URL='redis://127.0.0.1:6379' npm run launch:smoke:valkey
+pnpm -C api launch:check
+RUN_DB_SMOKE=1 DATABASE_URL='postgresql://sublet:sublet@localhost:5432/sublet_pipeline?schema=public' pnpm -C api launch:smoke
+DATABASE_URL='postgresql://sublet:sublet@localhost:5432/sublet_pipeline?schema=public' pnpm -C api launch:smoke:roommate
 ```
 
-`launch:check` runs the non-database pre-release checks. `launch:smoke` requires a migrated PostgreSQL database and exercises the core HTTP flow against real Prisma. `launch:smoke:valkey` is explicitly opt-in and checks the production Lua script, sliding-window boundary behavior, multi-key atomicity, and retry-after values against a real Redis or Valkey server. Ordinary test runs skip it and make no network connection.
+`launch:check` runs the non-database pre-release checks. `launch:smoke` requires a migrated PostgreSQL
+database and exercises the core HTTP flow against real Prisma. `launch:smoke:roommate` uses a
+disposable PostgreSQL database to prove the roommate migrations and durable HTTP/realtime journey.
+
+Valkey is optional. To start only the Compose service used by the distributed smoke gate, then run
+the combined Lua limiter and two-instance Socket.IO test:
+
+```bash
+docker compose --profile realtime up -d valkey
+RUN_DB_SMOKE=1 RUN_VALKEY_SMOKE=1 \
+  DATABASE_URL='postgresql://sublet:sublet@localhost:5432/sublet_pipeline?schema=public' \
+  VALKEY_URL='redis://127.0.0.1:6379' \
+  pnpm -C api launch:smoke:valkey
+```
+
+Ordinary test runs skip database- and Valkey-gated integration suites when their opt-in flags are
+absent and do not connect to those services. Keep `VALKEY_URL` empty when distributed fan-out and
+rate limiting are not needed.
 
 ## Current Scope
 
 The local product supports email-code login, persisted profiles, host listing submission,
 administrator review, approved public listings, two-sided host/renter messages, viewing requests
 and host decisions, ranked roommate discovery, administrator-managed roommate profiles, reciprocal
-matches, active deal rooms, and idempotent group-tour requests. Empty database tables produce
-intentional empty states.
+matches, backend roommate direct messages with durable history/unread/read state and realtime events,
+active deal rooms, and idempotent group-tour requests. Empty database tables produce intentional
+empty states.
 
-Online applications, payments, escrow, roommate direct messages, realtime updates, and production
-hosting are not wired yet. Stripe, Mapbox, real email delivery, Redis queues, and production
-moderation providers are also not connected.
+Online applications, payments, escrow, production hosting, roommate messaging frontend integration,
+and the messaging non-goals listed above are not wired yet. Stripe, Mapbox, real email delivery,
+Redis queues, and production moderation providers are also not connected.
