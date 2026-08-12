@@ -445,13 +445,13 @@ describe("AuthService", () => {
     expect(prisma.verificationCode.state.codes.at(-1)?.codeHash).not.toBe(sender.sentCodes[0].code);
   });
 
-  it("generically accepts provider failure, records it without secrets, and preserves the old SENT code", async () => {
+  it("does not disclose a development code after provider failure", async () => {
     const prisma = createPrismaMock();
     const jwt = new JwtService({ secret: "test-secret" });
     const sender = createEmailSenderMock();
     const fixedNow = 1_800_000_000_000;
     const service = createAuthService(prisma, jwt, {
-      nodeEnv: "production",
+      nodeEnv: "development",
       emailSender: sender,
       codeRequestCooldownMs: 0,
       now: () => fixedNow
@@ -466,7 +466,7 @@ describe("AuthService", () => {
       }
     };
     const failingService = createAuthService(prisma, jwt, {
-      nodeEnv: "production",
+      nodeEnv: "development",
       emailSender: failingSender,
       codeRequestCooldownMs: 0,
       now: () => fixedNow,
@@ -475,11 +475,15 @@ describe("AuthService", () => {
 
     const failedAcceptance = await failingService.requestEmailCode("student@northeastern.edu");
 
-    expect(successfulAcceptance).toEqual({
+    expect(successfulAcceptance).toMatchObject({
+      email: "student@northeastern.edu",
+      expiresAt: new Date(fixedNow + 600_000),
+      devCode: expect.stringMatching(/^\d{6}$/)
+    });
+    expect(failedAcceptance).toEqual({
       email: "student@northeastern.edu",
       expiresAt: new Date(fixedNow + 600_000)
     });
-    expect(failedAcceptance).toEqual(successfulAcceptance);
     expect(prisma.verificationCode.state.codes).toHaveLength(2);
     expect(existingCode.consumedAt).toBeNull();
     expect(prisma.verificationCode.state.codes[1].deliveryStatus).toBe(VerificationDeliveryStatus.FAILED);

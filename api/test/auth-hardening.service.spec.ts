@@ -224,7 +224,11 @@ describe("AuthService production email issuance", () => {
 
     const olderRecord = prisma.state.codes.find((record) => record.id === sent[0].verificationCodeId);
     const newerRecord = prisma.state.codes.find((record) => record.id === sent[1].verificationCodeId);
-    expect(olderResponse.devCode).not.toBe(newerResponse.devCode);
+    expect(olderResponse).toEqual({
+      email: "student@example.com",
+      expiresAt: expect.any(Date)
+    });
+    expect(newerResponse.devCode).toMatch(/^\d{6}$/);
     expect(olderRecord?.consumedAt).toBeInstanceOf(Date);
     expect(newerRecord?.consumedAt).toBeNull();
   });
