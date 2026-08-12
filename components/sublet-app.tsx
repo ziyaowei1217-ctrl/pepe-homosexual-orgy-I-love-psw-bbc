@@ -39,7 +39,7 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
 import { AuthFlowPanel } from "@/components/auth-flow-panel";
@@ -58,15 +58,20 @@ import { Separator } from "@/components/ui/separator";
 import {
   apiGet,
   apiPatch,
+  getRoommateConversations,
+  getRoommateMessages,
   getMyProfile,
   getSessionUser,
+  markRoommateConversationRead,
   apiPost,
+  sendRoommateMessage,
   updateMyProfile,
   type ApiProfile,
   type ApiDealRoom,
   type ApiListing,
   type ApiRoommate,
   type ApiRoommateActionResponse,
+  type ApiRoommateConversation,
   type ApiTrustQueue,
   type ApiDealThread,
   type ApiViewingRequest,
@@ -159,6 +164,19 @@ import {
   mergeInboxContacts,
   type InboxContact
 } from "@/lib/message-inbox";
+import {
+  applyRoommateReadState,
+  createOptimisticRoommateMessage,
+  getRoommateUnreadTotal,
+  markRoommateMessageFailed,
+  mergeRoommateMessageIntoConversations,
+  mergeRoommateMessages,
+  reconcileRoommateMessage,
+  resolveRoommateConversationTarget,
+  shouldReportRoommateRead,
+  type RoommateMessageView
+} from "@/lib/roommate-conversations";
+import { createRoommateRealtimeClient } from "@/lib/roommate-realtime";
 import { buildSearchInsight } from "@/lib/search-insights";
 import {
   filterRoommatesByPreference,
@@ -659,6 +677,7 @@ export default function HomePage({
   initialSection,
   initialMessageListingId,
   initialRoommateDmId,
+  initialRoommateConversationId,
   initialListingId,
   initialGroupTourSelecting = false,
   initialGroupTourDealRoomId = null,
@@ -667,6 +686,7 @@ export default function HomePage({
   initialSection?: AppSection;
   initialMessageListingId?: string | null;
   initialRoommateDmId?: string | null;
+  initialRoommateConversationId?: string | null;
   initialListingId?: string | null;
   initialGroupTourSelecting?: boolean;
   initialGroupTourDealRoomId?: string | null;
@@ -702,6 +722,19 @@ export default function HomePage({
   const [notifications, setNotifications] = useState<LocalReminder[]>([]);
   const [userUiHydratedFor, setUserUiHydratedFor] = useState<string | null>(null);
   const [activeMessageListingId, setActiveMessageListingId] = useState<string | null>(initialMessageListingId ?? null);
+  const [activeRoommateConversationId, setActiveRoommateConversationId] = useState<string | null>(
+    initialRoommateConversationId ?? null
+  );
+  const [roommateConversations, setRoommateConversations] = useState<ApiRoommateConversation[]>([]);
+  const [roommateConversationsLoaded, setRoommateConversationsLoaded] = useState(false);
+  const [roommateMessages, setRoommateMessages] = useState<Record<string, RoommateMessageView[]>>({});
+  const [roommateMessageCursors, setRoommateMessageCursors] = useState<Record<string, string | null>>({});
+  const [roommateHistoryLoading, setRoommateHistoryLoading] = useState<Set<string>>(new Set());
+  const [roommateHistoryErrors, setRoommateHistoryErrors] = useState<Record<string, string>>({});
+  const [pendingReadMessageIds, setPendingReadMessageIds] = useState<Record<string, string>>({});
+  const tokenRef = useRef<string | null>(null);
+  const activeRoommateConversationIdRef = useRef<string | null>(initialRoommateConversationId ?? null);
+  const appliedRoommateRouteRef = useRef<string | null>(null);
   const [groupMembers, setGroupMembers] = useState<Roommate[]>([]);
   const [likedRoommateIds, setLikedRoommateIds] = useState<Set<string>>(new Set());
   const [likedMeRoommateIds, setLikedMeRoommateIds] = useState<Set<string>>(new Set());
@@ -735,6 +768,12 @@ export default function HomePage({
     profile,
     profileStatus
   });
+  const initialRoommateRouteKey = initialRoommateConversationId
+    ? `conversation:${initialRoommateConversationId}`
+    : initialRoommateDmId
+      ? `peer:${initialRoommateDmId}`
+      : null;
+  tokenRef.current = token;
 
   useEffect(() => {
     const storedSession = readStoredAuthSession();
@@ -766,12 +805,17 @@ export default function HomePage({
   useEffect(() => {
     if (initialMessageListingId) {
       setActiveMessageListingId(initialMessageListingId);
+      setActiveRoommateConversationId(null);
       return;
     }
 
     setActiveMessageListingId(null);
-    if (initialRoommateDmId) setToast("室友私信暂未开放。");
-  }, [initialMessageListingId, initialRoommateDmId]);
+    if (initialRoommateConversationId) {
+      setActiveRoommateConversationId(initialRoommateConversationId);
+    } else if (!initialRoommateDmId) {
+      setActiveRoommateConversationId(null);
+    }
+  }, [initialMessageListingId, initialRoommateConversationId, initialRoommateDmId]);
 
   useEffect(() => {
     const nextSection = sectionForRoute(pathname, { listingId: initialListingId });
@@ -912,6 +956,121 @@ export default function HomePage({
       cancelled = true;
     };
   }, [token]);
+
+  const handleRoommateApiError = useCallback((error: unknown, prefix = "") => {
+    const productError = toProductApiError(error);
+    if (shouldClearAuthSession(productError)) {
+      clearStoredAuthSession();
+      setToken(null);
+      setUser(null);
+      setProfile(null);
+      setProfileStatus("idle");
+      setAuthPanelOpen(true);
+    }
+    setToast(`${prefix}${productError.message}`);
+    return productError.message;
+  }, []);
+
+  const refreshRoommateConversations = useCallback(
+    async (currentToken: string) => {
+      try {
+        const nextConversations = await getRoommateConversations(currentToken);
+        if (tokenRef.current !== currentToken) return null;
+        setRoommateConversations(nextConversations);
+        setRoommateConversationsLoaded(true);
+        return nextConversations;
+      } catch (error) {
+        if (tokenRef.current === currentToken) {
+          handleRoommateApiError(error, "室友消息加载失败：");
+        }
+        return null;
+      }
+    },
+    [handleRoommateApiError]
+  );
+
+  const refreshRoommateHistory = useCallback(
+    async (currentToken: string, conversationId: string, cursor?: string) => {
+      setRoommateHistoryLoading((current) => new Set(current).add(conversationId));
+      try {
+        const page = cursor
+          ? await getRoommateMessages(currentToken, conversationId, cursor)
+          : await getRoommateMessages(currentToken, conversationId);
+        if (tokenRef.current !== currentToken) return null;
+        setRoommateMessages((current) => {
+          const existing = current[conversationId] ?? [];
+          const base = cursor
+            ? existing
+            : existing.filter((message) => message.deliveryStatus !== "sent");
+          return {
+            ...current,
+            [conversationId]: mergeRoommateMessages(base, page.messages)
+          };
+        });
+        setRoommateMessageCursors((current) => ({
+          ...current,
+          [conversationId]: page.nextCursor
+        }));
+        setRoommateHistoryErrors((current) => {
+          if (!(conversationId in current)) return current;
+          const next = { ...current };
+          delete next[conversationId];
+          return next;
+        });
+        return page;
+      } catch (error) {
+        if (tokenRef.current === currentToken) {
+          const message = handleRoommateApiError(error);
+          setRoommateHistoryErrors((current) => ({ ...current, [conversationId]: message }));
+        }
+        return null;
+      } finally {
+        if (tokenRef.current === currentToken) {
+          setRoommateHistoryLoading((current) => {
+            const next = new Set(current);
+            next.delete(conversationId);
+            return next;
+          });
+        }
+      }
+    },
+    [handleRoommateApiError]
+  );
+
+  useEffect(() => {
+    setRoommateConversations([]);
+    setRoommateConversationsLoaded(false);
+    setRoommateMessages({});
+    setRoommateMessageCursors({});
+    setRoommateHistoryLoading(new Set());
+    setRoommateHistoryErrors({});
+    setPendingReadMessageIds({});
+    appliedRoommateRouteRef.current = null;
+    if (!token) {
+      setActiveRoommateConversationId(null);
+      return;
+    }
+    setActiveRoommateConversationId(initialRoommateConversationId ?? null);
+    void refreshRoommateConversations(token);
+  }, [initialRoommateConversationId, refreshRoommateConversations, token]);
+
+  useEffect(() => {
+    if (!initialRoommateRouteKey || !roommateConversationsLoaded) return;
+    if (appliedRoommateRouteRef.current === initialRoommateRouteKey) return;
+    const resolved = resolveRoommateConversationTarget(roommateConversations, {
+      conversationId: initialRoommateConversationId,
+      peerProfileId: initialRoommateDmId
+    });
+    appliedRoommateRouteRef.current = initialRoommateRouteKey;
+    setActiveRoommateConversationId(resolved?.id ?? null);
+    if (!resolved) setToast("无法打开这个室友会话，请从消息列表重新选择。");
+  }, [
+    initialRoommateConversationId,
+    initialRoommateDmId,
+    initialRoommateRouteKey,
+    roommateConversations,
+    roommateConversationsLoaded
+  ]);
 
   useEffect(() => {
     if (activeSection !== "Publish") return;
@@ -1103,17 +1262,44 @@ export default function HomePage({
       }),
     [dealThreads, groupMembers, messageListings]
   );
+  const roommateInboxContacts = useMemo<InboxContact[]>(
+    () =>
+      roommateConversations.map((conversation) => ({
+        kind: "roommate",
+        targetId: conversation.id,
+        contactName: conversation.peer.name ?? "室友",
+        contextLabel: conversation.peer.role ?? "室友匹配",
+        preview: conversation.latestMessage?.body ?? "开始聊聊入住计划",
+        time: conversation.lastMessageAt ? formatApiMessageTime(conversation.lastMessageAt) : "",
+        image: conversation.peer.image ?? "",
+        activityOrder: new Date(conversation.lastMessageAt ?? conversation.updatedAt).getTime() || 0,
+        unreadCount: conversation.unreadCount
+      })),
+    [roommateConversations]
+  );
   const inboxContacts = useMemo(
-    () => mergeInboxContacts(listingInboxContacts),
-    [listingInboxContacts]
+    () => mergeInboxContacts(listingInboxContacts, roommateInboxContacts),
+    [listingInboxContacts, roommateInboxContacts]
   );
   const requestedInboxTarget = activeMessageListingId
     ? { kind: "listing" as const, targetId: activeMessageListingId }
-    : null;
+    : activeRoommateConversationId
+      ? { kind: "roommate" as const, targetId: activeRoommateConversationId }
+      : null;
   const routeInboxTarget = requestedInboxTarget;
   const narrowMessagePane = getNarrowMessagePane(routeInboxTarget);
   const requestedInboxKey = routeInboxTarget ? getInboxContactKey(routeInboxTarget) : null;
-  const activeInboxContact = getActiveInboxContact(inboxContacts, requestedInboxTarget);
+  const requestedInboxContact = requestedInboxTarget
+    ? inboxContacts.find(
+        (contact) => getInboxContactKey(contact) === getInboxContactKey(requestedInboxTarget)
+      ) ?? null
+    : null;
+  const hasExplicitInboxTarget = Boolean(initialMessageListingId || initialRoommateRouteKey);
+  const activeInboxContact = requestedInboxTarget
+    ? requestedInboxContact
+    : hasExplicitInboxTarget
+      ? null
+      : getActiveInboxContact(inboxContacts, null);
   const activeMessageListing = useMemo(
     () =>
       activeInboxContact?.kind === "listing"
@@ -1121,6 +1307,23 @@ export default function HomePage({
         : null,
     [activeInboxContact, messageListings]
   );
+  const activeRoommateConversation = useMemo(
+    () =>
+      activeInboxContact?.kind === "roommate"
+        ? roommateConversations.find(
+            (conversation) => conversation.id === activeInboxContact.targetId
+          ) ?? null
+        : null,
+    [activeInboxContact, roommateConversations]
+  );
+  const activeRoommateMessages = useMemo(
+    () =>
+      activeRoommateConversation
+        ? roommateMessages[activeRoommateConversation.id] ?? []
+        : [],
+    [activeRoommateConversation, roommateMessages]
+  );
+  const roommateUnreadTotal = getRoommateUnreadTotal(roommateConversations);
   const activeMessageThread = useMemo(
     () =>
       activeMessageListing
@@ -1141,6 +1344,116 @@ export default function HomePage({
     window.scrollTo({ left: 0, top: 0 });
   }, [activeSection, requestedInboxKey]);
 
+  const activeRoommateConversationKey = activeRoommateConversation?.id ?? null;
+
+  useEffect(() => {
+    activeRoommateConversationIdRef.current = activeRoommateConversationKey;
+    if (!token || !activeRoommateConversationKey) return;
+    void refreshRoommateHistory(token, activeRoommateConversationKey);
+  }, [activeRoommateConversationKey, refreshRoommateHistory, token]);
+
+  useEffect(() => {
+    if (!token) return;
+    const currentToken = token;
+    const synchronize = () => {
+      setPendingReadMessageIds({});
+      void refreshRoommateConversations(currentToken);
+      const selectedConversationId = activeRoommateConversationIdRef.current;
+      if (selectedConversationId) {
+        void refreshRoommateHistory(currentToken, selectedConversationId);
+      }
+    };
+    const client = createRoommateRealtimeClient({
+      token: currentToken,
+      onEvent: (event) => {
+        if (tokenRef.current !== currentToken) return;
+        if (event.name === "roommate.message.created") {
+          setRoommateMessages((current) => ({
+            ...current,
+            [event.payload.conversationId]: mergeRoommateMessages(
+              current[event.payload.conversationId] ?? [],
+              [event.payload.message]
+            )
+          }));
+          setRoommateConversations((current) =>
+            mergeRoommateMessageIntoConversations(current, event.payload.message)
+          );
+          return;
+        }
+        if (event.name === "roommate.message.read") {
+          setRoommateConversations((current) => applyRoommateReadState(current, event.payload));
+          setPendingReadMessageIds((current) => {
+            if (!(event.payload.conversationId in current)) return current;
+            const next = { ...current };
+            delete next[event.payload.conversationId];
+            return next;
+          });
+          return;
+        }
+        void refreshRoommateConversations(currentToken);
+      },
+      onReconnect: synchronize
+    });
+    const synchronizeWhenVisible = () => {
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+      synchronize();
+    };
+
+    client.connect();
+    document.addEventListener("visibilitychange", synchronizeWhenVisible);
+    window.addEventListener("focus", synchronizeWhenVisible);
+    return () => {
+      document.removeEventListener("visibilitychange", synchronizeWhenVisible);
+      window.removeEventListener("focus", synchronizeWhenVisible);
+      client.disconnect();
+    };
+  }, [refreshRoommateConversations, refreshRoommateHistory, token]);
+
+  useEffect(() => {
+    if (!token || !activeRoommateConversation) return;
+    const lastPeerMessage = [...activeRoommateMessages]
+      .reverse()
+      .find((message) => message.senderRole === "peer");
+    const conversationId = activeRoommateConversation.id;
+    const lastPeerMessageId = lastPeerMessage?.id ?? null;
+    if (
+      !shouldReportRoommateRead({
+        activeConversationId: activeRoommateConversationIdRef.current,
+        conversationId,
+        documentVisible:
+          typeof document === "undefined" || document.visibilityState === "visible",
+        lastPeerMessageId,
+        lastReadMessageId: activeRoommateConversation.lastReadMessageId,
+        pendingMessageId: pendingReadMessageIds[conversationId] ?? null
+      }) ||
+      !lastPeerMessageId
+    ) {
+      return;
+    }
+
+    setPendingReadMessageIds((current) => ({ ...current, [conversationId]: lastPeerMessageId }));
+    void markRoommateConversationRead(token, conversationId, lastPeerMessageId)
+      .then((state) => {
+        if (tokenRef.current !== token) return;
+        setRoommateConversations((current) => applyRoommateReadState(current, state));
+        setPendingReadMessageIds((current) => {
+          if (current[conversationId] !== lastPeerMessageId) return current;
+          const next = { ...current };
+          delete next[conversationId];
+          return next;
+        });
+      })
+      .catch((error) => {
+        if (tokenRef.current === token) handleRoommateApiError(error);
+      });
+  }, [
+    activeRoommateConversation,
+    activeRoommateMessages,
+    handleRoommateApiError,
+    pendingReadMessageIds,
+    token
+  ]);
+
   function setActiveSectionAndTrack(section: AppSection) {
     activeSectionRef.current = section;
     setActiveSection(section);
@@ -1153,21 +1466,109 @@ export default function HomePage({
   }
 
   function handleSelectInboxContact(contact: InboxContact) {
-    if (contact.kind !== "listing") return;
-    setActiveMessageListingId(contact.targetId);
     setActiveSectionAndTrack("Messages");
+    if (contact.kind === "listing") {
+      setActiveMessageListingId(contact.targetId);
+      setActiveRoommateConversationId(null);
+      router.push(
+        dmRouteForTarget(
+          { kind: "listing", id: contact.targetId },
+          { dealRoomId: getExistingThreadDealRoomId(dealThreads, contact.targetId) }
+        )
+      );
+      return;
+    }
+
+    const conversation = roommateConversations.find((item) => item.id === contact.targetId);
+    if (!conversation) return;
+    setActiveMessageListingId(null);
+    setActiveRoommateConversationId(conversation.id);
     router.push(
       dmRouteForTarget(
-        { kind: "listing", id: contact.targetId },
-        { dealRoomId: getExistingThreadDealRoomId(dealThreads, contact.targetId) }
+        { kind: "roommate", id: conversation.peer.id ?? conversation.id },
+        { conversationId: conversation.id }
       )
     );
   }
 
   function handleBackToMessageContacts() {
     setActiveMessageListingId(null);
+    setActiveRoommateConversationId(null);
     setActiveSectionAndTrack("Messages");
     router.push("/messages");
+  }
+
+  function handleSendRoommateMessage(conversation: ApiRoommateConversation, body: string) {
+    const trimmedBody = body.trim();
+    if (!token || !conversation.writable) return false;
+    if (!trimmedBody || trimmedBody.length > 2000) {
+      setToast("室友消息需为 1–2,000 个字符。");
+      return false;
+    }
+
+    const optimistic = createOptimisticRoommateMessage({
+      conversationId: conversation.id,
+      clientMessageId: crypto.randomUUID(),
+      body: trimmedBody,
+      createdAt: new Date().toISOString()
+    });
+    setRoommateMessages((current) => ({
+      ...current,
+      [conversation.id]: mergeRoommateMessages(current[conversation.id] ?? [], [optimistic])
+    }));
+    setRoommateConversations((current) =>
+      mergeRoommateMessageIntoConversations(current, optimistic)
+    );
+    void commitRoommateMessage(conversation.id, optimistic.clientMessageId, optimistic.body);
+    return true;
+  }
+
+  function handleRetryRoommateMessage(message: RoommateMessageView) {
+    if (!token || message.senderRole !== "self" || message.deliveryStatus !== "failed") return;
+    setRoommateMessages((current) => ({
+      ...current,
+      [message.conversationId]: (current[message.conversationId] ?? []).map((candidate) =>
+        candidate.clientMessageId === message.clientMessageId
+          ? { ...candidate, deliveryStatus: "sending" }
+          : candidate
+      )
+    }));
+    void commitRoommateMessage(message.conversationId, message.clientMessageId, message.body);
+  }
+
+  async function commitRoommateMessage(conversationId: string, clientMessageId: string, body: string) {
+    if (!token) return;
+    const currentToken = token;
+    try {
+      const committed = await sendRoommateMessage(currentToken, conversationId, {
+        clientMessageId,
+        body
+      });
+      if (tokenRef.current !== currentToken) return;
+      setRoommateMessages((current) => ({
+        ...current,
+        [conversationId]: reconcileRoommateMessage(current[conversationId] ?? [], committed)
+      }));
+      setRoommateConversations((current) =>
+        mergeRoommateMessageIntoConversations(current, committed)
+      );
+    } catch (error) {
+      if (tokenRef.current !== currentToken) return;
+      setRoommateMessages((current) => ({
+        ...current,
+        [conversationId]: markRoommateMessageFailed(
+          current[conversationId] ?? [],
+          clientMessageId
+        )
+      }));
+      handleRoommateApiError(error);
+    }
+  }
+
+  function handleLoadOlderRoommateMessages(conversationId: string) {
+    if (!token || roommateHistoryLoading.has(conversationId)) return;
+    const cursor = roommateMessageCursors[conversationId];
+    void refreshRoommateHistory(token, conversationId, cursor ?? undefined);
   }
 
   function requireCapability(capability: ProductCapability) {
@@ -1529,7 +1930,22 @@ export default function HomePage({
         ]);
         setActiveDealRoomId(responseDealRoom.id);
         setGroupMembers(getRoommatesFromDealRooms([responseDealRoom]).slice(-4));
-        setToast(`你和 ${targetRoommate.name} 已互相匹配；室友私信暂未开放。`);
+      }
+      if (response.conversation) {
+        setLikedMeRoommateIds((current) => new Set(current).add(targetKey));
+        await refreshRoommateConversations(token);
+        setActiveMessageListingId(null);
+        setActiveRoommateConversationId(response.conversation.id);
+        setActiveSectionAndTrack("Messages");
+        router.push(
+          dmRouteForTarget(
+            { kind: "roommate", id: targetRoommate.id },
+            { conversationId: response.conversation.id }
+          )
+        );
+        setToast(`你和 ${targetRoommate.name} 已互相匹配，可以开始聊天。`);
+      } else if (response.dealRoom) {
+        setToast(`你和 ${targetRoommate.name} 已互相匹配。`);
       } else {
         setToast(`已喜欢 ${targetRoommate.name}，等待对方回应。`);
       }
@@ -1543,11 +1959,26 @@ export default function HomePage({
   }
 
   function handleSendRoommateIntro(targetRoommate: Roommate) {
-    setToast(`${targetRoommate.name} 的室友私信暂未开放。`);
+    handleOpenRoommateDm(targetRoommate);
   }
 
   function handleOpenRoommateDm(targetRoommate: Roommate) {
-    setToast(`${targetRoommate.name} 的室友私信暂未开放。`);
+    const conversation = roommateConversations.find(
+      (item) => item.peer.id === targetRoommate.id
+    );
+    if (!conversation) {
+      setToast("双方互相喜欢后，室友私信会自动创建。");
+      return;
+    }
+    setActiveMessageListingId(null);
+    setActiveRoommateConversationId(conversation.id);
+    setActiveSectionAndTrack("Messages");
+    router.push(
+      dmRouteForTarget(
+        { kind: "roommate", id: targetRoommate.id ?? conversation.id },
+        { conversationId: conversation.id }
+      )
+    );
   }
 
   async function handleDecideRoommate(targetRoommate: Roommate) {
@@ -1769,6 +2200,7 @@ export default function HomePage({
     <main className="min-h-screen bg-background">
       <AppHeader
         favoriteCount={favoriteIds.size}
+        messageUnreadCount={roommateUnreadTotal}
         savedOnly={savedOnly}
         notifications={notifications}
         notificationsOpen={notificationsOpen}
@@ -1928,6 +2360,23 @@ export default function HomePage({
           contacts={inboxContacts}
           activeContact={activeInboxContact}
           selectedListing={activeMessageListing}
+          selectedRoommateConversation={activeRoommateConversation}
+          roommateMessages={activeRoommateMessages}
+          roommateNextCursor={
+            activeRoommateConversation
+              ? roommateMessageCursors[activeRoommateConversation.id] ?? null
+              : null
+          }
+          roommateHistoryLoading={
+            activeRoommateConversation
+              ? roommateHistoryLoading.has(activeRoommateConversation.id)
+              : false
+          }
+          roommateHistoryError={
+            activeRoommateConversation
+              ? roommateHistoryErrors[activeRoommateConversation.id] ?? null
+              : null
+          }
           dealStage={activeMessageStage}
           dealThread={activeMessageThread}
           latestViewingRequest={activeMessageViewingRequest}
@@ -1935,6 +2384,9 @@ export default function HomePage({
           viewingSlots={viewingSlots}
           pendingActions={pendingActions}
           onSendMessage={handleSendDealMessage}
+          onSendRoommateMessage={handleSendRoommateMessage}
+          onRetryRoommateMessage={handleRetryRoommateMessage}
+          onLoadOlderRoommateMessages={handleLoadOlderRoommateMessages}
           onRequestTour={handleRequestListingTour}
           onViewingDecision={handleViewingDecision}
           onSelectContact={handleSelectInboxContact}
@@ -1972,6 +2424,7 @@ export default function HomePage({
 
 function AppHeader({
   favoriteCount,
+  messageUnreadCount,
   savedOnly,
   notifications,
   notificationsOpen,
@@ -1987,6 +2440,7 @@ function AppHeader({
   onLogout
 }: {
   favoriteCount: number;
+  messageUnreadCount: number;
   savedOnly: boolean;
   notifications: LocalReminder[];
   notificationsOpen: boolean;
@@ -2038,6 +2492,11 @@ function AppHeader({
               >
                 <Icon className="size-4" aria-hidden="true" />
                 {item.label}
+                {item.section === "Messages" && messageUnreadCount > 0 ? (
+                  <span className="flex min-w-5 items-center justify-center rounded-full bg-[#006AFF] px-1.5 text-[10px] font-black text-white">
+                    {messageUnreadCount > 99 ? "99+" : messageUnreadCount}
+                  </span>
+                ) : null}
               </Button>
             );
           })}
@@ -2131,6 +2590,11 @@ function AppHeader({
               >
                 <Icon className="size-3.5" aria-hidden="true" />
                 {item.label}
+                {item.section === "Messages" && messageUnreadCount > 0 ? (
+                  <span className="rounded-full bg-[#006AFF] px-1.5 text-[10px] font-black text-white">
+                    {messageUnreadCount > 99 ? "99+" : messageUnreadCount}
+                  </span>
+                ) : null}
               </Button>
             );
           })}
@@ -3204,7 +3668,7 @@ function RoommateConnectionRow({
       <div className="flex shrink-0 gap-1">
         <Button size="icon" variant="secondary" className="size-9 rounded-full" onClick={() => onOpenDm(roommate)}>
           <MessageCircle className="size-4" aria-hidden="true" />
-          <span className="sr-only">室友私信暂未开放</span>
+          <span className="sr-only">打开室友私信</span>
         </Button>
         <Button size="icon" variant="secondary" className="size-9 rounded-full" onClick={() => onDecideRoommate(roommate)}>
           <UserCheck className="size-4" aria-hidden="true" />
@@ -3743,6 +4207,11 @@ function MessagesScreen({
   contacts,
   activeContact,
   selectedListing,
+  selectedRoommateConversation,
+  roommateMessages,
+  roommateNextCursor,
+  roommateHistoryLoading,
+  roommateHistoryError,
   dealStage,
   dealThread,
   latestViewingRequest,
@@ -3750,6 +4219,9 @@ function MessagesScreen({
   viewingSlots,
   pendingActions,
   onSendMessage,
+  onSendRoommateMessage,
+  onRetryRoommateMessage,
+  onLoadOlderRoommateMessages,
   onRequestTour,
   onViewingDecision,
   onSelectContact,
@@ -3759,6 +4231,11 @@ function MessagesScreen({
   contacts: InboxContact[];
   activeContact: InboxContact | null;
   selectedListing: Listing | null;
+  selectedRoommateConversation: ApiRoommateConversation | null;
+  roommateMessages: RoommateMessageView[];
+  roommateNextCursor: string | null;
+  roommateHistoryLoading: boolean;
+  roommateHistoryError: string | null;
   dealStage: string;
   dealThread: DealThread | null;
   latestViewingRequest: ViewingRequest | null;
@@ -3766,6 +4243,9 @@ function MessagesScreen({
   viewingSlots: ViewingSlot[];
   pendingActions: Set<string>;
   onSendMessage: (listing: Listing, body: string) => Promise<boolean>;
+  onSendRoommateMessage: (conversation: ApiRoommateConversation, body: string) => boolean;
+  onRetryRoommateMessage: (message: RoommateMessageView) => void;
+  onLoadOlderRoommateMessages: (conversationId: string) => void;
   onRequestTour: (listing: Listing, slot?: ViewingSlot) => Promise<boolean>;
   onViewingDecision: (
     listing: Listing,
@@ -3785,7 +4265,7 @@ function MessagesScreen({
             <div className="flex items-start justify-between gap-3">
               <div>
                 <CardTitle>消息</CardTitle>
-                <CardDescription>仅显示服务端已创建的房东会话</CardDescription>
+                <CardDescription>房东与室友会话统一显示，记录以服务端为准</CardDescription>
               </div>
               <Badge variant={contacts.length > 0 ? "trust" : "secondary"}>{contacts.length}</Badge>
             </div>
@@ -3812,7 +4292,14 @@ function MessagesScreen({
                     <div className="min-w-0">
                       <div className="flex items-center justify-between gap-2">
                         <div className="truncate text-sm font-extrabold text-primary">{contact.contactName}</div>
-                        <span className="shrink-0 text-[10px] font-black text-muted-foreground">{contact.time}</span>
+                        <span className="flex shrink-0 items-center gap-1.5 text-[10px] font-black text-muted-foreground">
+                          {contact.time}
+                          {contact.unreadCount && contact.unreadCount > 0 ? (
+                            <span className="flex min-w-5 items-center justify-center rounded-full bg-[#006AFF] px-1.5 py-0.5 text-white">
+                              {contact.unreadCount > 99 ? "99+" : contact.unreadCount}
+                            </span>
+                          ) : null}
+                        </span>
                       </div>
                       <div className="mt-1 flex items-center gap-2">
                         <Badge variant={contact.kind === "roommate" ? "trust" : "secondary"} className="shrink-0">
@@ -3827,7 +4314,7 @@ function MessagesScreen({
               })
             ) : (
               <div className="rounded-lg border border-dashed border-blue-200 bg-blue-50/50 p-4 text-sm font-semibold text-muted-foreground">
-                还没有联系人。成功联系房东后，会话会出现在这里。室友私信暂未开放。
+                还没有联系人。联系房东或与真实用户互相喜欢后，会话会出现在这里。
               </div>
             )}
           </CardContent>
@@ -3887,15 +4374,27 @@ function MessagesScreen({
               onViewingDecision={onViewingDecision}
             />
           </>
+        ) : activeContact?.kind === "roommate" && selectedRoommateConversation ? (
+          <RoommateConversationPanel
+            key={selectedRoommateConversation.id}
+            conversation={selectedRoommateConversation}
+            messages={roommateMessages}
+            nextCursor={roommateNextCursor}
+            loading={roommateHistoryLoading}
+            error={roommateHistoryError}
+            onLoadOlder={onLoadOlderRoommateMessages}
+            onSend={onSendRoommateMessage}
+            onRetry={onRetryRoommateMessage}
+          />
         ) : (
           <Card className="shadow-panel">
             <CardHeader>
               <CardTitle>选择联系人</CardTitle>
-              <CardDescription>从左侧选择房东，右侧会打开对应消息。室友私信暂未开放。</CardDescription>
+              <CardDescription>从左侧选择房东或室友，右侧会打开对应消息。</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="rounded-[24px] border border-dashed border-blue-200 bg-blue-50/50 p-8 text-center text-sm font-semibold text-muted-foreground">
-                联系房东后，会话会在服务端创建并显示在这里。
+                联系房东或完成双向室友匹配后，会话会在服务端创建并显示在这里。
               </div>
             </CardContent>
           </Card>
@@ -3903,6 +4402,198 @@ function MessagesScreen({
       </div>
     </section>
   );
+}
+
+function RoommateConversationPanel({
+  conversation,
+  messages,
+  nextCursor,
+  loading,
+  error,
+  onLoadOlder,
+  onSend,
+  onRetry
+}: {
+  conversation: ApiRoommateConversation;
+  messages: RoommateMessageView[];
+  nextCursor: string | null;
+  loading: boolean;
+  error: string | null;
+  onLoadOlder: (conversationId: string) => void;
+  onSend: (conversation: ApiRoommateConversation, body: string) => boolean;
+  onRetry: (message: RoommateMessageView) => void;
+}) {
+  const [draft, setDraft] = useState("");
+  const latestSelfMessage = [...messages]
+    .reverse()
+    .find((message) => message.senderRole === "self");
+  const quickReplies = ["你计划什么时候入住？", "预算和通勤范围方便对一下吗？", "周末一起去看房吗？"];
+
+  function submitMessage() {
+    const accepted = onSend(conversation, draft);
+    if (accepted) setDraft("");
+  }
+
+  return (
+    <Card className="overflow-hidden shadow-panel" data-testid="roommate-dm-panel">
+      <CardHeader className="border-b border-blue-100 bg-blue-50/40">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-3">
+            <Avatar className="size-12">
+              <AvatarImage src={conversation.peer.image ?? ""} alt="" />
+              <AvatarFallback>{(conversation.peer.name ?? "室").slice(0, 1)}</AvatarFallback>
+            </Avatar>
+            <div className="min-w-0">
+              <CardTitle className="truncate">{conversation.peer.name ?? "室友"}</CardTitle>
+              <CardDescription className="truncate">
+                {conversation.peer.role ?? "已完成双向室友匹配"}
+              </CardDescription>
+            </div>
+          </div>
+          <Badge variant={conversation.writable ? "trust" : "secondary"}>
+            {conversation.writable ? "可以发送" : "只读"}
+          </Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-4 p-4">
+        {nextCursor ? (
+          <Button
+            variant="outline"
+            size="sm"
+            className="mx-auto"
+            disabled={loading}
+            onClick={() => onLoadOlder(conversation.id)}
+          >
+            {loading ? "正在加载" : "加载更早消息"}
+          </Button>
+        ) : null}
+        {error ? (
+          <div className="flex items-center justify-between gap-3 rounded-[20px] border border-red-200 bg-red-50 p-3 text-sm font-semibold text-red-700">
+            <span>{error}</span>
+            <Button variant="outline" size="sm" onClick={() => onLoadOlder(conversation.id)}>
+              重试加载
+            </Button>
+          </div>
+        ) : null}
+
+        <div className="flex max-h-[430px] min-h-[260px] flex-col gap-3 overflow-y-auto rounded-[24px] border bg-blue-50/40 p-3 app-scrollbar">
+          {loading && messages.length === 0 ? (
+            <div className="m-auto text-sm font-semibold text-muted-foreground">正在加载消息…</div>
+          ) : messages.length === 0 ? (
+            <div className="m-auto max-w-md rounded-[20px] border border-dashed bg-white p-5 text-center text-sm font-semibold text-muted-foreground">
+              你们已经互相喜欢。可以从入住时间、预算和生活习惯开始聊起。
+            </div>
+          ) : null}
+          {messages.map((message) => {
+            const isSelf = message.senderRole === "self";
+            const showDelivery = isSelf && latestSelfMessage?.id === message.id;
+            const deliveryLabel = showDelivery
+              ? getRoommateDeliveryLabel(message, conversation)
+              : null;
+
+            return (
+              <div
+                key={message.id}
+                className={cn(
+                  "max-w-[88%] rounded-[22px] border px-3 py-2 text-sm shadow-sm",
+                  isSelf
+                    ? "ml-auto border-[#006AFF]/20 bg-[#006AFF] text-white"
+                    : "border-blue-100 bg-white text-primary"
+                )}
+              >
+                <div
+                  className={cn(
+                    "flex items-center justify-between gap-3 text-[11px] font-black",
+                    isSelf ? "text-white/80" : "text-muted-foreground"
+                  )}
+                >
+                  <span>{isSelf ? "我" : conversation.peer.name ?? "室友"}</span>
+                  <span>{formatApiMessageTime(message.createdAt)}</span>
+                </div>
+                <p className="mt-1 whitespace-pre-wrap font-semibold leading-5">{message.body}</p>
+                {deliveryLabel ? (
+                  <div className="mt-2 flex items-center justify-end gap-2 text-[11px] font-black text-white/85">
+                    <span>{deliveryLabel}</span>
+                    {message.deliveryStatus === "failed" ? (
+                      <button
+                        type="button"
+                        className="rounded-full bg-white/15 px-2 py-1 text-white underline"
+                        onClick={() => onRetry(message)}
+                      >
+                        重新发送
+                      </button>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
+
+        {conversation.writable ? (
+          <>
+            <div className="flex flex-wrap gap-2">
+              {quickReplies.map((reply) => (
+                <Button
+                  key={reply}
+                  variant="secondary"
+                  size="sm"
+                  className="rounded-full"
+                  onClick={() => setDraft(reply)}
+                >
+                  {reply}
+                </Button>
+              ))}
+            </div>
+            <div className="grid grid-cols-[minmax(0,1fr)_56px] items-stretch gap-2">
+              <div className="min-w-0">
+                <textarea
+                  className="min-h-20 w-full resize-none rounded-[22px] border border-blue-100 bg-white px-4 py-3 text-sm font-semibold text-primary shadow-sm outline-none transition-colors placeholder:text-muted-foreground focus:border-[#006AFF]"
+                  value={draft}
+                  maxLength={2000}
+                  onChange={(event) => setDraft(event.target.value)}
+                  placeholder="输入给室友的消息"
+                />
+                <div className="mt-1 text-right text-[11px] font-bold text-muted-foreground">
+                  {draft.length}/2,000
+                </div>
+              </div>
+              <Button
+                className="h-20 rounded-[22px] bg-[#006AFF] px-4 text-white hover:bg-[#0D4599]"
+                disabled={!draft.trim() || draft.trim().length > 2000}
+                onClick={submitMessage}
+              >
+                <Send aria-hidden="true" />
+                <span className="sr-only">发送消息</span>
+              </Button>
+            </div>
+          </>
+        ) : (
+          <div className="rounded-[20px] border border-dashed border-blue-200 bg-blue-50 p-4 text-sm font-semibold text-muted-foreground">
+            这段室友匹配已结束。历史消息仍可查看，但不能继续发送。
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function getRoommateDeliveryLabel(
+  message: RoommateMessageView,
+  conversation: ApiRoommateConversation
+) {
+  if (message.deliveryStatus === "sending") return "发送中";
+  if (message.deliveryStatus === "failed") return "发送失败";
+  if (
+    conversation.peerLastReadMessageId &&
+    conversation.peerLastReadAt &&
+    (conversation.peerLastReadAt > message.createdAt ||
+      (conversation.peerLastReadAt === message.createdAt &&
+        conversation.peerLastReadMessageId >= message.id))
+  ) {
+    return "已读";
+  }
+  return "已发送";
 }
 
 export function PublishScreen({

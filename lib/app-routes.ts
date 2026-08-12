@@ -42,8 +42,11 @@ export type DmRouteTarget =
 
 export function dmRouteForTarget(
   target: DmRouteTarget,
-  options: { tour?: boolean; dealRoomId?: string | null } = {}
+  options: { tour?: boolean; dealRoomId?: string | null; conversationId?: string | null } = {}
 ) {
+  if (target.kind === "roommate" && options.conversationId) {
+    return `/messages?conversationId=${encodeURIComponent(options.conversationId)}`;
+  }
   const param = target.kind === "listing" ? "listingId" : "roommateId";
   const route = "/messages";
 

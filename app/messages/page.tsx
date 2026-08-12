@@ -3,7 +3,12 @@ import SubletApp from "@/components/sublet-app";
 export default async function MessagesPage({
   searchParams
 }: {
-  searchParams?: Promise<{ listingId?: string; roommateId?: string; dealRoomId?: string }>;
+  searchParams?: Promise<{
+    listingId?: string;
+    roommateId?: string;
+    conversationId?: string;
+    dealRoomId?: string;
+  }>;
 }) {
   const params = await searchParams;
 
@@ -12,6 +17,7 @@ export default async function MessagesPage({
       initialSection="Messages"
       initialMessageListingId={params?.listingId ?? null}
       initialRoommateDmId={params?.roommateId ?? null}
+      initialRoommateConversationId={params?.conversationId ?? null}
       initialGroupTourDealRoomId={params?.dealRoomId ?? null}
     />
   );

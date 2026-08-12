@@ -221,7 +221,7 @@ export type ApiRoommateActionResponse = {
     id: string;
     matchId: string;
   } | null;
-  dealRoom: ApiDealRoom | null;
+  dealRoom?: ApiDealRoom | null;
 };
 
 export type ApiRoommateMessage = {

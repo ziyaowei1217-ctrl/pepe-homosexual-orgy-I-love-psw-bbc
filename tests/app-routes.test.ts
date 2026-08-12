@@ -40,6 +40,12 @@ describe("app route map", () => {
   it("routes landlord and roommate DM targets into the unified messages workspace", () => {
     expect(dmRouteForTarget({ kind: "listing", id: "westwood" })).toBe("/messages?listingId=westwood");
     expect(dmRouteForTarget({ kind: "roommate", id: "Mia Chen" })).toBe("/messages?roommateId=Mia%20Chen");
+    expect(
+      dmRouteForTarget(
+        { kind: "roommate", id: "profile-b" },
+        { conversationId: "conversation-a-b" }
+      )
+    ).toBe("/messages?conversationId=conversation-a-b");
     expect(dmRouteForTarget({ kind: "listing", id: "westwood" }, { tour: true })).toBe("/messages?listingId=westwood&tour=1");
     expect(
       dmRouteForTarget(
