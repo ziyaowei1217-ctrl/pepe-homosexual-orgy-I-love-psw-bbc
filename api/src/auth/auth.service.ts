@@ -199,13 +199,14 @@ export class AuthService {
     }
 
     const codeIsUsable = await this.finalizeSuccessfulDelivery(pending, input.purpose, providerMessageId);
+    if (!codeIsUsable) return this.acceptAfterBudget(startedAt, email, pending.expiresAt);
 
-    return this.acceptAfterBudget(
-      startedAt,
-      email,
-      pending.expiresAt,
-      codeIsUsable ? pending.code : undefined
-    );
+    await this.waitForResponseBudget(startedAt);
+    const code =
+      this.nodeEnv !== "production" && (await this.isUsableForDevelopmentResponse(pending, input.purpose))
+        ? pending.code
+        : undefined;
+    return this.acceptedResponse(email, pending.expiresAt, code);
   }
 
   consumeLoginCodesForInviteRevocation(
@@ -290,11 +291,32 @@ export class AuthService {
     return response;
   }
 
-  private async acceptAfterBudget(startedAt: number, email: string, expiresAt: Date, code?: string) {
+  private async acceptAfterBudget(startedAt: number, email: string, expiresAt: Date) {
+    await this.waitForResponseBudget(startedAt);
+    return this.acceptedResponse(email, expiresAt);
+  }
+
+  private async waitForResponseBudget(startedAt: number) {
     const jitter = Math.floor(this.random() * (this.responseJitterMs + 1));
     const remainingMs = this.responseMinimumMs + jitter - (this.now() - startedAt);
     if (remainingMs > 0) await this.delay(remainingMs);
-    return this.acceptedResponse(email, expiresAt, code);
+  }
+
+  private async isUsableForDevelopmentResponse(pending: PendingCode, purpose: VerificationPurpose) {
+    return this.withSerializedEmail(pending.email, async (transaction) => {
+      const current = await transaction.verificationCode.findFirst({
+        where: {
+          id: pending.id,
+          email: pending.email,
+          purpose,
+          deliveryStatus: VerificationDeliveryStatus.SENT,
+          consumedAt: null,
+          expiresAt: { gt: new Date(this.now()) }
+        },
+        select: { id: true }
+      });
+      return current?.id === pending.id;
+    });
   }
 
   private async finalizeSuccessfulDelivery(

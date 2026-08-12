@@ -233,6 +233,70 @@ describe("AuthService production email issuance", () => {
     expect(newerRecord?.consumedAt).toBeNull();
   });
 
+  it("does not disclose a code superseded during the response budget", async () => {
+    const issuedAt = new Date("2020-01-01T00:00:00.000Z");
+    const prisma = createAuthPrismaMock({
+      invited: ["student@example.com"],
+      fixedCodeCreatedAt: issuedAt
+    });
+    let releaseOlderResponse: () => void = () => undefined;
+    const olderResponseBlocked = new Promise<void>((resolve) => {
+      releaseOlderResponse = resolve;
+    });
+    let delayCalls = 0;
+    const service = createService(prisma, createSender(prisma), {
+      codeRequestCooldownMs: 0,
+      now: () => issuedAt.getTime(),
+      responseMinimumMs: 1,
+      delay: async () => {
+        delayCalls += 1;
+        if (delayCalls === 1) await olderResponseBlocked;
+      }
+    });
+
+    const olderRequest = service.requestEmailCode("student@example.com");
+    while (delayCalls === 0) await Promise.resolve();
+    const newerResponse = await service.requestEmailCode("student@example.com");
+    releaseOlderResponse();
+    const olderResponse = await olderRequest;
+
+    expect(olderResponse).toEqual({
+      email: "student@example.com",
+      expiresAt: expect.any(Date)
+    });
+    expect(newerResponse.devCode).toMatch(/^\d{6}$/);
+  });
+
+  it("does not disclose a code when provider delivery completes after its expiry", async () => {
+    const issuedAt = new Date("2020-01-01T00:00:00.000Z");
+    let now = issuedAt.getTime();
+    const prisma = createAuthPrismaMock({ invited: ["student@example.com"], fixedCodeCreatedAt: issuedAt });
+    let releaseDelivery: () => void = () => undefined;
+    const deliveryBlocked = new Promise<void>((resolve) => {
+      releaseDelivery = resolve;
+    });
+    const sender: EmailSender = {
+      async sendVerificationCode() {
+        await deliveryBlocked;
+        return { providerMessageId: "provider-after-expiry" };
+      }
+    };
+    const service = createService(prisma, sender, {
+      codeTtlMs: 1,
+      now: () => now
+    });
+
+    const request = service.requestEmailCode("student@example.com");
+    while (prisma.state.codes.length === 0) await Promise.resolve();
+    now = issuedAt.getTime() + 1;
+    releaseDelivery();
+
+    await expect(request).resolves.toEqual({
+      email: "student@example.com",
+      expiresAt: new Date(issuedAt.getTime() + 1)
+    });
+  });
+
   it("does not revive an older slow delivery after the newer SENT code was consumed", async () => {
     const sharedTimestamp = new Date("2020-01-01T00:00:00.000Z");
     const prisma = createAuthPrismaMock({
@@ -317,20 +381,24 @@ function createAuthPrismaMock(
         where
       }: {
         where: {
+          id?: string;
           email: string;
           purpose?: VerificationPurpose;
           deliveryStatus?: VerificationDeliveryStatus;
           consumedAt?: null;
           createdAt?: { gt: Date };
+          expiresAt?: { gt: Date };
         };
       }) =>
         [...state.codes].reverse().find(
           (record) =>
+            (!where.id || record.id === where.id) &&
             record.email === where.email &&
             (!where.purpose || record.purpose === where.purpose) &&
             (!where.deliveryStatus || record.deliveryStatus === where.deliveryStatus) &&
             (!("consumedAt" in where) || record.consumedAt === where.consumedAt) &&
-            (!where.createdAt || record.createdAt > where.createdAt.gt)
+            (!where.createdAt || record.createdAt > where.createdAt.gt) &&
+            (!where.expiresAt || record.expiresAt > where.expiresAt.gt)
         ) ?? null,
       create: async ({
         data
@@ -415,7 +483,10 @@ function createService(
   sender: EmailSender,
   options: {
     codeRequestCooldownMs?: number;
+    codeTtlMs?: number;
     now?: () => number;
+    responseMinimumMs?: number;
+    delay?: (milliseconds: number) => Promise<void>;
     logger?: { warn(...args: unknown[]): unknown };
   } = {},
   jwt = new JwtService({ secret: "test-secret" })
@@ -423,13 +494,14 @@ function createService(
   return new AuthService(prisma as never, jwt, sender, {
     nodeEnv: "development",
     otpHashSecret: "otp-test-secret-that-is-at-least-32-bytes",
-    codeTtlMs: 600_000,
+    codeTtlMs: options.codeTtlMs ?? 600_000,
     codeMaxAttempts: 5,
     codeRequestCooldownMs: options.codeRequestCooldownMs ?? 60_000,
     localAdminEmails: "",
-    responseMinimumMs: 0,
+    responseMinimumMs: options.responseMinimumMs ?? 0,
     responseJitterMs: 0,
     now: options.now,
+    delay: options.delay,
     logger: options.logger ?? { warn: () => undefined }
   });
 }
