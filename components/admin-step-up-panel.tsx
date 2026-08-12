@@ -8,7 +8,10 @@ import {
   requestAdminStepUpCode,
   verifyAdminStepUpCode
 } from "@/lib/api";
-import type { AdminStepUpSession } from "@/lib/admin-step-up";
+import {
+  getActiveAdminStepUpToken,
+  type AdminStepUpSession
+} from "@/lib/admin-step-up";
 import { normalizeVerificationCode } from "@/lib/auth-flow";
 import { toProductApiError } from "@/lib/product-errors";
 
@@ -75,6 +78,10 @@ export function AdminStepUpPanel({
     setError(null);
     try {
       const session = await verifyAdminStepUpCode(sessionToken, normalizedCode);
+      if (!getActiveAdminStepUpToken(session)) {
+        setError("操作未完成，请稍后重试。");
+        return;
+      }
       onVerified(session);
     } catch (verifyError) {
       setError(toProductApiError(verifyError).message);

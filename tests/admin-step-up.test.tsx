@@ -116,6 +116,44 @@ describe("administrator step-up", () => {
     await unmount(renderer);
   });
 
+  it.each([
+    [
+      "empty enhanced token",
+      { accessToken: "", reauthenticatedUntil: "2026-08-12T08:30:00.000Z" }
+    ],
+    [
+      "malformed enhanced-session expiry",
+      { accessToken: "enhanced-token", reauthenticatedUntil: "not-an-expiry" }
+    ],
+    [
+      "past enhanced-session expiry",
+      { accessToken: "enhanced-token", reauthenticatedUntil: "2026-08-12T08:00:00.000Z" }
+    ]
+  ] as const)(
+    "does not accept a verified response with %s",
+    async (_caseName, invalidSession) => {
+      vi.mocked(api.requestAdminStepUpCode).mockResolvedValue({
+        email: "admin@example.com",
+        expiresAt: "2026-08-12T08:10:00.000Z",
+        devCode: "246810"
+      });
+      vi.mocked(api.verifyAdminStepUpCode).mockResolvedValue(invalidSession);
+      const onVerified = vi.fn();
+      const renderer = await renderPanel(onVerified);
+
+      await requestAndSubmitCode(renderer);
+
+      expect(onVerified).not.toHaveBeenCalled();
+      expect(
+        renderer.root.findByProps({ "aria-label": "管理员二次验证" })
+      ).toBeDefined();
+      expect(findAlert(renderer.root).children.join("")).toBe(
+        "操作未完成，请稍后重试。"
+      );
+      await unmount(renderer);
+    }
+  );
+
   it("does not verify a development code when the response expiry is malformed", async () => {
     vi.mocked(api.requestAdminStepUpCode).mockResolvedValue({
       email: "admin@example.com",
@@ -238,6 +276,18 @@ function findAlert(root: ReactTestInstance) {
 async function flushMicrotasks() {
   await Promise.resolve();
   await Promise.resolve();
+}
+
+async function requestAndSubmitCode(renderer: ReactTestRenderer) {
+  await act(async () => {
+    findButton(renderer.root, "发送管理员验证码").props.onClick();
+    await flushMicrotasks();
+  });
+  await act(async () => {
+    await renderer.root.findByType("form").props.onSubmit({
+      preventDefault: vi.fn()
+    });
+  });
 }
 
 async function unmount(renderer: ReactTestRenderer) {
