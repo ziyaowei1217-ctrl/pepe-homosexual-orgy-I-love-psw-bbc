@@ -49,11 +49,15 @@ import type {
   ApiRoommateConversation,
   ApiRoommateConversationReadState,
   ApiRoommateMessage,
+  ApiRoommateMessagePage,
   SessionUser
 } from "../lib/api";
 import { writeStoredAuthSession } from "../lib/auth-session";
 
-(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+const reactActEnvironment = globalThis as typeof globalThis & {
+  IS_REACT_ACT_ENVIRONMENT: boolean;
+};
+reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true;
 
 class MemoryStorage implements Storage {
   private readonly values = new Map<string, string>();
@@ -205,6 +209,44 @@ beforeEach(() => {
 });
 
 describe("SubletApp roommate chat", () => {
+  it.each([
+    {
+      routeName: "conversation ID",
+      initialRoommateConversationId: conversation.id,
+      initialRoommateDmId: null
+    },
+    {
+      routeName: "roommate ID",
+      initialRoommateConversationId: null,
+      initialRoommateDmId: conversation.peer.id
+    }
+  ])("recovers a $routeName deep link after initially empty summaries", async ({
+    initialRoommateConversationId,
+    initialRoommateDmId
+  }) => {
+    vi.mocked(api.getRoommateConversations)
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([conversation]);
+    const renderer = await renderMessagesApp({
+      initialRoommateConversationId,
+      initialRoommateDmId
+    });
+
+    try {
+      expect(renderedText(renderer.root)).not.toContain("Mia Chen");
+      expect(api.getRoommateMessages).not.toHaveBeenCalled();
+
+      dispatchWindowEvent("focus");
+      await act(flushMicrotasks);
+
+      expect(renderedText(renderer.root)).toContain("Mia Chen");
+      expect(renderedText(renderer.root)).toContain(peerMessage.body);
+      expect(api.getRoommateMessages).toHaveBeenCalledWith("stored-token", conversation.id);
+    } finally {
+      await unmount(renderer);
+    }
+  });
+
   it("loads a durable roommate conversation into the unified inbox", async () => {
     const renderer = await renderMessagesApp();
 
@@ -215,6 +257,78 @@ describe("SubletApp roommate chat", () => {
     expect(vi.mocked(api.getRoommateMessages)).toHaveBeenCalledWith("stored-token", conversation.id);
     expect(realtimeMock.connect).toHaveBeenCalledOnce();
     await unmount(renderer);
+  });
+
+  it("ignores a stale overlapping newest-history response and preserves newer committed messages", async () => {
+    const alreadyReadConversation: ApiRoommateConversation = {
+      ...conversation,
+      unreadCount: 0,
+      lastReadMessageId: peerMessage.id,
+      lastReadAt: peerMessage.createdAt
+    };
+    const staleRefresh = deferred<ApiRoommateMessagePage>();
+    const newestRefresh = deferred<ApiRoommateMessagePage>();
+    const newerHttpMessage: ApiRoommateMessage = {
+      id: "message-http-newer",
+      conversationId: conversation.id,
+      senderRole: "self",
+      clientMessageId: "e5236356-511a-47cf-bded-55f1f2e984dc",
+      body: "newest HTTP message",
+      createdAt: "2026-08-12T00:00:03.000Z"
+    };
+    const realtimeMessage: ApiRoommateMessage = {
+      id: "message-realtime-newer",
+      conversationId: conversation.id,
+      senderRole: "self",
+      clientMessageId: "0d6b1cc0-0c2f-497f-9e56-0fa03cac8c33",
+      body: "newest realtime message",
+      createdAt: "2026-08-12T00:00:04.000Z"
+    };
+    const staleMessage: ApiRoommateMessage = {
+      id: "message-stale-refresh",
+      conversationId: conversation.id,
+      senderRole: "peer",
+      clientMessageId: "e7fb6424-b60e-49df-a1d1-6d527576b3d7",
+      body: "stale refresh payload",
+      createdAt: "2026-08-11T23:59:59.000Z"
+    };
+    vi.mocked(api.getRoommateMessages)
+      .mockResolvedValueOnce({ messages: [peerMessage], nextCursor: null })
+      .mockReturnValueOnce(staleRefresh.promise)
+      .mockReturnValueOnce(newestRefresh.promise);
+    vi.mocked(api.getRoommateConversations).mockResolvedValue([alreadyReadConversation]);
+    const renderer = await renderMessagesApp();
+
+    try {
+      dispatchWindowEvent("focus");
+      dispatchWindowEvent("focus");
+      expect(api.getRoommateMessages).toHaveBeenCalledTimes(3);
+
+      const realtimeOptions = realtimeMock.create.mock.calls[0]?.[0];
+      if (!realtimeOptions) throw new Error("Realtime client options were not captured");
+      act(() => {
+        realtimeOptions.onEvent({
+          name: "roommate.message.created",
+          payload: { conversationId: conversation.id, message: realtimeMessage }
+        });
+      });
+      reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = false;
+      try {
+        newestRefresh.resolve({ messages: [newerHttpMessage], nextCursor: "cursor-new" });
+        staleRefresh.resolve({ messages: [staleMessage], nextCursor: null });
+        await flushMicrotasks();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      } finally {
+        reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true;
+      }
+
+      expect(renderedText(renderer.root)).toContain(realtimeMessage.body);
+      expect(renderedText(renderer.root)).toContain(newerHttpMessage.body);
+      expect(renderedText(renderer.root)).not.toContain(staleMessage.body);
+      expect(renderedText(renderer.root)).toContain("加载更早消息");
+    } finally {
+      await unmount(renderer);
+    }
   });
 
   it("renders an optimistic outgoing message and reconciles the HTTP acknowledgement", async () => {
@@ -277,6 +391,43 @@ describe("SubletApp roommate chat", () => {
     await unmount(renderer);
   });
 
+  it("keeps retry control on an older failed self bubble after a later self message", async () => {
+    vi.mocked(globalThis.crypto.randomUUID)
+      .mockReturnValueOnce("7e4ac8e6-21dc-4e68-961b-42b4ca33dc8b")
+      .mockReturnValueOnce("736e96f3-9105-4826-b5f3-0d783837b1d9");
+    vi.mocked(api.sendRoommateMessage)
+      .mockRejectedValueOnce({ status: 503 })
+      .mockImplementationOnce(async (_token, conversationId, input) => ({
+        id: "message-later",
+        conversationId,
+        senderRole: "self",
+        clientMessageId: input.clientMessageId,
+        body: input.body,
+        createdAt: "2099-08-12T00:00:03.000Z"
+      }));
+    const renderer = await renderMessagesApp();
+
+    try {
+      await changeTextarea(renderer.root, "first message fails");
+      await clickButton(renderer.root, "发送消息");
+      await changeTextarea(renderer.root, "later message succeeds");
+      await clickButton(renderer.root, "发送消息");
+
+      expect(renderedText(renderer.root)).toContain("first message fails");
+      expect(renderedText(renderer.root)).toContain("later message succeeds");
+      expect(renderedText(renderer.root)).toContain("发送失败");
+      expect(findButtons(renderer.root, "重新发送")).toHaveLength(1);
+
+      await clickButton(renderer.root, "重新发送");
+
+      expect(vi.mocked(api.sendRoommateMessage).mock.calls.at(-1)?.[2].clientMessageId).toBe(
+        "7e4ac8e6-21dc-4e68-961b-42b4ca33dc8b"
+      );
+    } finally {
+      await unmount(renderer);
+    }
+  });
+
   it("reports the last peer message read only for the visible active conversation", async () => {
     const renderer = await renderMessagesApp();
 
@@ -289,11 +440,21 @@ describe("SubletApp roommate chat", () => {
   });
 });
 
-async function renderMessagesApp(): Promise<ReactTestRenderer> {
+async function renderMessagesApp({
+  initialRoommateConversationId = conversation.id,
+  initialRoommateDmId = null
+}: {
+  initialRoommateConversationId?: string | null;
+  initialRoommateDmId?: string | null;
+} = {}): Promise<ReactTestRenderer> {
   let renderer: ReactTestRenderer | undefined;
   await act(async () => {
     renderer = create(
-      <SubletApp initialSection="Messages" initialRoommateConversationId={conversation.id} />
+      <SubletApp
+        initialSection="Messages"
+        initialRoommateConversationId={initialRoommateConversationId}
+        initialRoommateDmId={initialRoommateDmId}
+      />
     );
     await flushMicrotasks();
   });
@@ -312,11 +473,23 @@ async function changeTextarea(root: ReactTestInstance, value: string) {
 }
 
 async function clickButton(root: ReactTestInstance, label: string) {
-  const button = root.findAllByType("button").find((candidate) => renderedText(candidate) === label);
+  const button = findButtons(root, label)[0];
   if (!button) throw new Error(`Button "${label}" was not found`);
   await act(async () => {
     button.props.onClick();
     await flushMicrotasks();
+  });
+}
+
+function findButtons(root: ReactTestInstance, label: string) {
+  return root.findAllByType("button").filter((candidate) => renderedText(candidate) === label);
+}
+
+function dispatchWindowEvent(name: string) {
+  const listener = windowListeners.get(name);
+  if (!listener) throw new Error(`Window listener "${name}" was not found`);
+  act(() => {
+    listener({ type: name } as Event);
   });
 }
 

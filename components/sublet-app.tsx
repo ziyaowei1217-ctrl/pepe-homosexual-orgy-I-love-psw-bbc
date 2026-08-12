@@ -735,6 +735,7 @@ export default function HomePage({
   const tokenRef = useRef<string | null>(null);
   const activeRoommateConversationIdRef = useRef<string | null>(initialRoommateConversationId ?? null);
   const appliedRoommateRouteRef = useRef<string | null>(null);
+  const roommateHistoryRequestGenerationsRef = useRef<Record<string, number>>({});
   const [groupMembers, setGroupMembers] = useState<Roommate[]>([]);
   const [likedRoommateIds, setLikedRoommateIds] = useState<Set<string>>(new Set());
   const [likedMeRoommateIds, setLikedMeRoommateIds] = useState<Set<string>>(new Set());
@@ -991,20 +992,23 @@ export default function HomePage({
 
   const refreshRoommateHistory = useCallback(
     async (currentToken: string, conversationId: string, cursor?: string) => {
+      const requestGeneration =
+        (roommateHistoryRequestGenerationsRef.current[conversationId] ?? 0) + 1;
+      roommateHistoryRequestGenerationsRef.current[conversationId] = requestGeneration;
+      const requestIsCurrent = () =>
+        tokenRef.current === currentToken &&
+        roommateHistoryRequestGenerationsRef.current[conversationId] === requestGeneration;
       setRoommateHistoryLoading((current) => new Set(current).add(conversationId));
       try {
         const page = cursor
           ? await getRoommateMessages(currentToken, conversationId, cursor)
           : await getRoommateMessages(currentToken, conversationId);
-        if (tokenRef.current !== currentToken) return null;
+        if (!requestIsCurrent()) return null;
         setRoommateMessages((current) => {
           const existing = current[conversationId] ?? [];
-          const base = cursor
-            ? existing
-            : existing.filter((message) => message.deliveryStatus !== "sent");
           return {
             ...current,
-            [conversationId]: mergeRoommateMessages(base, page.messages)
+            [conversationId]: mergeRoommateMessages(existing, page.messages)
           };
         });
         setRoommateMessageCursors((current) => ({
@@ -1019,13 +1023,13 @@ export default function HomePage({
         });
         return page;
       } catch (error) {
-        if (tokenRef.current === currentToken) {
+        if (requestIsCurrent()) {
           const message = handleRoommateApiError(error);
           setRoommateHistoryErrors((current) => ({ ...current, [conversationId]: message }));
         }
         return null;
       } finally {
-        if (tokenRef.current === currentToken) {
+        if (requestIsCurrent()) {
           setRoommateHistoryLoading((current) => {
             const next = new Set(current);
             next.delete(conversationId);
@@ -1061,9 +1065,13 @@ export default function HomePage({
       conversationId: initialRoommateConversationId,
       peerProfileId: initialRoommateDmId
     });
+    if (!resolved) {
+      setActiveRoommateConversationId(null);
+      setToast("无法打开这个室友会话，请从消息列表重新选择。");
+      return;
+    }
     appliedRoommateRouteRef.current = initialRoommateRouteKey;
-    setActiveRoommateConversationId(resolved?.id ?? null);
-    if (!resolved) setToast("无法打开这个室友会话，请从消息列表重新选择。");
+    setActiveRoommateConversationId(resolved.id);
   }, [
     initialRoommateConversationId,
     initialRoommateDmId,
@@ -4486,7 +4494,9 @@ function RoommateConversationPanel({
           ) : null}
           {messages.map((message) => {
             const isSelf = message.senderRole === "self";
-            const showDelivery = isSelf && latestSelfMessage?.id === message.id;
+            const showDelivery =
+              isSelf &&
+              (message.deliveryStatus === "failed" || latestSelfMessage?.id === message.id);
             const deliveryLabel = showDelivery
               ? getRoommateDeliveryLabel(message, conversation)
               : null;
