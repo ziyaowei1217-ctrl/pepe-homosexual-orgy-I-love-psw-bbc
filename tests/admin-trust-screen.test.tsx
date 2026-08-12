@@ -269,6 +269,30 @@ describe("AdminTrustScreen", () => {
     expect(onTrustMetricsChanged).toHaveBeenCalledTimes(1);
     await unmount(renderer);
   });
+
+  it("forwards the actual 401 refresh failure when an earlier refresh fails for another reason", async () => {
+    vi.mocked(api.getAdminListingReviewQueue)
+      .mockResolvedValueOnce([queuedListing])
+      .mockResolvedValueOnce([]);
+    const catalogFailure = { status: 503 };
+    const metricsAuthenticationFailure = { status: 401 };
+    const onAuthenticationError = vi.fn();
+    const renderer = await renderScreen({
+      onCatalogChanged: vi.fn().mockRejectedValue(catalogFailure),
+      onTrustMetricsChanged: vi.fn().mockRejectedValue(metricsAuthenticationFailure),
+      onAuthenticationError,
+      stepUpSession: {
+        accessToken: "enhanced-token",
+        reauthenticatedUntil: "2099-08-12T08:30:00.000Z"
+      }
+    });
+
+    await click(renderer.root, "通过");
+    await click(renderer.root, "确认通过");
+
+    expect(onAuthenticationError).toHaveBeenCalledWith(metricsAuthenticationFailure);
+    await unmount(renderer);
+  });
 });
 
 async function renderScreen(

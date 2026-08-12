@@ -134,11 +134,13 @@ export function AdminTrustScreen({
               toProductApiError(refresh.reason).status === 401
           );
         if (authenticationFailed) {
-          const failedRefresh = refreshes.find(
-            (refresh) => refresh.status === "rejected"
+          const authenticationRefresh = refreshes.find(
+            (refresh) =>
+              refresh.status === "rejected" &&
+              toProductApiError(refresh.reason).status === 401
           );
-          if (failedRefresh?.status === "rejected") {
-            onAuthenticationErrorRef.current?.(failedRefresh.reason);
+          if (authenticationRefresh?.status === "rejected") {
+            onAuthenticationErrorRef.current?.(authenticationRefresh.reason);
           }
           return;
         }

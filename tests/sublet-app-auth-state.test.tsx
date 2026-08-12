@@ -15,6 +15,10 @@ const authPanelCapture = vi.hoisted(() => ({
   current: null as unknown
 }));
 
+const adminStepUpPanelCapture = vi.hoisted(() => ({
+  current: null as unknown
+}));
+
 vi.mock("next/navigation", () => ({
   usePathname: () => navigationMock.pathname,
   useRouter: () => ({ push: navigationMock.push })
@@ -27,6 +31,13 @@ vi.mock("@/components/auth-flow-panel", () => ({
   }
 }));
 
+vi.mock("@/components/admin-step-up-panel", () => ({
+  AdminStepUpPanel: (props: unknown) => {
+    adminStepUpPanelCapture.current = props;
+    return <div data-testid="admin-step-up-panel" />;
+  }
+}));
+
 vi.mock("@/lib/api", async () => {
   const actual = await vi.importActual<typeof import("../lib/api")>(
     "../lib/api"
@@ -34,10 +45,12 @@ vi.mock("@/lib/api", async () => {
 
   return {
     ...actual,
+    approveAdminListing: vi.fn(),
     apiGet: vi.fn(),
     apiPatch: vi.fn(),
     apiPost: vi.fn(),
     getMyProfile: vi.fn(),
+    getAdminListingReviewQueue: vi.fn(),
     getRoommateConversations: vi.fn(),
     getSessionUser: vi.fn(),
     updateMyProfile: vi.fn()
@@ -109,6 +122,8 @@ Object.defineProperty(globalThis, "window", {
       callback(0);
       return 1;
     },
+    setTimeout: globalThis.setTimeout,
+    clearTimeout: globalThis.clearTimeout,
     scrollTo: vi.fn()
   }
 });
@@ -141,16 +156,38 @@ const incompleteListerProfile: ApiProfile = {
   city: null
 };
 
+const adminReviewListing = {
+  id: "admin-review-listing",
+  title: "管理员刷新验收房源",
+  area: "Westwood",
+  image: "https://images.example.test/admin-review.jpg",
+  price: 1800,
+  originalPrice: 1900,
+  beds: 1,
+  baths: 1,
+  commute: "12 min",
+  transit: "Bus 1",
+  trust: "待审核",
+  tags: ["带家具"],
+  score: 80,
+  status: "SUBMITTED" as const,
+  submittedAt: "2026-08-12T08:00:00.000Z",
+  media: []
+};
+
 beforeEach(() => {
   vi.clearAllMocks();
   localStorage.clear();
   navigationMock.pathname = "/host/listings";
   authPanelCapture.current = null;
+  adminStepUpPanelCapture.current = null;
   vi.mocked(api.apiGet).mockImplementation(async () => []);
   vi.mocked(api.apiPatch).mockResolvedValue({});
   vi.mocked(api.apiPost).mockResolvedValue({});
+  vi.mocked(api.approveAdminListing).mockResolvedValue(adminReviewListing);
   vi.mocked(api.getSessionUser).mockResolvedValue(user);
   vi.mocked(api.getMyProfile).mockResolvedValue(completeProfile);
+  vi.mocked(api.getAdminListingReviewQueue).mockResolvedValue([]);
   vi.mocked(api.getRoommateConversations).mockResolvedValue([]);
   vi.mocked(api.updateMyProfile).mockResolvedValue(completeProfile);
 });
@@ -473,6 +510,58 @@ describe("SubletApp auth state flow", () => {
 
     expect(readStoredAuthSession()).toBeNull();
     expect(capturedAuthPanel().token).toBeNull();
+    await unmount(renderer);
+  });
+
+  it("clears the application-owned administrator session when metrics 401 follows a catalog refresh 503", async () => {
+    navigationMock.pathname = "/admin/trust";
+    writeStoredAuthSession("mixed-refresh-token");
+    vi.mocked(api.getSessionUser).mockResolvedValue({ ...user, role: "ADMIN" });
+    vi.mocked(api.getAdminListingReviewQueue)
+      .mockResolvedValueOnce([adminReviewListing])
+      .mockResolvedValueOnce([]);
+    let listingsReadCount = 0;
+    let metricsReadCount = 0;
+    vi.mocked(api.apiGet).mockImplementation(async (path) => {
+      if (path === "/listings") {
+        listingsReadCount += 1;
+        if (listingsReadCount > 1) throw { status: 503 };
+      }
+      if (path === "/trust/queues") {
+        metricsReadCount += 1;
+        if (metricsReadCount > 1) throw { status: 401 };
+      }
+      return [];
+    });
+    const renderer = await renderSubletApp("Trust");
+
+    await act(async () => {
+      clickButton(renderer.root, "通过");
+      await flushMicrotasks();
+    });
+    await act(async () => {
+      clickButton(renderer.root, "确认通过");
+      await flushMicrotasks();
+    });
+    const stepUpPanel = adminStepUpPanelCapture.current as {
+      onVerified: (session: { accessToken: string; reauthenticatedUntil: string }) => void;
+    };
+    await act(async () => {
+      stepUpPanel.onVerified({
+        accessToken: "enhanced-token",
+        reauthenticatedUntil: new Date(Date.now() + 30 * 60 * 1000).toISOString()
+      });
+      await flushMicrotasks();
+    });
+    await act(async () => {
+      clickButton(renderer.root, "确认通过");
+      await flushMicrotasks();
+    });
+
+    expect(readStoredAuthSession()).toBeNull();
+    expect(capturedAuthPanel().token).toBeNull();
+    expect(api.apiGet).toHaveBeenCalledWith("/listings");
+    expect(api.apiGet).toHaveBeenCalledWith("/trust/queues", "mixed-refresh-token");
     await unmount(renderer);
   });
 
