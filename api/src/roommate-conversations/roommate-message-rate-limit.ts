@@ -146,7 +146,7 @@ export class ValkeyRoommateMessageRateLimiter extends RoommateMessageRateLimiter
   private connectOperation?: { client: RoommateMessageValkeyClient; operation: Promise<unknown> };
   private readonly operationTimeoutMs: number;
   private readonly clientFactory?: () => RoommateMessageValkeyClient | undefined;
-  private readonly destroyedClients = new Set<RoommateMessageValkeyClient>();
+  private readonly destroyedClients = new WeakSet<RoommateMessageValkeyClient>();
   private closed = false;
 
   constructor(
