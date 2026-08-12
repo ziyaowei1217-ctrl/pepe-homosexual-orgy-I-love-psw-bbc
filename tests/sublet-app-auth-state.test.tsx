@@ -441,6 +441,26 @@ describe("SubletApp auth state flow", () => {
     await unmount(renderer);
   });
 
+  it("loads the administrator review workspace only after the current user resolves as ADMIN", async () => {
+    navigationMock.pathname = "/admin/trust";
+    writeStoredAuthSession("stored-token");
+    const currentUser = deferred<SessionUser>();
+    vi.mocked(api.getSessionUser).mockReturnValue(currentUser.promise);
+    const renderer = await renderSubletApp("Trust");
+
+    expect(renderedText(renderer.root)).toContain("需要管理员权限");
+    expect(api.apiGet).not.toHaveBeenCalledWith("/trust/queues", "stored-token");
+
+    await act(async () => {
+      currentUser.resolve({ ...user, role: "ADMIN" });
+      await flushMicrotasks();
+    });
+
+    expect(renderedText(renderer.root)).toContain("房源审核队列");
+    expect(api.apiGet).toHaveBeenCalledWith("/trust/queues", "stored-token");
+    await unmount(renderer);
+  });
+
   it.each([
     ["503", { status: 503 }],
     ["network failure", new TypeError("Failed to fetch")]
@@ -458,7 +478,7 @@ describe("SubletApp auth state flow", () => {
 });
 
 async function renderSubletApp(
-  initialSection: "Discover" | "Publish",
+  initialSection: "Discover" | "Publish" | "Trust",
   initialListingId?: string
 ): Promise<ReactTestRenderer> {
   let renderer: ReactTestRenderer | undefined;

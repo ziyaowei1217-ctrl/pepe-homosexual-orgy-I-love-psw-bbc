@@ -43,6 +43,8 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { createPortal } from "react-dom";
 
 import { AuthFlowPanel } from "@/components/auth-flow-panel";
+import { AdminStepUpPanel } from "@/components/admin-step-up-panel";
+import { AdminTrustScreen } from "@/components/admin-trust-screen";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -85,6 +87,7 @@ import {
   readStoredAuthSession,
   writeStoredAuthSession
 } from "@/lib/auth-session";
+import { getActiveAdminStepUpToken, type AdminStepUpSession } from "@/lib/admin-step-up";
 import {
   beginLatestRequest,
   commitLatestRequest,
@@ -276,14 +279,6 @@ type SearchFilters = {
   amenity: string;
   sort: CatalogSort;
   page: number;
-};
-
-type QueueItem = {
-  id?: string;
-  label: string;
-  value: number;
-  icon: LucideIcon;
-  variant: "trust" | "warning" | "danger" | "success";
 };
 
 const previewDataEnabled = isPreviewDataEnabled();
@@ -757,6 +752,10 @@ export default function HomePage({
   const [pendingActions, setPendingActions] = useState<Set<string>>(new Set());
   const [token, setToken] = useState<string | null>(null);
   const [user, setUser] = useState<SessionUser | null>(null);
+  const [resolvedUserToken, setResolvedUserToken] = useState<string | null>(null);
+  const [adminStepUpSession, setAdminStepUpSession] = useState<AdminStepUpSession | null>(null);
+  const [adminStepUpOpen, setAdminStepUpOpen] = useState(false);
+  const adminStepUpIdentityRef = useRef<string | null>(null);
   const [profile, setProfile] = useState<ApiProfile | null>(null);
   const [profileStatus, setProfileStatus] =
     useState<ProfileLoadStatus>("idle");
@@ -783,7 +782,34 @@ export default function HomePage({
     : initialRoommateDmId
       ? `peer:${initialRoommateDmId}`
       : null;
+  const adminStepUpIdentity = token && user
+    ? `${token}:${user.id}:${user.email}:${user.role}`
+    : null;
   tokenRef.current = token;
+
+  useEffect(() => {
+    if (adminStepUpIdentityRef.current === adminStepUpIdentity) return;
+    adminStepUpIdentityRef.current = adminStepUpIdentity;
+    setAdminStepUpSession(null);
+    setAdminStepUpOpen(false);
+  }, [adminStepUpIdentity]);
+
+  useEffect(() => {
+    if (!adminStepUpSession) return;
+    if (!getActiveAdminStepUpToken(adminStepUpSession)) {
+      setAdminStepUpSession(null);
+      return;
+    }
+    const delay = Date.parse(adminStepUpSession.reauthenticatedUntil) - Date.now();
+    const timer = window.setTimeout(() => {
+      setAdminStepUpSession((current) =>
+        current?.reauthenticatedUntil === adminStepUpSession.reauthenticatedUntil
+          ? null
+          : current
+      );
+    }, delay);
+    return () => window.clearTimeout(timer);
+  }, [adminStepUpSession]);
 
   useEffect(() => {
     const storedSession = readStoredAuthSession();
@@ -900,18 +926,8 @@ export default function HomePage({
       }
     }
 
-    async function loadTrustQueues() {
-      try {
-        const apiQueueData = await apiGet<ApiTrustQueue[]>("/trust/queues");
-        if (!cancelled) setApiTrustQueues(apiQueueData);
-      } catch {
-        if (!cancelled) setApiTrustQueues([]);
-      }
-    }
-
     void loadListings();
     void loadRoommates();
-    void loadTrustQueues();
 
     return () => {
       cancelled = true;
@@ -921,6 +937,7 @@ export default function HomePage({
   useEffect(() => {
     let cancelled = false;
     setProfile(null);
+    setResolvedUserToken(null);
     if (!token) {
       setProfileStatus("idle");
       return;
@@ -941,6 +958,7 @@ export default function HomePage({
           requestVersion,
           () => {
             setUser(currentUser);
+            setResolvedUserToken(currentToken);
             setProfile(currentProfile);
             setProfileStatus("loaded");
           }
@@ -956,6 +974,7 @@ export default function HomePage({
               clearStoredAuthSession();
               setToken(null);
               setUser(null);
+              setResolvedUserToken(null);
               setProfile(null);
               setProfileStatus("idle");
               setToast(productError.message);
@@ -975,6 +994,24 @@ export default function HomePage({
       cancelled = true;
     };
   }, [token]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setApiTrustQueues([]);
+    if (!token || resolvedUserToken !== token || user?.role !== "ADMIN") return;
+
+    void apiGet<ApiTrustQueue[]>("/trust/queues", token)
+      .then((queues) => {
+        if (!cancelled) setApiTrustQueues(queues);
+      })
+      .catch((error) => {
+        if (!cancelled) setToast(`审核指标加载失败：${toProductApiError(error).message}`);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [resolvedUserToken, token, user?.role]);
 
   const handleRoommateApiError = useCallback((error: unknown, prefix = "") => {
     const productError = toProductApiError(error);
@@ -2230,6 +2267,8 @@ export default function HomePage({
 
   function handleAuthenticated(response: VerifyEmailResponse) {
     writeStoredAuthSession(response.accessToken);
+    setAdminStepUpSession(null);
+    setAdminStepUpOpen(false);
     setToken(response.accessToken);
     setUser(response.user);
     setAuthPanelOpen(true);
@@ -2246,6 +2285,8 @@ export default function HomePage({
   function handleLogout() {
     clearStoredAuthSession();
     invalidateLatestRequests(profileRequestGuard);
+    setAdminStepUpSession(null);
+    setAdminStepUpOpen(false);
     setToken(null);
     setUser(null);
     setProfile(null);
@@ -2357,6 +2398,16 @@ export default function HomePage({
           onToast={setToast}
         />
       ) : null}
+      <AdminStepUpPanel
+        open={adminStepUpOpen}
+        sessionToken={token ?? ""}
+        email={user?.email ?? ""}
+        onVerified={(session) => {
+          setAdminStepUpSession(session);
+          setAdminStepUpOpen(false);
+        }}
+        onCancel={() => setAdminStepUpOpen(false)}
+      />
       {activeSection === "Discover" ? (
         <DiscoverScreen
           filters={filters}
@@ -2527,7 +2578,35 @@ export default function HomePage({
         />
       ) : null}
       {activeSection === "Trust" ? (
-        <TrustScreen queues={apiTrustQueues} onToast={setToast} />
+        <AdminTrustScreen
+          token={token}
+          user={user}
+          stepUpSession={adminStepUpSession}
+          onStepUpRequired={() => setAdminStepUpOpen(true)}
+          trustMetrics={apiTrustQueues}
+          onCatalogChanged={async () => {
+            const refreshedListings = await apiGet<ApiListing[]>("/listings");
+            const nextListings = previewDataEnabled
+              ? previewListings
+              : refreshedListings.map(normalizeListing);
+            setAllListings(nextListings);
+            setSelectedListing((current) =>
+              getRequestedListing(nextListings, initialListingId, current)
+            );
+            if (token && user?.role === "ADMIN") {
+              const queues = await apiGet<ApiTrustQueue[]>("/trust/queues", token);
+              setApiTrustQueues(queues);
+            }
+          }}
+          onToast={setToast}
+          onAuthenticationError={(error) => {
+            const productError = toProductApiError(error);
+            if (!shouldClearAuthSession(productError)) return;
+            handleLogout();
+            setToast(productError.message);
+            setAuthPanelOpen(true);
+          }}
+        />
       ) : null}
       <StatusToast message={toast} />
     </main>
@@ -5442,31 +5521,6 @@ function DetailList({ title, items }: { title: string; items: string[] }) {
   );
 }
 
-function TrustScreen({
-  queues,
-  onToast
-}: {
-  queues: ApiTrustQueue[];
-  onToast: (message: string) => void;
-}) {
-  return (
-    <section className="app-shell app-grid w-full items-start py-5 md:py-6">
-      <div className="app-section editorial-toolbar">
-        <div>
-          <span className="editorial-kicker">01 / 信任</span>
-          <h1 className="mt-2 text-3xl font-black tracking-[-0.035em] md:text-4xl">信任与三阶段前端范围</h1>
-        </div>
-      </div>
-      <div className="col-span-full min-w-0 xl:col-span-8">
-        <TrustAndRoadmap />
-      </div>
-      <aside className="col-span-full min-w-0 xl:col-span-4">
-        <OperationsPanel initialQueues={queues} onToast={onToast} />
-      </aside>
-    </section>
-  );
-}
-
 function MarketToolbar({
   listingCount,
   heading,
@@ -6254,128 +6308,6 @@ function PublishReviewItem({ label, value }: { label: string; value: string }) {
       <div className="text-xs font-bold text-muted-foreground">{label}</div>
       <div className="mt-1 break-words text-sm font-extrabold text-primary">{value}</div>
     </div>
-  );
-}
-
-function TrustAndRoadmap() {
-  return (
-    <Card className="shadow-panel">
-      <CardHeader>
-        <CardTitle>信任与三阶段前端范围</CardTitle>
-        <CardDescription>P0/P1/P2 静态模块在同一设计系统下呈现</CardDescription>
-      </CardHeader>
-      <CardContent className="grid grid-cols-1 gap-4 md:grid-cols-3">
-        {[
-          {
-            phase: "P0",
-            title: "核心撮合与交易",
-            color: "danger" as const,
-            items: ["邮箱认证", "卡片流", "Group 创建", "地图找房", "基础托管"]
-          },
-          {
-            phase: "P1",
-            title: "风控与推荐",
-            color: "warning" as const,
-            items: ["整租推荐", "阶梯退款", "入住保障", "信用降权", "服务费"]
-          },
-          {
-            phase: "P2",
-            title: "租后高频生态",
-            color: "success" as const,
-            items: ["假期转租", "共享微仓", "拼单外卖", "水电拆分"]
-          }
-        ].map((phase) => (
-          <div key={phase.phase} className="rounded-md border bg-white p-4">
-            <Badge variant={phase.color}>{phase.phase}</Badge>
-            <h3 className="mt-3 text-base font-bold text-primary">{phase.title}</h3>
-            <div className="mt-4 flex flex-col gap-2">
-              {phase.items.map((item) => (
-                <div key={item} className="flex items-center gap-2 text-sm font-semibold">
-                  <CheckCircle2 className="size-4 text-trust-green" aria-hidden="true" />
-                  {item}
-                </div>
-              ))}
-            </div>
-          </div>
-        ))}
-      </CardContent>
-    </Card>
-  );
-}
-
-function OperationsPanel({
-  initialQueues,
-  onToast
-}: {
-  initialQueues: ApiTrustQueue[];
-  onToast: (message: string) => void;
-}) {
-  const queues: QueueItem[] = initialQueues.map((queue) => ({
-    ...queue,
-    icon: ShieldCheck
-  }));
-
-  const reviewModules = [
-    "举报入口",
-    "内容审核",
-    "退款介入",
-    "信用降权",
-    "入住保障",
-    "服务费分账"
-  ];
-
-  return (
-    <Card className="shadow-panel">
-      <CardHeader>
-        <CardTitle>运营控制台预览</CardTitle>
-        <CardDescription>审核、举报、信用分和应急保障的静态入口</CardDescription>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-3">
-        {queues.length === 0 ? (
-          <div className="rounded-md border border-dashed bg-secondary p-4 text-sm font-semibold text-muted-foreground">
-            当前没有服务端审核队列数据，不显示本地模拟指标。
-          </div>
-        ) : queues.map(({ label, value, icon: Icon, variant }) => (
-          <div key={label} className="flex items-center justify-between gap-3 rounded-md border bg-white p-3">
-            <div className="flex items-center gap-3">
-              <div className="flex size-10 items-center justify-center rounded-md bg-secondary text-primary">
-                <Icon className="size-4" aria-hidden="true" />
-              </div>
-              <div>
-                <div className="text-sm font-bold text-primary">{label}</div>
-                <div className="text-xs font-semibold text-muted-foreground">来自平台审核队列</div>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <Badge variant={variant}>{value}</Badge>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => onToast(`${label} 的后台审核操作暂未开放。`)}
-                disabled
-              >
-                暂未开放
-              </Button>
-            </div>
-          </div>
-        ))}
-        <Separator />
-        <div className="grid grid-cols-2 gap-2">
-          {reviewModules.map((module) => (
-            <Button
-              key={module}
-              variant="secondary"
-              size="sm"
-              className="justify-start"
-              onClick={() => onToast(`${module} 的后台操作暂未开放。`)}
-            >
-              <MessageCircle data-icon="inline-start" />
-              {module}
-            </Button>
-          ))}
-        </div>
-      </CardContent>
-    </Card>
   );
 }
 

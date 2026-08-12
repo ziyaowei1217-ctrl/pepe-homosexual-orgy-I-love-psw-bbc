@@ -408,6 +408,26 @@ export function getAdminRoommates(token: string) {
   return apiGet<ApiRoommate[]>("/admin/roommates", token);
 }
 
+export function getAdminListingReviewQueue(token: string) {
+  return apiGet<ApiListing[]>("/admin/listings/review-queue", token);
+}
+
+export function approveAdminListing(token: string, id: string) {
+  return apiPost<ApiListing>(
+    `/admin/listings/${encodeURIComponent(id)}/approve`,
+    {},
+    token
+  );
+}
+
+export function rejectAdminListing(token: string, id: string, reason: string) {
+  return apiPost<ApiListing>(
+    `/admin/listings/${encodeURIComponent(id)}/reject`,
+    { reason },
+    token
+  );
+}
+
 export function createAdminRoommate(token: string, roommate: UpsertAdminRoommateInput) {
   return apiPost<ApiRoommate>("/admin/roommates", roommate, token);
 }
