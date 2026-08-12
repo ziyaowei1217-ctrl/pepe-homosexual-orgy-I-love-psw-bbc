@@ -297,6 +297,17 @@ describe("AuthService production email issuance", () => {
     });
   });
 
+  it("generically accepts when post-budget eligibility verification fails", async () => {
+    const prisma = createAuthPrismaMock({ invited: ["student@example.com"] });
+    prisma.state.eligibilityReadFailuresRemaining = 1;
+    const service = createService(prisma, createSender(prisma));
+
+    await expect(service.requestEmailCode("student@example.com")).resolves.toEqual({
+      email: "student@example.com",
+      expiresAt: expect.any(Date)
+    });
+  });
+
   it("does not revive an older slow delivery after the newer SENT code was consumed", async () => {
     const sharedTimestamp = new Date("2020-01-01T00:00:00.000Z");
     const prisma = createAuthPrismaMock({
@@ -363,7 +374,8 @@ function createAuthPrismaMock(
     inTransaction: false,
     senderObservedTransaction: undefined as boolean | undefined,
     finalizationFailuresRemaining: 0,
-    finalizationAttempts: 0
+    finalizationAttempts: 0,
+    eligibilityReadFailuresRemaining: 0
   };
 
   const transaction = {
@@ -390,7 +402,12 @@ function createAuthPrismaMock(
           expiresAt?: { gt: Date };
         };
       }) =>
-        [...state.codes].reverse().find(
+        (() => {
+          if (where.id && state.eligibilityReadFailuresRemaining > 0) {
+            state.eligibilityReadFailuresRemaining -= 1;
+            throw new Error("eligibility read failure");
+          }
+          return [...state.codes].reverse().find(
           (record) =>
             (!where.id || record.id === where.id) &&
             record.email === where.email &&
@@ -399,7 +416,8 @@ function createAuthPrismaMock(
             (!("consumedAt" in where) || record.consumedAt === where.consumedAt) &&
             (!where.createdAt || record.createdAt > where.createdAt.gt) &&
             (!where.expiresAt || record.expiresAt > where.expiresAt.gt)
-        ) ?? null,
+          ) ?? null;
+        })(),
       create: async ({
         data
       }: {

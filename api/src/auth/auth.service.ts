@@ -303,20 +303,24 @@ export class AuthService {
   }
 
   private async isUsableForDevelopmentResponse(pending: PendingCode, purpose: VerificationPurpose) {
-    return this.withSerializedEmail(pending.email, async (transaction) => {
-      const current = await transaction.verificationCode.findFirst({
-        where: {
-          id: pending.id,
-          email: pending.email,
-          purpose,
-          deliveryStatus: VerificationDeliveryStatus.SENT,
-          consumedAt: null,
-          expiresAt: { gt: new Date(this.now()) }
-        },
-        select: { id: true }
+    try {
+      return await this.withSerializedEmail(pending.email, async (transaction) => {
+        const current = await transaction.verificationCode.findFirst({
+          where: {
+            id: pending.id,
+            email: pending.email,
+            purpose,
+            deliveryStatus: VerificationDeliveryStatus.SENT,
+            consumedAt: null,
+            expiresAt: { gt: new Date(this.now()) }
+          },
+          select: { id: true }
+        });
+        return current?.id === pending.id;
       });
-      return current?.id === pending.id;
-    });
+    } catch {
+      return false;
+    }
   }
 
   private async finalizeSuccessfulDelivery(
