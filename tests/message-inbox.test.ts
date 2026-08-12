@@ -28,7 +28,8 @@ const roommate: InboxContact = {
   preview: "Want to compare move-in dates?",
   time: "Now",
   image: "/mia.jpg",
-  activityOrder: 3
+  activityOrder: 3,
+  unreadCount: 3
 };
 
 describe("message inbox", () => {
@@ -36,6 +37,13 @@ describe("message inbox", () => {
     const contacts = mergeInboxContacts([landlord], [roommate]);
 
     expect(contacts.map(getInboxContactKey)).toEqual(["roommate:mia", "listing:westwood"]);
+  });
+
+  it("preserves the server-backed unread count on a merged contact", () => {
+    expect(mergeInboxContacts([landlord], [roommate])[0]).toMatchObject({
+      targetId: "mia",
+      unreadCount: 3
+    });
   });
 
   it("uses last activity instead of message count when sorting contacts", () => {

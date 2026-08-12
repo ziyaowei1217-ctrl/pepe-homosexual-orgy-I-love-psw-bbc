@@ -9,6 +9,7 @@ export type InboxContact = {
   time: string;
   image: string;
   activityOrder: number;
+  unreadCount?: number;
 };
 
 export type InboxTarget = Pick<InboxContact, "kind" | "targetId">;

@@ -213,7 +213,60 @@ export type ApiRoommateActionResponse = {
   action: {
     action: "LIKE" | "PASS" | "LATER";
   };
+  match: {
+    id: string;
+    status?: string;
+  } | null;
+  conversation: {
+    id: string;
+    matchId: string;
+  } | null;
   dealRoom: ApiDealRoom | null;
+};
+
+export type ApiRoommateMessage = {
+  id: string;
+  conversationId: string;
+  senderRole: "self" | "peer";
+  clientMessageId: string;
+  body: string;
+  createdAt: string;
+};
+
+export type ApiRoommateConversation = {
+  id: string;
+  matchId: string;
+  peer: {
+    id: string | null;
+    name: string | null;
+    age: number | null;
+    role: string | null;
+    image: string | null;
+    match: number | null;
+    budget: string | null;
+    commute: string | null;
+    tags: string[];
+  };
+  latestMessage: ApiRoommateMessage | null;
+  unreadCount: number;
+  lastReadMessageId: string | null;
+  lastReadAt: string | null;
+  peerLastReadMessageId: string | null;
+  peerLastReadAt: string | null;
+  writable: boolean;
+  lastMessageAt: string | null;
+  updatedAt: string;
+};
+
+export type ApiRoommateMessagePage = {
+  messages: ApiRoommateMessage[];
+  nextCursor: string | null;
+};
+
+export type ApiRoommateConversationReadState = {
+  conversationId: string;
+  self: { lastReadMessageId: string | null; lastReadAt: string | null };
+  peer: { lastReadMessageId: string | null; lastReadAt: string | null };
 };
 
 export type UpsertAdminRoommateInput = {
@@ -343,6 +396,36 @@ export function createAdminRoommate(token: string, roommate: UpsertAdminRoommate
 
 export function updateAdminRoommate(token: string, id: string, roommate: UpdateAdminRoommateInput) {
   return apiPatch<ApiRoommate>(`/admin/roommates/${encodeURIComponent(id)}`, roommate, token);
+}
+
+export function getRoommateConversations(token: string) {
+  return apiGet<ApiRoommateConversation[]>("/roommate-conversations", token);
+}
+
+export function getRoommateMessages(token: string, conversationId: string, cursor?: string) {
+  const encodedConversationId = encodeURIComponent(conversationId);
+  const query = cursor === undefined ? "" : `?cursor=${encodeURIComponent(cursor)}`;
+  return apiGet<ApiRoommateMessagePage>(`/roommate-conversations/${encodedConversationId}/messages${query}`, token);
+}
+
+export function sendRoommateMessage(
+  token: string,
+  conversationId: string,
+  input: { clientMessageId: string; body: string }
+) {
+  return apiPost<ApiRoommateMessage>(
+    `/roommate-conversations/${encodeURIComponent(conversationId)}/messages`,
+    input,
+    token
+  );
+}
+
+export function markRoommateConversationRead(token: string, conversationId: string, lastReadMessageId: string) {
+  return apiPost<ApiRoommateConversationReadState>(
+    `/roommate-conversations/${encodeURIComponent(conversationId)}/read`,
+    { lastReadMessageId },
+    token
+  );
 }
 
 export function archiveAdminRoommate(token: string, id: string) {
