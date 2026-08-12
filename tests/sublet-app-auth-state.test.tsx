@@ -38,10 +38,18 @@ vi.mock("@/lib/api", async () => {
     apiPatch: vi.fn(),
     apiPost: vi.fn(),
     getMyProfile: vi.fn(),
+    getRoommateConversations: vi.fn(),
     getSessionUser: vi.fn(),
     updateMyProfile: vi.fn()
   };
 });
+
+vi.mock("@/lib/roommate-realtime", () => ({
+  createRoommateRealtimeClient: vi.fn(() => ({
+    connect: vi.fn(),
+    disconnect: vi.fn()
+  }))
+}));
 
 import type { AuthFlowPanelProps } from "../components/auth-flow-panel";
 import SubletApp from "../components/sublet-app";
@@ -143,10 +151,29 @@ beforeEach(() => {
   vi.mocked(api.apiPost).mockResolvedValue({});
   vi.mocked(api.getSessionUser).mockResolvedValue(user);
   vi.mocked(api.getMyProfile).mockResolvedValue(completeProfile);
+  vi.mocked(api.getRoommateConversations).mockResolvedValue([]);
   vi.mocked(api.updateMyProfile).mockResolvedValue(completeProfile);
 });
 
 describe("SubletApp auth state flow", () => {
+  it("keeps listing-detail placeholder rows free of duplicate React keys", async () => {
+    navigationMock.pathname = "/";
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    let renderer: ReactTestRenderer | null = null;
+
+    try {
+      renderer = await renderSubletApp("Discover", "seed-listing-1");
+
+      const duplicateKeyErrors = consoleError.mock.calls.filter(([message]) =>
+        String(message).includes("Encountered two children with the same key")
+      );
+      expect(duplicateKeyErrors).toEqual([]);
+    } finally {
+      consoleError.mockRestore();
+      if (renderer) await unmount(renderer);
+    }
+  });
+
   it("hides the identity panel when a stored complete landlord profile finishes loading", async () => {
     writeStoredAuthSession("stored-token");
     const profileRequest = deferred<ApiProfile>();
@@ -431,11 +458,17 @@ describe("SubletApp auth state flow", () => {
 });
 
 async function renderSubletApp(
-  initialSection: "Discover" | "Publish"
+  initialSection: "Discover" | "Publish",
+  initialListingId?: string
 ): Promise<ReactTestRenderer> {
   let renderer: ReactTestRenderer | undefined;
   await act(async () => {
-    renderer = create(<SubletApp initialSection={initialSection} />);
+    renderer = create(
+      <SubletApp
+        initialSection={initialSection}
+        initialListingId={initialListingId}
+      />
+    );
     await flushMicrotasks();
   });
   if (!renderer) throw new Error("SubletApp renderer was not created");

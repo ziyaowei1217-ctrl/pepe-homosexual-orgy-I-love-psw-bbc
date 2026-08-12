@@ -1408,11 +1408,23 @@ export default function HomePage({
     };
 
     client.connect();
-    document.addEventListener("visibilitychange", synchronizeWhenVisible);
-    window.addEventListener("focus", synchronizeWhenVisible);
+    const canListenToDocument =
+      typeof document !== "undefined" && typeof document.addEventListener === "function";
+    const canListenToWindow =
+      typeof window !== "undefined" && typeof window.addEventListener === "function";
+    if (canListenToDocument) {
+      document.addEventListener("visibilitychange", synchronizeWhenVisible);
+    }
+    if (canListenToWindow) {
+      window.addEventListener("focus", synchronizeWhenVisible);
+    }
     return () => {
-      document.removeEventListener("visibilitychange", synchronizeWhenVisible);
-      window.removeEventListener("focus", synchronizeWhenVisible);
+      if (canListenToDocument) {
+        document.removeEventListener("visibilitychange", synchronizeWhenVisible);
+      }
+      if (canListenToWindow) {
+        window.removeEventListener("focus", synchronizeWhenVisible);
+      }
       client.disconnect();
     };
   }, [refreshRoommateConversations, refreshRoommateHistory, token]);
@@ -5327,8 +5339,8 @@ function DetailList({ title, items }: { title: string; items: string[] }) {
     <div className="rounded-md border bg-white p-4">
       <h2 className="text-sm font-extrabold text-primary">{title}</h2>
       <div className="mt-3 flex flex-col gap-2">
-        {items.map((item) => (
-          <div key={item} className="flex gap-2 text-sm font-semibold text-muted-foreground">
+        {items.map((item, index) => (
+          <div key={`${title}-${index}`} className="flex gap-2 text-sm font-semibold text-muted-foreground">
             <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-trust-green" aria-hidden="true" />
             <span>{item}</span>
           </div>

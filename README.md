@@ -132,7 +132,7 @@ Admin/developer management endpoints:
 See [docs/roommate-matching-admin.md](docs/roommate-matching-admin.md) for the exact payload and the safe way to add or edit deck profiles.
 The developer UI is available at `/admin/roommates`.
 
-## Roommate Messaging Backend
+## Roommate Messaging
 
 The backend wires authenticated direct messages between reciprocal roommate matches, durable message
 history in PostgreSQL, unread counts, monotonic read cursors, and realtime message/read events. Unread
@@ -142,9 +142,14 @@ The HTTP collection starts at `/api/v1/roommate-conversations`; Socket.IO client
 are the recovery path after a reconnect or any offline period; realtime events accelerate the online
 experience but do not replace an HTTP refresh.
 
-This backend scope intentionally does not include email or Web Push offline notifications,
+The web app integrates these server conversations into the unified Messages inbox alongside host
+conversations. It supports durable history and pagination, server-backed unread/read state,
+optimistic text sends with idempotent retry, validated realtime updates, conversation deep links,
+and bounded HTTP recovery after reconnect, browser focus, or reload. Roommate message content is not
+stored in browser storage.
+
+This messaging scope intentionally does not include email or Web Push offline notifications,
 attachments, group chat, typing indicators, message editing, message recall, or presence claims.
-Frontend messaging integration is outside this backend launch gate.
 
 ## Verify
 
@@ -207,9 +212,10 @@ The local product supports email-code login, persisted profiles, host listing su
 administrator review, approved public listings, two-sided host/renter messages, viewing requests
 and host decisions, ranked roommate discovery, administrator-managed roommate profiles, reciprocal
 matches, backend roommate direct messages with durable history/unread/read state and realtime events,
+roommate messaging in the unified web inbox with optimistic send/retry and reconnect recovery,
 active deal rooms, and idempotent group-tour requests. Empty database tables produce intentional
 empty states.
 
-Online applications, payments, escrow, production hosting, roommate messaging frontend integration,
-and the messaging non-goals listed above are not wired yet. Stripe, Mapbox, real email delivery,
-Redis queues, and production moderation providers are also not connected.
+Online applications, payments, escrow, production hosting, and the messaging non-goals listed above
+are not wired yet. Stripe, Mapbox, real email delivery, Redis queues, and production moderation
+providers are also not connected.
