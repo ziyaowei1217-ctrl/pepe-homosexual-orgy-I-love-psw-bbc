@@ -995,6 +995,24 @@ export default function HomePage({
     };
   }, [token]);
 
+  function handleAdminAuthenticationError(error: unknown) {
+    const productError = toProductApiError(error);
+    if (!shouldClearAuthSession(productError)) return false;
+    clearStoredAuthSession();
+    invalidateLatestRequests(profileRequestGuard);
+    setAdminStepUpSession(null);
+    setAdminStepUpOpen(false);
+    setToken(null);
+    setUser(null);
+    setResolvedUserToken(null);
+    setProfile(null);
+    setProfileStatus("idle");
+    setOnboardingReason(null);
+    setAuthPanelOpen(true);
+    setToast(productError.message);
+    return true;
+  }
+
   useEffect(() => {
     let cancelled = false;
     setApiTrustQueues([]);
@@ -1005,7 +1023,9 @@ export default function HomePage({
         if (!cancelled) setApiTrustQueues(queues);
       })
       .catch((error) => {
-        if (!cancelled) setToast(`审核指标加载失败：${toProductApiError(error).message}`);
+        if (cancelled) return;
+        if (handleAdminAuthenticationError(error)) return;
+        setToast(`审核指标加载失败：${toProductApiError(error).message}`);
       });
 
     return () => {
@@ -2296,6 +2316,23 @@ export default function HomePage({
     setToast("已退出登录");
   }
 
+  async function refreshPublicCatalog() {
+    const refreshedListings = await apiGet<ApiListing[]>("/listings");
+    const nextListings = previewDataEnabled
+      ? previewListings
+      : refreshedListings.map(normalizeListing);
+    setAllListings(nextListings);
+    setSelectedListing((current) =>
+      getRequestedListing(nextListings, initialListingId, current)
+    );
+  }
+
+  async function refreshTrustMetrics() {
+    if (!token || user?.role !== "ADMIN") return;
+    const queues = await apiGet<ApiTrustQueue[]>("/trust/queues", token);
+    setApiTrustQueues(queues);
+  }
+
   async function handleSaveProfile(
     draft: UpdateProfileInput
   ): Promise<ApiProfile | null> {
@@ -2584,27 +2621,11 @@ export default function HomePage({
           stepUpSession={adminStepUpSession}
           onStepUpRequired={() => setAdminStepUpOpen(true)}
           trustMetrics={apiTrustQueues}
-          onCatalogChanged={async () => {
-            const refreshedListings = await apiGet<ApiListing[]>("/listings");
-            const nextListings = previewDataEnabled
-              ? previewListings
-              : refreshedListings.map(normalizeListing);
-            setAllListings(nextListings);
-            setSelectedListing((current) =>
-              getRequestedListing(nextListings, initialListingId, current)
-            );
-            if (token && user?.role === "ADMIN") {
-              const queues = await apiGet<ApiTrustQueue[]>("/trust/queues", token);
-              setApiTrustQueues(queues);
-            }
-          }}
+          onCatalogChanged={refreshPublicCatalog}
+          onTrustMetricsChanged={refreshTrustMetrics}
           onToast={setToast}
           onAuthenticationError={(error) => {
-            const productError = toProductApiError(error);
-            if (!shouldClearAuthSession(productError)) return;
-            handleLogout();
-            setToast(productError.message);
-            setAuthPanelOpen(true);
+            void handleAdminAuthenticationError(error);
           }}
         />
       ) : null}

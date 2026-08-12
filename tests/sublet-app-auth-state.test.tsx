@@ -461,6 +461,21 @@ describe("SubletApp auth state flow", () => {
     await unmount(renderer);
   });
 
+  it("clears an administrator session when the Trust metrics read returns 401", async () => {
+    navigationMock.pathname = "/admin/trust";
+    writeStoredAuthSession("expired-admin-token");
+    vi.mocked(api.getSessionUser).mockResolvedValue({ ...user, role: "ADMIN" });
+    vi.mocked(api.apiGet).mockImplementation(async (path) => {
+      if (path === "/trust/queues") throw { status: 401 };
+      return [];
+    });
+    const renderer = await renderSubletApp("Trust");
+
+    expect(readStoredAuthSession()).toBeNull();
+    expect(capturedAuthPanel().token).toBeNull();
+    await unmount(renderer);
+  });
+
   it.each([
     ["503", { status: 503 }],
     ["network failure", new TypeError("Failed to fetch")]

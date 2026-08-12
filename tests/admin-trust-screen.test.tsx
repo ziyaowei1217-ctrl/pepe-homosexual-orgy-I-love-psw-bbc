@@ -175,6 +175,100 @@ describe("AdminTrustScreen", () => {
     expect(onAuthenticationError).toHaveBeenCalledWith({ status: 401 });
     await unmount(renderer);
   });
+
+  it("keeps a selected rejection and reason when enhanced authentication is required without retrying", async () => {
+    vi.mocked(api.rejectAdminListing).mockRejectedValue({
+      status: 403,
+      code: "ADMIN_REAUTH_REQUIRED"
+    });
+    const onStepUpRequired = vi.fn();
+    const renderer = await renderScreen({
+      onStepUpRequired,
+      stepUpSession: {
+        accessToken: "enhanced-token",
+        reauthenticatedUntil: "2099-08-12T08:30:00.000Z"
+      }
+    });
+
+    await click(renderer.root, "拒绝");
+    await changeInput(renderer.root, "rejection-reason", "需要更清晰的所有权证明");
+    await click(renderer.root, "确认拒绝");
+
+    expect(onStepUpRequired).toHaveBeenCalledTimes(1);
+    expect(api.rejectAdminListing).toHaveBeenCalledTimes(1);
+    expect(renderedText(renderer.root)).toContain(queuedListing.title);
+    expect(findInput(renderer.root, "rejection-reason").props.value).toBe("需要更清晰的所有权证明");
+    await unmount(renderer);
+  });
+
+  it("routes a mutation 401 through authentication reset without presenting it as a failed decision", async () => {
+    vi.mocked(api.approveAdminListing).mockRejectedValue({ status: 401 });
+    const onAuthenticationError = vi.fn();
+    const onToast = vi.fn();
+    const renderer = await renderScreen({
+      onAuthenticationError,
+      onToast,
+      stepUpSession: {
+        accessToken: "enhanced-token",
+        reauthenticatedUntil: "2099-08-12T08:30:00.000Z"
+      }
+    });
+
+    await click(renderer.root, "通过");
+    await click(renderer.root, "确认通过");
+
+    expect(onAuthenticationError).toHaveBeenCalledWith({ status: 401 });
+    expect(onToast).not.toHaveBeenCalledWith("审核决定已成功，但刷新失败，请重试。");
+    await unmount(renderer);
+  });
+
+  it("attempts queue and catalog refreshes after a successful decision even when one refresh fails", async () => {
+    vi.mocked(api.getAdminListingReviewQueue)
+      .mockResolvedValueOnce([queuedListing])
+      .mockResolvedValueOnce([]);
+    const onCatalogChanged = vi.fn().mockRejectedValue(new Error("catalog unavailable"));
+    const onToast = vi.fn();
+    const renderer = await renderScreen({
+      onCatalogChanged,
+      onToast,
+      stepUpSession: {
+        accessToken: "enhanced-token",
+        reauthenticatedUntil: "2099-08-12T08:30:00.000Z"
+      }
+    });
+
+    await click(renderer.root, "通过");
+    await click(renderer.root, "确认通过");
+
+    expect(api.getAdminListingReviewQueue).toHaveBeenCalledTimes(2);
+    expect(onCatalogChanged).toHaveBeenCalledTimes(1);
+    expect(onToast).toHaveBeenCalledWith("审核决定已成功，但刷新失败，请重试。");
+    await unmount(renderer);
+  });
+
+  it("refreshes queue, catalog, and Trust metrics independently after a successful decision", async () => {
+    vi.mocked(api.getAdminListingReviewQueue)
+      .mockResolvedValueOnce([queuedListing])
+      .mockResolvedValueOnce([]);
+    const onCatalogChanged = vi.fn().mockRejectedValue(new Error("catalog unavailable"));
+    const onTrustMetricsChanged = vi.fn().mockResolvedValue(undefined);
+    const renderer = await renderScreen({
+      onCatalogChanged,
+      onTrustMetricsChanged,
+      stepUpSession: {
+        accessToken: "enhanced-token",
+        reauthenticatedUntil: "2099-08-12T08:30:00.000Z"
+      }
+    } as Partial<React.ComponentProps<typeof AdminTrustScreen>>);
+
+    await click(renderer.root, "通过");
+    await click(renderer.root, "确认通过");
+
+    expect(api.getAdminListingReviewQueue).toHaveBeenCalledTimes(2);
+    expect(onCatalogChanged).toHaveBeenCalledTimes(1);
+    expect(onTrustMetricsChanged).toHaveBeenCalledTimes(1);
+    await unmount(renderer);
+  });
 });
 
 async function renderScreen(
@@ -189,6 +283,7 @@ async function renderScreen(
         stepUpSession={null}
         onStepUpRequired={vi.fn()}
         onCatalogChanged={async () => undefined}
+        onTrustMetricsChanged={async () => undefined}
         onToast={vi.fn()}
         {...overrides}
       />
@@ -211,6 +306,7 @@ async function update(
         stepUpSession={null}
         onStepUpRequired={vi.fn()}
         onCatalogChanged={async () => undefined}
+        onTrustMetricsChanged={async () => undefined}
         onToast={vi.fn()}
         {...overrides}
       />

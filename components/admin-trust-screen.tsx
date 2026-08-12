@@ -33,6 +33,7 @@ export function AdminTrustScreen({
   stepUpSession,
   onStepUpRequired,
   onCatalogChanged,
+  onTrustMetricsChanged,
   onToast,
   onAuthenticationError,
   trustMetrics = []
@@ -42,6 +43,7 @@ export function AdminTrustScreen({
   stepUpSession: AdminStepUpSession | null;
   onStepUpRequired: () => void;
   onCatalogChanged: () => Promise<void>;
+  onTrustMetricsChanged: () => Promise<void>;
   onToast: (message: string) => void;
   onAuthenticationError?: (error: unknown) => void;
   trustMetrics?: ApiTrustQueue[];
@@ -61,15 +63,16 @@ export function AdminTrustScreen({
     try {
       const nextListings = await getAdminListingReviewQueue(token);
       setListings(nextListings);
-      return nextListings;
+      return { status: "success" as const, listings: nextListings };
     } catch (error) {
       const productError = toProductApiError(error);
       if (productError.status === 401 && onAuthenticationErrorRef.current) {
         onAuthenticationErrorRef.current(error);
+        return { status: "authentication-error" as const };
       } else {
         onToastRef.current(`审核队列加载失败：${productError.message}`);
+        return { status: "error" as const };
       }
-      return null;
     } finally {
       setLoading(false);
     }
@@ -116,9 +119,39 @@ export function AdminTrustScreen({
       setListings((current) => current.filter((listing) => listing.id !== pendingDecision.listingId));
       setPendingDecision(null);
       try {
-        const [refreshedQueue] = await Promise.all([loadQueue(), onCatalogChanged()]);
-        if (!refreshedQueue) throw new Error("Review queue refresh failed");
-        onToast(pendingDecision.kind === "approve" ? "房源已通过审核。" : "房源已拒绝并已通知发布者。");
+        const refreshes = await Promise.allSettled([
+          loadQueue(),
+          onCatalogChanged(),
+          onTrustMetricsChanged()
+        ]);
+        const queueRefresh = refreshes[0];
+        const authenticationFailed =
+          (queueRefresh.status === "fulfilled" &&
+            queueRefresh.value?.status === "authentication-error") ||
+          refreshes.some(
+            (refresh) =>
+              refresh.status === "rejected" &&
+              toProductApiError(refresh.reason).status === 401
+          );
+        if (authenticationFailed) {
+          const failedRefresh = refreshes.find(
+            (refresh) => refresh.status === "rejected"
+          );
+          if (failedRefresh?.status === "rejected") {
+            onAuthenticationErrorRef.current?.(failedRefresh.reason);
+          }
+          return;
+        }
+        const refreshFailed =
+          refreshes.some((refresh) => refresh.status === "rejected") ||
+          (queueRefresh.status === "fulfilled" && queueRefresh.value?.status !== "success");
+        onToast(
+          refreshFailed
+            ? "审核决定已成功，但刷新失败，请重试。"
+            : pendingDecision.kind === "approve"
+              ? "房源已通过审核。"
+              : "房源已拒绝并已通知发布者。"
+        );
       } catch {
         onToast("审核决定已成功，但刷新失败，请重试。");
       }
