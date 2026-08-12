@@ -13,6 +13,8 @@ export type RoommateConversationTarget = {
   peerProfileId?: string | null;
 };
 
+const ROOMMATE_MESSAGE_BODY_ERROR = "Message body must contain between 1 and 2,000 characters.";
+
 type OptimisticRoommateMessageInput = {
   conversationId: string;
   clientMessageId: string;
@@ -35,10 +37,23 @@ export function createOptimisticRoommateMessage(input: OptimisticRoommateMessage
     conversationId: input.conversationId,
     senderRole: "self",
     clientMessageId: input.clientMessageId,
-    body: input.body.trim(),
+    body: normalizeRoommateMessageBody(input.body),
     createdAt: input.createdAt,
     deliveryStatus: "sending"
   };
+}
+
+export function normalizeRoommateMessageBody(body: unknown): string {
+  if (typeof body !== "string") {
+    throw new Error(ROOMMATE_MESSAGE_BODY_ERROR);
+  }
+
+  const trimmedBody = body.trim();
+  if (trimmedBody.length < 1 || trimmedBody.length > 2_000) {
+    throw new Error(ROOMMATE_MESSAGE_BODY_ERROR);
+  }
+
+  return trimmedBody;
 }
 
 export function mergeRoommateMessages(

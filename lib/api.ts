@@ -1,5 +1,6 @@
 import { productErrorForStatus, toProductApiError } from "./product-errors";
 import { getBrowserDeviceId } from "./device-id";
+import { normalizeRoommateMessageBody } from "./roommate-conversations";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000/api/v1";
 
@@ -415,7 +416,7 @@ export function sendRoommateMessage(
 ) {
   return apiPost<ApiRoommateMessage>(
     `/roommate-conversations/${encodeURIComponent(conversationId)}/messages`,
-    input,
+    { ...input, body: normalizeRoommateMessageBody(input.body) },
     token
   );
 }

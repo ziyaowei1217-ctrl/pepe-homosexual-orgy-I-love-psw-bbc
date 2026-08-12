@@ -105,6 +105,41 @@ describe("roommate conversation API", () => {
       body: JSON.stringify({ lastReadMessageId: "message/1" })
     });
   });
+
+  it.each([
+    ["a one-character body", "a", "a"],
+    ["a 2,000-character body", "a".repeat(2_000), "a".repeat(2_000)],
+    ["a body with surrounding whitespace", "  hello  ", "hello"]
+  ])("trims %s before sending it", async (_description, body, expectedBody) => {
+    await sendRoommateMessage("token-a", conversation.id, {
+      clientMessageId: "7e4ac8e6-21dc-4e68-961b-42b4ca33dc8b",
+      body
+    });
+
+    expect(vi.mocked(fetch)).toHaveBeenCalledWith(
+      "http://localhost:4000/api/v1/roommate-conversations/conversation-a-b/messages",
+      expect.objectContaining({
+        body: JSON.stringify({
+          clientMessageId: "7e4ac8e6-21dc-4e68-961b-42b4ca33dc8b",
+          body: expectedBody
+        })
+      })
+    );
+  });
+
+  it.each([
+    ["an empty body", ""],
+    ["a whitespace-only body", "   "],
+    ["a body longer than 2,000 characters", "a".repeat(2_001)]
+  ])("rejects %s before making an HTTP request", (_description, body) => {
+    expect(() =>
+      sendRoommateMessage("token-a", conversation.id, {
+        clientMessageId: "7e4ac8e6-21dc-4e68-961b-42b4ca33dc8b",
+        body
+      })
+    ).toThrow("Message body must contain between 1 and 2,000 characters.");
+    expect(fetch).not.toHaveBeenCalled();
+  });
 });
 
 describe("roommate conversation state", () => {
@@ -125,6 +160,36 @@ describe("roommate conversation state", () => {
       createdAt: "2026-08-12T00:00:01.000Z",
       deliveryStatus: "sending"
     });
+  });
+
+  it.each([
+    ["a one-character body", "a", "a"],
+    ["a 2,000-character body", "a".repeat(2_000), "a".repeat(2_000)],
+    ["a body with surrounding whitespace", "  hello  ", "hello"]
+  ])("creates an optimistic message for %s", (_description, body, expectedBody) => {
+    expect(
+      createOptimisticRoommateMessage({
+        conversationId: conversation.id,
+        clientMessageId: "7e4ac8e6-21dc-4e68-961b-42b4ca33dc8b",
+        body,
+        createdAt: "2026-08-12T00:00:01.000Z"
+      }).body
+    ).toBe(expectedBody);
+  });
+
+  it.each([
+    ["an empty body", ""],
+    ["a whitespace-only body", "   "],
+    ["a body longer than 2,000 characters", "a".repeat(2_001)]
+  ])("rejects %s when creating an optimistic message", (_description, body) => {
+    expect(() =>
+      createOptimisticRoommateMessage({
+        conversationId: conversation.id,
+        clientMessageId: "7e4ac8e6-21dc-4e68-961b-42b4ca33dc8b",
+        body,
+        createdAt: "2026-08-12T00:00:01.000Z"
+      })
+    ).toThrow("Message body must contain between 1 and 2,000 characters.");
   });
 
   it("reconciles the HTTP acknowledgement with one optimistic bubble", () => {
