@@ -90,12 +90,27 @@ class MemoryStorage implements Storage {
 const localStorage = new MemoryStorage();
 const windowListeners = new Map<string, EventListener>();
 const documentListeners = new Map<string, EventListener>();
+const desktopMessageLayout = {
+  matches: false,
+  listeners: new Set<(event: MediaQueryListEvent) => void>()
+};
 
 Object.defineProperty(globalThis, "window", {
   configurable: true,
   value: {
     addEventListener: vi.fn((name: string, listener: EventListener) => windowListeners.set(name, listener)),
     localStorage,
+    matchMedia: vi.fn((media: string) => ({
+      matches: desktopMessageLayout.matches,
+      media,
+      onchange: null,
+      addEventListener: (_name: string, listener: (event: MediaQueryListEvent) => void) => {
+        desktopMessageLayout.listeners.add(listener);
+      },
+      removeEventListener: (_name: string, listener: (event: MediaQueryListEvent) => void) => {
+        desktopMessageLayout.listeners.delete(listener);
+      }
+    })),
     removeEventListener: vi.fn((name: string) => windowListeners.delete(name)),
     requestAnimationFrame: (callback: FrameRequestCallback) => {
       callback(0);
@@ -180,6 +195,9 @@ beforeEach(() => {
   localStorage.clear();
   windowListeners.clear();
   documentListeners.clear();
+  desktopMessageLayout.matches = false;
+  desktopMessageLayout.listeners.clear();
+  setDocumentVisibility("visible");
   navigationMock.pathname = "/messages";
   realtimeMock.create.mockReturnValue({
     connect: realtimeMock.connect,
@@ -257,6 +275,190 @@ describe("SubletApp roommate chat", () => {
     expect(vi.mocked(api.getRoommateMessages)).toHaveBeenCalledWith("stored-token", conversation.id);
     expect(realtimeMock.connect).toHaveBeenCalledOnce();
     await unmount(renderer);
+  });
+
+  it("does not mark an implicitly selected roommate read while narrow /messages shows contacts", async () => {
+    const renderer = await renderMessagesApp({
+      initialRoommateConversationId: null,
+      initialRoommateDmId: null
+    });
+
+    try {
+      expect(api.getRoommateMessages).toHaveBeenCalledWith("stored-token", conversation.id);
+      expect(api.markRoommateConversationRead).not.toHaveBeenCalled();
+
+      await clickInboxContact(renderer.root, conversation.peer.name ?? "Mia Chen");
+
+      expect(api.markRoommateConversationRead).toHaveBeenCalledOnce();
+      expect(api.markRoommateConversationRead).toHaveBeenCalledWith(
+        "stored-token",
+        conversation.id,
+        peerMessage.id
+      );
+    } finally {
+      await unmount(renderer);
+    }
+  });
+
+  it("lets only the latest overlapping conversation-summary request publish", async () => {
+    const baseConversation = readConversation();
+    const staleRefresh = deferred<ApiRoommateConversation[]>();
+    const newestRefresh = deferred<ApiRoommateConversation[]>();
+    const staleConversation = summaryWithMessage(baseConversation, {
+      id: "message-summary-stale",
+      body: "stale summary preview",
+      createdAt: "2026-08-12T00:00:02.000Z"
+    }, {
+      unreadCount: 7,
+      lastReadMessageId: "message-read-stale",
+      lastReadAt: "2026-08-12T00:00:02.000Z"
+    });
+    const newestConversation = summaryWithMessage(baseConversation, {
+      id: "message-summary-newest",
+      body: "newest summary preview",
+      createdAt: "2026-08-12T00:00:04.000Z"
+    }, {
+      unreadCount: 4,
+      lastReadMessageId: "message-read-newest",
+      lastReadAt: "2026-08-12T00:00:04.000Z"
+    });
+    vi.mocked(api.getRoommateConversations)
+      .mockResolvedValueOnce([baseConversation])
+      .mockReturnValueOnce(staleRefresh.promise)
+      .mockReturnValueOnce(newestRefresh.promise);
+    vi.mocked(api.getRoommateMessages).mockResolvedValue({ messages: [], nextCursor: null });
+    const renderer = await renderMessagesApp();
+
+    try {
+      emitRealtimeSummaryHint("roommate.conversation.updated");
+      emitRealtimeSummaryHint("roommate.unread.updated");
+      expect(api.getRoommateConversations).toHaveBeenCalledTimes(3);
+
+      await act(async () => {
+        newestRefresh.resolve([newestConversation]);
+        await flushMicrotasks();
+      });
+      expect(inboxContactText(renderer.root, "Mia Chen")).toContain("newest summary preview");
+
+      await act(async () => {
+        staleRefresh.resolve([staleConversation]);
+        await flushMicrotasks();
+      });
+
+      expect(inboxContactText(renderer.root, "Mia Chen")).toContain("newest summary preview");
+      expect(inboxContactText(renderer.root, "Mia Chen")).not.toContain("stale summary preview");
+    } finally {
+      await unmount(renderer);
+    }
+  });
+
+  it("does not let an older summary response erase a realtime preview or unread count", async () => {
+    setDocumentVisibility("hidden");
+    const baseConversation = readConversation();
+    const staleRefresh = deferred<ApiRoommateConversation[]>();
+    const realtimeMessage: ApiRoommateMessage = {
+      id: "message-realtime-summary",
+      conversationId: conversation.id,
+      senderRole: "peer",
+      clientMessageId: "e9a7bbb8-8919-4fe7-95b0-cd27bba1df31",
+      body: "realtime summary survives",
+      createdAt: "2026-08-12T00:00:05.000Z"
+    };
+    vi.mocked(api.getRoommateConversations)
+      .mockResolvedValueOnce([baseConversation])
+      .mockReturnValueOnce(staleRefresh.promise);
+    vi.mocked(api.getRoommateMessages).mockResolvedValue({ messages: [], nextCursor: null });
+    const renderer = await renderMessagesApp();
+
+    try {
+      emitRealtimeSummaryHint("roommate.conversation.updated");
+      emitRealtimeMessage(realtimeMessage);
+      expect(inboxContactText(renderer.root, "Mia Chen")).toContain(realtimeMessage.body);
+      expect(inboxContactUnread(renderer.root, "Mia Chen")).toEqual(["1"]);
+
+      await act(async () => {
+        staleRefresh.resolve([baseConversation]);
+        await flushMicrotasks();
+      });
+
+      expect(inboxContactText(renderer.root, "Mia Chen")).toContain(realtimeMessage.body);
+      expect(inboxContactUnread(renderer.root, "Mia Chen")).toEqual(["1"]);
+    } finally {
+      await unmount(renderer);
+      setDocumentVisibility("visible");
+    }
+  });
+
+  it("does not let an older summary response erase an optimistic send preview", async () => {
+    const baseConversation = readConversation();
+    const staleRefresh = deferred<ApiRoommateConversation[]>();
+    const sendRequest = deferred<ApiRoommateMessage>();
+    vi.mocked(api.getRoommateConversations)
+      .mockResolvedValueOnce([baseConversation])
+      .mockReturnValueOnce(staleRefresh.promise);
+    vi.mocked(api.getRoommateMessages).mockResolvedValue({ messages: [], nextCursor: null });
+    vi.mocked(api.sendRoommateMessage).mockReturnValue(sendRequest.promise);
+    const renderer = await renderMessagesApp();
+
+    try {
+      emitRealtimeSummaryHint("roommate.conversation.updated");
+      await changeTextarea(renderer.root, "optimistic summary survives");
+      await clickButton(renderer.root, "发送消息");
+      expect(inboxContactText(renderer.root, "Mia Chen")).toContain("optimistic summary survives");
+
+      await act(async () => {
+        staleRefresh.resolve([baseConversation]);
+        await flushMicrotasks();
+      });
+
+      expect(inboxContactText(renderer.root, "Mia Chen")).toContain("optimistic summary survives");
+
+      await act(async () => {
+        sendRequest.resolve({
+          id: "message-optimistic-ack",
+          conversationId: conversation.id,
+          senderRole: "self",
+          clientMessageId: "7e4ac8e6-21dc-4e68-961b-42b4ca33dc8b",
+          body: "optimistic summary survives",
+          createdAt: "2026-08-12T00:00:06.000Z"
+        });
+        await flushMicrotasks();
+      });
+    } finally {
+      await unmount(renderer);
+    }
+  });
+
+  it("does not let an older summary response restore unread after a confirmed read", async () => {
+    const staleRefresh = deferred<ApiRoommateConversation[]>();
+    const readRequest = deferred<ApiRoommateConversationReadState>();
+    vi.mocked(api.getRoommateConversations)
+      .mockResolvedValueOnce([conversation])
+      .mockReturnValueOnce(staleRefresh.promise);
+    vi.mocked(api.markRoommateConversationRead).mockReturnValue(readRequest.promise);
+    const renderer = await renderMessagesApp();
+
+    try {
+      expect(inboxContactUnread(renderer.root, "Mia Chen")).toEqual(["1"]);
+      emitRealtimeSummaryHint("roommate.conversation.updated");
+
+      await act(async () => {
+        readRequest.resolve(readState);
+        await flushMicrotasks();
+      });
+      expect(inboxContactUnread(renderer.root, "Mia Chen")).toEqual([]);
+      setDocumentVisibility("hidden");
+
+      await act(async () => {
+        staleRefresh.resolve([conversation]);
+        await flushMicrotasks();
+      });
+
+      expect(inboxContactUnread(renderer.root, "Mia Chen")).toEqual([]);
+    } finally {
+      await unmount(renderer);
+      setDocumentVisibility("visible");
+    }
   });
 
   it("ignores a stale overlapping newest-history response and preserves newer committed messages", async () => {
@@ -438,6 +640,39 @@ describe("SubletApp roommate chat", () => {
     );
     await unmount(renderer);
   });
+
+  it("retries one rejected visible read after backoff and stops after recovery", async () => {
+    vi.useFakeTimers();
+    vi.mocked(api.markRoommateConversationRead)
+      .mockRejectedValueOnce({ status: 503 })
+      .mockResolvedValueOnce(readState);
+    const renderer = await renderMessagesApp();
+
+    try {
+      expect(api.markRoommateConversationRead).toHaveBeenCalledOnce();
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(999);
+        await flushMicrotasks();
+      });
+      expect(api.markRoommateConversationRead).toHaveBeenCalledOnce();
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1);
+        await flushMicrotasks();
+      });
+      expect(api.markRoommateConversationRead).toHaveBeenCalledTimes(2);
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(10_000);
+        await flushMicrotasks();
+      });
+      expect(api.markRoommateConversationRead).toHaveBeenCalledTimes(2);
+    } finally {
+      await unmount(renderer);
+      vi.useRealTimers();
+    }
+  });
 });
 
 async function renderMessagesApp({
@@ -481,8 +716,88 @@ async function clickButton(root: ReactTestInstance, label: string) {
   });
 }
 
+async function clickInboxContact(root: ReactTestInstance, contactName: string) {
+  const button = findInboxContact(root, contactName);
+  await act(async () => {
+    button.props.onClick();
+    await flushMicrotasks();
+  });
+}
+
 function findButtons(root: ReactTestInstance, label: string) {
   return root.findAllByType("button").filter((candidate) => renderedText(candidate) === label);
+}
+
+function findInboxContact(root: ReactTestInstance, contactName: string) {
+  const contact = root.findAllByType("button").find(
+    (candidate) =>
+      String(candidate.props.className).includes("grid-cols-[52px_minmax(0,1fr)]") &&
+      renderedText(candidate).includes(contactName)
+  );
+  if (!contact) throw new Error(`Inbox contact "${contactName}" was not found`);
+  return contact;
+}
+
+function inboxContactText(root: ReactTestInstance, contactName: string) {
+  return renderedText(findInboxContact(root, contactName));
+}
+
+function inboxContactUnread(root: ReactTestInstance, contactName: string) {
+  return findInboxContact(root, contactName)
+    .findAll(
+      (candidate) =>
+        typeof candidate.props.className === "string" &&
+        candidate.props.className.includes("bg-[#006AFF]")
+    )
+    .map(renderedText);
+}
+
+function emitRealtimeSummaryHint(
+  name: "roommate.conversation.updated" | "roommate.unread.updated"
+) {
+  const realtimeOptions = realtimeMock.create.mock.calls[0]?.[0];
+  if (!realtimeOptions) throw new Error("Realtime client options were not captured");
+  act(() => {
+    realtimeOptions.onEvent({ name, payload: { conversationId: conversation.id } });
+  });
+}
+
+function emitRealtimeMessage(message: ApiRoommateMessage) {
+  const realtimeOptions = realtimeMock.create.mock.calls[0]?.[0];
+  if (!realtimeOptions) throw new Error("Realtime client options were not captured");
+  act(() => {
+    realtimeOptions.onEvent({
+      name: "roommate.message.created",
+      payload: { conversationId: message.conversationId, message }
+    });
+  });
+}
+
+function readConversation(): ApiRoommateConversation {
+  return {
+    ...conversation,
+    unreadCount: 0,
+    lastReadMessageId: peerMessage.id,
+    lastReadAt: peerMessage.createdAt
+  };
+}
+
+function summaryWithMessage(
+  base: ApiRoommateConversation,
+  messageOverrides: Partial<ApiRoommateMessage>,
+  conversationOverrides: Partial<ApiRoommateConversation> = {}
+): ApiRoommateConversation {
+  const message: ApiRoommateMessage = {
+    ...peerMessage,
+    ...messageOverrides
+  };
+  return {
+    ...base,
+    ...conversationOverrides,
+    latestMessage: message,
+    lastMessageAt: message.createdAt,
+    updatedAt: message.createdAt
+  };
 }
 
 function dispatchWindowEvent(name: string) {
@@ -490,6 +805,13 @@ function dispatchWindowEvent(name: string) {
   if (!listener) throw new Error(`Window listener "${name}" was not found`);
   act(() => {
     listener({ type: name } as Event);
+  });
+}
+
+function setDocumentVisibility(visibilityState: DocumentVisibilityState) {
+  Object.defineProperty(globalThis.document, "visibilityState", {
+    configurable: true,
+    value: visibilityState
   });
 }
 

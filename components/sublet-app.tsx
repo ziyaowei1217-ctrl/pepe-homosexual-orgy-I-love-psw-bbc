@@ -673,6 +673,9 @@ function formatApiMessageTime(value: string) {
   }).format(new Date(value));
 }
 
+const ROOMMATE_READ_RETRY_DELAY_MS = 1_000;
+const ROOMMATE_READ_MAX_AUTO_RETRIES = 1;
+
 export default function HomePage({
   initialSection,
   initialMessageListingId,
@@ -732,10 +735,16 @@ export default function HomePage({
   const [roommateHistoryLoading, setRoommateHistoryLoading] = useState<Set<string>>(new Set());
   const [roommateHistoryErrors, setRoommateHistoryErrors] = useState<Record<string, string>>({});
   const [pendingReadMessageIds, setPendingReadMessageIds] = useState<Record<string, string>>({});
+  const [desktopMessageLayout, setDesktopMessageLayout] = useState(false);
   const tokenRef = useRef<string | null>(null);
   const activeRoommateConversationIdRef = useRef<string | null>(initialRoommateConversationId ?? null);
   const appliedRoommateRouteRef = useRef<string | null>(null);
+  const roommateConversationRequestGenerationRef = useRef(0);
   const roommateHistoryRequestGenerationsRef = useRef<Record<string, number>>({});
+  const roommateReadRetryAttemptsRef = useRef<
+    Record<string, { messageId: string; attempts: number }>
+  >({});
+  const roommateReadRetryTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const [groupMembers, setGroupMembers] = useState<Roommate[]>([]);
   const [likedRoommateIds, setLikedRoommateIds] = useState<Set<string>>(new Set());
   const [likedMeRoommateIds, setLikedMeRoommateIds] = useState<Set<string>>(new Set());
@@ -780,6 +789,15 @@ export default function HomePage({
     const storedSession = readStoredAuthSession();
     if (storedSession) setToken(storedSession.accessToken);
     clearLegacyProductStorage(window.localStorage);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return;
+    const mediaQuery = window.matchMedia("(min-width: 1024px)");
+    const updateDesktopMessageLayout = () => setDesktopMessageLayout(mediaQuery.matches);
+    updateDesktopMessageLayout();
+    mediaQuery.addEventListener("change", updateDesktopMessageLayout);
+    return () => mediaQuery.removeEventListener("change", updateDesktopMessageLayout);
   }, []);
 
   useEffect(() => {
@@ -972,16 +990,44 @@ export default function HomePage({
     return productError.message;
   }, []);
 
+  const applyRoommateConversationMutation = useCallback(
+    (update: (current: ApiRoommateConversation[]) => ApiRoommateConversation[]) => {
+      roommateConversationRequestGenerationRef.current += 1;
+      setRoommateConversations((current) => update(current));
+    },
+    []
+  );
+
+  const clearRoommateReadRetry = useCallback((conversationId: string) => {
+    const timer = roommateReadRetryTimersRef.current[conversationId];
+    if (timer !== undefined) clearTimeout(timer);
+    delete roommateReadRetryTimersRef.current[conversationId];
+    delete roommateReadRetryAttemptsRef.current[conversationId];
+  }, []);
+
+  const clearAllRoommateReadRetries = useCallback(() => {
+    for (const timer of Object.values(roommateReadRetryTimersRef.current)) {
+      clearTimeout(timer);
+    }
+    roommateReadRetryTimersRef.current = {};
+    roommateReadRetryAttemptsRef.current = {};
+  }, []);
+
   const refreshRoommateConversations = useCallback(
     async (currentToken: string) => {
+      const requestGeneration = roommateConversationRequestGenerationRef.current + 1;
+      roommateConversationRequestGenerationRef.current = requestGeneration;
+      const requestIsCurrent = () =>
+        tokenRef.current === currentToken &&
+        roommateConversationRequestGenerationRef.current === requestGeneration;
       try {
         const nextConversations = await getRoommateConversations(currentToken);
-        if (tokenRef.current !== currentToken) return null;
+        if (!requestIsCurrent()) return null;
         setRoommateConversations(nextConversations);
         setRoommateConversationsLoaded(true);
         return nextConversations;
       } catch (error) {
-        if (tokenRef.current === currentToken) {
+        if (requestIsCurrent()) {
           handleRoommateApiError(error, "室友消息加载失败：");
         }
         return null;
@@ -1049,6 +1095,7 @@ export default function HomePage({
     setRoommateHistoryLoading(new Set());
     setRoommateHistoryErrors({});
     setPendingReadMessageIds({});
+    clearAllRoommateReadRetries();
     appliedRoommateRouteRef.current = null;
     if (!token) {
       setActiveRoommateConversationId(null);
@@ -1056,7 +1103,12 @@ export default function HomePage({
     }
     setActiveRoommateConversationId(initialRoommateConversationId ?? null);
     void refreshRoommateConversations(token);
-  }, [initialRoommateConversationId, refreshRoommateConversations, token]);
+  }, [
+    clearAllRoommateReadRetries,
+    initialRoommateConversationId,
+    refreshRoommateConversations,
+    token
+  ]);
 
   useEffect(() => {
     if (!initialRoommateRouteKey || !roommateConversationsLoaded) return;
@@ -1296,6 +1348,8 @@ export default function HomePage({
       : null;
   const routeInboxTarget = requestedInboxTarget;
   const narrowMessagePane = getNarrowMessagePane(routeInboxTarget);
+  const roommateConversationPaneVisible =
+    narrowMessagePane === "conversation" || desktopMessageLayout;
   const requestedInboxKey = routeInboxTarget ? getInboxContactKey(routeInboxTarget) : null;
   const requestedInboxContact = requestedInboxTarget
     ? inboxContacts.find(
@@ -1364,6 +1418,7 @@ export default function HomePage({
     if (!token) return;
     const currentToken = token;
     const synchronize = () => {
+      clearAllRoommateReadRetries();
       setPendingReadMessageIds({});
       void refreshRoommateConversations(currentToken);
       const selectedConversationId = activeRoommateConversationIdRef.current;
@@ -1383,13 +1438,16 @@ export default function HomePage({
               [event.payload.message]
             )
           }));
-          setRoommateConversations((current) =>
+          applyRoommateConversationMutation((current) =>
             mergeRoommateMessageIntoConversations(current, event.payload.message)
           );
           return;
         }
         if (event.name === "roommate.message.read") {
-          setRoommateConversations((current) => applyRoommateReadState(current, event.payload));
+          clearRoommateReadRetry(event.payload.conversationId);
+          applyRoommateConversationMutation((current) =>
+            applyRoommateReadState(current, event.payload)
+          );
           setPendingReadMessageIds((current) => {
             if (!(event.payload.conversationId in current)) return current;
             const next = { ...current };
@@ -1427,7 +1485,14 @@ export default function HomePage({
       }
       client.disconnect();
     };
-  }, [refreshRoommateConversations, refreshRoommateHistory, token]);
+  }, [
+    applyRoommateConversationMutation,
+    clearAllRoommateReadRetries,
+    clearRoommateReadRetry,
+    refreshRoommateConversations,
+    refreshRoommateHistory,
+    token
+  ]);
 
   useEffect(() => {
     if (!token || !activeRoommateConversation) return;
@@ -1440,6 +1505,7 @@ export default function HomePage({
       !shouldReportRoommateRead({
         activeConversationId: activeRoommateConversationIdRef.current,
         conversationId,
+        conversationPaneVisible: roommateConversationPaneVisible,
         documentVisible:
           typeof document === "undefined" || document.visibilityState === "visible",
         lastPeerMessageId,
@@ -1455,7 +1521,8 @@ export default function HomePage({
     void markRoommateConversationRead(token, conversationId, lastPeerMessageId)
       .then((state) => {
         if (tokenRef.current !== token) return;
-        setRoommateConversations((current) => applyRoommateReadState(current, state));
+        clearRoommateReadRetry(conversationId);
+        applyRoommateConversationMutation((current) => applyRoommateReadState(current, state));
         setPendingReadMessageIds((current) => {
           if (current[conversationId] !== lastPeerMessageId) return current;
           const next = { ...current };
@@ -1464,13 +1531,38 @@ export default function HomePage({
         });
       })
       .catch((error) => {
-        if (tokenRef.current === token) handleRoommateApiError(error);
+        if (tokenRef.current !== token) return;
+        handleRoommateApiError(error);
+        const currentRetry = roommateReadRetryAttemptsRef.current[conversationId];
+        const retryAttempts =
+          currentRetry?.messageId === lastPeerMessageId ? currentRetry.attempts : 0;
+        if (retryAttempts >= ROOMMATE_READ_MAX_AUTO_RETRIES) return;
+
+        roommateReadRetryAttemptsRef.current[conversationId] = {
+          messageId: lastPeerMessageId,
+          attempts: retryAttempts + 1
+        };
+        const existingTimer = roommateReadRetryTimersRef.current[conversationId];
+        if (existingTimer !== undefined) clearTimeout(existingTimer);
+        roommateReadRetryTimersRef.current[conversationId] = setTimeout(() => {
+          delete roommateReadRetryTimersRef.current[conversationId];
+          if (tokenRef.current !== token) return;
+          setPendingReadMessageIds((current) => {
+            if (current[conversationId] !== lastPeerMessageId) return current;
+            const next = { ...current };
+            delete next[conversationId];
+            return next;
+          });
+        }, ROOMMATE_READ_RETRY_DELAY_MS);
       });
   }, [
     activeRoommateConversation,
     activeRoommateMessages,
+    applyRoommateConversationMutation,
+    clearRoommateReadRetry,
     handleRoommateApiError,
     pendingReadMessageIds,
+    roommateConversationPaneVisible,
     token
   ]);
 
@@ -1536,7 +1628,7 @@ export default function HomePage({
       ...current,
       [conversation.id]: mergeRoommateMessages(current[conversation.id] ?? [], [optimistic])
     }));
-    setRoommateConversations((current) =>
+    applyRoommateConversationMutation((current) =>
       mergeRoommateMessageIntoConversations(current, optimistic)
     );
     void commitRoommateMessage(conversation.id, optimistic.clientMessageId, optimistic.body);
@@ -1569,7 +1661,7 @@ export default function HomePage({
         ...current,
         [conversationId]: reconcileRoommateMessage(current[conversationId] ?? [], committed)
       }));
-      setRoommateConversations((current) =>
+      applyRoommateConversationMutation((current) =>
         mergeRoommateMessageIntoConversations(current, committed)
       );
     } catch (error) {

@@ -25,6 +25,7 @@ type OptimisticRoommateMessageInput = {
 type ReadGateInput = {
   activeConversationId: string | null;
   conversationId: string;
+  conversationPaneVisible: boolean;
   documentVisible: boolean;
   lastPeerMessageId: string | null;
   lastReadMessageId: string | null;
@@ -105,6 +106,20 @@ export function mergeRoommateMessageIntoConversations(
       if (conversation.id !== message.conversationId) return conversation;
 
       const latest = conversation.latestMessage;
+      const sameClientAcknowledgement = Boolean(
+        latest &&
+          latest.senderRole === "self" &&
+          message.senderRole === "self" &&
+          latest.clientMessageId === message.clientMessageId &&
+          !message.id.startsWith("optimistic:")
+      );
+      if (sameClientAcknowledgement) {
+        return {
+          ...conversation,
+          latestMessage: message,
+          lastMessageAt: message.createdAt
+        };
+      }
       if (latest && compareMessages(latest, message) > 0) return conversation;
 
       const duplicate = latest ? messagesMatch(latest, message) : false;
@@ -180,7 +195,8 @@ export function resolveRoommateConversationTarget(
 
 export function shouldReportRoommateRead(input: ReadGateInput) {
   return Boolean(
-    input.documentVisible &&
+    input.conversationPaneVisible &&
+      input.documentVisible &&
       input.activeConversationId === input.conversationId &&
       input.lastPeerMessageId &&
       input.lastPeerMessageId !== input.lastReadMessageId &&

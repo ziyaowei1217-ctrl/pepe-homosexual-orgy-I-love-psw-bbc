@@ -274,6 +274,82 @@ describe("roommate conversation state", () => {
     });
   });
 
+  it("uses a same-client-id server acknowledgement as summary authority despite client clock skew", () => {
+    const optimistic = createOptimisticRoommateMessage({
+      conversationId: conversation.id,
+      clientMessageId: "7e4ac8e6-21dc-4e68-961b-42b4ca33dc8b",
+      body: "optimistic preview",
+      createdAt: "2099-08-12T00:00:01.000Z"
+    });
+    const otherConversation: ApiRoommateConversation = {
+      ...conversation,
+      id: "conversation-c-d",
+      matchId: "match-c-d",
+      latestMessage: null,
+      lastMessageAt: "2026-08-12T00:00:03.000Z",
+      updatedAt: "2026-08-12T00:00:03.000Z"
+    };
+    const withOptimistic = mergeRoommateMessageIntoConversations(
+      [conversation, otherConversation],
+      optimistic
+    );
+    const acknowledgement = serverMessage({
+      id: "message-ack",
+      senderRole: "self",
+      clientMessageId: optimistic.clientMessageId,
+      body: "server-normalized preview",
+      createdAt: "2026-08-12T00:00:02.000Z"
+    });
+
+    const reconciled = mergeRoommateMessageIntoConversations(withOptimistic, acknowledgement);
+    const acknowledgedConversation = reconciled.find((item) => item.id === conversation.id);
+
+    expect(acknowledgedConversation).toMatchObject({
+      latestMessage: acknowledgement,
+      lastMessageAt: acknowledgement.createdAt,
+      unreadCount: 0
+    });
+    expect(reconciled.map((item) => item.id)).toEqual([otherConversation.id, conversation.id]);
+  });
+
+  it("lets a peer message advance unread after a clock-skewed self acknowledgement", () => {
+    const optimistic = createOptimisticRoommateMessage({
+      conversationId: conversation.id,
+      clientMessageId: "7e4ac8e6-21dc-4e68-961b-42b4ca33dc8b",
+      body: "optimistic preview",
+      createdAt: "2099-08-12T00:00:01.000Z"
+    });
+    const acknowledgement = serverMessage({
+      id: "message-ack",
+      senderRole: "self",
+      clientMessageId: optimistic.clientMessageId,
+      body: "server acknowledgement",
+      createdAt: "2026-08-12T00:00:02.000Z"
+    });
+    const nextPeerMessage = serverMessage({
+      id: "message-peer-after-ack",
+      clientMessageId: "b4e9f77b-5fe9-4c88-a782-9864c4d35468",
+      body: "peer message after acknowledgement",
+      createdAt: "2026-08-12T00:00:03.000Z"
+    });
+
+    const withOptimistic = mergeRoommateMessageIntoConversations([conversation], optimistic);
+    const withAcknowledgement = mergeRoommateMessageIntoConversations(
+      withOptimistic,
+      acknowledgement
+    );
+    const withPeerMessage = mergeRoommateMessageIntoConversations(
+      withAcknowledgement,
+      nextPeerMessage
+    );
+
+    expect(withPeerMessage[0]).toMatchObject({
+      latestMessage: nextPeerMessage,
+      lastMessageAt: nextPeerMessage.createdAt,
+      unreadCount: 1
+    });
+  });
+
   it("applies confirmed read state monotonically and clears self unread", () => {
     const withUnread = { ...conversation, unreadCount: 3 };
     const advanced = applyRoommateReadState([withUnread], {
@@ -318,6 +394,7 @@ describe("roommate conversation state", () => {
         shouldReportRoommateRead({
           activeConversationId,
           conversationId,
+          conversationPaneVisible: true,
           documentVisible,
           lastPeerMessageId,
           lastReadMessageId,
