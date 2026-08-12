@@ -1,0 +1,247 @@
+import {
+  act,
+  create,
+  type ReactTestInstance,
+  type ReactTestRenderer
+} from "react-test-renderer";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import * as api from "../lib/api";
+import { AdminStepUpPanel } from "../components/admin-step-up-panel";
+import { getActiveAdminStepUpToken } from "../lib/admin-step-up";
+
+vi.mock("../lib/api", async () => {
+  const actual = await vi.importActual<typeof import("../lib/api")>("../lib/api");
+  return {
+    ...actual,
+    requestAdminStepUpCode: vi.fn(),
+    verifyAdminStepUpCode: vi.fn()
+  };
+});
+
+(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean })
+  .IS_REACT_ACT_ENVIRONMENT = true;
+
+describe("administrator step-up", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-12T08:00:00.000Z"));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("returns an enhanced token only before its server expiry", () => {
+    const session = {
+      accessToken: "enhanced",
+      reauthenticatedUntil: "2026-08-12T08:30:00.000Z"
+    };
+
+    expect(
+      getActiveAdminStepUpToken(
+        session,
+        Date.parse("2026-08-12T08:00:00.000Z")
+      )
+    ).toBe("enhanced");
+    expect(
+      getActiveAdminStepUpToken(
+        session,
+        Date.parse("2026-08-12T08:30:00.000Z")
+      )
+    ).toBeNull();
+  });
+
+  it("fails closed when a session lacks a usable token or expiry", () => {
+    const now = Date.parse("2026-08-12T08:00:00.000Z");
+
+    expect(getActiveAdminStepUpToken(null, now)).toBeNull();
+    expect(
+      getActiveAdminStepUpToken(
+        {
+          accessToken: "",
+          reauthenticatedUntil: "2026-08-12T08:30:00.000Z"
+        },
+        now
+      )
+    ).toBeNull();
+    expect(
+      getActiveAdminStepUpToken(
+        {
+          accessToken: "enhanced",
+          reauthenticatedUntil: "not-an-expiry"
+        },
+        now
+      )
+    ).toBeNull();
+  });
+
+  it("hands a verified memory-only enhanced session to the administrator workspace", async () => {
+    vi.mocked(api.requestAdminStepUpCode).mockResolvedValue({
+      email: "admin@example.com",
+      expiresAt: "2026-08-12T08:10:00.000Z",
+      devCode: "246810"
+    });
+    vi.mocked(api.verifyAdminStepUpCode).mockResolvedValue({
+      accessToken: "enhanced-token",
+      reauthenticatedUntil: "2026-08-12T08:30:00.000Z"
+    });
+    const onVerified = vi.fn();
+    const renderer = await renderPanel(onVerified);
+
+    await act(async () => {
+      findButton(renderer.root, "发送管理员验证码").props.onClick();
+      await flushMicrotasks();
+    });
+
+    expect(findInput(renderer.root, "admin-step-up-code").props.value).toBe(
+      "246810"
+    );
+
+    await act(async () => {
+      await renderer.root.findByType("form").props.onSubmit({
+        preventDefault: vi.fn()
+      });
+    });
+
+    expect(api.verifyAdminStepUpCode).toHaveBeenCalledWith(
+      "ordinary-token",
+      "246810"
+    );
+    expect(onVerified).toHaveBeenCalledWith({
+      accessToken: "enhanced-token",
+      reauthenticatedUntil: "2026-08-12T08:30:00.000Z"
+    });
+    await unmount(renderer);
+  });
+
+  it("does not verify a development code when the response expiry is malformed", async () => {
+    vi.mocked(api.requestAdminStepUpCode).mockResolvedValue({
+      email: "admin@example.com",
+      expiresAt: "not-an-expiry",
+      devCode: "246810"
+    });
+    const renderer = await renderPanel(vi.fn());
+
+    await act(async () => {
+      findButton(renderer.root, "发送管理员验证码").props.onClick();
+      await flushMicrotasks();
+    });
+
+    await act(async () => {
+      await renderer.root.findByType("form").props.onSubmit({
+        preventDefault: vi.fn()
+      });
+    });
+
+    expect(api.verifyAdminStepUpCode).not.toHaveBeenCalled();
+    expect(findAlert(renderer.root).children.join("")).toBe("验证码已过期，请重新发送。");
+    await unmount(renderer);
+  });
+
+  it("keeps the request prompt and maps a request failure to a product error", async () => {
+    vi.mocked(api.requestAdminStepUpCode).mockRejectedValue(
+      new TypeError("Failed to fetch")
+    );
+    const renderer = await renderPanel(vi.fn());
+
+    await act(async () => {
+      findButton(renderer.root, "发送管理员验证码").props.onClick();
+      await flushMicrotasks();
+    });
+
+    expect(findButton(renderer.root, "发送管理员验证码")).toBeDefined();
+    expect(findAlert(renderer.root).children.join("")).toBe(
+      "网络连接失败，请检查网络后重试。"
+    );
+    await unmount(renderer);
+  });
+
+  it("keeps the verification prompt and maps a verification failure to a product error", async () => {
+    vi.mocked(api.requestAdminStepUpCode).mockResolvedValue({
+      email: "admin@example.com",
+      expiresAt: "2026-08-12T08:10:00.000Z",
+      devCode: "246810"
+    });
+    vi.mocked(api.verifyAdminStepUpCode).mockRejectedValue({ status: 403 });
+    const renderer = await renderPanel(vi.fn());
+
+    await act(async () => {
+      findButton(renderer.root, "发送管理员验证码").props.onClick();
+      await flushMicrotasks();
+    });
+    await act(async () => {
+      await renderer.root.findByType("form").props.onSubmit({
+        preventDefault: vi.fn()
+      });
+    });
+
+    expect(findButton(renderer.root, "完成管理员验证")).toBeDefined();
+    expect(findAlert(renderer.root).children.join("")).toBe(
+      "你没有权限执行此操作。"
+    );
+    await unmount(renderer);
+  });
+});
+
+async function renderPanel(onVerified: ReturnType<typeof vi.fn>) {
+  let renderer: ReactTestRenderer | undefined;
+  await act(async () => {
+    renderer = create(
+      <AdminStepUpPanel
+        open
+        sessionToken="ordinary-token"
+        email="admin@example.com"
+        onVerified={onVerified}
+        onCancel={vi.fn()}
+      />
+    );
+  });
+  if (!renderer) throw new Error("Expected renderer");
+  return renderer;
+}
+
+function findButton(root: ReactTestInstance, label: string) {
+  const matches = root.findAll(
+    (node) =>
+      node.type === "button" &&
+      node.children.filter((child) => typeof child === "string").join("") ===
+        label
+  );
+  if (matches.length !== 1) {
+    throw new Error(`Expected one button labelled ${label}, found ${matches.length}`);
+  }
+  return matches[0];
+}
+
+function findInput(root: ReactTestInstance, name: string) {
+  const matches = root.findAll(
+    (node) => node.type === "input" && node.props.name === name
+  );
+  if (matches.length !== 1) {
+    throw new Error(`Expected one input named ${name}, found ${matches.length}`);
+  }
+  return matches[0];
+}
+
+function findAlert(root: ReactTestInstance) {
+  const matches = root.findAll(
+    (node) => node.type === "p" && node.props.role === "alert"
+  );
+  if (matches.length !== 1) {
+    throw new Error(`Expected one alert, found ${matches.length}`);
+  }
+  return matches[0];
+}
+
+async function flushMicrotasks() {
+  await Promise.resolve();
+  await Promise.resolve();
+}
+
+async function unmount(renderer: ReactTestRenderer) {
+  await act(async () => {
+    renderer.unmount();
+  });
+}

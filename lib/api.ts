@@ -192,6 +192,11 @@ export type EmailCodeResponse = {
   devCode?: string;
 };
 
+export type AdminStepUpResponse = {
+  accessToken: string;
+  reauthenticatedUntil: string;
+};
+
 export type VerifyEmailResponse = {
   accessToken: string;
   user: SessionUser;
@@ -375,6 +380,18 @@ export function verifyEmailCode(email: string, code: string) {
   return apiPost<VerifyEmailResponse>("/auth/verify-email", { email, code });
 }
 
+export function requestAdminStepUpCode(token: string) {
+  return apiPost<EmailCodeResponse>("/auth/admin-step-up/email-code", {}, token);
+}
+
+export function verifyAdminStepUpCode(token: string, code: string) {
+  return apiPost<AdminStepUpResponse>(
+    "/auth/admin-step-up/verify",
+    { code },
+    token
+  );
+}
+
 export function getSessionUser(token: string) {
   return apiGet<SessionUser>("/auth/me", token);
 }
@@ -451,12 +468,23 @@ async function apiRequest<T>(path: string, init: RequestInit, token?: string): P
   }
 
   if (!response.ok) {
-    throw productErrorForStatus(response.status);
+    throw productErrorForStatus(response.status, await readSafeErrorCode(response));
   }
 
   try {
     return (await response.json()) as T;
   } catch {
     throw productErrorForStatus(502);
+  }
+}
+
+async function readSafeErrorCode(response: Response) {
+  try {
+    const payload = (await response.json()) as { code?: unknown };
+    return typeof payload.code === "string" && /^[A-Z0-9_]{1,64}$/.test(payload.code)
+      ? payload.code
+      : undefined;
+  } catch {
+    return undefined;
   }
 }

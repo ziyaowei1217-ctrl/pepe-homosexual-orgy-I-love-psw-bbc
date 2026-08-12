@@ -1,8 +1,17 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { ProductApiError, toProductApiError } from "../lib/product-errors";
+import { apiPost } from "../lib/api";
+import {
+  ProductApiError,
+  productErrorForStatus,
+  toProductApiError
+} from "../lib/product-errors";
 
 describe("product API errors", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   it("maps browser network failures to a retryable Chinese message", () => {
     const error = toProductApiError(new TypeError("Failed to fetch"));
 
@@ -25,5 +34,41 @@ describe("product API errors", () => {
 
     expect(error).toMatchObject({ status, category, message, retryable });
     expect(error.message).not.toContain("internal stack");
+  });
+
+  it("retains a parsed administrator reauthentication code without exposing the raw response body", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            code: "ADMIN_REAUTH_REQUIRED",
+            message: "raw server detail"
+          }),
+          { status: 403, headers: { "Content-Type": "application/json" } }
+        )
+      )
+    );
+
+    const error = await apiPost("/administrator-write", {}).catch(
+      (requestError) => requestError
+    );
+
+    expect(error).toMatchObject({
+      category: "permission",
+      code: "ADMIN_REAUTH_REQUIRED",
+      message: "需要再次验证管理员邮箱。",
+      retryable: false,
+      status: 403
+    });
+    expect(JSON.stringify(error)).not.toContain("raw server detail");
+  });
+
+  it("does not retain an unsafe backend error code", () => {
+    const rawCode = "raw server detail <script>";
+    const error = productErrorForStatus(403, rawCode);
+
+    expect(error.code).toBeUndefined();
+    expect(JSON.stringify(error)).not.toContain(rawCode);
   });
 });
