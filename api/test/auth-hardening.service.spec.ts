@@ -73,10 +73,9 @@ describe("AuthService production email issuance", () => {
 
     const accepted = await service.requestEmailCode("student@example.com");
 
-    expect(accepted).toMatchObject({
+    expect(accepted).toEqual({
       email: "student@example.com",
-      expiresAt: expect.any(Date),
-      devCode: expect.stringMatching(/^\d{6}$/)
+      expiresAt: expect.any(Date)
     });
     expect(previous.consumedAt).toBeNull();
     expect(prisma.state.codes[1]).toMatchObject({
@@ -100,10 +99,9 @@ describe("AuthService production email issuance", () => {
 
     const accepted = await service.requestEmailCode("student@example.com");
 
-    expect(accepted).toMatchObject({
+    expect(accepted).toEqual({
       email: "student@example.com",
-      expiresAt: expect.any(Date),
-      devCode: expect.stringMatching(/^\d{6}$/)
+      expiresAt: expect.any(Date)
     });
     expect(sender.sent).toHaveLength(2);
     expect(prisma.state.finalizationAttempts).toBe(3);
@@ -165,12 +163,11 @@ describe("AuthService production email issuance", () => {
     const invited = await service.requestEmailCode("invited@example.com");
     const existing = await service.requestEmailCode("member@example.com");
 
-    expect(Object.keys(uninvited).sort()).toEqual(Object.keys(invited).sort());
-    expect(uninvited).toMatchObject({
+    expect(uninvited).toEqual({
       email: "stranger@example.com",
-      expiresAt: expect.any(Date),
-      devCode: expect.stringMatching(/^\d{6}$/)
+      expiresAt: expect.any(Date)
     });
+    expect(invited.devCode).toMatch(/^\d{6}$/);
     expect(sender.sent.map((delivery) => delivery.email)).toEqual(["invited@example.com", "member@example.com"]);
     expect(prisma.state.codes.map((record) => record.email)).toEqual(["invited@example.com", "member@example.com"]);
     expect(existing.devCode).toMatch(/^\d{6}$/);
@@ -185,8 +182,14 @@ describe("AuthService production email issuance", () => {
     const invitedCooldown = await service.requestEmailCode("invited@example.com");
     const uninvited = await service.requestEmailCode("stranger@example.com");
 
-    expect(Object.keys(invitedCooldown).sort()).toEqual(Object.keys(uninvited).sort());
-    expect(invitedCooldown).toMatchObject({ expiresAt: expect.any(Date), devCode: expect.stringMatching(/^\d{6}$/) });
+    expect(invitedCooldown).toEqual({
+      email: "invited@example.com",
+      expiresAt: expect.any(Date)
+    });
+    expect(uninvited).toEqual({
+      email: "stranger@example.com",
+      expiresAt: expect.any(Date)
+    });
     expect(sender.sent).toHaveLength(1);
   });
 

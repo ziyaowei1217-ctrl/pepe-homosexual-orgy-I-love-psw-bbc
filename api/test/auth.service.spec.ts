@@ -331,9 +331,9 @@ describe("AuthService", () => {
 
     await service.requestEmailCode("student@northeastern.edu");
 
-    await expect(service.requestEmailCode("student@northeastern.edu")).resolves.toMatchObject({
+    await expect(service.requestEmailCode("student@northeastern.edu")).resolves.toEqual({
       email: "student@northeastern.edu",
-      devCode: expect.stringMatching(/^\d{6}$/)
+      expiresAt: expect.any(Date)
     });
     expect(sender.sentCodes).toHaveLength(1);
   });
@@ -388,9 +388,9 @@ describe("AuthService", () => {
       code: request.devCode
     });
 
-    await expect(service.requestEmailCode("student@northeastern.edu")).resolves.toMatchObject({
+    await expect(service.requestEmailCode("student@northeastern.edu")).resolves.toEqual({
       email: "student@northeastern.edu",
-      devCode: expect.stringMatching(/^\d{6}$/)
+      expiresAt: expect.any(Date)
     });
     expect(sender.sentCodes).toHaveLength(1);
   });

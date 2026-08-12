@@ -45,7 +45,7 @@ type PendingCode = {
   code: string;
 };
 
-type AcceptedWithoutDelivery = Omit<PendingCode, "id" | "createdAt"> & { id: null };
+type AcceptedWithoutDelivery = Pick<PendingCode, "email" | "expiresAt"> & { id: null };
 
 @Injectable()
 export class AuthService {
@@ -143,8 +143,7 @@ export class AuthService {
         return {
           id: null,
           email,
-          expiresAt: acceptedExpiresAt,
-          code: generateEmailCode()
+          expiresAt: acceptedExpiresAt
         } satisfies AcceptedWithoutDelivery;
       }
 
@@ -176,9 +175,9 @@ export class AuthService {
     });
 
     if (!pending) {
-      return this.acceptAfterBudget(startedAt, email, acceptedExpiresAt, generateEmailCode());
+      return this.acceptAfterBudget(startedAt, email, acceptedExpiresAt);
     }
-    if (pending.id === null) return this.acceptAfterBudget(startedAt, email, pending.expiresAt, pending.code);
+    if (pending.id === null) return this.acceptAfterBudget(startedAt, email, pending.expiresAt);
 
     let providerMessageId: string | undefined;
     try {
@@ -196,12 +195,17 @@ export class AuthService {
         })
         .catch(() => undefined);
       this.logger.warn("Verification email delivery failed", { verificationCodeId: pending.id });
-      return this.acceptAfterBudget(startedAt, email, pending.expiresAt, pending.code);
+      return this.acceptAfterBudget(startedAt, email, pending.expiresAt);
     }
 
-    await this.finalizeSuccessfulDelivery(pending, input.purpose, providerMessageId);
+    const codeIsUsable = await this.finalizeSuccessfulDelivery(pending, input.purpose, providerMessageId);
 
-    return this.acceptAfterBudget(startedAt, email, pending.expiresAt, pending.code);
+    return this.acceptAfterBudget(
+      startedAt,
+      email,
+      pending.expiresAt,
+      codeIsUsable ? pending.code : undefined
+    );
   }
 
   consumeLoginCodesForInviteRevocation(
@@ -280,13 +284,13 @@ export class AuthService {
     };
   }
 
-  private acceptedResponse(email: string, expiresAt: Date, code: string) {
+  private acceptedResponse(email: string, expiresAt: Date, code?: string) {
     const response: { email: string; expiresAt: Date; devCode?: string } = { email, expiresAt };
-    if (this.nodeEnv !== "production") response.devCode = code;
+    if (this.nodeEnv !== "production" && code) response.devCode = code;
     return response;
   }
 
-  private async acceptAfterBudget(startedAt: number, email: string, expiresAt: Date, code: string) {
+  private async acceptAfterBudget(startedAt: number, email: string, expiresAt: Date, code?: string) {
     const jitter = Math.floor(this.random() * (this.responseJitterMs + 1));
     const remainingMs = this.responseMinimumMs + jitter - (this.now() - startedAt);
     if (remainingMs > 0) await this.delay(remainingMs);
@@ -300,7 +304,7 @@ export class AuthService {
   ) {
     for (let attempt = 0; attempt < 2; attempt += 1) {
       try {
-        await this.withSerializedEmail(pending.email, async (transaction) => {
+        return await this.withSerializedEmail(pending.email, async (transaction) => {
           const sentAt = new Date();
           const newerSentCode = await transaction.verificationCode.findFirst({
             where: {
@@ -320,7 +324,7 @@ export class AuthService {
               ...(newerSentCode ? { consumedAt: sentAt } : {})
             }
           });
-          if (newerSentCode) return;
+          if (newerSentCode) return false;
           await transaction.verificationCode.updateMany({
             where: {
               email: pending.email,
@@ -332,8 +336,8 @@ export class AuthService {
             },
             data: { consumedAt: sentAt }
           });
+          return true;
         });
-        return;
       } catch {
         if (attempt === 1) {
           this.logger.warn("Verification email finalization failed", {
@@ -342,6 +346,7 @@ export class AuthService {
         }
       }
     }
+    return false;
   }
 
   private async verifyCode<T>(input: {
