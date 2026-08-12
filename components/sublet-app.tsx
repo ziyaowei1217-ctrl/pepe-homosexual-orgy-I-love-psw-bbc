@@ -43,6 +43,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { createPortal } from "react-dom";
 
 import { AuthFlowPanel } from "@/components/auth-flow-panel";
+import { AdminRoommatesScreen } from "@/components/admin-roommates-screen";
 import { AdminStepUpPanel } from "@/components/admin-step-up-panel";
 import { AdminTrustScreen } from "@/components/admin-trust-screen";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -2612,6 +2613,18 @@ export default function HomePage({
           viewingRequests={viewingRequests}
           user={user}
           onOpenDealRoom={() => navigateToSection("Messages")}
+        />
+      ) : null}
+      {activeSection === "AdminRoommates" ? (
+        <AdminRoommatesScreen
+          token={token}
+          user={user}
+          stepUpSession={adminStepUpSession}
+          onStepUpRequired={() => setAdminStepUpOpen(true)}
+          onToast={setToast}
+          onAuthenticationError={(error) => {
+            void handleAdminAuthenticationError(error);
+          }}
         />
       ) : null}
       {activeSection === "Trust" ? (

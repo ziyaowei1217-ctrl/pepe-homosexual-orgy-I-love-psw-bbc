@@ -16,6 +16,11 @@ import {
   type SessionUser,
   type UpsertAdminRoommateInput
 } from "@/lib/api";
+import {
+  getActiveAdminStepUpToken,
+  type AdminStepUpSession
+} from "@/lib/admin-step-up";
+import { toProductApiError } from "@/lib/product-errors";
 
 const emptyDraft: UpsertAdminRoommateInput = {
   name: "",
@@ -31,10 +36,16 @@ const emptyDraft: UpsertAdminRoommateInput = {
 export function AdminRoommatesScreen({
   token,
   user,
+  stepUpSession,
+  onStepUpRequired,
+  onAuthenticationError,
   onToast
 }: {
   token: string | null;
   user: SessionUser | null;
+  stepUpSession: AdminStepUpSession | null;
+  onStepUpRequired: () => void;
+  onAuthenticationError?: (error: unknown) => void;
   onToast: (message: string) => void;
 }) {
   const [profiles, setProfiles] = useState<ApiRoommate[]>([]);
@@ -89,12 +100,17 @@ export function AdminRoommatesScreen({
 
   async function saveDraft() {
     if (!token || user?.role !== "ADMIN") return;
+    const enhancedToken = getActiveAdminStepUpToken(stepUpSession);
+    if (!enhancedToken) {
+      onStepUpRequired();
+      return;
+    }
 
     setSaving(true);
     try {
       const saved = selectedProfile?.id
-        ? await updateAdminRoommate(token, selectedProfile.id, draft)
-        : await createAdminRoommate(token, draft);
+        ? await updateAdminRoommate(enhancedToken, selectedProfile.id, draft)
+        : await createAdminRoommate(enhancedToken, draft);
       setProfiles((current) => {
         const exists = current.some((profile) => profile.id === saved.id);
         return exists
@@ -104,7 +120,14 @@ export function AdminRoommatesScreen({
       setSelectedId(saved.id ?? null);
       onToast(`${saved.name} saved. The matching deck will use this profile.`);
     } catch (error) {
-      onToast(error instanceof Error ? `Save failed: ${error.message}` : "Save failed");
+      const productError = toProductApiError(error);
+      if (productError.code === "ADMIN_REAUTH_REQUIRED") {
+        onStepUpRequired();
+      } else if (productError.status === 401 && onAuthenticationError) {
+        onAuthenticationError(error);
+      } else {
+        onToast(`Save failed: ${productError.message}`);
+      }
     } finally {
       setSaving(false);
     }
@@ -112,14 +135,26 @@ export function AdminRoommatesScreen({
 
   async function archiveSelectedProfile() {
     if (!token || user?.role !== "ADMIN" || !selectedProfile?.id) return;
+    const enhancedToken = getActiveAdminStepUpToken(stepUpSession);
+    if (!enhancedToken) {
+      onStepUpRequired();
+      return;
+    }
 
     setSaving(true);
     try {
-      const archived = await archiveAdminRoommate(token, selectedProfile.id);
+      const archived = await archiveAdminRoommate(enhancedToken, selectedProfile.id);
       setProfiles((current) => current.map((profile) => profile.id === archived.id ? archived : profile));
       onToast(`${archived.name} archived and removed from active discovery.`);
     } catch (error) {
-      onToast(error instanceof Error ? `Archive failed: ${error.message}` : "Archive failed");
+      const productError = toProductApiError(error);
+      if (productError.code === "ADMIN_REAUTH_REQUIRED") {
+        onStepUpRequired();
+      } else if (productError.status === 401 && onAuthenticationError) {
+        onAuthenticationError(error);
+      } else {
+        onToast(`Archive failed: ${productError.message}`);
+      }
     } finally {
       setSaving(false);
     }

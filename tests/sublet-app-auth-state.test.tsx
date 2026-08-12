@@ -49,6 +49,7 @@ vi.mock("@/lib/api", async () => {
     apiGet: vi.fn(),
     apiPatch: vi.fn(),
     apiPost: vi.fn(),
+    getAdminRoommates: vi.fn(),
     getMyProfile: vi.fn(),
     getAdminListingReviewQueue: vi.fn(),
     getRoommateConversations: vi.fn(),
@@ -184,6 +185,7 @@ beforeEach(() => {
   vi.mocked(api.apiGet).mockImplementation(async () => []);
   vi.mocked(api.apiPatch).mockResolvedValue({});
   vi.mocked(api.apiPost).mockResolvedValue({});
+  vi.mocked(api.getAdminRoommates).mockResolvedValue([]);
   vi.mocked(api.approveAdminListing).mockResolvedValue(adminReviewListing);
   vi.mocked(api.getSessionUser).mockResolvedValue(user);
   vi.mocked(api.getMyProfile).mockResolvedValue(completeProfile);
@@ -498,6 +500,19 @@ describe("SubletApp auth state flow", () => {
     await unmount(renderer);
   });
 
+  it("mounts the roommate administrator workspace for a stored administrator session", async () => {
+    navigationMock.pathname = "/admin/roommates";
+    writeStoredAuthSession("stored-admin-token");
+    vi.mocked(api.getSessionUser).mockResolvedValue({ ...user, role: "ADMIN" });
+    vi.mocked(api.getAdminRoommates).mockResolvedValue([]);
+    const renderer = await renderSubletApp("AdminRoommates");
+
+    expect(renderedText(renderer.root)).toContain("Roommate Admin");
+    expect(hasButton(renderer.root, "New profile")).toBe(true);
+    expect(api.getAdminRoommates).toHaveBeenCalledWith("stored-admin-token");
+    await unmount(renderer);
+  });
+
   it("clears an administrator session when the Trust metrics read returns 401", async () => {
     navigationMock.pathname = "/admin/trust";
     writeStoredAuthSession("expired-admin-token");
@@ -582,7 +597,7 @@ describe("SubletApp auth state flow", () => {
 });
 
 async function renderSubletApp(
-  initialSection: "Discover" | "Publish" | "Trust",
+  initialSection: "Discover" | "Publish" | "Trust" | "AdminRoommates",
   initialListingId?: string
 ): Promise<ReactTestRenderer> {
   let renderer: ReactTestRenderer | undefined;
