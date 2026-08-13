@@ -64,16 +64,13 @@ describe("editorial grid redesign", () => {
   it("labels every supporting editorial workspace", () => {
     const source = readFileSync("components/sublet-app.tsx", "utf8");
     const authSource = readFileSync("components/auth-flow-panel.tsx", "utf8");
+    const trustSource = readFileSync("components/admin-trust-screen.tsx", "utf8");
 
-    for (const label of [
-      "01 / 消息",
-      "01 / 看房",
-      "01 / 发布",
-      "01 / 信任"
-    ]) {
+    for (const label of ["01 / 消息", "01 / 看房", "01 / 发布"]) {
       expect(source).toContain(label);
     }
     expect(authSource).toContain("01 / 账户");
+    expect(trustSource).toContain("01 / 信任");
     expect(source).toContain("xl:col-span-3");
     expect(source).toContain("xl:col-span-9");
   });

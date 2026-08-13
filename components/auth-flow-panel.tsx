@@ -62,6 +62,8 @@ export function AuthFlowPanel({
   const [email, setEmail] = useState("");
   const [sentEmail, setSentEmail] = useState("");
   const [code, setCode] = useState("");
+  const [showNeutralDevelopmentGuidance, setShowNeutralDevelopmentGuidance] =
+    useState(false);
   const [expiresAt, setExpiresAt] = useState<string | null>(null);
   const [resendAvailableAt, setResendAvailableAt] = useState(0);
   const [now, setNow] = useState(() => Date.now());
@@ -84,6 +86,7 @@ export function AuthFlowPanel({
     setEmail("");
     setSentEmail("");
     setCode("");
+    setShowNeutralDevelopmentGuidance(false);
     setExpiresAt(null);
     setResendAvailableAt(0);
     setNow(Date.now());
@@ -99,11 +102,12 @@ export function AuthFlowPanel({
 
   async function sendCode(value: string) {
     setLocalError(null);
+    const isDevelopment = process.env.NODE_ENV === "development";
     const result = await runEmailCodeRequest(
       {
         email: value,
         currentCode: code,
-        isDevelopment: process.env.NODE_ENV === "development"
+        isDevelopment
       },
       {
         lock: actionLock,
@@ -125,12 +129,15 @@ export function AuthFlowPanel({
     setExpiresAt(result.transition.expiresAt);
     setResendAvailableAt(result.transition.resendAvailableAt);
     setCode(result.transition.code);
-    setNow(result.transition.resendAvailableAt - 60_000);
-    onToast(
-      result.hasDevelopmentCode
-        ? "本地开发验证码已填入"
-        : "验证码已发送"
+    setShowNeutralDevelopmentGuidance(
+      isDevelopment && !result.hasDevelopmentCode
     );
+    setNow(result.transition.resendAvailableAt - 60_000);
+    if (result.hasDevelopmentCode) {
+      onToast("本地开发验证码已填入");
+    } else if (!isDevelopment) {
+      onToast("验证码已发送");
+    }
   }
 
   async function handleEmailSubmit(event: FormEvent<HTMLFormElement>) {
@@ -172,6 +179,7 @@ export function AuthFlowPanel({
     setEmail(sentEmail);
     setStep("email");
     setCode("");
+    setShowNeutralDevelopmentGuidance(false);
     setExpiresAt(null);
     setResendAvailableAt(0);
     setLocalError(null);
@@ -284,9 +292,15 @@ export function AuthFlowPanel({
             </form>
           ) : (
             <form className="mt-5 grid gap-3" onSubmit={handleCodeSubmit} noValidate>
-              <p className="text-sm font-semibold text-muted-foreground">
-                验证码已发送至 <strong className="text-primary">{sentEmail}</strong>
-              </p>
+              {showNeutralDevelopmentGuidance ? (
+                <p className="text-sm font-semibold text-muted-foreground">
+                  如果该邮箱具备测试资格，请输入收到的验证码；否则请联系测试管理员。
+                </p>
+              ) : (
+                <p className="text-sm font-semibold text-muted-foreground">
+                  验证码已发送至 <strong className="text-primary">{sentEmail}</strong>
+                </p>
+              )}
               <label
                 htmlFor={`${panelId}-code`}
                 className="grid gap-1 text-xs font-black uppercase text-muted-foreground"

@@ -266,6 +266,29 @@ describe("AuthFlowPanel interactions", () => {
 
   afterEach(() => {
     vi.useRealTimers();
+    vi.unstubAllEnvs();
+  });
+
+  it("shows neutral guidance when development accepts a request without a usable code", async () => {
+    vi.stubEnv("NODE_ENV", "development");
+    vi.mocked(api.requestEmailCode).mockResolvedValueOnce({
+      email: "unknown@example.edu",
+      expiresAt: "2026-07-29T01:05:00.000Z"
+    });
+    const onToast = vi.fn();
+    const renderer = await renderAuthPanel({ onToast });
+
+    changeInput(renderer.root, "email", "unknown@example.edu");
+    await submitCurrentForm(renderer);
+
+    expect(findInput(renderer.root, "code").props.value).toBe("");
+    expect(renderedText(renderer.root)).toContain(
+      "如果该邮箱具备测试资格，请输入收到的验证码；否则请联系测试管理员。"
+    );
+    expect(renderedText(renderer.root)).not.toContain("验证码已发送至");
+    expect(onToast).not.toHaveBeenCalledWith("本地开发验证码已填入");
+    expect(onToast).not.toHaveBeenCalledWith("验证码已发送");
+    await unmountRenderer(renderer);
   });
 
   it("requests once while pending, enters the code step, and verifies the code", async () => {

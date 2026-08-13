@@ -175,7 +175,7 @@ export function AdminTrustScreen({
     <section className="app-shell py-5 md:py-6" aria-labelledby="admin-trust-title">
       <div className="editorial-toolbar">
         <div>
-          <span className="editorial-kicker">管理员 / 信任</span>
+          <span className="editorial-kicker">01 / 信任</span>
           <h1 id="admin-trust-title" className="mt-2 text-3xl font-black tracking-[-0.035em] md:text-4xl">
             房源审核队列
           </h1>
