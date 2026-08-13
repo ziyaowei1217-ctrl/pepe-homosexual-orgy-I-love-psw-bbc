@@ -2623,9 +2623,7 @@ export default function HomePage({
           stepUpSession={adminStepUpSession}
           onStepUpRequired={() => setAdminStepUpOpen(true)}
           onToast={setToast}
-          onAuthenticationError={(error) => {
-            void handleAdminAuthenticationError(error);
-          }}
+          onAuthenticationError={handleAdminAuthenticationError}
         />
       ) : null}
       {activeSection === "Trust" ? (

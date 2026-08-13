@@ -513,6 +513,20 @@ describe("SubletApp auth state flow", () => {
     await unmount(renderer);
   });
 
+  it("clears the stored administrator session when the initial roommate read returns 401", async () => {
+    navigationMock.pathname = "/admin/roommates";
+    writeStoredAuthSession("expired-roommate-read-token");
+    vi.mocked(api.getSessionUser).mockResolvedValue({ ...user, role: "ADMIN" });
+    vi.mocked(api.getAdminRoommates).mockRejectedValue({ status: 401 });
+    const renderer = await renderSubletApp("AdminRoommates");
+
+    expect(api.getAdminRoommates).toHaveBeenCalledWith("expired-roommate-read-token");
+    expect(readStoredAuthSession()).toBeNull();
+    expect(capturedAuthPanel().token).toBeNull();
+    expect(capturedAuthPanel().user).toBeNull();
+    await unmount(renderer);
+  });
+
   it("clears an administrator session when the Trust metrics read returns 401", async () => {
     navigationMock.pathname = "/admin/trust";
     writeStoredAuthSession("expired-admin-token");

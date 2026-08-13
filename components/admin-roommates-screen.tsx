@@ -1,7 +1,7 @@
 "use client";
 
 import { Archive, Plus, RefreshCw, Save, Users } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -53,6 +53,10 @@ export function AdminRoommatesScreen({
   const [draft, setDraft] = useState<UpsertAdminRoommateInput>(emptyDraft);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const onAuthenticationErrorRef = useRef(onAuthenticationError);
+  onAuthenticationErrorRef.current = onAuthenticationError;
+  const onToastRef = useRef(onToast);
+  onToastRef.current = onToast;
   const selectedProfile = useMemo(
     () => profiles.find((profile) => profile.id === selectedId) ?? null,
     [profiles, selectedId]
@@ -81,13 +85,18 @@ export function AdminRoommatesScreen({
       const nextProfiles = await getAdminRoommates(token);
       setProfiles(nextProfiles);
       setSelectedId((current) => current ?? nextProfiles[0]?.id ?? null);
-      onToast(`Loaded ${nextProfiles.length} roommate profiles`);
+      onToastRef.current(`Loaded ${nextProfiles.length} roommate profiles`);
     } catch (error) {
-      onToast(error instanceof Error ? `Failed to load roommate profiles: ${error.message}` : "Failed to load roommate profiles");
+      const productError = toProductApiError(error);
+      if (productError.status === 401 && onAuthenticationErrorRef.current) {
+        onAuthenticationErrorRef.current(productError);
+        return;
+      }
+      onToastRef.current(`Failed to load roommate profiles: ${productError.message}`);
     } finally {
       setLoading(false);
     }
-  }, [onToast, token, user?.role]);
+  }, [token, user?.role]);
 
   useEffect(() => {
     void loadProfiles();

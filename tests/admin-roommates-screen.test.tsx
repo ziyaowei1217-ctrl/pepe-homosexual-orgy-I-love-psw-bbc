@@ -77,6 +77,55 @@ describe("AdminRoommatesScreen", () => {
     });
   });
 
+  it("delegates an initial ordinary-session read 401 as a normalized authentication error", async () => {
+    vi.mocked(api.getAdminRoommates).mockRejectedValue({ status: 401 });
+    const onAuthenticationError = vi.fn();
+    const onToast = vi.fn();
+    const renderer = await renderScreen({ onAuthenticationError, onToast });
+
+    expect(api.getAdminRoommates).toHaveBeenCalledWith("ordinary-token");
+    expect(onAuthenticationError).toHaveBeenCalledTimes(1);
+    const normalizedError = onAuthenticationError.mock.calls[0]?.[0];
+    expect(normalizedError).toBeInstanceOf(ProductApiError);
+    expect(normalizedError).toMatchObject({ status: 401, category: "authentication" });
+    expect(onToast).not.toHaveBeenCalled();
+    await unmount(renderer);
+  });
+
+  it("delegates a manual-refresh 401 and keeps the already loaded profiles visible", async () => {
+    vi.mocked(api.getAdminRoommates)
+      .mockResolvedValueOnce([existingProfile])
+      .mockRejectedValueOnce({ status: 401 });
+    const onAuthenticationError = vi.fn();
+    const onToast = vi.fn();
+    const renderer = await renderScreen({ onAuthenticationError, onToast });
+    onAuthenticationError.mockClear();
+    onToast.mockClear();
+
+    await click(renderer.root, "Refresh");
+
+    expect(api.getAdminRoommates).toHaveBeenNthCalledWith(2, "ordinary-token");
+    expect(onAuthenticationError).toHaveBeenCalledTimes(1);
+    expect(onAuthenticationError.mock.calls[0]?.[0]).toMatchObject({
+      status: 401,
+      category: "authentication"
+    });
+    expect(onToast).not.toHaveBeenCalled();
+    expect(renderedText(renderer.root)).toContain(existingProfile.name);
+    await unmount(renderer);
+  });
+
+  it("keeps non-authentication read failures in the roommate workspace toast", async () => {
+    vi.mocked(api.getAdminRoommates).mockRejectedValue({ status: 503 });
+    const onAuthenticationError = vi.fn();
+    const onToast = vi.fn();
+    const renderer = await renderScreen({ onAuthenticationError, onToast });
+
+    expect(onAuthenticationError).not.toHaveBeenCalled();
+    expect(onToast).toHaveBeenCalledWith(expect.stringContaining("Failed to load roommate profiles"));
+    await unmount(renderer);
+  });
+
   it("requires an active step-up session before creating and leaves the draft untouched", async () => {
     const onStepUpRequired = vi.fn();
     const renderer = await renderScreen({ onStepUpRequired });
