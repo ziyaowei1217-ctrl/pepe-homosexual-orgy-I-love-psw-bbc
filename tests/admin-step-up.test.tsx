@@ -199,7 +199,7 @@ describe("administrator step-up", () => {
 
   it("delegates a normalized request 401 to application authentication reset", async () => {
     vi.mocked(api.requestAdminStepUpCode).mockRejectedValue({ status: 401 });
-    const onAuthenticationError = vi.fn(() => true);
+    const onAuthenticationError = vi.fn((_error: unknown) => true);
     const renderer = await renderPanel(vi.fn(), onAuthenticationError);
 
     await act(async () => {
@@ -249,7 +249,7 @@ describe("administrator step-up", () => {
       devCode: "246810"
     });
     vi.mocked(api.verifyAdminStepUpCode).mockRejectedValue({ status: 401 });
-    const onAuthenticationError = vi.fn(() => true);
+    const onAuthenticationError = vi.fn((_error: unknown) => true);
     const renderer = await renderPanel(vi.fn(), onAuthenticationError);
 
     await requestAndSubmitCode(renderer);
