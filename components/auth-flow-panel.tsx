@@ -124,13 +124,21 @@ export function AuthFlowPanel({
       return;
     }
 
+    const shouldShowNeutralDevelopmentGuidance =
+      isDevelopment && !result.hasDevelopmentCode;
     setStep(result.transition.step);
     setSentEmail(result.transition.sentEmail);
-    setExpiresAt(result.transition.expiresAt);
-    setResendAvailableAt(result.transition.resendAvailableAt);
+    setExpiresAt(
+      shouldShowNeutralDevelopmentGuidance ? null : result.transition.expiresAt
+    );
+    setResendAvailableAt(
+      shouldShowNeutralDevelopmentGuidance
+        ? 0
+        : result.transition.resendAvailableAt
+    );
     setCode(result.transition.code);
     setShowNeutralDevelopmentGuidance(
-      isDevelopment && !result.hasDevelopmentCode
+      shouldShowNeutralDevelopmentGuidance
     );
     setNow(result.transition.resendAvailableAt - 60_000);
     if (result.hasDevelopmentCode) {

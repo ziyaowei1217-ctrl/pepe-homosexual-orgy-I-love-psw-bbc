@@ -286,8 +286,37 @@ describe("AuthFlowPanel interactions", () => {
       "如果该邮箱具备测试资格，请输入收到的验证码；否则请联系测试管理员。"
     );
     expect(renderedText(renderer.root)).not.toContain("验证码已发送至");
+    expect(renderedText(renderer.root)).not.toContain("请在验证码过期前完成验证");
+    expect(renderedText(renderer.root)).not.toContain("秒后重新发送");
+    expect(findButton(renderer.root, "重新发送").props.disabled).toBe(false);
     expect(onToast).not.toHaveBeenCalledWith("本地开发验证码已填入");
     expect(onToast).not.toHaveBeenCalledWith("验证码已发送");
+
+    changeInput(renderer.root, "code", "654321");
+    expect(findButton(renderer.root, "验证并登录").props.disabled).toBe(false);
+    await unmountRenderer(renderer);
+  });
+
+  it("auto-fills a real development code and retains issued-code feedback", async () => {
+    vi.stubEnv("NODE_ENV", "development");
+    vi.mocked(api.requestEmailCode).mockResolvedValueOnce({
+      email: "invited@example.edu",
+      expiresAt: "2026-07-29T01:05:00.000Z",
+      devCode: "123456"
+    });
+    const onToast = vi.fn();
+    const renderer = await renderAuthPanel({ onToast });
+
+    changeInput(renderer.root, "email", "invited@example.edu");
+    await submitCurrentForm(renderer);
+
+    expect(findInput(renderer.root, "code").props.value).toBe("123456");
+    expect(renderedText(renderer.root)).toContain(
+      "验证码已发送至 invited@example.edu"
+    );
+    expect(renderedText(renderer.root)).toContain("请在验证码过期前完成验证");
+    expect(renderedText(renderer.root)).toContain("60 秒后重新发送");
+    expect(onToast).toHaveBeenCalledWith("本地开发验证码已填入");
     await unmountRenderer(renderer);
   });
 
