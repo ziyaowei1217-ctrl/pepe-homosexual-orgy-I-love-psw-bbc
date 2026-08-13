@@ -20,13 +20,15 @@ export function AdminStepUpPanel({
   sessionToken,
   email,
   onVerified,
-  onCancel
+  onCancel,
+  onAuthenticationError
 }: {
   open: boolean;
   sessionToken: string;
   email: string;
   onVerified: (session: AdminStepUpSession) => void;
   onCancel: () => void;
+  onAuthenticationError?: (error: unknown) => boolean;
 }) {
   const panelId = useId();
   const [step, setStep] = useState<"request" | "verify">("request");
@@ -55,7 +57,9 @@ export function AdminStepUpPanel({
       setCode(response.devCode ? normalizeVerificationCode(response.devCode) : "");
       setStep("verify");
     } catch (requestError) {
-      setError(toProductApiError(requestError).message);
+      const productError = toProductApiError(requestError);
+      if (productError.status === 401 && onAuthenticationError?.(productError)) return;
+      setError(productError.message);
     } finally {
       setPending(false);
     }
@@ -84,7 +88,9 @@ export function AdminStepUpPanel({
       }
       onVerified(session);
     } catch (verifyError) {
-      setError(toProductApiError(verifyError).message);
+      const productError = toProductApiError(verifyError);
+      if (productError.status === 401 && onAuthenticationError?.(productError)) return;
+      setError(productError.message);
     } finally {
       setPending(false);
     }

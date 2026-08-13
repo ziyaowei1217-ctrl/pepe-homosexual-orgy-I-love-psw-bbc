@@ -2445,6 +2445,7 @@ export default function HomePage({
           setAdminStepUpOpen(false);
         }}
         onCancel={() => setAdminStepUpOpen(false)}
+        onAuthenticationError={handleAdminAuthenticationError}
       />
       {activeSection === "Discover" ? (
         <DiscoverScreen

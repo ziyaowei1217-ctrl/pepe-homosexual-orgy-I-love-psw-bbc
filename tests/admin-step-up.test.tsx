@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as api from "../lib/api";
 import { AdminStepUpPanel } from "../components/admin-step-up-panel";
 import { getActiveAdminStepUpToken } from "../lib/admin-step-up";
+import { ProductApiError } from "../lib/product-errors";
 
 vi.mock("../lib/api", async () => {
   const actual = await vi.importActual<typeof import("../lib/api")>("../lib/api");
@@ -196,6 +197,25 @@ describe("administrator step-up", () => {
     await unmount(renderer);
   });
 
+  it("delegates a normalized request 401 to application authentication reset", async () => {
+    vi.mocked(api.requestAdminStepUpCode).mockRejectedValue({ status: 401 });
+    const onAuthenticationError = vi.fn(() => true);
+    const renderer = await renderPanel(vi.fn(), onAuthenticationError);
+
+    await act(async () => {
+      findButton(renderer.root, "发送管理员验证码").props.onClick();
+      await flushMicrotasks();
+    });
+
+    expect(onAuthenticationError).toHaveBeenCalledTimes(1);
+    const normalizedError = onAuthenticationError.mock.calls[0]?.[0];
+    expect(normalizedError).toBeInstanceOf(ProductApiError);
+    expect(normalizedError).toMatchObject({ status: 401, category: "authentication" });
+    expect(findButton(renderer.root, "发送管理员验证码")).toBeDefined();
+    expect(findAlerts(renderer.root)).toEqual([]);
+    await unmount(renderer);
+  });
+
   it("keeps the verification prompt and maps a verification failure to a product error", async () => {
     vi.mocked(api.requestAdminStepUpCode).mockResolvedValue({
       email: "admin@example.com",
@@ -221,9 +241,33 @@ describe("administrator step-up", () => {
     );
     await unmount(renderer);
   });
+
+  it("delegates a normalized verification 401 without dismissing or replacing the prompt", async () => {
+    vi.mocked(api.requestAdminStepUpCode).mockResolvedValue({
+      email: "admin@example.com",
+      expiresAt: "2026-08-12T08:10:00.000Z",
+      devCode: "246810"
+    });
+    vi.mocked(api.verifyAdminStepUpCode).mockRejectedValue({ status: 401 });
+    const onAuthenticationError = vi.fn(() => true);
+    const renderer = await renderPanel(vi.fn(), onAuthenticationError);
+
+    await requestAndSubmitCode(renderer);
+
+    expect(onAuthenticationError).toHaveBeenCalledTimes(1);
+    const normalizedError = onAuthenticationError.mock.calls[0]?.[0];
+    expect(normalizedError).toBeInstanceOf(ProductApiError);
+    expect(normalizedError).toMatchObject({ status: 401, category: "authentication" });
+    expect(findButton(renderer.root, "完成管理员验证")).toBeDefined();
+    expect(findAlerts(renderer.root)).toEqual([]);
+    await unmount(renderer);
+  });
 });
 
-async function renderPanel(onVerified: ReturnType<typeof vi.fn>) {
+async function renderPanel(
+  onVerified: ReturnType<typeof vi.fn>,
+  onAuthenticationError?: (error: unknown) => boolean
+) {
   let renderer: ReactTestRenderer | undefined;
   await act(async () => {
     renderer = create(
@@ -233,6 +277,7 @@ async function renderPanel(onVerified: ReturnType<typeof vi.fn>) {
         email="admin@example.com"
         onVerified={onVerified}
         onCancel={vi.fn()}
+        onAuthenticationError={onAuthenticationError}
       />
     );
   });
@@ -264,13 +309,17 @@ function findInput(root: ReactTestInstance, name: string) {
 }
 
 function findAlert(root: ReactTestInstance) {
-  const matches = root.findAll(
-    (node) => node.type === "p" && node.props.role === "alert"
-  );
+  const matches = findAlerts(root);
   if (matches.length !== 1) {
     throw new Error(`Expected one alert, found ${matches.length}`);
   }
   return matches[0];
+}
+
+function findAlerts(root: ReactTestInstance) {
+  return root.findAll(
+    (node) => node.type === "p" && node.props.role === "alert"
+  );
 }
 
 async function flushMicrotasks() {

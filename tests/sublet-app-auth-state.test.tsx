@@ -528,6 +528,29 @@ describe("SubletApp auth state flow", () => {
     await unmount(renderer);
   });
 
+  it("wires administrator step-up authentication failures to the application session reset", async () => {
+    navigationMock.pathname = "/admin/trust";
+    writeStoredAuthSession("expired-step-up-session");
+    vi.mocked(api.getSessionUser).mockResolvedValue({ ...user, role: "ADMIN" });
+    const renderer = await renderSubletApp("Trust");
+    const stepUpPanel = adminStepUpPanelCapture.current as {
+      onAuthenticationError?: (error: unknown) => boolean;
+    };
+
+    expect(typeof stepUpPanel.onAuthenticationError).toBe("function");
+    let handled = false;
+    await act(async () => {
+      handled = stepUpPanel.onAuthenticationError?.({ status: 401 }) ?? false;
+      await flushMicrotasks();
+    });
+
+    expect(handled).toBe(true);
+    expect(readStoredAuthSession()).toBeNull();
+    expect(capturedAuthPanel().token).toBeNull();
+    expect(capturedAuthPanel().user).toBeNull();
+    await unmount(renderer);
+  });
+
   it("clears the application-owned administrator session when metrics 401 follows a catalog refresh 503", async () => {
     navigationMock.pathname = "/admin/trust";
     writeStoredAuthSession("mixed-refresh-token");
