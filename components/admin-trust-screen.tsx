@@ -201,6 +201,8 @@ export function AdminTrustScreen({
         {!loading && listings.length === 0 ? <p className="rounded-md border border-dashed bg-secondary p-5 text-sm font-semibold text-muted-foreground">当前没有待审核房源。</p> : null}
         {listings.map((listing) => {
           const decision = pendingDecision?.listingId === listing.id ? pendingDecision : null;
+          const tags = listing.tags.map((tag) => tag.trim()).filter(Boolean);
+          const reviewMedia = getReviewMedia(listing);
           return (
             <Card key={listing.id} className="shadow-panel">
               <CardHeader>
@@ -213,9 +215,46 @@ export function AdminTrustScreen({
                 </div>
               </CardHeader>
               <CardContent className="grid gap-4">
+                <dl className="grid gap-3 rounded-md border bg-secondary/30 p-3 sm:grid-cols-2">
+                  <div>
+                    <dt className="text-xs font-bold text-muted-foreground">发布者编号</dt>
+                    <dd className="mt-1 break-all text-sm font-semibold text-primary">
+                      {displayText(listing.ownerId, "未提供")}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs font-bold text-muted-foreground">信任声明</dt>
+                    <dd className="mt-1 text-sm font-semibold text-primary">
+                      {displayText(listing.trust, "未提供信任声明")}
+                    </dd>
+                  </div>
+                </dl>
                 <div className="flex flex-wrap gap-2">
-                  {listing.tags.map((tag) => <Badge key={tag} variant="secondary">{tag}</Badge>)}
+                  {tags.length > 0
+                    ? tags.map((tag) => <Badge key={tag} variant="secondary">{tag}</Badge>)
+                    : <span className="text-sm font-semibold text-muted-foreground">暂无标签</span>}
                 </div>
+                {reviewMedia.length > 0 ? (
+                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3" aria-label="房源图片">
+                    {reviewMedia.map((media) => (
+                      <figure key={media.url} className="overflow-hidden rounded-md border bg-secondary/40">
+                        <div
+                          role="img"
+                          aria-label={`${displayText(listing.title, "待审核房源")} · ${media.kind}`}
+                          className="aspect-[4/3] bg-cover bg-center"
+                          style={{ backgroundImage: `url("${media.url}")` }}
+                        />
+                        <figcaption className="px-3 py-2 text-xs font-bold text-muted-foreground">
+                          {media.kind}
+                        </figcaption>
+                      </figure>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="rounded-md border border-dashed bg-secondary/30 p-3 text-sm font-semibold text-muted-foreground">
+                    未提供可安全预览的房源图片
+                  </p>
+                )}
                 {!decision ? (
                   <div className="flex flex-wrap gap-2">
                     <Button type="button" variant="trust" disabled={submitting} onClick={() => setPendingDecision({ listingId: listing.id, kind: "approve", reason: "" })}>
@@ -303,4 +342,34 @@ function formatTimestamp(value: string | null | undefined) {
   if (!value) return "未知时间";
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? "未知时间" : date.toLocaleString("zh-CN");
+}
+
+function displayText(value: string | null | undefined, fallback: string) {
+  const normalized = value?.trim();
+  return normalized || fallback;
+}
+
+function getReviewMedia(listing: ApiListing) {
+  const candidates = [
+    { url: listing.image, kind: "封面", sortOrder: -1 },
+    ...(listing.media ?? [])
+  ].sort((left, right) => left.sortOrder - right.sortOrder);
+  const seen = new Set<string>();
+
+  return candidates.flatMap((candidate) => {
+    const url = safeReviewMediaUrl(candidate.url);
+    if (!url || seen.has(url)) return [];
+    seen.add(url);
+    return [{ url, kind: displayText(candidate.kind, "图片") }];
+  });
+}
+
+function safeReviewMediaUrl(value: string | null | undefined) {
+  if (!value?.trim()) return null;
+  try {
+    const url = new URL(value.trim());
+    return url.protocol === "http:" || url.protocol === "https:" ? url.href : null;
+  } catch {
+    return null;
+  }
 }

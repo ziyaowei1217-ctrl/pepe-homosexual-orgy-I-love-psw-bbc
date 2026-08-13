@@ -98,9 +98,54 @@ describe("AdminTrustScreen", () => {
       trustMetrics: [{ id: "metric-0812", label: "待审核", value: 1, variant: "warning" }]
     });
 
-    expect(renderedText(renderer.root)).toContain("Codex 浏览验收测试房源 0812");
-    expect(renderedText(renderer.root)).toContain("待审核1");
+    const text = renderedText(renderer.root);
+    expect(text).toContain("Codex 浏览验收测试房源 0812");
+    expect(text).toContain("Westwood");
+    expect(text).toContain("$1820/月");
+    expect(text).toContain("提交于");
+    expect(text).toContain("带家具");
+    expect(text).toContain("近校园");
+    expect(text).toContain("发布者编号owner-0812");
+    expect(text).toContain("信任声明待审核");
+    expect(text).toContain("待审核1");
+    expect(reviewMediaBackgrounds(renderer.root)).toEqual([
+      'url("https://images.example.test/listing-cover.jpg")',
+      'url("https://images.example.test/listing-media.jpg")'
+    ]);
     expect(api.getAdminListingReviewQueue).toHaveBeenCalledWith("ordinary-token");
+    await unmount(renderer);
+  });
+
+  it("shows explicit fallbacks and refuses unsafe review media", async () => {
+    vi.mocked(api.getAdminListingReviewQueue).mockResolvedValue([
+      {
+        ...queuedListing,
+        id: "listing-missing-review-fields",
+        ownerId: "   ",
+        trust: "   ",
+        tags: [],
+        image: "",
+        submittedAt: "not-a-timestamp",
+        media: [
+          {
+            id: "unsafe-media",
+            url: "javascript:alert('review')",
+            kind: "image",
+            sortOrder: 0
+          }
+        ]
+      }
+    ]);
+
+    const renderer = await renderScreen();
+    const text = renderedText(renderer.root);
+
+    expect(text).toContain("发布者编号未提供");
+    expect(text).toContain("信任声明未提供信任声明");
+    expect(text).toContain("未知时间");
+    expect(text).toContain("暂无标签");
+    expect(text).toContain("未提供可安全预览的房源图片");
+    expect(reviewMediaBackgrounds(renderer.root)).toEqual([]);
     await unmount(renderer);
   });
 
@@ -367,6 +412,12 @@ function findInput(root: ReactTestInstance, name: string) {
 
 function renderedText(node: ReactTestInstance): string {
   return node.children.map((child) => typeof child === "string" ? child : renderedText(child)).join("");
+}
+
+function reviewMediaBackgrounds(root: ReactTestInstance) {
+  return root
+    .findAll((node) => node.props.role === "img" && node.props.style?.backgroundImage)
+    .map((node) => node.props.style.backgroundImage);
 }
 
 function deferred<T>() {
