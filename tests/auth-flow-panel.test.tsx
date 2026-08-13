@@ -287,8 +287,7 @@ describe("AuthFlowPanel interactions", () => {
     );
     expect(renderedText(renderer.root)).not.toContain("验证码已发送至");
     expect(renderedText(renderer.root)).not.toContain("请在验证码过期前完成验证");
-    expect(renderedText(renderer.root)).not.toContain("秒后重新发送");
-    expect(findButton(renderer.root, "重新发送").props.disabled).toBe(false);
+    expect(renderedText(renderer.root)).not.toContain("重新发送");
     expect(onToast).not.toHaveBeenCalledWith("本地开发验证码已填入");
     expect(onToast).not.toHaveBeenCalledWith("验证码已发送");
 

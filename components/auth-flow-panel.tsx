@@ -350,21 +350,23 @@ export function AuthFlowPanel({
                 >
                   修改邮箱
                 </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => void sendCode(sentEmail)}
-                  disabled={
-                    pendingAction !== null ||
-                    (resendSeconds > 0 && !verificationStatus.expired)
-                  }
-                  aria-live="polite"
-                >
-                  {resendSeconds > 0 && !verificationStatus.expired
-                    ? `${resendSeconds} 秒后重新发送`
-                    : "重新发送"}
-                </Button>
+                {!showNeutralDevelopmentGuidance ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void sendCode(sentEmail)}
+                    disabled={
+                      pendingAction !== null ||
+                      (resendSeconds > 0 && !verificationStatus.expired)
+                    }
+                    aria-live="polite"
+                  >
+                    {resendSeconds > 0 && !verificationStatus.expired
+                      ? `${resendSeconds} 秒后重新发送`
+                      : "重新发送"}
+                  </Button>
+                ) : null}
               </div>
             </form>
           )}
