@@ -176,6 +176,13 @@ const adminReviewListing = {
   media: []
 };
 
+const headerOffsetListing = {
+  ...adminReviewListing,
+  id: "header-offset-listing",
+  status: "APPROVED" as const,
+  trust: "平台已审核"
+};
+
 beforeEach(() => {
   vi.clearAllMocks();
   localStorage.clear();
@@ -229,6 +236,79 @@ describe("SubletApp auth state flow", () => {
     expect(hasButton(renderer.root, "房源审核")).toBe(false);
     expect(hasButton(renderer.root, "室友管理")).toBe(false);
     await unmount(renderer);
+  });
+
+  it("labels administrator navigation and exposes its active destination", async () => {
+    navigationMock.pathname = "/admin/trust";
+    writeStoredAuthSession("stored-admin-token");
+    vi.mocked(api.getSessionUser).mockResolvedValue({ ...user, role: "ADMIN" });
+    const renderer = await renderSubletApp("Trust");
+
+    const administratorNavigations = renderer.root.findAllByProps({
+      "aria-label": "管理员工具"
+    });
+    expect(administratorNavigations).toHaveLength(1);
+    expect(administratorNavigations[0]?.type).toBe("nav");
+
+    const trustDestination = findButton(renderer.root, "房源审核");
+    const roommateDestination = findButton(renderer.root, "室友管理");
+    expect(trustDestination.props["aria-current"]).toBe("page");
+    expect(roommateDestination.props["aria-current"]).toBeUndefined();
+    await unmount(renderer);
+  });
+
+  it("keeps the ordinary header offset and expands it for administrators", async () => {
+    navigationMock.pathname = "/";
+    writeStoredAuthSession("stored-user-token");
+    const ordinaryRenderer = await renderSubletApp("Discover");
+
+    expect(ordinaryRenderer.root.findByType("main").props.className).toContain(
+      "[--app-header-offset:6rem]"
+    );
+    await unmount(ordinaryRenderer);
+
+    localStorage.clear();
+    writeStoredAuthSession("stored-admin-token");
+    vi.mocked(api.getSessionUser).mockResolvedValue({ ...user, role: "ADMIN" });
+    const administratorRenderer = await renderSubletApp("Discover");
+
+    expect(administratorRenderer.root.findByType("main").props.className).toContain(
+      "[--app-header-offset:9rem]"
+    );
+    await unmount(administratorRenderer);
+  });
+
+  it("uses the shared header offset for every sticky and scroll-margin consumer", async () => {
+    vi.mocked(api.apiGet).mockImplementation(async (path) =>
+      path === "/listings" ? [headerOffsetListing] : []
+    );
+    navigationMock.pathname = "/";
+    const discoverRenderer = await renderSubletApp("Discover");
+
+    expect(
+      nodesWithClass(discoverRenderer.root, "top-[var(--app-header-offset)]")
+    ).toHaveLength(1);
+    expect(
+      nodesWithClass(discoverRenderer.root, "scroll-mt-[var(--app-header-offset)]")
+    ).toHaveLength(1);
+    await unmount(discoverRenderer);
+
+    navigationMock.pathname = "/host/listings";
+    const publishRenderer = await renderSubletApp("Publish");
+    expect(
+      publishRenderer.root.findByProps({ id: "publish-flow" }).props.className
+    ).toContain("scroll-mt-[var(--app-header-offset)]");
+    await unmount(publishRenderer);
+
+    navigationMock.pathname = "/";
+    const detailRenderer = await renderSubletApp(
+      "Discover",
+      headerOffsetListing.id
+    );
+    expect(
+      nodesWithClass(detailRenderer.root, "xl:top-[var(--app-header-offset)]")
+    ).toHaveLength(1);
+    await unmount(detailRenderer);
   });
 
   it("keeps listing-detail placeholder rows free of duplicate React keys", async () => {
@@ -708,15 +788,28 @@ function hasButton(root: ReactTestInstance, label: string) {
 }
 
 function clickButton(root: ReactTestInstance, label: string) {
+  findButton(root, label).props.onClick();
+}
+
+function findButton(root: ReactTestInstance, label: string) {
   const button = root
     .findAllByType("button")
     .find((candidate) => renderedText(candidate) === label);
   if (!button) throw new Error(`Button \"${label}\" was not found`);
-  button.props.onClick();
+  return button;
 }
 
 function hasAuthPanel(root: ReactTestInstance) {
   return root.findAllByProps({ "data-testid": "auth-flow-panel" }).length > 0;
+}
+
+function nodesWithClass(root: ReactTestInstance, className: string) {
+  return root.findAll(
+    (node) =>
+      typeof node.type === "string" &&
+      typeof node.props.className === "string" &&
+      node.props.className.split(" ").includes(className)
+  );
 }
 
 function renderedText(node: ReactTestInstance): string {

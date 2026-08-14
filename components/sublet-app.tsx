@@ -2392,7 +2392,14 @@ export default function HomePage({
       : authPanelOpen);
 
   return (
-    <main className="min-h-screen bg-background">
+    <main
+      className={cn(
+        "min-h-screen bg-background",
+        user?.role === "ADMIN"
+          ? "[--app-header-offset:9rem]"
+          : "[--app-header-offset:6rem]"
+      )}
+    >
       <AppHeader
         favoriteCount={favoriteIds.size}
         messageUnreadCount={roommateUnreadTotal}
@@ -2773,7 +2780,7 @@ function AppHeader({
       </div>
       {visibleAdminItems.length > 0 ? (
         <div className="border-t border-blue-100 bg-blue-50/70">
-          <div className="app-shell flex flex-wrap items-center gap-2 py-2">
+          <nav aria-label="管理员工具" className="app-shell flex flex-wrap items-center gap-2 py-2">
             <span className="mr-1 text-xs font-black text-[#006AFF]">管理员工具</span>
             {visibleAdminItems.map((item) => {
               const Icon = navIcons[item.section];
@@ -2783,6 +2790,7 @@ function AppHeader({
                   type="button"
                   size="sm"
                   variant={activeSection === item.section ? "default" : "outline"}
+                  aria-current={activeSection === item.section ? "page" : undefined}
                   onClick={() => onSectionChange(item.section)}
                 >
                   <Icon className="size-3.5" aria-hidden="true" />
@@ -2790,7 +2798,7 @@ function AppHeader({
                 </Button>
               );
             })}
-          </div>
+          </nav>
         </div>
       ) : null}
       {notificationsOpen ? (
@@ -4046,7 +4054,7 @@ function DiscoverScreen({
         {viewMode === "map" ? (
           <aside className="col-span-full hidden min-w-0 lg:col-span-4 lg:block xl:col-span-5">
             <MapCanvas
-              className="sticky top-24"
+              className="sticky top-[var(--app-header-offset)]"
               listings={listings}
               totalResultCount={totalListingCount}
               selectedListing={selectedListing}
@@ -4872,7 +4880,7 @@ export function PublishScreen({
   return (
     <section
       id="publish-flow"
-      className="app-shell app-grid w-full scroll-mt-24 items-start py-5 md:py-6"
+      className="app-shell app-grid w-full scroll-mt-[var(--app-header-offset)] items-start py-5 md:py-6"
     >
       <div className="app-section editorial-toolbar">
         <div>
@@ -5263,7 +5271,7 @@ function ListingDetailScreen({
           </Card>
         </div>
 
-        <aside className="col-span-full flex min-w-0 flex-col gap-4 xl:col-span-4 xl:sticky xl:top-24">
+        <aside className="col-span-full flex min-w-0 flex-col gap-4 xl:col-span-4 xl:sticky xl:top-[var(--app-header-offset)]">
           <Card className="shadow-panel">
             <CardHeader>
               <CardTitle>下一步</CardTitle>
@@ -5936,7 +5944,7 @@ function ListingCard({
     <article
       id={getListingCardDomId(listing.id)}
       className={cn(
-        "group flex h-full scroll-mt-24 flex-col overflow-hidden rounded-[18px] border bg-card text-left shadow-card transition-all hover:-translate-y-0.5 hover:shadow-panel",
+        "group flex h-full scroll-mt-[var(--app-header-offset)] flex-col overflow-hidden rounded-[18px] border bg-card text-left shadow-card transition-all hover:-translate-y-0.5 hover:shadow-panel",
         selected ? "border-accent ring-4 ring-accent/10" : "border-border"
       )}
     >

@@ -128,6 +128,11 @@ describe("ListingsService", () => {
   it.each([
     ["房东知情声明 · 待平台审核", "房东知情声明 · 平台已审核"],
     ["待审核", "平台已审核"],
+    [
+      "房东知情声明 · 平台已审核 · 待平台审核 · 待审核 · 平台已审核",
+      "房东知情声明 · 平台已审核"
+    ],
+    ["待平台审核 · 平台已审核 · 待审核", "平台已审核"],
     [".edu verified", ".edu verified · 平台已审核"],
     ["", "平台已审核"],
     ["房东知情 · 平台已审核", "房东知情 · 平台已审核"]
@@ -139,7 +144,7 @@ describe("ListingsService", () => {
     await expect(service.findAll()).resolves.toMatchObject([
       { id: "approved", status: "APPROVED", trust: expectedTrust }
     ]);
-    expect(stored.trust).toBe(trust);
+    expect(prisma.listing.rows[0]?.trust).toBe(trust);
   });
 
   it("presents the same approved trust semantics on public detail reads", async () => {

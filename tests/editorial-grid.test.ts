@@ -57,7 +57,7 @@ describe("editorial grid redesign", () => {
     for (const label of ["01 / 房源", "01 / 室友", "01 / 喜欢列表"]) {
       expect(source).toContain(label);
     }
-    expect(source).toContain("xl:col-span-4 xl:sticky xl:top-24");
+    expect(source).toContain("xl:col-span-4 xl:sticky xl:top-[var(--app-header-offset)]");
     expect(source).toContain("xl:grid-cols-3");
   });
 

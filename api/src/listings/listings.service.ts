@@ -244,14 +244,21 @@ function definedData<T extends Record<string, unknown>>(data: T) {
 function approvedPublicTrust(value: string) {
   const trust = value.trim();
   if (!trust) return "平台已审核";
-  if (trust.includes("平台已审核")) return trust;
-  if (trust.includes("待平台审核")) {
-    return trust.replaceAll("待平台审核", "平台已审核");
-  }
-  if (trust.includes("待审核")) {
-    return trust.replaceAll("待审核", "平台已审核");
-  }
-  return `${trust} · 平台已审核`;
+  const approvedMarker = "平台已审核";
+  let includesApprovedMarker = false;
+  const declarations = trust
+    .replaceAll("待平台审核", approvedMarker)
+    .replaceAll("待审核", approvedMarker)
+    .split("·")
+    .map((declaration) => declaration.trim().replaceAll(approvedMarker, () => {
+      if (includesApprovedMarker) return "";
+      includesApprovedMarker = true;
+      return approvedMarker;
+    }).trim())
+    .filter(Boolean);
+
+  if (!includesApprovedMarker) declarations.push(approvedMarker);
+  return declarations.join(" · ");
 }
 
 function presentApprovedListing<T extends { trust: string }>(listing: T): T {
