@@ -14,7 +14,9 @@
 - A user can belong to at most one active team; PostgreSQL enforces this with a partial unique membership index.
 - Invite statuses are `PENDING`, `ACCEPTED`, `DECLINED`, `CANCELLED`, and `EXPIRED`.
 - Team statuses are `ACTIVE` and `DISSOLVED`.
+- A user without an active team may have pending invitations across multiple reciprocal matches.
 - Accepting an invite, creating memberships, and associating a Deal Room is one serializable transaction.
+- The acceptance transaction also cancels every other pending invitation involving either new member.
 - Leaving dissolves the team and preserves invites, membership snapshots, messages, applications, and Deal Room history.
 - `DealRoom` is never used to infer team membership.
 - Direct messages still require only the existing server-confirmed reciprocal conversation.
@@ -124,7 +126,7 @@ git commit -m "feat: persist confirmed roommate teams"
 
 - [ ] **Step 1: Write failing service tests**
 
-Cover active-match enforcement, target profile ownership, self-invite rejection, pending invite reuse, only-invitee acceptance/decline, only-inviter cancellation, expiry, one-active-team conflicts, two memberships, and team dissolution. Verify concurrent accepts cannot place either user in two active teams.
+Cover active-match enforcement, target profile ownership, self-invite rejection, pending invite reuse for the same match, multiple pending invitations across different matches, only-invitee acceptance/decline, only-inviter cancellation, expiry, competing-invite cancellation, one-active-team conflicts, two memberships, and team dissolution. Verify concurrent accepts cannot place either user in two active teams.
 
 ```ts
 const invite = await service.invite("user-a", { roommateProfileId: "profile-b" });
@@ -146,7 +148,7 @@ Resolve the target through `RoommateProfile.ownerId`; require an `ACTIVE` normal
 
 - [ ] **Step 4: Implement accept/leave at serializable isolation**
 
-Acceptance conditionally changes `PENDING -> ACCEPTED`, creates the team, creates both active members with immutable display snapshots, calls `ensureForConfirmedTeam`, and stores its `dealRoomId`. Retry Prisma `P2034` up to three times; translate partial-unique `P2002` failures into `409 ROOMMATE_TEAM_CONFLICT`.
+Acceptance conditionally changes `PENDING -> ACCEPTED`, creates the team, creates both active members with immutable display snapshots, cancels every other `PENDING` invitation where either accepted member is inviter or invitee, calls `ensureForConfirmedTeam`, and stores its `dealRoomId`. Retry Prisma `P2034` up to three times; translate partial-unique `P2002` failures into `409 ROOMMATE_TEAM_CONFLICT`.
 
 Leaving conditionally changes `ACTIVE -> DISSOLVED`, sets both memberships inactive with `leftAt`, records the actor and bounded reason `成员主动离开`, and archives the associated Deal Room so it cannot accept new group-tour commands. The Deal Room row and all history remain readable.
 

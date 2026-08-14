@@ -4,21 +4,23 @@
 
 **Goal:** Let a renter submit one persistent solo or confirmed-team application for an approved listing, let only that listing's owner decide it, and expose the result to both sides after refresh.
 
-**Architecture:** The applications module owns application input, immutable applicant snapshots, availability checks, viewer authorization, and the application state machine. It stores an `activeKey` so PostgreSQL permits only one non-terminal application per listing and applicant scope. Acceptance and cancellation call the narrow demo-payments transaction API defined in the demo-payments plan so payment-order creation and held-fund refunds remain atomic.
+**Architecture:** The applications module owns application input, immutable applicant snapshots, availability checks, viewer authorization, and the application state machine. It stores an `activeKey` so PostgreSQL permits only one non-terminal application per listing and applicant scope, plus an `acceptedListingKey` so one listing cannot have two unfinished accepted applications. Acceptance and cancellation call the narrow demo-payments transaction API defined in the demo-payments plan so payment-order creation and held-fund refunds remain atomic.
 
 **Tech Stack:** NestJS, Prisma/PostgreSQL 16, class-validator, Next.js 15, React 19, Vitest, Supertest.
 
 ## Global Constraints
 
 - Application scopes are `SOLO` and `TEAM`; a team application requires an active confirmed team containing the submitter.
-- Application statuses are `DRAFT`, `SUBMITTED`, `ACCEPTED`, `REJECTED`, `WITHDRAWN`, and `CANCELLED`.
+- Application statuses are `DRAFT`, `SUBMITTED`, `ACCEPTED`, `REJECTED`, `WITHDRAWN`, `CANCELLED`, and `COMPLETED`.
 - A submitted stay must satisfy `listing.availableFrom <= moveIn` and `listing.availableTo >= moveOut`.
 - Only approved canonical `Listing` records accept applications; users cannot apply to their own listing.
 - Applicant/member display data is snapshotted and is never replaced by later profile edits.
 - No identity document, bank statement, credit report, background-check file, or exact income is collected.
 - Only the listing owner can list or decide incoming applications for that listing.
-- Applicants may withdraw only `SUBMITTED` applications; applicant or owner may cancel `ACCEPTED` applications before fund release.
-- Rejection, withdrawal, and cancellation clear `activeKey`; accepted applications remain active.
+- Applicants may withdraw only `SUBMITTED` applications; applicant or owner may cancel `ACCEPTED` applications only before the agreed move-in date.
+- Team dissolution leaves drafts un-submittable, automatically withdraws submitted team applications with reason `TEAM_DISSOLVED`, and does not bypass cancellation for accepted applications.
+- Rejection, withdrawal, and cancellation clear `activeKey`; accepted applications remain active and released applications become `COMPLETED`.
+- A listing permits one unfinished accepted application; while it exists, other submitted applications remain pending and new submissions are blocked. Cancellation reopens the listing, while `COMPLETED` closes it permanently.
 - Every retryable mutation accepts and persists a bounded idempotency key.
 
 ---
@@ -33,7 +35,7 @@
 **Interfaces:**
 - Produces: `RentalApplicationScope`, `RentalApplicationStatus`, `RentalIncomeBand`, and `GuarantorStatus` enums.
 - Produces: `RentalApplication` with relations to listing, listing owner, submitter, optional team, and later demo payment.
-- Produces: nullable unique `activeKey` and unique nullable command-key columns.
+- Produces: nullable unique `activeKey`, nullable unique `acceptedListingKey`, and unique nullable command-key columns.
 
 - [ ] **Step 1: Write failing schema and migration tests**
 
@@ -41,7 +43,7 @@ Assert enum order, non-null snapshots/dates, optional `teamId`, owner/submitter 
 
 ```ts
 expect(await scalar(db, `SELECT array_to_string(enum_range(NULL::"RentalApplicationStatus"), ',')`))
-  .toBe("DRAFT,SUBMITTED,ACCEPTED,REJECTED,WITHDRAWN,CANCELLED");
+  .toBe("DRAFT,SUBMITTED,ACCEPTED,REJECTED,WITHDRAWN,CANCELLED,COMPLETED");
 await expect(insertApplication({ scope: "TEAM", teamId: null }))
   .rejects.toThrow(/RentalApplication_team_scope_check/);
 await expect(insertApplication({ moveIn: "2026-09-02", moveOut: "2026-09-01" }))
@@ -68,6 +70,7 @@ model RentalApplication {
   scope              RentalApplicationScope
   status             RentalApplicationStatus @default(DRAFT)
   activeKey          String?                 @unique
+  acceptedListingKey String?                 @unique
   memberSnapshots    Json
   moveIn             DateTime                @db.Date
   moveOut            DateTime                @db.Date
@@ -125,7 +128,7 @@ git commit -m "feat: persist rental applications"
 
 - [ ] **Step 1: Write failing DTO/idempotency/service tests**
 
-Test strict date and text bounds, no extra fields, 8-120 character keys, approved-listing requirement, own-listing rejection, exact boundary dates, out-of-range dates, solo/team active keys, active-team membership, immutable snapshots, viewer permissions, idempotent retries, submit transition, stale conflicts, and withdrawal clearing `activeKey`. `schoolOrOccupation` is trimmed, required, and at most 140 characters; `note` is trimmed and at most 1,000 characters; decision/cancellation reasons are trimmed, required, and at most 500 characters.
+Test strict date and text bounds, no extra fields, 8-120 character keys, approved-listing requirement, own-listing rejection, exact boundary dates, out-of-range dates, solo/team active keys, active-team membership, immutable snapshots, viewer permissions, idempotent retries, submit transition, accepted/completed listing submission blocks, stale conflicts, and withdrawal clearing `activeKey`. `schoolOrOccupation` is trimmed, required, and at most 140 characters; `note` is trimmed and at most 1,000 characters; decision/cancellation reasons are trimmed, required, and at most 500 characters.
 
 ```ts
 const draft = await service.create("renter-1", "create-key-0001", soloInput);
@@ -147,7 +150,7 @@ Resolve display data from the canonical user email plus `Profile` and `RoommateP
 
 - [ ] **Step 4: Implement viewer reads and conditional submit/withdraw transitions**
 
-`mine` includes applications submitted by the actor or by a team containing the actor. `hostInbox` filters by `listingOwnerId`. `findOne` uses the union of those rules. Submit rechecks current listing status/availability and team activity, then conditionally updates `DRAFT -> SUBMITTED`. Withdraw conditionally updates `SUBMITTED -> WITHDRAWN` and sets `activeKey = null`.
+`mine` includes applications submitted by the actor or by a team containing the actor. `hostInbox` filters by `listingOwnerId`. `findOne` uses the union of those rules. Submit rechecks current listing status/availability, team activity, and the absence of an `ACCEPTED` or `COMPLETED` application for the listing, then conditionally updates `DRAFT -> SUBMITTED`. Withdraw conditionally updates `SUBMITTED -> WITHDRAWN` and sets `activeKey = null`.
 
 - [ ] **Step 5: Run the focused test and verify GREEN**
 
@@ -176,7 +179,7 @@ git commit -m "feat: add renter application workflow"
 
 - [ ] **Step 1: Write failing owner-decision and cancellation tests**
 
-Cover owner-only authorization, `SUBMITTED -> ACCEPTED|REJECTED`, accepted payment-order creation in the same transaction, safe rejection reason bounds, applicant/owner cancellation, stranger rejection, no-fund cancellation, held-fund refund, released-fund conflict, idempotent retries, and terminal-state conflicts.
+Cover owner-only authorization, `SUBMITTED -> ACCEPTED|REJECTED`, one unfinished accepted application per listing, accepted payment-order creation in the same transaction, safe rejection reason bounds, applicant/owner cancellation before move-in, cancellation rejection on/after move-in, stranger rejection, no-fund cancellation, held-fund refund, released-fund conflict, idempotent retries, and terminal-state conflicts.
 
 ```ts
 const accepted = await service.accept("owner-1", application.id, "accept-key-0001");
@@ -194,19 +197,23 @@ Expected: FAIL on missing decision/cancellation methods.
 
 - [ ] **Step 3: Implement conditional owner decisions**
 
-Accept and reject load by `listingOwnerId`, use `updateMany({ id, status: "SUBMITTED" })`, persist the command key and decision metadata, and return the existing matching result on same-key retry. Acceptance calls the demo-payment order helper before the transaction commits. Rejection clears `activeKey`.
+Accept and reject load by `listingOwnerId`, use `updateMany({ id, status: "SUBMITTED" })`, persist the command key and decision metadata, and return the existing matching result on same-key retry. Acceptance first claims `acceptedListingKey = listingId`; a unique conflict returns `409 LISTING_APPLICATION_IN_PROGRESS`. It then calls the demo-payment order helper before the transaction commits. Rejection clears `activeKey`.
 
 - [ ] **Step 4: Implement accepted cancellation**
 
-Require actor to be `submitterId` or `listingOwnerId`. Within one transaction call `refundForCancellation`; if it reports `RELEASED`, return 409 and leave the application unchanged. Otherwise conditionally update `ACCEPTED -> CANCELLED`, clear `activeKey`, and record actor/reason/timestamp/key.
+Require actor to be `submitterId` or `listingOwnerId` and server time to be strictly before `moveIn`. Within one transaction call `refundForCancellation`; if it reports `RELEASED`, return 409 and leave the application unchanged. Otherwise conditionally update `ACCEPTED -> CANCELLED`, clear `activeKey` and `acceptedListingKey`, and record actor/reason/timestamp/key.
 
-- [ ] **Step 5: Run the focused test and verify GREEN**
+- [ ] **Step 5: Integrate team dissolution withdrawal**
+
+Update `RoommateTeamsService.leave` in the same transaction to change that team's `SUBMITTED` applications to `WITHDRAWN`, clear `activeKey`, set `withdrawnAt`, and record `decisionReason = "TEAM_DISSOLVED"`. Leave `DRAFT` and `ACCEPTED` rows unchanged; draft submit validation and accepted cancellation rules handle them.
+
+- [ ] **Step 6: Run the focused test and verify GREEN**
 
 Run: `cd api && pnpm vitest run test/applications.service.spec.ts`
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
 git add api/src/applications api/test/applications.service.spec.ts

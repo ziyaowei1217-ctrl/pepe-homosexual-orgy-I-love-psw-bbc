@@ -51,9 +51,9 @@ The existing roommate-conversation module remains authoritative for direct messa
 
 ### Listing Availability
 
-Add required `availableFrom` and `availableTo` date columns plus a required `dateFlexible` boolean to `Listing`. Existing seeded and migrated records receive explicit safe defaults in the migration/seed path. New or edited listings validate that the end is after the start. `dateFlexible` is display/application context only; it never weakens the collection coverage predicate.
+Add required `availableFrom` and `availableTo` date columns to `Listing`. Existing seeded and migrated records receive explicit safe defaults in the migration/seed path. New or edited listings validate that the end is after the start.
 
-Submitted or approved listings that change either availability date or `dateFlexible` enter a fresh `SUBMITTED` review cycle automatically, because the public offer changed materially. Saving the change refreshes `submittedAt` and clears the previous reviewer, review timestamp, and rejection reason; the host does not click Submit a second time.
+Submitted or approved listings that change either availability date enter a fresh `SUBMITTED` review cycle automatically, because the public offer changed materially. Saving the change refreshes `submittedAt` and clears the previous reviewer, review timestamp, and rejection reason; the host does not click Submit a second time.
 
 The collection API accepts `moveIn` and `moveOut` only as a pair. A listing matches when:
 
@@ -201,7 +201,7 @@ All retryable write routes accept an idempotency key. The server binds each key 
 
 ### Search Dates
 
-The existing calendar becomes enabled. Labels use “入住/退租” and duration in days, not hotel-night language. A partial pair is retained in the form but does not filter and prompts the renter to complete both dates. Selecting a valid pair updates the URL search parameters and refetches the server collection. Clearing dates restores the unfiltered collection. The host form persists a “日期可协商” switch and public cards/details display that flag without changing strict date filtering.
+The existing calendar becomes enabled. Labels use “入住/退租” and duration in days, not hotel-night language. A partial pair is retained in the form but does not filter and prompts the renter to complete both dates. Selecting a valid pair updates the URL search parameters and refetches the server collection. Clearing dates restores the unfiltered collection.
 
 ### Roommate Messaging And Teams
 
@@ -242,7 +242,6 @@ Each feature begins with unit/service tests and finishes with public-boundary in
 Required checks include:
 
 - exact and boundary-inclusive date coverage plus invalid range rejection;
-- date-flexibility persistence, review reset, and proof that it does not broaden filtering;
 - listing review reset after availability changes;
 - media type/size/count validation, finalize failure, retry, ordering, removal, and authorization;
 - reciprocal-match requirement, multiple pending invites, competing-invite cancellation, concurrent accept protection, one-active-team rule, and dissolve behavior;

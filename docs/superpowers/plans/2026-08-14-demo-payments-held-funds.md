@@ -15,7 +15,8 @@
 - An accepted application has exactly one payment order for one month of listing rent, converted to integer cents.
 - Simulation outcomes are deterministic explicit commands: `SUCCEEDED` or `FAILED`.
 - The first successful attempt creates one held-fund account; later successful retries never create another account or another hold posting.
-- Held funds refund on accepted-application cancellation before release and release only after renter and listing owner confirmations.
+- Held funds refund on accepted-application cancellation strictly before the agreed move-in date and release only after renter and listing owner confirmations on or after that date.
+- Cancelling an unpaid order closes it without creating a refund ledger event.
 - Every hold, refund, and release posts one debit and one equal credit under one transaction ID.
 - Ledger rows are immutable in PostgreSQL: update and delete operations fail.
 - Idempotency keys protect attempts, confirmations, refunds, releases, and all associated postings.
@@ -180,7 +181,7 @@ git commit -m "feat: post balanced demo ledger entries"
 
 - [ ] **Step 1: Write failing service tests**
 
-Cover accepted-only order creation, amount `listing.price * 100`, one order, applicant/owner read authorization, applicant-only simulations, failed attempts, first success hold, repeated success, same-key retries, terminal-state behavior, one timestamp per party, dual-confirm release, cancellation refund, no-fund cancellation, release conflict, and exact balanced ledger pairs.
+Cover accepted-only order creation, amount `listing.price * 100`, one order, applicant/owner read authorization, applicant-only simulations, failed attempts, first success hold, repeated success, same-key retries, terminal-state behavior, confirmation rejection before `application.moveIn`, one timestamp per party, dual-confirm release, application completion, cancellation refund, unpaid cancellation without a refund posting, release conflict, and exact balanced ledger pairs.
 
 ```ts
 const payment = await service.ensureOrderForAcceptedApplication(tx, "application-1");
@@ -202,7 +203,7 @@ Order creation loads an `ACCEPTED` application and listing inside the caller tra
 
 - [ ] **Step 4: Implement refund and dual confirmation**
 
-Refund returns `NO_FUNDS` when no account exists, conditionally updates `HELD -> REFUNDED`, updates payment, and posts `REFUND`. Confirmation identifies the actor as submitter or listing owner and only sets that actor's timestamp/key. A second confirmation by the same actor returns the original timestamp without changing its key. If the other party's timestamp is now present, conditionally update `HELD -> RELEASED`, update payment, and post `RELEASE` in the same transaction.
+Refund returns `NO_FUNDS` when no account exists, closes an unpaid payment without a ledger posting, or conditionally updates `HELD -> REFUNDED`, updates payment, and posts `REFUND`. Confirmation loads `application.moveIn`, rejects server time before that date, identifies the actor as submitter or listing owner, and only sets that actor's timestamp/key. A second confirmation by the same actor returns the original timestamp without changing its key. If the other party's timestamp is now present, conditionally update `HELD -> RELEASED`, update payment, post `RELEASE`, and transition the application `ACCEPTED -> COMPLETED` in the same transaction while retaining `acceptedListingKey` to keep the listing closed.
 
 - [ ] **Step 5: Run the focused test and verify GREEN**
 
