@@ -125,6 +125,39 @@ describe("ListingsService", () => {
     await expect(service.findAll()).resolves.toMatchObject([{ id: "approved" }]);
   });
 
+  it.each([
+    ["房东知情声明 · 待平台审核", "房东知情声明 · 平台已审核"],
+    ["待审核", "平台已审核"],
+    [".edu verified", ".edu verified · 平台已审核"],
+    ["", "平台已审核"],
+    ["房东知情 · 平台已审核", "房东知情 · 平台已审核"]
+  ])("presents approved public trust without mutating the stored declaration", async (trust, expectedTrust) => {
+    const stored = listingRecord({ id: "approved", status: "APPROVED", trust });
+    const prisma = createPrismaMock({ listings: [stored] });
+    const service = new ListingsService(prisma as never, new AuditService());
+
+    await expect(service.findAll()).resolves.toMatchObject([
+      { id: "approved", status: "APPROVED", trust: expectedTrust }
+    ]);
+    expect(stored.trust).toBe(trust);
+  });
+
+  it("presents the same approved trust semantics on public detail reads", async () => {
+    const prisma = createPrismaMock({
+      listings: [listingRecord({
+        id: "approved",
+        status: "APPROVED",
+        trust: "房东知情声明 · 待平台审核"
+      })]
+    });
+    const service = new ListingsService(prisma as never, new AuditService());
+
+    await expect(service.findOne("approved")).resolves.toMatchObject({
+      id: "approved",
+      trust: "房东知情声明 · 平台已审核"
+    });
+  });
+
   it("returns an empty public catalog when no approved database listings exist", async () => {
     const prisma = createPrismaMock({
       listings: [listingRecord({ id: "draft", ownerId: "owner-1", status: "DRAFT" })]

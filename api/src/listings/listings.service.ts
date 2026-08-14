@@ -28,12 +28,12 @@ export class ListingsService {
       orderBy: { createdAt: "desc" }
     });
 
-    return records;
+    return records.map(presentApprovedListing);
   }
 
   async findOne(id: string) {
     const record = await this.prisma.listing.findUnique({ where: { id }, include: listingMediaInclude });
-    if (record?.status === "APPROVED") return record;
+    if (record?.status === "APPROVED") return presentApprovedListing(record);
     if (record) throw new NotFoundException("Listing not found");
 
     throw new NotFoundException("Listing not found");
@@ -239,4 +239,21 @@ function listingUpdateData(dto: UpdateListingDto) {
 
 function definedData<T extends Record<string, unknown>>(data: T) {
   return Object.fromEntries(Object.entries(data).filter(([, value]) => value !== undefined));
+}
+
+function approvedPublicTrust(value: string) {
+  const trust = value.trim();
+  if (!trust) return "平台已审核";
+  if (trust.includes("平台已审核")) return trust;
+  if (trust.includes("待平台审核")) {
+    return trust.replaceAll("待平台审核", "平台已审核");
+  }
+  if (trust.includes("待审核")) {
+    return trust.replaceAll("待审核", "平台已审核");
+  }
+  return `${trust} · 平台已审核`;
+}
+
+function presentApprovedListing<T extends { trust: string }>(listing: T): T {
+  return { ...listing, trust: approvedPublicTrust(listing.trust) };
 }
