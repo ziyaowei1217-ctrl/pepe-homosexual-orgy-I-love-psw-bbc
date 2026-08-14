@@ -37,6 +37,8 @@ type ListingRecord = {
   title: string;
   area: string;
   image: string;
+  availableFrom: Date;
+  availableTo: Date;
   price: number;
   originalPrice: number;
   beds: number;
@@ -273,6 +275,8 @@ type ListingWhere = {
   id?: string;
   ownerId?: string;
   status?: ListingStatus;
+  availableFrom?: { lte: Date };
+  availableTo?: { gte: Date };
 };
 
 type ListingOrderBy = {
@@ -638,6 +642,8 @@ export function createLaunchPrismaMock() {
           title: data.title,
           area: data.area ?? "",
           image: data.image ?? "",
+          availableFrom: data.availableFrom ?? new Date("2026-08-01T00:00:00.000Z"),
+          availableTo: data.availableTo ?? new Date("2027-08-01T00:00:00.000Z"),
           price: data.price ?? 0,
           originalPrice: data.originalPrice ?? 0,
           beds: data.beds ?? 0,
@@ -1081,6 +1087,8 @@ function matchesListing(listing: ListingRecord, where: ListingWhere = {}) {
   if (where.id && listing.id !== where.id) return false;
   if (where.ownerId && listing.ownerId !== where.ownerId) return false;
   if (where.status && listing.status !== where.status) return false;
+  if (where.availableFrom?.lte && listing.availableFrom > where.availableFrom.lte) return false;
+  if (where.availableTo?.gte && listing.availableTo < where.availableTo.gte) return false;
   return true;
 }
 

@@ -39,6 +39,8 @@ describeDatabase("listing review PostgreSQL concurrency", () => {
         ownerId: owner.id,
         title: "Concurrent review listing",
         area: "Boston",
+        availableFrom: new Date("2026-08-20T00:00:00.000Z"),
+        availableTo: new Date("2026-12-31T00:00:00.000Z"),
         price: 1_900,
         originalPrice: 2_100,
         beds: 1,

@@ -1,7 +1,7 @@
-import { Body, Controller, Get, Inject, Param, Patch, Post, Req, UseGuards, ValidationPipe } from "@nestjs/common";
+import { Body, Controller, Get, Inject, Param, Patch, Post, Query, Req, UseGuards, ValidationPipe } from "@nestjs/common";
 
 import { AuthGuard, AuthenticatedRequest } from "../auth/auth.guard";
-import { CreateListingDto, CreateListingMediaDto, UpdateListingDto } from "./dto";
+import { CreateListingDto, CreateListingMediaDto, ListingAvailabilityQueryDto, UpdateListingDto } from "./dto";
 import { ListingsService } from "./listings.service";
 
 const createListingBodyPipe = new ValidationPipe({
@@ -25,13 +25,20 @@ const createListingMediaBodyPipe = new ValidationPipe({
   expectedType: CreateListingMediaDto
 });
 
+const listingAvailabilityQueryPipe = new ValidationPipe({
+  whitelist: true,
+  forbidNonWhitelisted: true,
+  transform: true,
+  expectedType: ListingAvailabilityQueryDto
+});
+
 @Controller("listings")
 export class ListingsController {
   constructor(@Inject(ListingsService) private readonly listings: ListingsService) {}
 
   @Get()
-  findAll() {
-    return this.listings.findAll();
+  findAll(@Query(listingAvailabilityQueryPipe) query: ListingAvailabilityQueryDto) {
+    return this.listings.findAll(query);
   }
 
   @UseGuards(AuthGuard)

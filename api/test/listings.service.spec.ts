@@ -13,6 +13,8 @@ type ListingRecord = {
   title: string;
   area: string;
   image: string;
+  availableFrom: Date;
+  availableTo: Date;
   price: number;
   originalPrice: number;
   beds: number;
@@ -44,6 +46,8 @@ type ListingWhere = {
   id?: string;
   ownerId?: string;
   status?: ListingStatus;
+  availableFrom?: { lte: Date };
+  availableTo?: { gte: Date };
 };
 
 type ListingOrderBy = {
@@ -123,6 +127,36 @@ describe("ListingsService", () => {
     const service = new ListingsService(prisma as never, new AuditService());
 
     await expect(service.findAll()).resolves.toMatchObject([{ id: "approved" }]);
+  });
+
+  it("returns only approved listings that fully cover the requested stay", async () => {
+    const prisma = createPrismaMock({
+      listings: [
+        listingRecord({
+          id: "full-cover",
+          status: "APPROVED",
+          availableFrom: new Date("2026-08-20T00:00:00.000Z"),
+          availableTo: new Date("2026-09-20T00:00:00.000Z")
+        }),
+        listingRecord({
+          id: "starts-late",
+          status: "APPROVED",
+          availableFrom: new Date("2026-08-21T00:00:00.000Z"),
+          availableTo: new Date("2026-09-20T00:00:00.000Z")
+        }),
+        listingRecord({
+          id: "ends-early",
+          status: "APPROVED",
+          availableFrom: new Date("2026-08-20T00:00:00.000Z"),
+          availableTo: new Date("2026-09-19T00:00:00.000Z")
+        })
+      ]
+    });
+    const service = new ListingsService(prisma as never, new AuditService());
+
+    await expect(
+      service.findAll({ moveIn: "2026-08-20", moveOut: "2026-09-20" })
+    ).resolves.toMatchObject([{ id: "full-cover" }]);
   });
 
   it.each([
@@ -255,6 +289,24 @@ describe("ListingsService", () => {
     await expect(service.create("owner-1", listingDto())).resolves.toMatchObject({
       ownerId: "owner-1",
       status: "DRAFT"
+    });
+  });
+
+  it("persists validated availability when an owner creates a listing", async () => {
+    const prisma = createPrismaMock();
+    const service = new ListingsService(prisma as never, new AuditService());
+
+    await expect(
+      service.create(
+        "owner-1",
+        listingDto({
+          availableFrom: "2026-09-01",
+          availableTo: "2027-01-15"
+        })
+      )
+    ).resolves.toMatchObject({
+      availableFrom: new Date("2026-09-01T00:00:00.000Z"),
+      availableTo: new Date("2027-01-15T00:00:00.000Z")
     });
   });
 
@@ -411,6 +463,51 @@ describe("ListingsService", () => {
 
     expect(updated.title).toBe("Updated title");
     expect(updated.status).toBe(status);
+  });
+
+  it("returns an approved listing to review after an availability-only edit", async () => {
+    const prisma = createPrismaMock({
+      listings: [
+        listingRecord({
+          id: "listing-1",
+          ownerId: "owner-1",
+          status: "APPROVED",
+          reviewedAt: new Date("2026-08-10T00:00:00.000Z"),
+          reviewerId: "admin-1"
+        })
+      ]
+    });
+    const service = new ListingsService(prisma as never, new AuditService());
+
+    await expect(
+      service.update("owner-1", "listing-1", {
+        availableFrom: "2026-09-01",
+        availableTo: "2027-01-15"
+      })
+    ).resolves.toMatchObject({
+      status: "SUBMITTED",
+      availableFrom: new Date("2026-09-01T00:00:00.000Z"),
+      availableTo: new Date("2027-01-15T00:00:00.000Z"),
+      submittedAt: expect.any(Date),
+      reviewedAt: null,
+      reviewerId: null,
+      rejectionReason: null
+    });
+  });
+
+  it("keeps non-availability owner edits blocked for approved listings", async () => {
+    const prisma = createPrismaMock({
+      listings: [listingRecord({ id: "listing-1", ownerId: "owner-1", status: "APPROVED" })]
+    });
+    const service = new ListingsService(prisma as never, new AuditService());
+
+    await expect(
+      service.update("owner-1", "listing-1", {
+        title: "Changed title",
+        availableFrom: "2026-09-01",
+        availableTo: "2027-01-15"
+      })
+    ).rejects.toThrow(BadRequestException);
   });
 
   it("ignores client-provided review status when owners update listings", async () => {
@@ -629,6 +726,8 @@ function listingDto(overrides: Partial<ListingDto> = {}): ListingDto {
     title: "Fenway verified sublet",
     area: "Boston - Fenway",
     image: "https://example.com/home.jpg",
+    availableFrom: "2026-08-20",
+    availableTo: "2026-12-31",
     price: 1420,
     originalPrice: 1680,
     beds: 1,
@@ -651,6 +750,8 @@ function listingRecord(overrides: Partial<ListingRecord> = {}): ListingRecord {
     title: dto.title,
     area: dto.area,
     image: dto.image,
+    availableFrom: new Date(`${dto.availableFrom}T00:00:00.000Z`),
+    availableTo: new Date(`${dto.availableTo}T00:00:00.000Z`),
     price: dto.price,
     originalPrice: dto.originalPrice,
     beds: dto.beds,
@@ -833,6 +934,8 @@ function matchesWhere(listing: ListingRecord, where: ListingWhere = {}) {
   if (where.id && listing.id !== where.id) return false;
   if (where.ownerId && listing.ownerId !== where.ownerId) return false;
   if (where.status && listing.status !== where.status) return false;
+  if (where.availableFrom?.lte && listing.availableFrom > where.availableFrom.lte) return false;
+  if (where.availableTo?.gte && listing.availableTo < where.availableTo.gte) return false;
   return true;
 }
 

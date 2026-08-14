@@ -10,6 +10,15 @@ import { AdminListingsController } from "../src/listings/admin-listings.controll
 import { ListingsController } from "../src/listings/listings.controller";
 
 describe("ListingsController", () => {
+  it("delegates public availability queries to ListingsService", async () => {
+    const listings = createListingsServiceMock();
+    const controller = new ListingsController(listings as never);
+    const query = { moveIn: "2026-08-20", moveOut: "2026-09-20" };
+
+    await expect(controller.findAll(query)).resolves.toEqual([{ id: "listing-1" }]);
+    expect(listings.findAllCalls).toEqual([query]);
+  });
+
   it("delegates current-user listing reads to ListingsService", async () => {
     const listings = createListingsServiceMock();
     const controller = new ListingsController(listings as never);
@@ -117,12 +126,17 @@ function requestFor(id: string, role = "USER"): AuthenticatedRequest & RequestWi
 
 function createListingsServiceMock() {
   const service = {
+    findAllCalls: [] as Array<{ moveIn?: string; moveOut?: string }>,
     findMineCalls: [] as string[],
     submitCalls: [] as Array<{ ownerId: string; id: string }>,
     addMediaCalls: [] as Array<{ ownerId: string; id: string; dto: { url: string; kind: string; sortOrder?: number } }>,
     findReviewQueueCalls: 0,
     approveCalls: [] as Array<{ id: string; actor: AuditActor }>,
     rejectCalls: [] as Array<{ id: string; actor: AuditActor; reason: string }>,
+    findAll: async (query: { moveIn?: string; moveOut?: string }) => {
+      service.findAllCalls.push(query);
+      return [{ id: "listing-1" }];
+    },
     findMine: async (ownerId: string) => {
       service.findMineCalls.push(ownerId);
       return [{ id: "listing-1" }];

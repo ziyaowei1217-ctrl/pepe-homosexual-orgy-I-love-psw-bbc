@@ -4,7 +4,8 @@ import { Prisma } from "@prisma/client";
 import { AuditActor, AuditService } from "../audit/audit.service";
 import { requirePublishCapableProfile } from "../marketplace/publish-profile";
 import { PrismaService } from "../prisma/prisma.service";
-import { CreateListingDto, CreateListingMediaDto, UpdateListingDto } from "./dto";
+import { CreateListingDto, CreateListingMediaDto, ListingAvailabilityQueryDto, UpdateListingDto } from "./dto";
+import { buildListingAvailabilityWhere, validateListingAvailability } from "./listing-availability";
 
 const editableListingStatuses = new Set(["DRAFT", "REJECTED"]);
 const listingMediaInclude = {
@@ -22,9 +23,10 @@ export class ListingsService {
     @Inject(AuditService) private readonly audit: AuditService
   ) {}
 
-  async findAll() {
+  async findAll(query: ListingAvailabilityQueryDto = {}) {
+    const availabilityWhere = buildListingAvailabilityWhere(query);
     const records = await this.prisma.listing.findMany({
-      where: { status: "APPROVED" },
+      where: { status: "APPROVED", ...availabilityWhere },
       orderBy: { createdAt: "desc" }
     });
 
@@ -41,6 +43,7 @@ export class ListingsService {
 
   async create(ownerId: string, dto: CreateListingDto) {
     await this.requirePublishCapableOwner(ownerId);
+    const availability = validateListingAvailability(dto.availableFrom, dto.availableTo);
 
     return this.prisma.listing.create({
       data: {
@@ -49,6 +52,7 @@ export class ListingsService {
         title: dto.title,
         area: dto.area,
         image: dto.image,
+        ...availability,
         price: dto.price,
         originalPrice: dto.originalPrice,
         beds: dto.beds,
@@ -91,14 +95,26 @@ export class ListingsService {
   async update(ownerId: string, id: string, dto: UpdateListingDto) {
     const listing = await this.prisma.listing.findUnique({ where: { id } });
     if (!listing || listing.ownerId !== ownerId) throw new NotFoundException("Listing not found");
-    if (!editableListingStatuses.has(listing.status)) {
+    const approvedAvailabilityEdit =
+      listing.status === "APPROVED" && isAvailabilityOnlyUpdate(dto);
+    if (!editableListingStatuses.has(listing.status) && !approvedAvailabilityEdit) {
       throw new BadRequestException("Listing cannot be edited in its current status");
     }
     await this.requirePublishCapableOwner(ownerId);
 
-    const data = listingUpdateData(dto);
+    const data = listingUpdateData(dto, listing);
     if (Object.keys(data).length === 0) {
       throw new BadRequestException("At least one editable listing field is required");
+    }
+
+    if (approvedAvailabilityEdit) {
+      Object.assign(data, {
+        status: "SUBMITTED",
+        submittedAt: new Date(),
+        reviewedAt: null,
+        reviewerId: null,
+        rejectionReason: null
+      });
     }
 
     return this.prisma.listing.update({
@@ -220,11 +236,24 @@ export class ListingsService {
   }
 }
 
-function listingUpdateData(dto: UpdateListingDto) {
+function listingUpdateData(
+  dto: UpdateListingDto,
+  listing: { availableFrom: Date; availableTo: Date }
+) {
+  const availabilityChanged =
+    dto.availableFrom !== undefined || dto.availableTo !== undefined;
+  const availability = availabilityChanged
+    ? validateListingAvailability(
+        dto.availableFrom ?? formatListingDate(listing.availableFrom),
+        dto.availableTo ?? formatListingDate(listing.availableTo)
+      )
+    : {};
+
   return definedData({
     title: dto.title,
     area: dto.area,
     image: dto.image,
+    ...availability,
     price: dto.price,
     originalPrice: dto.originalPrice,
     beds: dto.beds,
@@ -235,6 +264,21 @@ function listingUpdateData(dto: UpdateListingDto) {
     tags: dto.tags,
     score: dto.score
   });
+}
+
+function isAvailabilityOnlyUpdate(dto: UpdateListingDto) {
+  const fields = Object.entries(dto)
+    .filter(([, value]) => value !== undefined)
+    .map(([field]) => field);
+
+  return (
+    fields.length > 0 &&
+    fields.every((field) => field === "availableFrom" || field === "availableTo")
+  );
+}
+
+function formatListingDate(value: Date) {
+  return value.toISOString().slice(0, 10);
 }
 
 function definedData<T extends Record<string, unknown>>(data: T) {

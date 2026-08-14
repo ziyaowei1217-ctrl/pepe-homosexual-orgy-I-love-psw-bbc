@@ -192,6 +192,8 @@ function listingPayload() {
     title: "Launch-ready Fenway sublet",
     area: "Boston - Fenway",
     image: "https://example.com/fenway.jpg",
+    availableFrom: "2026-08-20",
+    availableTo: "2026-12-31",
     price: 1800,
     originalPrice: 2100,
     beds: 2,

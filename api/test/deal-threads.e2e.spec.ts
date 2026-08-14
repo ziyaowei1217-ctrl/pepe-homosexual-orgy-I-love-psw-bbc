@@ -153,6 +153,8 @@ async function createApprovedListing(http: any, host: any, admin: any) {
       title: "Service-backed Westwood room",
       area: "LA · Westwood",
       image: "https://example.com/home.jpg",
+      availableFrom: "2026-08-20",
+      availableTo: "2026-12-31",
       price: 1750,
       originalPrice: 1900,
       beds: 2,

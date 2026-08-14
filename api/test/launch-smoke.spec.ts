@@ -205,6 +205,8 @@ function listingPayload() {
     title: "Launch smoke verified sublet",
     area: "Boston - Fenway",
     image: "https://example.com/smoke-listing.jpg",
+    availableFrom: "2026-08-20",
+    availableTo: "2026-12-31",
     price: 1900,
     originalPrice: 2200,
     beds: 2,

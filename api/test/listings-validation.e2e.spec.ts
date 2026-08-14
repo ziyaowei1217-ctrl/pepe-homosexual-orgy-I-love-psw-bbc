@@ -86,6 +86,40 @@ describe("listing HTTP validation", () => {
       .expect(400);
   });
 
+  it("requires a valid increasing availability range", async () => {
+    const http = request(app.getHttpServer());
+    const { availableFrom: _from, availableTo: _to, ...withoutAvailability } = listingPayload();
+
+    await http
+      .post("/api/v1/listings")
+      .set("Authorization", `Bearer ${token}`)
+      .send(withoutAvailability)
+      .expect(400);
+
+    await http
+      .post("/api/v1/listings")
+      .set("Authorization", `Bearer ${token}`)
+      .send({
+        ...listingPayload(),
+        availableFrom: "2026-09-20",
+        availableTo: "2026-08-20"
+      })
+      .expect(400);
+  });
+
+  it("rejects incomplete or malformed public date queries", async () => {
+    const http = request(app.getHttpServer());
+
+    await http.get("/api/v1/listings?moveIn=2026-08-20").expect(400);
+    await http.get("/api/v1/listings?moveOut=2026-09-20").expect(400);
+    await http
+      .get("/api/v1/listings?moveIn=2026-09-20&moveOut=2026-08-20")
+      .expect(400);
+    await http
+      .get("/api/v1/listings?moveIn=2026-02-30&moveOut=2026-09-20")
+      .expect(400);
+  });
+
   it("rejects server-owned listing fields at the HTTP boundary", async () => {
     const http = request(app.getHttpServer());
 
@@ -275,6 +309,8 @@ function listingPayload() {
     title: "Launch-ready Fenway sublet",
     area: "Boston - Fenway",
     image: "https://example.com/fenway.jpg",
+    availableFrom: "2026-08-20",
+    availableTo: "2026-12-31",
     price: 1800,
     originalPrice: 2100,
     beds: 2,
