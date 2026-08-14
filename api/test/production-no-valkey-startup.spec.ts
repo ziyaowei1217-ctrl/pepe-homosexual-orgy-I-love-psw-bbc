@@ -29,6 +29,12 @@ describe("production startup without Valkey", () => {
     setEnvironment("EMAIL_FROM", "Sublet Pipeline <no-reply@example.com>");
     setEnvironment("LOCAL_ADMIN_EMAILS", "");
     setEnvironment("VALKEY_URL", "");
+    setEnvironment("LISTING_MEDIA_STORAGE_ENDPOINT", "https://minio.example.com");
+    setEnvironment("LISTING_MEDIA_UPLOAD_ENDPOINT", "https://uploads.example.com");
+    setEnvironment("LISTING_MEDIA_STORAGE_REGION", "us-east-1");
+    setEnvironment("LISTING_MEDIA_STORAGE_BUCKET", "listing-media");
+    setEnvironment("LISTING_MEDIA_STORAGE_ACCESS_KEY_ID", "production-minio-key");
+    setEnvironment("LISTING_MEDIA_STORAGE_SECRET_ACCESS_KEY", "production-minio-secret");
 
     const [{ AppModule }, { MessagingInfrastructureHealth }, { PrismaService }, { createRoommateSocketAdapter }] =
       await Promise.all([

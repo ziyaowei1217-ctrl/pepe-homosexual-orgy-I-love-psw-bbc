@@ -46,7 +46,10 @@ import { AuthFlowPanel } from "@/components/auth-flow-panel";
 import { AdminRoommatesScreen } from "@/components/admin-roommates-screen";
 import { AdminStepUpPanel } from "@/components/admin-step-up-panel";
 import { AdminTrustScreen } from "@/components/admin-trust-screen";
+import { ApplicationStatusPanel } from "@/components/application-status-panel";
+import { HostApplicationInbox } from "@/components/host-application-inbox";
 import { ListingMediaUploader } from "@/components/listing-media-uploader";
+import { RentalApplicationPanel } from "@/components/rental-application-panel";
 import { RoommateTeamControls } from "@/components/roommate-team-controls";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -799,6 +802,7 @@ export default function HomePage({
   } | null>(null);
   const [myListings, setMyListings] = useState<ApiListing[]>([]);
   const [editingListingId, setEditingListingId] = useState<string | null>(null);
+  const [applicationListing, setApplicationListing] = useState<Listing | null>(null);
   const [isPublishing, setIsPublishing] = useState(false);
   const publishAccess = getPublishAccess({
     authenticated: Boolean(token && user),
@@ -2139,8 +2143,13 @@ export default function HomePage({
   }
 
   function handleStartApplication(listing: Listing) {
+    if (!token || !user) {
+      setAuthPanelOpen(true);
+      setToast("请先登录再提交租房申请。");
+      return;
+    }
     setSelectedListing(listing);
-    setToast("在线申请、支付与托管暂未开放。");
+    setApplicationListing(listing);
   }
 
   function roommateTeamActionFor(targetRoommate: Roommate): RoommateTeamAction {
@@ -2776,6 +2785,7 @@ export default function HomePage({
       {activeSection === "Trips" ? (
         <TripsScreen
           viewingRequests={viewingRequests}
+          token={token}
           user={user}
           onOpenDealRoom={() => navigateToSection("Messages")}
         />
@@ -2802,6 +2812,20 @@ export default function HomePage({
           onToast={setToast}
           onAuthenticationError={(error) => {
             void handleAdminAuthenticationError(error);
+          }}
+        />
+      ) : null}
+      {applicationListing && token && user ? (
+        <RentalApplicationPanel
+          listing={applicationListing}
+          token={token}
+          team={roommateTeam}
+          profile={profile}
+          onClose={() => setApplicationListing(null)}
+          onSubmitted={() => {
+            setApplicationListing(null);
+            setToast("申请已提交，可在看房行程中继续查看状态。");
+            navigateToSection("Trips");
           }}
         />
       ) : null}
@@ -5164,12 +5188,17 @@ export function PublishScreen({
         )}
       </div>
       <aside className="col-span-full min-w-0 xl:col-span-4">
-        <LandlordListingsPanel
-          editingListingId={editingListingId}
-          listings={listings}
-          user={user}
-          onEditListing={onEditListing}
-        />
+        <div className="flex flex-col gap-4">
+          <LandlordListingsPanel
+            editingListingId={editingListingId}
+            listings={listings}
+            user={user}
+            onEditListing={onEditListing}
+          />
+          {token && user ? (
+            <HostApplicationInbox token={token} currentUserId={user.id} />
+          ) : null}
+        </div>
       </aside>
     </section>
   );
@@ -5271,10 +5300,12 @@ function normalizeListingStatus(status: ApiListing["status"]): ListingStatus {
 
 function TripsScreen({
   viewingRequests,
+  token,
   user,
   onOpenDealRoom
 }: {
   viewingRequests: ViewingRequest[];
+  token: string | null;
   user: SessionUser | null;
   onOpenDealRoom: () => void;
 }) {
@@ -5287,17 +5318,16 @@ function TripsScreen({
         </div>
       </div>
       <aside className="col-span-full min-w-0 lg:col-span-4">
-        <Card className="shadow-panel">
-          <CardHeader>
-            <CardTitle>后续交易功能</CardTitle>
-            <CardDescription>以下能力尚未接通后端，本页不会模拟成功状态。</CardDescription>
-          </CardHeader>
-          <CardContent className="flex flex-wrap gap-2">
-            <Badge variant="secondary">在线申请 · 暂未开放</Badge>
-            <Badge variant="secondary">支付 · 暂未开放</Badge>
-            <Badge variant="secondary">资金托管 · 暂未开放</Badge>
-          </CardContent>
-        </Card>
+        {token && user ? (
+          <ApplicationStatusPanel token={token} currentUserId={user.id} />
+        ) : (
+          <Card className="shadow-panel">
+            <CardHeader>
+              <CardTitle>租房申请行程</CardTitle>
+              <CardDescription>登录后查看申请、演示支付与资金状态。</CardDescription>
+            </CardHeader>
+          </Card>
+        )}
       </aside>
       <div className="col-span-full min-w-0 lg:col-span-4 xl:col-span-8">
         <Card className="shadow-panel">
@@ -5537,7 +5567,7 @@ function ListingDetailScreen({
                 className="w-full justify-between"
                 onClick={() => onApply(listing)}
               >
-                在线申请（暂未开放）
+                在线申请
                 <ArrowRight data-icon="inline-end" />
               </Button>
               <Separator />
@@ -5552,11 +5582,11 @@ function ListingDetailScreen({
                 </div>
                 <div className="mt-2 flex justify-between text-muted-foreground">
                   <span>支付</span>
-                  <span>暂未开放</span>
+                  <span>申请接受后可演示</span>
                 </div>
                 <div className="mt-2 flex justify-between text-muted-foreground">
-                  <span>资金托管</span>
-                  <span>暂未开放</span>
+                  <span>演示资金</span>
+                  <span>不会真实扣款</span>
                 </div>
               </div>
             </CardContent>

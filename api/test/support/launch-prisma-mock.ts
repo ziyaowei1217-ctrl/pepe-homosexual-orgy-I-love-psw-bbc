@@ -60,9 +60,16 @@ type ListingRecord = {
 type ListingMediaRecord = {
   id: string;
   listingId: string;
-  url: string;
+  url: string | null;
   kind: string;
   sortOrder: number;
+  originalKey: string | null;
+  processedKey: string | null;
+  publicMainKey: string | null;
+  publicThumbnailKey: string | null;
+  storageStatus: "PENDING_UPLOAD" | "UPLOADED_PENDING_VALIDATION" | "READY" | "PUBLISHED" | "FAILED";
+  reviewStatus: "PENDING" | "APPROVED" | "REJECTED";
+  publishedAt: Date | null;
   createdAt: Date;
 };
 
@@ -683,15 +690,37 @@ export function createLaunchPrismaMock() {
       create: async ({
         data
       }: {
-        data: Pick<ListingMediaRecord, "listingId" | "url" | "kind" | "sortOrder">;
+        data: Pick<ListingMediaRecord, "listingId" | "url" | "kind" | "sortOrder"> & Partial<ListingMediaRecord>;
       }) => {
         const created: ListingMediaRecord = {
           id: `media-${state.listingMedia.length + 1}`,
           ...data,
+          originalKey: data.originalKey ?? null,
+          processedKey: data.processedKey ?? null,
+          publicMainKey: data.publicMainKey ?? null,
+          publicThumbnailKey: data.publicThumbnailKey ?? null,
+          storageStatus: data.storageStatus ?? "PENDING_UPLOAD",
+          reviewStatus: data.reviewStatus ?? "PENDING",
+          publishedAt: data.publishedAt ?? null,
           createdAt: new Date()
         };
         state.listingMedia.push(created);
         return created;
+      },
+      updateMany: async ({
+        where,
+        data
+      }: {
+        where: { listingId?: string; storageStatus?: ListingMediaRecord["storageStatus"] };
+        data: Partial<ListingMediaRecord>;
+      }) => {
+        const matches = state.listingMedia.filter(
+          (record) =>
+            (!where.listingId || record.listingId === where.listingId) &&
+            (!where.storageStatus || record.storageStatus === where.storageStatus)
+        );
+        matches.forEach((record) => Object.assign(record, definedData(data)));
+        return { count: matches.length };
       }
     },
     roommateProfile: {

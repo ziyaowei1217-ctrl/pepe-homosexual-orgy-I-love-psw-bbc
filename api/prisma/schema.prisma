@@ -75,28 +75,35 @@ enum ViewingRequestStatus {
 }
 
 model User {
-  id              String           @id @default(cuid())
-  email           String           @unique
-  role            UserRole         @default(USER)
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
-  listings        Listing[]
-  roommateActions RoommateAction[]
-  ownedDealRooms  DealRoom[]
-  tourRequests    TourRequest[]
-  renterDealThreads DealThread[]       @relation("RenterDealThreads")
-  ownedListingThreads DealThread[]      @relation("ListingOwnerDealThreads")
-  dealMessages    DealMessage[]
-  viewingRequests ViewingRequest[]
-  roommateProfile RoommateProfile? @relation("RoommateProfileOwner")
-  firstRoommateMatches RoommateMatch[] @relation("RoommateMatchFirstUser")
-  secondRoommateMatches RoommateMatch[] @relation("RoommateMatchSecondUser")
+  id                              String                       @id @default(cuid())
+  email                           String                       @unique
+  role                            UserRole                     @default(USER)
+  createdAt                       DateTime                     @default(now())
+  updatedAt                       DateTime                     @updatedAt
+  listings                        Listing[]
+  roommateActions                 RoommateAction[]
+  ownedDealRooms                  DealRoom[]
+  tourRequests                    TourRequest[]
+  renterDealThreads               DealThread[]                 @relation("RenterDealThreads")
+  ownedListingThreads             DealThread[]                 @relation("ListingOwnerDealThreads")
+  dealMessages                    DealMessage[]
+  viewingRequests                 ViewingRequest[]
+  roommateProfile                 RoommateProfile?             @relation("RoommateProfileOwner")
+  firstRoommateMatches            RoommateMatch[]              @relation("RoommateMatchFirstUser")
+  secondRoommateMatches           RoommateMatch[]              @relation("RoommateMatchSecondUser")
   roommateConversationMemberships RoommateConversationMember[]
-  sentRoommateMessages RoommateMessage[]
-  roommateTeamMemberships RoommateTeamMember[]
-  sentRoommateTeamInvites RoommateTeamInvite[] @relation("RoommateTeamInviteInviter")
-  receivedRoommateTeamInvites RoommateTeamInvite[] @relation("RoommateTeamInviteInvitee")
-  dissolvedRoommateTeams RoommateTeam[] @relation("RoommateTeamDissolver")
+  sentRoommateMessages            RoommateMessage[]
+  roommateTeamMemberships         RoommateTeamMember[]
+  sentRoommateTeamInvites         RoommateTeamInvite[]         @relation("RoommateTeamInviteInviter")
+  receivedRoommateTeamInvites     RoommateTeamInvite[]         @relation("RoommateTeamInviteInvitee")
+  dissolvedRoommateTeams          RoommateTeam[]               @relation("RoommateTeamDissolver")
+  submittedRentalApplications     RentalApplication[]          @relation("RentalApplicationSubmitter")
+  ownedRentalApplications         RentalApplication[]          @relation("RentalApplicationListingOwner")
+  decidedRentalApplications       RentalApplication[]          @relation("RentalApplicationDecisionBy")
+  cancelledRentalApplications     RentalApplication[]          @relation("RentalApplicationCancelledBy")
+  demoPaymentsAsPayer             DemoPayment[]                @relation("DemoPaymentPayer")
+  demoPaymentsAsPayee             DemoPayment[]                @relation("DemoPaymentPayee")
+  demoPaymentAttempts             DemoPaymentAttempt[]         @relation("DemoPaymentAttemptActor")
 }
 
 model Profile {
@@ -179,35 +186,36 @@ model AuditEvent {
 }
 
 model Listing {
-  id              String         @id @default(cuid())
-  ownerId         String
-  owner           User           @relation(fields: [ownerId], references: [id])
-  title           String
-  area            String
-  image           String?
-  availableFrom   DateTime       @db.Date
-  availableTo     DateTime       @db.Date
-  price           Int
-  originalPrice   Int
-  beds            Int
-  baths           Int
-  commute         String
-  transit         String
-  trust           String
-  tags            String[]
-  score           Float          @default(4.8)
-  status          ListingStatus  @default(DRAFT)
-  submittedAt     DateTime?
-  reviewedAt      DateTime?
-  reviewerId      String?
-  rejectionReason String?
-  suspendedAt     DateTime?
-  suspendedBy     String?
-  suspensionReason String?
-  media           ListingMedia[]
-  dealThreads     DealThread[]
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
+  id                 String              @id @default(cuid())
+  ownerId            String
+  owner              User                @relation(fields: [ownerId], references: [id])
+  title              String
+  area               String
+  image              String?
+  availableFrom      DateTime            @db.Date
+  availableTo        DateTime            @db.Date
+  price              Int
+  originalPrice      Int
+  beds               Int
+  baths              Int
+  commute            String
+  transit            String
+  trust              String
+  tags               String[]
+  score              Float               @default(4.8)
+  status             ListingStatus       @default(DRAFT)
+  submittedAt        DateTime?
+  reviewedAt         DateTime?
+  reviewerId         String?
+  rejectionReason    String?
+  suspendedAt        DateTime?
+  suspendedBy        String?
+  suspensionReason   String?
+  media              ListingMedia[]
+  dealThreads        DealThread[]
+  rentalApplications RentalApplication[]
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
 
   @@index([status, createdAt])
   @@index([status, availableFrom, availableTo])
@@ -284,24 +292,24 @@ model ListingMedia {
 }
 
 model RoommateProfile {
-  id              String           @id @default(cuid())
-  ownerId         String?          @unique
-  owner           User?            @relation("RoommateProfileOwner", fields: [ownerId], references: [id], onDelete: SetNull)
-  name            String
-  age             Int
-  role            String
-  image           String
-  match           Int
-  budget          String
-  commute         String
-  tags            String[]
-  status          String           @default("active")
-  archivedAt      DateTime?
-  localReciprocalLike Boolean      @default(false)
-  createdAt       DateTime         @default(now())
-  actions         RoommateAction[]
-  dealRooms       DealRoom[]
-  dealRoomMembers DealRoomMember[]
+  id                  String           @id @default(cuid())
+  ownerId             String?          @unique
+  owner               User?            @relation("RoommateProfileOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  name                String
+  age                 Int
+  role                String
+  image               String
+  match               Int
+  budget              String
+  commute             String
+  tags                String[]
+  status              String           @default("active")
+  archivedAt          DateTime?
+  localReciprocalLike Boolean          @default(false)
+  createdAt           DateTime         @default(now())
+  actions             RoommateAction[]
+  dealRooms           DealRoom[]
+  dealRoomMembers     DealRoomMember[]
 
   @@index([status, match])
 }
@@ -324,16 +332,81 @@ enum RoommateTeamInviteStatus {
   EXPIRED
 }
 
+enum RentalApplicationScope {
+  SOLO
+  TEAM
+}
+
+enum RentalApplicationStatus {
+  DRAFT
+  SUBMITTED
+  ACCEPTED
+  REJECTED
+  WITHDRAWN
+  CANCELLED
+  COMPLETED
+}
+
+enum RentalIncomeBand {
+  BELOW_2X
+  TWO_TO_THREE_X
+  THREE_TO_FOUR_X
+  ABOVE_FOUR_X
+  PREFER_NOT_TO_SAY
+}
+
+enum GuarantorStatus {
+  AVAILABLE
+  NOT_AVAILABLE
+  NOT_NEEDED
+}
+
+enum DemoPaymentStatus {
+  AWAITING_ATTEMPT
+  HELD
+  REFUNDED
+  RELEASED
+  CLOSED
+}
+
+enum DemoPaymentAttemptOutcome {
+  SUCCEEDED
+  FAILED
+}
+
+enum DemoHeldFundStatus {
+  HELD
+  REFUNDED
+  RELEASED
+}
+
+enum DemoLedgerEvent {
+  HOLD
+  REFUND
+  RELEASE
+}
+
+enum DemoLedgerAccount {
+  RENTER_CLEARING
+  HELD_FUNDS
+  HOST_CLEARING
+}
+
+enum DemoLedgerDirection {
+  DEBIT
+  CREDIT
+}
+
 model RoommateMatch {
-  id           String              @id @default(cuid())
+  id           String                @id @default(cuid())
   firstUserId  String
   secondUserId String
-  status       RoommateMatchStatus @default(ACTIVE)
-  matchedAt    DateTime            @default(now())
-  createdAt    DateTime            @default(now())
-  updatedAt    DateTime            @updatedAt
-  firstUser    User                @relation("RoommateMatchFirstUser", fields: [firstUserId], references: [id], onDelete: Cascade)
-  secondUser   User                @relation("RoommateMatchSecondUser", fields: [secondUserId], references: [id], onDelete: Cascade)
+  status       RoommateMatchStatus   @default(ACTIVE)
+  matchedAt    DateTime              @default(now())
+  createdAt    DateTime              @default(now())
+  updatedAt    DateTime              @updatedAt
+  firstUser    User                  @relation("RoommateMatchFirstUser", fields: [firstUserId], references: [id], onDelete: Cascade)
+  secondUser   User                  @relation("RoommateMatchSecondUser", fields: [secondUserId], references: [id], onDelete: Cascade)
   conversation RoommateConversation?
   teamInvites  RoommateTeamInvite[]
 
@@ -343,33 +416,158 @@ model RoommateMatch {
 }
 
 model RoommateTeam {
-  id              String             @id @default(cuid())
-  status          RoommateTeamStatus @default(ACTIVE)
-  dealRoomId      String?            @unique
-  confirmedAt     DateTime           @default(now())
-  dissolvedAt     DateTime?
-  dissolvedById   String?
-  dissolveReason  String?
-  dealRoom        DealRoom?          @relation(fields: [dealRoomId], references: [id], onDelete: SetNull)
-  dissolvedBy     User?              @relation("RoommateTeamDissolver", fields: [dissolvedById], references: [id], onDelete: SetNull)
-  members         RoommateTeamMember[]
-  invites         RoommateTeamInvite[]
-  createdAt       DateTime           @default(now())
-  updatedAt       DateTime           @updatedAt
+  id                 String               @id @default(cuid())
+  status             RoommateTeamStatus   @default(ACTIVE)
+  dealRoomId         String?              @unique
+  confirmedAt        DateTime             @default(now())
+  dissolvedAt        DateTime?
+  dissolvedById      String?
+  dissolveReason     String?
+  dealRoom           DealRoom?            @relation(fields: [dealRoomId], references: [id], onDelete: SetNull)
+  dissolvedBy        User?                @relation("RoommateTeamDissolver", fields: [dissolvedById], references: [id], onDelete: SetNull)
+  members            RoommateTeamMember[]
+  invites            RoommateTeamInvite[]
+  rentalApplications RentalApplication[]
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
 
   @@index([status, updatedAt])
 }
 
+model RentalApplication {
+  id                 String                  @id @default(cuid())
+  listingId          String
+  listingOwnerId     String
+  submitterId        String
+  teamId             String?
+  scope              RentalApplicationScope
+  status             RentalApplicationStatus @default(DRAFT)
+  activeKey          String?                 @unique
+  acceptedListingKey String?                 @unique
+  memberSnapshots    Json
+  moveIn             DateTime                @db.Date
+  moveOut            DateTime                @db.Date
+  schoolOrOccupation String
+  incomeBand         RentalIncomeBand
+  guarantorStatus    GuarantorStatus
+  note               String
+  createKey          String                  @unique
+  submitKey          String?                 @unique
+  withdrawKey        String?                 @unique
+  decisionKey        String?                 @unique
+  cancelKey          String?                 @unique
+  submittedAt        DateTime?
+  decidedAt          DateTime?
+  decisionById       String?
+  decisionReason     String?
+  withdrawnAt        DateTime?
+  cancelledAt        DateTime?
+  cancelledById      String?
+  cancellationReason String?
+  demoPayment        DemoPayment?
+  listing            Listing                 @relation(fields: [listingId], references: [id], onDelete: Restrict)
+  listingOwner       User                    @relation("RentalApplicationListingOwner", fields: [listingOwnerId], references: [id], onDelete: Restrict)
+  submitter          User                    @relation("RentalApplicationSubmitter", fields: [submitterId], references: [id], onDelete: Restrict)
+  team               RoommateTeam?           @relation(fields: [teamId], references: [id], onDelete: Restrict)
+  decisionBy         User?                   @relation("RentalApplicationDecisionBy", fields: [decisionById], references: [id], onDelete: SetNull)
+  cancelledBy        User?                   @relation("RentalApplicationCancelledBy", fields: [cancelledById], references: [id], onDelete: SetNull)
+  createdAt          DateTime                @default(now())
+  updatedAt          DateTime                @updatedAt
+
+  @@index([submitterId, status, updatedAt])
+  @@index([teamId, status, updatedAt])
+  @@index([listingOwnerId, status, updatedAt])
+  @@index([listingId, status, updatedAt])
+}
+
+model DemoPayment {
+  id            String               @id @default(cuid())
+  applicationId String               @unique
+  payerId       String
+  payeeId       String
+  amountCents   Int
+  currency      String               @default("USD")
+  status        DemoPaymentStatus    @default(AWAITING_ATTEMPT)
+  application   RentalApplication    @relation(fields: [applicationId], references: [id], onDelete: Restrict)
+  payer         User                 @relation("DemoPaymentPayer", fields: [payerId], references: [id], onDelete: Restrict)
+  payee         User                 @relation("DemoPaymentPayee", fields: [payeeId], references: [id], onDelete: Restrict)
+  attempts      DemoPaymentAttempt[]
+  heldFund      DemoHeldFund?
+  ledgerEntries DemoLedgerEntry[]
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+
+  @@index([payerId, status, updatedAt])
+  @@index([payeeId, status, updatedAt])
+}
+
+model DemoPaymentAttempt {
+  id             String                    @id @default(cuid())
+  paymentId      String
+  actorId        String
+  idempotencyKey String                    @unique
+  outcome        DemoPaymentAttemptOutcome
+  applied        Boolean                   @default(false)
+  payment        DemoPayment               @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  actor          User                      @relation("DemoPaymentAttemptActor", fields: [actorId], references: [id], onDelete: Restrict)
+  createdAt      DateTime                  @default(now())
+
+  @@index([paymentId, createdAt])
+  @@index([actorId, createdAt])
+}
+
+model DemoHeldFund {
+  id                    String             @id @default(cuid())
+  paymentId             String             @unique
+  amountCents           Int
+  status                DemoHeldFundStatus @default(HELD)
+  renterConfirmedAt     DateTime?
+  ownerConfirmedAt      DateTime?
+  renterConfirmationKey String?            @unique
+  ownerConfirmationKey  String?            @unique
+  refundKey             String?            @unique
+  releaseKey            String?            @unique
+  refundedAt            DateTime?
+  releasedAt            DateTime?
+  payment               DemoPayment        @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  ledgerEntries         DemoLedgerEntry[]
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
+
+  @@index([status, updatedAt])
+}
+
+model DemoLedgerEntry {
+  id             String              @id @default(cuid())
+  transactionId  String
+  paymentId      String
+  heldFundId     String
+  event          DemoLedgerEvent
+  account        DemoLedgerAccount
+  direction      DemoLedgerDirection
+  amountCents    Int
+  idempotencyKey String
+  payment        DemoPayment         @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  heldFund       DemoHeldFund        @relation(fields: [heldFundId], references: [id], onDelete: Restrict)
+  createdAt      DateTime            @default(now())
+
+  @@unique([transactionId, account, direction])
+  @@unique([idempotencyKey, account, direction])
+  @@index([paymentId, createdAt])
+  @@index([heldFundId, createdAt])
+  @@index([idempotencyKey])
+}
+
 model RoommateTeamMember {
-  id        String       @id @default(cuid())
-  teamId    String
-  userId    String
-  snapshot  Json
-  active    Boolean      @default(true)
-  joinedAt  DateTime     @default(now())
-  leftAt    DateTime?
-  team      RoommateTeam @relation(fields: [teamId], references: [id], onDelete: Restrict)
-  user      User         @relation(fields: [userId], references: [id], onDelete: Restrict)
+  id       String       @id @default(cuid())
+  teamId   String
+  userId   String
+  snapshot Json
+  active   Boolean      @default(true)
+  joinedAt DateTime     @default(now())
+  leftAt   DateTime?
+  team     RoommateTeam @relation(fields: [teamId], references: [id], onDelete: Restrict)
+  user     User         @relation(fields: [userId], references: [id], onDelete: Restrict)
 
   @@unique([teamId, userId])
   @@index([userId, active])
@@ -397,12 +595,12 @@ model RoommateTeamInvite {
 }
 
 model RoommateConversation {
-  id            String   @id @default(cuid())
-  matchId       String   @unique
+  id            String                       @id @default(cuid())
+  matchId       String                       @unique
   lastMessageAt DateTime?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  match         RoommateMatch @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  createdAt     DateTime                     @default(now())
+  updatedAt     DateTime                     @updatedAt
+  match         RoommateMatch                @relation(fields: [matchId], references: [id], onDelete: Cascade)
   members       RoommateConversationMember[]
   messages      RoommateMessage[]
 }
@@ -558,23 +756,23 @@ model TourRequest {
 }
 
 model DealThread {
-  id              String           @id @default(cuid())
-  ownerId         String
-  owner           User             @relation("RenterDealThreads", fields: [ownerId], references: [id], onDelete: Cascade)
-  listingOwnerId  String
-  listingOwner    User             @relation("ListingOwnerDealThreads", fields: [listingOwnerId], references: [id], onDelete: Cascade)
-  dealRoomId      String?
-  dealRoom        DealRoom?        @relation(fields: [dealRoomId], references: [id], onDelete: SetNull)
-  listingId       String
-  listing         Listing          @relation(fields: [listingId], references: [id], onDelete: Cascade)
-  listingTitle    String
-  area            String
-  contactName     String
-  participantNames String[]        @default([])
-  messages        DealMessage[]
-  viewingRequests ViewingRequest[]
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
+  id               String           @id @default(cuid())
+  ownerId          String
+  owner            User             @relation("RenterDealThreads", fields: [ownerId], references: [id], onDelete: Cascade)
+  listingOwnerId   String
+  listingOwner     User             @relation("ListingOwnerDealThreads", fields: [listingOwnerId], references: [id], onDelete: Cascade)
+  dealRoomId       String?
+  dealRoom         DealRoom?        @relation(fields: [dealRoomId], references: [id], onDelete: SetNull)
+  listingId        String
+  listing          Listing          @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  listingTitle     String
+  area             String
+  contactName      String
+  participantNames String[]         @default([])
+  messages         DealMessage[]
+  viewingRequests  ViewingRequest[]
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
 
   @@unique([ownerId, listingId])
   @@index([ownerId, updatedAt])

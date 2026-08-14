@@ -376,6 +376,18 @@ export async function apiPost<T>(path: string, body: unknown, token?: string) {
   );
 }
 
+export async function apiPostIdempotent<T>(path: string, body: unknown, token: string, idempotencyKey: string) {
+  return apiRequest<T>(
+    path,
+    {
+      method: "POST",
+      body: JSON.stringify(body),
+      headers: { "Idempotency-Key": idempotencyKey }
+    },
+    token
+  );
+}
+
 export async function apiPatch<T>(path: string, body: unknown, token?: string) {
   return apiRequest<T>(
     path,

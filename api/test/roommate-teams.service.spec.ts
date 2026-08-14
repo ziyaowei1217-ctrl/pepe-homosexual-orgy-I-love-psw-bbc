@@ -104,6 +104,27 @@ describe("RoommateTeamsService", () => {
     expect(prisma.dealRoom.rows[0]).toMatchObject({ id: "deal-room-1", status: "ARCHIVED" });
     await expect(service.current("user-a")).resolves.toBeNull();
   });
+
+  it("withdraws only submitted team applications when the team dissolves", async () => {
+    const prisma = createPrismaMock();
+    const service = new RoommateTeamsService(prisma as never, createDealRoomsStub() as never);
+    const invite = await service.invite("user-a", { roommateProfileId: "profile-b" });
+    const team = await service.accept("user-b", invite.id);
+    prisma.rentalApplication.rows.push(
+      { id: "draft-application", teamId: team.id, status: "DRAFT", activeKey: "team:draft", withdrawnAt: null, decisionReason: null },
+      { id: "submitted-application", teamId: team.id, status: "SUBMITTED", activeKey: "team:submitted", withdrawnAt: null, decisionReason: null },
+      { id: "accepted-application", teamId: team.id, status: "ACCEPTED", activeKey: "team:accepted", withdrawnAt: null, decisionReason: null },
+      { id: "other-team-application", teamId: "team-other", status: "SUBMITTED", activeKey: "team:other", withdrawnAt: null, decisionReason: null }
+    );
+
+    await service.leave("user-a");
+
+    expect(prisma.rentalApplication.rows.find((record: { id: string }) => record.id === "submitted-application"))
+      .toMatchObject({ status: "WITHDRAWN", activeKey: null, withdrawnAt: expect.any(Date), decisionReason: "TEAM_DISSOLVED" });
+    expect(prisma.rentalApplication.rows.find((record: { id: string }) => record.id === "draft-application")?.status).toBe("DRAFT");
+    expect(prisma.rentalApplication.rows.find((record: { id: string }) => record.id === "accepted-application")?.status).toBe("ACCEPTED");
+    expect(prisma.rentalApplication.rows.find((record: { id: string }) => record.id === "other-team-application")?.status).toBe("SUBMITTED");
+  });
 });
 
 type Profile = {
@@ -147,6 +168,14 @@ function createPrismaMock() {
   const teams: Team[] = [];
   const members: Member[] = [];
   const dealRooms = [{ id: "deal-room-1", status: "ACTIVE" as const }];
+  const rentalApplications: Array<{
+    id: string;
+    teamId: string;
+    status: "DRAFT" | "SUBMITTED" | "ACCEPTED" | "WITHDRAWN";
+    activeKey: string | null;
+    withdrawnAt: Date | null;
+    decisionReason: string | null;
+  }> = [];
 
   const mock: any = {
     roommateProfile: {
@@ -233,6 +262,20 @@ function createPrismaMock() {
       updateMany: async ({ where, data }: { where: { id: string; status: string }; data: { status: "ARCHIVED" } }) => {
         const found = dealRooms.filter((room) => room.id === where.id && room.status === where.status);
         found.forEach((room) => Object.assign(room, data));
+        return { count: found.length };
+      }
+    },
+    rentalApplication: {
+      rows: rentalApplications,
+      updateMany: async ({
+        where,
+        data
+      }: {
+        where: { teamId: string; status: "SUBMITTED" };
+        data: Partial<(typeof rentalApplications)[number]>;
+      }) => {
+        const found = rentalApplications.filter((record) => record.teamId === where.teamId && record.status === where.status);
+        found.forEach((record) => Object.assign(record, data));
         return { count: found.length };
       }
     },

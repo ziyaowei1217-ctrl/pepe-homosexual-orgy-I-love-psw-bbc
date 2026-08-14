@@ -138,11 +138,20 @@ export class ListingsService {
 
   async approve(id: string, actor: AuditActor) {
     return this.prisma.$transaction(async (transaction) => {
+      const approvedAt = new Date();
       const listing = await this.transitionSubmittedListing(transaction, id, {
         status: "APPROVED",
-        reviewedAt: new Date(),
+        reviewedAt: approvedAt,
         reviewerId: actor.actorUserId,
         rejectionReason: null
+      });
+      await transaction.listingMedia.updateMany({
+        where: { listingId: id, storageStatus: "READY" },
+        data: {
+          storageStatus: "PUBLISHED",
+          reviewStatus: "APPROVED",
+          publishedAt: approvedAt
+        }
       });
       await this.audit.append(transaction, {
         ...actor,

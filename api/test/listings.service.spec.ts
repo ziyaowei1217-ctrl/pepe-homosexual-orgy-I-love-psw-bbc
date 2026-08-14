@@ -44,6 +44,8 @@ type ListingMediaRecord = {
   publicMainKey: string | null;
   publicThumbnailKey: string | null;
   storageStatus: "PENDING_UPLOAD" | "READY" | "PUBLISHED" | "FAILED";
+  reviewStatus: "PENDING" | "APPROVED" | "REJECTED";
+  publishedAt: Date | null;
   createdAt: Date;
 };
 
@@ -103,6 +105,11 @@ type ListingUpdateManyArgs = {
 
 type ListingMediaCreateArgs = {
   data: Pick<ListingMediaRecord, "listingId" | "url" | "kind" | "sortOrder">;
+};
+
+type ListingMediaUpdateManyArgs = {
+  where: { listingId: string; storageStatus: "READY" };
+  data: Partial<ListingMediaRecord>;
 };
 
 type PublishProfile = {
@@ -601,6 +608,24 @@ describe("ListingsService", () => {
     expect(prisma.transactionCount).toBe(1);
   });
 
+  it("publishes every ready image in the same approval transaction", async () => {
+    const prisma = createPrismaMock({
+      listings: [listingRecord({ id: reviewListingId, status: "SUBMITTED" })],
+      media: [
+        mediaRecord({ id: "media-ready-1", listingId: reviewListingId, storageStatus: "READY" }),
+        mediaRecord({ id: "media-ready-2", listingId: reviewListingId, storageStatus: "READY" })
+      ]
+    });
+    const service = new ListingsService(prisma as never, new AuditService());
+
+    await service.approve(reviewListingId, auditActor);
+
+    expect(prisma.listingMedia.rows).toEqual([
+      expect.objectContaining({ storageStatus: "PUBLISHED", reviewStatus: "APPROVED", publishedAt: expect.any(Date) }),
+      expect.objectContaining({ storageStatus: "PUBLISHED", reviewStatus: "APPROVED", publishedAt: expect.any(Date) })
+    ]);
+  });
+
   it("rolls back approval when audit persistence fails", async () => {
     const prisma = createPrismaMock({
       listings: [listingRecord({ id: reviewListingId, status: "SUBMITTED" })],
@@ -733,6 +758,8 @@ function mediaRecord(overrides: Partial<ListingMediaRecord> = {}): ListingMediaR
     publicMainKey: "listing-media/listing-1/public-main",
     publicThumbnailKey: "listing-media/listing-1/public-thumbnail",
     storageStatus: "READY",
+    reviewStatus: "PENDING",
+    publishedAt: null,
     createdAt: new Date("2026-01-01T00:00:00.000Z"),
     ...overrides
   };
@@ -846,6 +873,7 @@ function createPrismaMock({
       }
     },
     listingMedia: {
+      rows: mediaRecords,
       createCalls: [] as ListingMediaCreateArgs[],
       create: async (args: ListingMediaCreateArgs) => {
         mock.listingMedia.createCalls.push(args);
@@ -856,6 +884,13 @@ function createPrismaMock({
         });
         mediaRecords.push(created);
         return created;
+      },
+      updateMany: async (args: ListingMediaUpdateManyArgs) => {
+        const matched = mediaRecords.filter(
+          (record) => record.listingId === args.where.listingId && record.storageStatus === args.where.storageStatus
+        );
+        matched.forEach((record) => Object.assign(record, args.data));
+        return { count: matched.length };
       }
     },
     auditEvent: {
@@ -881,11 +916,13 @@ function createPrismaMock({
       });
       await previousTransaction;
       const listingSnapshot = records.map((record) => ({ ...record }));
+      const mediaSnapshot = mediaRecords.map((record) => ({ ...record }));
       const auditSnapshot = mock.auditEvent.rows.map((record) => ({ ...record }));
       try {
         return await operation(mock);
       } catch (error) {
         records.splice(0, records.length, ...listingSnapshot);
+        mediaRecords.splice(0, mediaRecords.length, ...mediaSnapshot);
         mock.auditEvent.rows.splice(0, mock.auditEvent.rows.length, ...auditSnapshot);
         throw error;
       } finally {

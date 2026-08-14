@@ -62,7 +62,7 @@ export function buildListingDetail(listing: DetailListing, dateRange: DateRange)
       moveIn: [
         dateRange.checkIn ? `${formatDateRangeLabel(dateRange)} 已用于核对可租范围` : "选择日期可核对房源可租范围",
         "联系房东并预约看房",
-        "在线申请、支付与资金托管暂未开放"
+        "在线申请后由房东处理，接受后进入演示支付与资金状态"
       ]
     }
   };

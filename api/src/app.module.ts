@@ -4,10 +4,12 @@ import { ConfigModule } from "@nestjs/config";
 import { JwtModule } from "@nestjs/jwt";
 
 import { AuthModule } from "./auth/auth.module";
+import { ApplicationsModule } from "./applications/applications.module";
 import { AuditModule } from "./audit/audit.module";
 import { getJwtSecret } from "./config/env";
 import { DealThreadsModule } from "./deal-threads/deal-threads.module";
 import { DealRoomsModule } from "./deal-rooms/deal-rooms.module";
+import { DemoPaymentsModule } from "./demo-payments/demo-payments.module";
 import { GroupsModule } from "./groups/groups.module";
 import { HealthModule } from "./health/health.module";
 import { ListingMediaModule } from "./listing-media/listing-media.module";
@@ -32,6 +34,8 @@ import { UsersModule } from "./users/users.module";
     PrismaModule,
     AuditModule,
     AuthModule,
+    DemoPaymentsModule,
+    ApplicationsModule,
     HealthModule,
     DealThreadsModule,
     DealRoomsModule,

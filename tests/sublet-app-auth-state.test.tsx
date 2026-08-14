@@ -183,6 +183,23 @@ const headerOffsetListing = {
   trust: "平台已审核"
 };
 
+const submittedRentalApplication = {
+  id: "application-1",
+  listingId: headerOffsetListing.id,
+  listingOwnerId: user.id,
+  submitterId: "renter-1",
+  teamId: null,
+  scope: "SOLO" as const,
+  status: "SUBMITTED" as const,
+  memberSnapshots: [{ userId: "renter-1", displayName: "Lin" }],
+  moveIn: "2026-09-01T00:00:00.000Z",
+  moveOut: "2026-12-31T00:00:00.000Z",
+  schoolOrOccupation: "UCLA",
+  incomeBand: "TWO_TO_THREE_X" as const,
+  guarantorStatus: "AVAILABLE" as const,
+  note: "安静作息"
+};
+
 beforeEach(() => {
   vi.clearAllMocks();
   localStorage.clear();
@@ -374,6 +391,56 @@ describe("SubletApp auth state flow", () => {
         .findAllByType("button")
         .find((button) => renderedText(button).includes("入住"))?.props.disabled
     ).not.toBe(true);
+    await unmount(renderer);
+  });
+
+  it("opens the server-backed rental application flow from listing detail", async () => {
+    navigationMock.pathname = "/";
+    writeStoredAuthSession("stored-renter-token");
+    vi.mocked(api.apiGet).mockImplementation(async (path) =>
+      path === "/listings" ? [headerOffsetListing] : []
+    );
+
+    const renderer = await renderSubletApp("Discover", headerOffsetListing.id);
+
+    expect(hasButton(renderer.root, "在线申请")).toBe(true);
+    await act(async () => {
+      clickButton(renderer.root, "在线申请");
+      await flushMicrotasks();
+    });
+    expect(renderer.root.findAllByProps({ "aria-label": "租房申请" })).toHaveLength(1);
+    expect(renderedText(renderer.root)).not.toContain("在线申请（暂未开放）");
+    await unmount(renderer);
+  });
+
+  it("shows server-backed rental applications in Trips", async () => {
+    navigationMock.pathname = "/trips";
+    writeStoredAuthSession("stored-renter-token");
+    vi.mocked(api.apiGet).mockImplementation(async (path) =>
+      path === "/applications/mine" ? [submittedRentalApplication] : []
+    );
+
+    const renderer = await renderSubletApp("Trips");
+
+    expect(renderedText(renderer.root)).toContain("租房申请行程");
+    expect(renderedText(renderer.root)).toContain("等待房东处理");
+    expect(renderedText(renderer.root)).not.toContain("在线申请 · 暂未开放");
+    expect(api.apiGet).toHaveBeenCalledWith("/applications/mine", "stored-renter-token");
+    await unmount(renderer);
+  });
+
+  it("shows the owner application inbox in the landlord workspace", async () => {
+    navigationMock.pathname = "/host/listings";
+    writeStoredAuthSession("stored-host-token");
+    vi.mocked(api.apiGet).mockImplementation(async (path) =>
+      path === "/applications/host-inbox" ? [submittedRentalApplication] : []
+    );
+
+    const renderer = await renderSubletApp("Publish");
+
+    expect(renderedText(renderer.root)).toContain("房东申请箱");
+    expect(renderedText(renderer.root)).toContain("Lin");
+    expect(api.apiGet).toHaveBeenCalledWith("/applications/host-inbox", "stored-host-token");
     await unmount(renderer);
   });
 
@@ -778,7 +845,7 @@ describe("SubletApp auth state flow", () => {
 });
 
 async function renderSubletApp(
-  initialSection: "Discover" | "Publish" | "Trust" | "AdminRoommates",
+  initialSection: "Discover" | "Publish" | "Trips" | "Trust" | "AdminRoommates",
   initialListingId?: string
 ): Promise<ReactTestRenderer> {
   let renderer: ReactTestRenderer | undefined;

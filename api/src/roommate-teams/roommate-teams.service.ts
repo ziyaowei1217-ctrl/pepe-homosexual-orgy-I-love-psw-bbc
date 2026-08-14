@@ -199,6 +199,16 @@ export class RoommateTeamsService {
       });
       if (dissolved.count !== 1) throw new ConflictException("组队状态已更新，请刷新后重试");
 
+      await transaction.rentalApplication.updateMany({
+        where: { teamId: membership.team.id, status: "SUBMITTED" },
+        data: {
+          status: "WITHDRAWN",
+          activeKey: null,
+          withdrawnAt: now,
+          decisionReason: "TEAM_DISSOLVED"
+        }
+      });
+
       await transaction.roommateTeamMember.updateMany({
         where: { teamId: membership.team.id, active: true },
         data: { active: false, leftAt: now }

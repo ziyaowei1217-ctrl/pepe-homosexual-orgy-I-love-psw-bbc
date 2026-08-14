@@ -164,26 +164,13 @@ describe("backend launch readiness HTTP flow", () => {
       .set("Authorization", `Bearer ${ownerToken}`)
       .send({ action: "LIKE" })
       .expect(201);
-    expect(matchResponse.body.dealRoom).toMatchObject({
-      status: "ACTIVE",
-      canRequestTour: true
-    });
+    expect(matchResponse.body.dealRoom).toBeNull();
 
     const activeRoomsResponse = await http
       .get("/api/v1/deal-rooms/active")
       .set("Authorization", `Bearer ${ownerToken}`)
       .expect(200);
-    expect(activeRoomsResponse.body).toHaveLength(1);
-
-    const firstTourResponse = await http
-      .post(`/api/v1/deal-rooms/${activeRoomsResponse.body[0].id}/tour-requests`)
-      .set("Authorization", `Bearer ${ownerToken}`)
-      .expect(201);
-    const secondTourResponse = await http
-      .post(`/api/v1/deal-rooms/${activeRoomsResponse.body[0].id}/tour-requests`)
-      .set("Authorization", `Bearer ${ownerToken}`)
-      .expect(201);
-    expect(secondTourResponse.body.id).toBe(firstTourResponse.body.id);
+    expect(activeRoomsResponse.body).toEqual([]);
   });
 });
 
@@ -191,7 +178,6 @@ function listingPayload() {
   return {
     title: "Launch-ready Fenway sublet",
     area: "Boston - Fenway",
-    image: "https://example.com/fenway.jpg",
     availableFrom: "2026-08-20",
     availableTo: "2026-12-31",
     price: 1800,

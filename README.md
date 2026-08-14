@@ -191,6 +191,27 @@ DATABASE_URL='postgresql://sublet:sublet@localhost:5432/sublet_pipeline?schema=p
 database and exercises the core HTTP flow against real Prisma. `launch:smoke:roommate` uses a
 disposable PostgreSQL database to prove the roommate migrations and durable HTTP/realtime journey.
 
+To prove the complete marketplace demo against PostgreSQL 16 and private MinIO storage, start the
+two external services and run the isolated journey:
+
+```bash
+docker compose up -d db minio minio-init
+pnpm -C api launch:smoke:marketplace
+```
+
+The marketplace smoke command creates a disposable database, deploys all migrations, uploads and
+validates a real PNG through a ten-minute presigned MinIO URL, then exercises reciprocal matching,
+two-person team confirmation, team applications, the host inbox, deterministic failed/successful
+payment simulation, held funds, balanced immutable ledger entries, both move-in confirmations,
+release, and automatic withdrawal of another submitted application when the team dissolves. It
+deletes the uploaded objects and drops the disposable database on completion. Local defaults use
+`http://localhost:9000`, bucket `listing-media`, access key `minio`, and secret
+`minio-development`; production requires every object-storage setting explicitly.
+
+Listing uploads accept JPEG, PNG, and WebP only, with a 10 MB per-image limit and 12 images per
+listing. Every simulated-money surface displays `演示模式，不会真实扣款`. This demo never collects
+payment credentials, moves real money, or claims to provide regulated escrow.
+
 Valkey is optional. To start only the Compose service used by the distributed smoke gate, then run
 the combined Lua limiter and two-instance Socket.IO test:
 
@@ -216,7 +237,14 @@ roommate messaging in the unified web inbox with optimistic send/retry and recon
 active deal rooms, and idempotent group-tour requests. Empty database tables produce intentional
 empty states.
 
-Reciprocal roommate matches can use the durable direct-message experience described above. Online
-applications, payments, demo held funds, two-person team confirmation, MinIO-backed host uploads,
-production hosting, and the messaging non-goals listed above are not wired yet. Stripe, Mapbox, real
-email delivery, Redis queues, and production moderation providers are also not connected.
+Reciprocal roommate matches can use durable direct messages and confirm one persisted two-person
+team. Renters can apply alone or with that team, recover application status in Trips, and withdraw a
+submitted application; listing owners receive a server-backed application inbox and can accept or
+reject. Dissolving a team automatically withdraws its submitted team applications while accepted or
+completed applications retain their normal payment/cancellation history.
+
+Accepted applications expose an explicitly simulated one-month payment order, held/refunded/released
+fund states, append-only balanced ledger entries, and renter/owner move-in confirmations. Host listing
+images use private MinIO-backed direct uploads, stored-byte validation, ordering, cover selection,
+and publish-on-approval. Production hosting, Stripe, Mapbox, real email delivery, Redis queues, and
+production moderation providers remain outside the current scope.
