@@ -136,6 +136,9 @@ describeMigration("production database foundations migration", () => {
 
   it("upgrades existing data while adding production-only database foundations", () => {
     expect(query(`SELECT array_to_string(enum_range(NULL::"ListingStatus"), ',')`)).toContain("SUSPENDED");
+    expect(query(`SELECT array_to_string(enum_range(NULL::"MediaStorageStatus"), ',')`)).toBe(
+      "PENDING_UPLOAD,UPLOADED_PENDING_VALIDATION,READY,PUBLISHED,FAILED"
+    );
     expect(query(`SELECT "email" FROM "User" WHERE "id" = 'existing-user'`)).toBe("existing@example.com");
     expect(query(`SELECT "title" FROM "Listing" WHERE "id" = 'existing-listing'`)).toBe("Existing listing");
     expect(
@@ -205,7 +208,8 @@ describeMigration("production database foundations migration", () => {
     `);
 
     expect(query(`SELECT "deliveryStatus"::text FROM "VerificationCode" WHERE "id" = 'existing-code'`)).toBe("PENDING");
-    expect(query(`SELECT "storageStatus"::text || ':' || "reviewStatus"::text FROM "ListingMedia" WHERE "id" = 'media-1'`)).toBe("PENDING:PENDING");
+    expect(query(`SELECT "storageStatus"::text || ':' || "reviewStatus"::text FROM "ListingMedia" WHERE "id" = 'media-1'`)).toBe("PENDING_UPLOAD:PENDING");
+    expect(query(`SELECT "securityErrorCode" IS NULL FROM "ListingMedia" WHERE "id" = 'media-1'`)).toBe("t");
   });
 });
 

@@ -32,7 +32,8 @@ enum VerificationDeliveryStatus {
 }
 
 enum MediaStorageStatus {
-  PENDING
+  PENDING_UPLOAD
+  UPLOADED_PENDING_VALIDATION
   READY
   PUBLISHED
   FAILED
@@ -265,8 +266,9 @@ model ListingMedia {
   height             Int?
   checksum           String?
   uploadExpiresAt    DateTime?
-  storageStatus      MediaStorageStatus @default(PENDING)
+  storageStatus      MediaStorageStatus @default(PENDING_UPLOAD)
   reviewStatus       MediaReviewStatus  @default(PENDING)
+  securityErrorCode  String?
   finalizedAt        DateTime?
   publishedAt        DateTime?
   createdAt          DateTime           @default(now())
