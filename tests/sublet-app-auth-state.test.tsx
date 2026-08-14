@@ -195,6 +195,42 @@ beforeEach(() => {
 });
 
 describe("SubletApp auth state flow", () => {
+  it("shows two direct administrator tools and routes each one for an ADMIN session", async () => {
+    navigationMock.pathname = "/";
+    writeStoredAuthSession("stored-admin-token");
+    vi.mocked(api.getSessionUser).mockResolvedValue({ ...user, role: "ADMIN" });
+    const renderer = await renderSubletApp("Discover");
+
+    expect(renderedText(renderer.root)).toContain("管理员工具");
+    expect(hasButton(renderer.root, "房源审核")).toBe(true);
+    expect(hasButton(renderer.root, "室友管理")).toBe(true);
+
+    await act(async () => {
+      clickButton(renderer.root, "房源审核");
+      await flushMicrotasks();
+    });
+    expect(navigationMock.push).toHaveBeenCalledWith("/admin/trust");
+
+    await act(async () => {
+      clickButton(renderer.root, "室友管理");
+      await flushMicrotasks();
+    });
+    expect(navigationMock.push).toHaveBeenCalledWith("/admin/roommates");
+    await unmount(renderer);
+  });
+
+  it("does not expose administrator tools to an ordinary authenticated user", async () => {
+    navigationMock.pathname = "/";
+    writeStoredAuthSession("stored-user-token");
+    vi.mocked(api.getSessionUser).mockResolvedValue(user);
+    const renderer = await renderSubletApp("Discover");
+
+    expect(renderedText(renderer.root)).not.toContain("管理员工具");
+    expect(hasButton(renderer.root, "房源审核")).toBe(false);
+    expect(hasButton(renderer.root, "室友管理")).toBe(false);
+    await unmount(renderer);
+  });
+
   it("keeps listing-detail placeholder rows free of duplicate React keys", async () => {
     navigationMock.pathname = "/";
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);

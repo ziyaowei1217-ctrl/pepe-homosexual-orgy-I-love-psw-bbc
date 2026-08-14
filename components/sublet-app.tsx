@@ -470,8 +470,12 @@ const navItems: Array<{ label: string; section: AppSection }> = [
   { label: "找室友", section: "Roommates" },
   { label: "消息", section: "Messages" },
   { label: "看房", section: "Trips" },
-  { label: "发布", section: "Publish" },
-  { label: "信任", section: "Trust" }
+  { label: "发布", section: "Publish" }
+];
+
+const adminNavItems: Array<{ label: string; section: AppSection }> = [
+  { label: "房源审核", section: "Trust" },
+  { label: "室友管理", section: "AdminRoommates" }
 ];
 
 const navIcons: Record<AppSection, LucideIcon> = {
@@ -2682,6 +2686,7 @@ function AppHeader({
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const primaryItems = navItems.slice(0, 4);
   const secondaryItems = navItems.slice(4);
+  const visibleAdminItems = user?.role === "ADMIN" ? adminNavItems : [];
   const unreadCount = getUnreadNotificationCount(notifications);
 
   return (
@@ -2766,6 +2771,28 @@ function AppHeader({
           </Button>
         </div>
       </div>
+      {visibleAdminItems.length > 0 ? (
+        <div className="border-t border-blue-100 bg-blue-50/70">
+          <div className="app-shell flex flex-wrap items-center gap-2 py-2">
+            <span className="mr-1 text-xs font-black text-[#006AFF]">管理员工具</span>
+            {visibleAdminItems.map((item) => {
+              const Icon = navIcons[item.section];
+              return (
+                <Button
+                  key={item.section}
+                  type="button"
+                  size="sm"
+                  variant={activeSection === item.section ? "default" : "outline"}
+                  onClick={() => onSectionChange(item.section)}
+                >
+                  <Icon className="size-3.5" aria-hidden="true" />
+                  {item.label}
+                </Button>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
       {notificationsOpen ? (
         <div className="absolute right-4 top-[68px] z-50 w-[min(360px,calc(100vw-2rem))] rounded-[24px] border border-blue-100 bg-white p-4 shadow-panel">
           <div className="flex items-center justify-between gap-3">
