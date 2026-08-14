@@ -208,14 +208,15 @@ rate limiting are not needed.
 
 ## Current Scope
 
-The local product supports email-code login, persisted profiles, host listing submission,
-administrator review, approved public listings, two-sided host/renter messages, viewing requests
+The local product supports email-code login, persisted profiles, date-bounded host listing submission,
+administrator review, approved public listings, full-coverage stay-date filtering, two-sided host/renter messages, viewing requests
 and host decisions, ranked roommate discovery, administrator-managed roommate profiles, reciprocal
 matches, backend roommate direct messages with durable history/unread/read state and realtime events,
 roommate messaging in the unified web inbox with optimistic send/retry and reconnect recovery,
 active deal rooms, and idempotent group-tour requests. Empty database tables produce intentional
 empty states.
 
-Online applications, payments, escrow, production hosting, and the messaging non-goals listed above
-are not wired yet. Stripe, Mapbox, real email delivery, Redis queues, and production moderation
-providers are also not connected.
+Reciprocal roommate matches can use the durable direct-message experience described above. Online
+applications, payments, demo held funds, two-person team confirmation, MinIO-backed host uploads,
+production hosting, and the messaging non-goals listed above are not wired yet. Stripe, Mapbox, real
+email delivery, Redis queues, and production moderation providers are also not connected.
