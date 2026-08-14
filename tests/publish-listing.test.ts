@@ -7,10 +7,13 @@ import {
   mapPublishDraftToListingDto,
   type PublishDraft
 } from "../lib/publish-listing";
+import { buildPublicListingsPath } from "../lib/api";
 
 const draft: PublishDraft = {
   title: "Westwood 主卧短租",
   area: "Los Angeles · Westwood",
+  availableFrom: "2026-08-20",
+  availableTo: "2026-12-31",
   beds: 1,
   baths: 1,
   commute: "步行 12 分钟到 UCLA",
@@ -37,6 +40,8 @@ describe("publish listing", () => {
       title: draft.title,
       area: draft.area,
       image: draft.media[0].url,
+      availableFrom: "2026-08-20",
+      availableTo: "2026-12-31",
       price: 1680,
       originalPrice: 1900,
       beds: 1,
@@ -47,6 +52,37 @@ describe("publish listing", () => {
       tags: ["带家具", "Wi-Fi", "房东知情"],
       score: 4.8
     });
+  });
+
+  it("rejects missing or non-increasing listing availability", () => {
+    expect(
+      getPublishStepErrors({ ...draft, availableFrom: "" }, "basic")
+    ).toContain("请选择可入住日期。");
+    expect(
+      getPublishStepErrors(
+        {
+          ...draft,
+          availableFrom: "2026-12-31",
+          availableTo: "2026-08-20"
+        },
+        "basic"
+      )
+    ).toContain("最晚退租日期必须晚于可入住日期。");
+  });
+
+  it("builds public listing paths only for empty or complete date ranges", () => {
+    expect(buildPublicListingsPath({ checkIn: "", checkOut: "" })).toBe(
+      "/listings"
+    );
+    expect(
+      buildPublicListingsPath({
+        checkIn: "2026-08-20",
+        checkOut: "2026-09-20"
+      })
+    ).toBe("/listings?moveIn=2026-08-20&moveOut=2026-09-20");
+    expect(
+      buildPublicListingsPath({ checkIn: "2026-08-20", checkOut: "" })
+    ).toBeNull();
   });
 
   it("retains the remote draft id when media upload partially fails and does not create again on retry", async () => {
@@ -108,6 +144,8 @@ describe("publish listing", () => {
       title: draft.title,
       area: draft.area,
       image: draft.media[0].url,
+      availableFrom: draft.availableFrom,
+      availableTo: draft.availableTo,
       price: draft.price,
       originalPrice: draft.originalPrice,
       beds: draft.beds,
@@ -126,6 +164,8 @@ describe("publish listing", () => {
 
     expect(restored).toMatchObject({
       remoteListingId: "remote-3",
+      availableFrom: draft.availableFrom,
+      availableTo: draft.availableTo,
       landlordAware: true,
       tags: ["带家具", "Wi-Fi"],
       media: draft.media,

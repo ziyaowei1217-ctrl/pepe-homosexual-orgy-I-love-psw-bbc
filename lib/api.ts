@@ -34,6 +34,20 @@ export type ApiListing = {
   availableTo?: string;
 };
 
+export function buildPublicListingsPath(range: {
+  checkIn: string;
+  checkOut: string;
+}) {
+  if (!range.checkIn && !range.checkOut) return "/listings";
+  if (!range.checkIn || !range.checkOut) return null;
+
+  const params = new URLSearchParams({
+    moveIn: range.checkIn,
+    moveOut: range.checkOut
+  });
+  return `/listings?${params.toString()}`;
+}
+
 export type ApiRoommateCompatibilityDimensions = {
   budget: number;
   lifestyle: number;

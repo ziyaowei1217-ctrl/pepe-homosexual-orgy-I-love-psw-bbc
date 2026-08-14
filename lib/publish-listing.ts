@@ -8,6 +8,8 @@ export type PublishMedia = {
 export type PublishDraft = {
   title: string;
   area: string;
+  availableFrom: string;
+  availableTo: string;
   beds: number;
   baths: number;
   commute: string;
@@ -25,6 +27,8 @@ export type ListingDto = {
   title: string;
   area: string;
   image: string;
+  availableFrom: string;
+  availableTo: string;
   price: number;
   originalPrice: number;
   beds: number;
@@ -59,6 +63,15 @@ export function getPublishStepErrors(draft: PublishDraft, step: PublishStep) {
   if (step === "basic" || step === "review") {
     if (!draft.title.trim()) errors.push("请填写房源标题。");
     if (!draft.area.trim()) errors.push("请填写房源区域。");
+    if (!draft.availableFrom) errors.push("请选择可入住日期。");
+    if (!draft.availableTo) errors.push("请选择最晚退租日期。");
+    if (
+      draft.availableFrom &&
+      draft.availableTo &&
+      draft.availableTo <= draft.availableFrom
+    ) {
+      errors.push("最晚退租日期必须晚于可入住日期。");
+    }
     if (!Number.isInteger(draft.beds) || draft.beds < 0) errors.push("请填写有效卧室数。");
     if (!Number.isInteger(draft.baths) || draft.baths < 0) errors.push("请填写有效卫浴数。");
     if (!draft.commute.trim()) errors.push("请填写通勤说明。");
@@ -93,6 +106,8 @@ export function mapPublishDraftToListingDto(draft: PublishDraft): ListingDto {
     title: draft.title.trim(),
     area: draft.area.trim(),
     image: draft.media[0]?.url.trim() ?? "",
+    availableFrom: draft.availableFrom,
+    availableTo: draft.availableTo,
     price: draft.price,
     originalPrice: draft.originalPrice,
     beds: draft.beds,
@@ -124,6 +139,8 @@ export function mapApiListingToPublishDraft(listing: ApiListing): PublishDraft {
   return {
     title: listing.title,
     area: listing.area,
+    availableFrom: normalizeApiDate(listing.availableFrom),
+    availableTo: normalizeApiDate(listing.availableTo),
     beds: listing.beds,
     baths: listing.baths,
     commute: listing.commute,
@@ -210,5 +227,9 @@ function isHttpUrl(value: string) {
   } catch {
     return false;
   }
+}
+
+function normalizeApiDate(value: string | undefined) {
+  return value?.slice(0, 10) ?? "";
 }
 import type { ApiListing } from "./api";

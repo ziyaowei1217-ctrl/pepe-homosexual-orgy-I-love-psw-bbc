@@ -346,6 +346,8 @@ describe("SubletApp auth state flow", () => {
 
     expect(hasAuthPanel(renderer.root)).toBe(false);
     expect(hasButton(renderer.root, "保存草稿")).toBe(true);
+    expect(renderedText(renderer.root)).toContain("可入住日期");
+    expect(renderedText(renderer.root)).toContain("最晚退租日期");
     await unmount(renderer);
   });
 

@@ -6096,7 +6096,7 @@ function PublishingFlow({
   onSave: (draft: PublishDraft, shouldSubmit: boolean) => Promise<PublishSaveResult | null>;
 }) {
   const steps: Array<{ key: PublishStep; code: string; title: string; detail: string }> = [
-    { key: "basic", code: "01", title: "基础信息", detail: "标题、区域、房型与交通" },
+    { key: "basic", code: "01", title: "基础信息", detail: "标题、区域、可租期、房型与交通" },
     { key: "media", code: "02", title: "图片与分类", detail: "图片 URL、卧室与公共区域" },
     { key: "pricing", code: "03", title: "价格与设施", detail: "月租、原价、设施与声明" },
     { key: "review", code: "04", title: "预览与提交", detail: "确认服务端将保存的内容" }
@@ -6107,6 +6107,8 @@ function PublishingFlow({
       initialDraft ?? {
         title: "",
         area: "",
+        availableFrom: "",
+        availableTo: "",
         beds: 1,
         baths: 1,
         commute: "",
@@ -6183,7 +6185,7 @@ function PublishingFlow({
           <div>
             <CardTitle>发布房源流程</CardTitle>
             <CardDescription>
-              严格保存到现有房源字段，不展示合同、日期或文件上传。
+              严格保存到现有房源字段；合同与文件上传将在后续步骤完善。
               {draft.remoteListingId ? ` 远程草稿：${draft.remoteListingId}` : ""}
             </CardDescription>
           </div>
@@ -6217,6 +6219,8 @@ function PublishingFlow({
             <div className="grid gap-3 md:grid-cols-2">
               <PublishField label="房源标题" value={draft.title} onChange={(value) => setDraft({ ...draft, title: value })} />
               <PublishField label="区域" value={draft.area} onChange={(value) => setDraft({ ...draft, area: value })} />
+              <PublishField type="date" label="可入住日期" value={draft.availableFrom} onChange={(value) => setDraft({ ...draft, availableFrom: value })} />
+              <PublishField type="date" label="最晚退租日期" value={draft.availableTo} onChange={(value) => setDraft({ ...draft, availableTo: value })} />
               <PublishNumberField label="卧室" value={draft.beds} min={0} onChange={(value) => setDraft({ ...draft, beds: value })} />
               <PublishNumberField label="卫浴" value={draft.baths} min={0} onChange={(value) => setDraft({ ...draft, baths: value })} />
               <PublishField label="通勤说明" value={draft.commute} onChange={(value) => setDraft({ ...draft, commute: value })} />
@@ -6296,6 +6300,8 @@ function PublishingFlow({
               <div className="grid gap-3 md:grid-cols-2">
                 <PublishReviewItem label="标题" value={draft.title || "未填写"} />
                 <PublishReviewItem label="区域" value={draft.area || "未填写"} />
+                <PublishReviewItem label="可入住日期" value={draft.availableFrom || "未填写"} />
+                <PublishReviewItem label="最晚退租日期" value={draft.availableTo || "未填写"} />
                 <PublishReviewItem label="价格" value={`$${draft.price.toLocaleString()} / 月`} />
                 <PublishReviewItem label="图片" value={`${draft.media.length} 张 URL`} />
                 <PublishReviewItem label="设施" value={draft.tags.join("、") || "未选择"} />
@@ -6335,18 +6341,20 @@ function PublishingFlow({
 function PublishField({
   label,
   value,
+  type = "text",
   disabled = false,
   onChange
 }: {
   label: string;
   value: string;
+  type?: "text" | "date";
   disabled?: boolean;
   onChange: (value: string) => void;
 }) {
   return (
     <label className="grid gap-2 text-sm font-semibold">
       {label}
-      <Input value={value} disabled={disabled} onChange={(event) => onChange(event.target.value)} />
+      <Input type={type} value={value} disabled={disabled} onChange={(event) => onChange(event.target.value)} />
     </label>
   );
 }
