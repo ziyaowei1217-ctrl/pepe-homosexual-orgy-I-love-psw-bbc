@@ -138,6 +138,11 @@ describeMigration("production database foundations migration", () => {
     expect(query(`SELECT array_to_string(enum_range(NULL::"ListingStatus"), ',')`)).toContain("SUSPENDED");
     expect(query(`SELECT "email" FROM "User" WHERE "id" = 'existing-user'`)).toBe("existing@example.com");
     expect(query(`SELECT "title" FROM "Listing" WHERE "id" = 'existing-listing'`)).toBe("Existing listing");
+    expect(
+      query(
+        `SELECT "availableFrom"::text || ':' || "availableTo"::text FROM "Listing" WHERE "id" = 'existing-listing'`
+      )
+    ).toBe("2026-08-01:2027-08-01");
     expect(query(`SELECT "title" FROM "listings" WHERE "id" = '00000000-0000-0000-0000-000000000002'`)).toBe("Legacy housing listing");
     expect(query(`SELECT "consumedAt" IS NOT NULL FROM "VerificationCode" WHERE "id" = 'existing-code'`)).toBe("t");
     expect(
@@ -176,6 +181,11 @@ describeMigration("production database foundations migration", () => {
     expect(() => executeSql(`UPDATE "AuditEvent" SET "action" = 'mutated' WHERE "id" = 'audit-admin-role-granted'`)).toThrow(/immutable/i);
     expect(() => executeSql(`DELETE FROM "AuditEvent" WHERE "id" = 'audit-admin-role-granted'`)).toThrow(/immutable/i);
     expect(() => executeSql(`TRUNCATE TABLE "AuditEvent"`)).toThrow(/immutable/i);
+    expect(() =>
+      executeSql(
+        `UPDATE "Listing" SET "availableTo" = "availableFrom" WHERE "id" = 'existing-listing'`
+      )
+    ).toThrow(/Listing_availability_order_check/i);
   });
 
   it("creates the new production records with their safe defaults", () => {

@@ -180,6 +180,8 @@ model Listing {
   title           String
   area            String
   image           String?
+  availableFrom   DateTime       @db.Date
+  availableTo     DateTime       @db.Date
   price           Int
   originalPrice   Int
   beds            Int
@@ -203,6 +205,7 @@ model Listing {
   updatedAt       DateTime       @updatedAt
 
   @@index([status, createdAt])
+  @@index([status, availableFrom, availableTo])
   @@index([ownerId, status, updatedAt])
 }
 
