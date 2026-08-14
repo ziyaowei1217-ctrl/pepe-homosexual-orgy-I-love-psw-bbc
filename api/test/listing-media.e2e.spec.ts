@@ -1,10 +1,11 @@
 import "reflect-metadata";
 
-import { INestApplication, ValidationPipe } from "@nestjs/common";
+import { INestApplication, NotFoundException, ValidationPipe } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AuthGuard } from "../src/auth/auth.guard";
+import { AuthenticatedUserService } from "../src/auth/authenticated-user.service";
 import {
   ListingMediaController,
   PublicListingMediaController
@@ -123,6 +124,39 @@ describe("listing media HTTP API", () => {
     expect(service.reorder).not.toHaveBeenCalled();
   });
 
+  it("rejects unauthenticated access to every owner media route", async () => {
+    const guardedService = createService();
+    const moduleRef = await Test.createTestingModule({
+      controllers: [ListingMediaController],
+      providers: [
+        AuthGuard,
+        { provide: AuthenticatedUserService, useValue: { fromBearerToken: vi.fn() } },
+        { provide: ListingMediaService, useValue: guardedService }
+      ]
+    }).compile();
+    const guardedApp = moduleRef.createNestApplication();
+    guardedApp.setGlobalPrefix("api/v1");
+    await guardedApp.init();
+
+    try {
+      const http = request(guardedApp.getHttpServer());
+      await http.post("/api/v1/listings/listing-1/media/uploads").send(uploadPayload()).expect(401);
+      await http.post("/api/v1/listings/listing-1/media/media-1/finalize").expect(401);
+      await http.post("/api/v1/listings/listing-1/media/media-1/retry").expect(401);
+      await http.get("/api/v1/listings/listing-1/media").expect(401);
+      await http.patch("/api/v1/listings/listing-1/media/order").send({ mediaIds: ["media-1"] }).expect(401);
+      await http.delete("/api/v1/listings/listing-1/media/media-1").expect(401);
+      expect(guardedService.initializeUpload).not.toHaveBeenCalled();
+      expect(guardedService.findOwned).not.toHaveBeenCalled();
+      expect(guardedService.finalize).not.toHaveBeenCalled();
+      expect(guardedService.retry).not.toHaveBeenCalled();
+      expect(guardedService.reorder).not.toHaveBeenCalled();
+      expect(guardedService.remove).not.toHaveBeenCalled();
+    } finally {
+      await guardedApp.close();
+    }
+  });
+
   it("delivers published bytes with immutable and nosniff headers", async () => {
     await request(app.getHttpServer())
       .get("/api/v1/listing-media/media-1/content")
@@ -133,6 +167,15 @@ describe("listing media HTTP API", () => {
       .expect("X-Content-Type-Options", "nosniff")
       .expect(({ body }: { body: Buffer }) => {
         expect(body).toEqual(Buffer.from([1, 2, 3, 4]));
+      });
+  });
+
+  it("returns a safe 404 before media is published", async () => {
+    await request(app.getHttpServer())
+      .get("/api/v1/listing-media/unpublished/content")
+      .expect(404)
+      .expect(({ body }: { body: Record<string, unknown> }) => {
+        expect(body.code).toBe("LISTING_MEDIA_NOT_AVAILABLE");
       });
   });
 
@@ -169,7 +212,15 @@ function createService() {
     })),
     reorder: vi.fn(async () => [mediaResponse("media-2", "READY"), mediaResponse("media-1", "READY", 1)]),
     remove: vi.fn(async () => ({ removed: true })),
-    readPublished: vi.fn(async () => ({ bytes: Buffer.from([1, 2, 3, 4]), mimeType: "image/png" }))
+    readPublished: vi.fn(async (mediaId: string) => {
+      if (mediaId === "unpublished") {
+        throw new NotFoundException({
+          code: "LISTING_MEDIA_NOT_AVAILABLE",
+          message: "Listing media not available"
+        });
+      }
+      return { bytes: Buffer.from([1, 2, 3, 4]), mimeType: "image/png" };
+    })
   };
 }
 

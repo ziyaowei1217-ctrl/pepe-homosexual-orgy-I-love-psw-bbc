@@ -285,18 +285,22 @@ describe("ListingMediaService", () => {
     expect(storage.read).toHaveBeenCalledWith("listing-media/listing-1/published");
   });
 
-  it("hides ready, missing, and corrupted public media", async () => {
+  it("hides ready, missing, and corrupted public media behind a stable safe code", async () => {
     const readyDatabase = createDatabase({ media: [mediaRow({ storageStatus: "READY" })] });
     await expect(
       createService(readyDatabase, createStorage()).readPublished("media-1")
-    ).rejects.toBeInstanceOf(NotFoundException);
+    ).rejects.toMatchObject({ response: { code: "LISTING_MEDIA_NOT_AVAILABLE" } });
+
+    await expect(
+      createService(createDatabase(), createStorage()).readPublished("missing")
+    ).rejects.toMatchObject({ response: { code: "LISTING_MEDIA_NOT_AVAILABLE" } });
 
     const corruptedDatabase = createDatabase({
       media: [mediaRow({ storageStatus: "PUBLISHED", sizeBytes: 5 })]
     });
     await expect(
       createService(corruptedDatabase, createStorage(Buffer.from([1]))).readPublished("media-1")
-    ).rejects.toBeInstanceOf(NotFoundException);
+    ).rejects.toMatchObject({ response: { code: "LISTING_MEDIA_NOT_AVAILABLE" } });
   });
 
   it("rejects invalid service input even when HTTP validation is bypassed", async () => {

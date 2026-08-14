@@ -18,6 +18,7 @@ import {
   InitializeListingMediaUploadDto,
   ReorderListingMediaDto
 } from "./listing-media.dto";
+import { presentListingMedia } from "./listing-media.presentation";
 import { ListingMediaService } from "./listing-media.service";
 
 const initializeUploadPipe = new ValidationPipe({
@@ -51,13 +52,13 @@ export class ListingMediaController {
     @Body(initializeUploadPipe) input: InitializeListingMediaUploadDto
   ) {
     const result = await this.media.initializeUpload(request.user.id, listingId, input);
-    return { ...result, media: toListingMediaResponse(result.media) };
+    return { ...result, media: presentListingMedia(result.media) };
   }
 
   @Get()
   async findOwned(@Req() request: AuthenticatedRequest, @Param("listingId") listingId: string) {
     const media = await this.media.findOwned(request.user.id, listingId);
-    return media.map(toListingMediaResponse);
+    return media.map(presentListingMedia);
   }
 
   @Post(":mediaId/finalize")
@@ -66,7 +67,7 @@ export class ListingMediaController {
     @Param("listingId") listingId: string,
     @Param("mediaId") mediaId: string
   ) {
-    return toListingMediaResponse(await this.media.finalize(request.user.id, listingId, mediaId));
+    return presentListingMedia(await this.media.finalize(request.user.id, listingId, mediaId));
   }
 
   @Post(":mediaId/retry")
@@ -76,7 +77,7 @@ export class ListingMediaController {
     @Param("mediaId") mediaId: string
   ) {
     const result = await this.media.retry(request.user.id, listingId, mediaId);
-    return { ...result, media: toListingMediaResponse(result.media) };
+    return { ...result, media: presentListingMedia(result.media) };
   }
 
   @Patch("order")
@@ -86,7 +87,7 @@ export class ListingMediaController {
     @Body(reorderMediaPipe) input: ReorderListingMediaDto
   ) {
     const media = await this.media.reorder(request.user.id, listingId, input);
-    return media.map(toListingMediaResponse);
+    return media.map(presentListingMedia);
   }
 
   @Delete(":mediaId")
@@ -97,26 +98,6 @@ export class ListingMediaController {
   ) {
     return this.media.remove(request.user.id, listingId, mediaId);
   }
-}
-
-function toListingMediaResponse<
-  T extends {
-    url: unknown;
-    originalKey: unknown;
-    processedKey: unknown;
-    publicMainKey: unknown;
-    publicThumbnailKey: unknown;
-  }
->(media: T) {
-  const {
-    url: _url,
-    originalKey: _originalKey,
-    processedKey: _processedKey,
-    publicMainKey: _publicMainKey,
-    publicThumbnailKey: _publicThumbnailKey,
-    ...response
-  } = media;
-  return response;
 }
 
 @Controller("listing-media")

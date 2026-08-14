@@ -4,6 +4,7 @@ import { Prisma } from "@prisma/client";
 import { AuditActor, AuditService } from "../audit/audit.service";
 import { requirePublishCapableProfile } from "../marketplace/publish-profile";
 import { PrismaService } from "../prisma/prisma.service";
+import { ListingMediaPresentationSource, presentListingMedia } from "../listing-media/listing-media.presentation";
 import { CreateListingDto, ListingAvailabilityQueryDto, UpdateListingDto } from "./dto";
 import { buildListingAvailabilityWhere, validateListingAvailability } from "./listing-availability";
 
@@ -35,7 +36,7 @@ export class ListingsService {
 
   async findOne(id: string) {
     const record = await this.prisma.listing.findUnique({ where: { id }, include: listingMediaInclude });
-    if (record?.status === "APPROVED") return presentApprovedListing(record);
+    if (record?.status === "APPROVED") return presentListingWithMedia(presentApprovedListing(record));
     if (record) throw new NotFoundException("Listing not found");
 
     throw new NotFoundException("Listing not found");
@@ -67,11 +68,12 @@ export class ListingsService {
   }
 
   async findMine(ownerId: string) {
-    return this.prisma.listing.findMany({
+    const records = await this.prisma.listing.findMany({
       where: { ownerId },
       orderBy: { updatedAt: "desc" },
       include: listingMediaInclude
     });
+    return records.map(presentListingWithMedia);
   }
 
   async update(ownerId: string, id: string, dto: UpdateListingDto) {
@@ -126,11 +128,12 @@ export class ListingsService {
   }
 
   async findReviewQueue() {
-    return this.prisma.listing.findMany({
+    const records = await this.prisma.listing.findMany({
       where: { status: "SUBMITTED" },
       orderBy: { submittedAt: "asc" },
       include: listingMediaInclude
     });
+    return records.map(presentListingWithMedia);
   }
 
   async approve(id: string, actor: AuditActor) {
@@ -288,4 +291,8 @@ function approvedPublicTrust(value: string) {
 
 function presentApprovedListing<T extends { trust: string }>(listing: T): T {
   return { ...listing, trust: approvedPublicTrust(listing.trust) };
+}
+
+function presentListingWithMedia<T extends { media: ListingMediaPresentationSource[] }>(listing: T) {
+  return { ...listing, media: listing.media.map(presentListingMedia) };
 }

@@ -207,12 +207,14 @@ export class ListingMediaService {
       !media.sizeBytes ||
       !(SUPPORTED_LISTING_MEDIA_MIME_TYPES as readonly string[]).includes(media.mimeType)
     ) {
-      throw new NotFoundException("Listing media not found");
+      throw productNotFound("LISTING_MEDIA_NOT_AVAILABLE", "Listing media not available");
     }
 
     try {
       const bytes = await this.storage.read(media.originalKey);
-      if (bytes.length !== media.sizeBytes) throw new NotFoundException("Listing media not found");
+      if (bytes.length !== media.sizeBytes) {
+        throw productNotFound("LISTING_MEDIA_NOT_AVAILABLE", "Listing media not available");
+      }
       return { bytes, mimeType: media.mimeType as SupportedListingMediaMimeType };
     } catch (error) {
       if (error instanceof NotFoundException) throw error;
@@ -222,7 +224,7 @@ export class ListingMediaService {
           message: "图片暂时无法读取，请稍后重试。"
         });
       }
-      throw new NotFoundException("Listing media not found");
+      throw productNotFound("LISTING_MEDIA_NOT_AVAILABLE", "Listing media not available");
     }
   }
 
@@ -358,4 +360,8 @@ function productBadRequest(code: string, message: string) {
 
 function productConflict(code: string, message: string) {
   return new ConflictException({ code, message });
+}
+
+function productNotFound(code: string, message: string) {
+  return new NotFoundException({ code, message });
 }

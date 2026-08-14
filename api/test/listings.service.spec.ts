@@ -36,9 +36,14 @@ type ListingRecord = {
 type ListingMediaRecord = {
   id: string;
   listingId: string;
-  url: string;
+  url: string | null;
   kind: string;
   sortOrder: number;
+  originalKey: string | null;
+  processedKey: string | null;
+  publicMainKey: string | null;
+  publicThumbnailKey: string | null;
+  storageStatus: "PENDING_UPLOAD" | "READY" | "PUBLISHED" | "FAILED";
   createdAt: Date;
 };
 
@@ -219,8 +224,8 @@ describe("ListingsService", () => {
     const prisma = createPrismaMock({
       listings: [listingRecord({ id: "approved", ownerId: "owner-1", status: "APPROVED" })],
       media: [
-        mediaRecord({ id: "media-2", listingId: "approved", sortOrder: 2 }),
-        mediaRecord({ id: "media-1", listingId: "approved", sortOrder: 1 })
+        mediaRecord({ id: "media-2", listingId: "approved", sortOrder: 2, storageStatus: "PUBLISHED" }),
+        mediaRecord({ id: "media-1", listingId: "approved", sortOrder: 1, storageStatus: "PUBLISHED" })
       ]
     });
     const service = new ListingsService(prisma as never, new AuditService());
@@ -232,6 +237,7 @@ describe("ListingsService", () => {
     expect(prisma.listing.findUniqueCalls[0]?.include).toEqual({
       media: { orderBy: { sortOrder: "asc" } }
     });
+    expectSafeListingMedia((await service.findOne("approved")).media);
   });
 
   it("hides non-approved database listings from public detail reads", async () => {
@@ -344,8 +350,8 @@ describe("ListingsService", () => {
     const prisma = createPrismaMock({
       listings: [listingRecord({ id: "listing-1", ownerId: "owner-1", status: "DRAFT" })],
       media: [
-        mediaRecord({ id: "media-2", listingId: "listing-1", sortOrder: 2 }),
-        mediaRecord({ id: "media-1", listingId: "listing-1", sortOrder: 1 })
+        mediaRecord({ id: "media-2", listingId: "listing-1", sortOrder: 2, storageStatus: "PUBLISHED" }),
+        mediaRecord({ id: "media-1", listingId: "listing-1", sortOrder: 1, storageStatus: "PUBLISHED" })
       ]
     });
     const service = new ListingsService(prisma as never, new AuditService());
@@ -359,6 +365,7 @@ describe("ListingsService", () => {
     expect(prisma.listing.findManyCalls[0]?.include).toEqual({
       media: { orderBy: { sortOrder: "asc" } }
     });
+    expectSafeListingMedia((await service.findMine("owner-1"))[0]!.media);
   });
 
   it.each(["update", "submit"] as const)(
@@ -554,8 +561,8 @@ describe("ListingsService", () => {
     const prisma = createPrismaMock({
       listings: [listingRecord({ id: "submitted", status: "SUBMITTED" })],
       media: [
-        mediaRecord({ id: "media-2", listingId: "submitted", sortOrder: 2 }),
-        mediaRecord({ id: "media-1", listingId: "submitted", sortOrder: 1 })
+        mediaRecord({ id: "media-2", listingId: "submitted", sortOrder: 2, storageStatus: "PUBLISHED" }),
+        mediaRecord({ id: "media-1", listingId: "submitted", sortOrder: 1, storageStatus: "PUBLISHED" })
       ]
     });
     const service = new ListingsService(prisma as never, new AuditService());
@@ -569,6 +576,7 @@ describe("ListingsService", () => {
     expect(prisma.listing.findManyCalls[0]?.include).toEqual({
       media: { orderBy: { sortOrder: "asc" } }
     });
+    expectSafeListingMedia((await service.findReviewQueue())[0]!.media);
   });
 
   it("approves and audits in the same transaction", async () => {
@@ -717,12 +725,30 @@ function mediaRecord(overrides: Partial<ListingMediaRecord> = {}): ListingMediaR
   return {
     id: "media-1",
     listingId: "listing-1",
-    url: "https://example.com/bedroom.jpg",
+    url: "https://storage.example/listing-media/private.jpg",
     kind: "bedroom",
     sortOrder: 1,
+    originalKey: "listing-media/listing-1/original",
+    processedKey: "listing-media/listing-1/processed",
+    publicMainKey: "listing-media/listing-1/public-main",
+    publicThumbnailKey: "listing-media/listing-1/public-thumbnail",
+    storageStatus: "READY",
     createdAt: new Date("2026-01-01T00:00:00.000Z"),
     ...overrides
   };
+}
+
+function expectSafeListingMedia(media: Array<Record<string, unknown>>) {
+  for (const item of media) {
+    expect(item).not.toHaveProperty("url");
+    expect(item).not.toHaveProperty("originalKey");
+    expect(item).not.toHaveProperty("processedKey");
+    expect(item).not.toHaveProperty("publicMainKey");
+    expect(item).not.toHaveProperty("publicThumbnailKey");
+    expect(item).toMatchObject({
+      contentUrl: `/api/v1/listing-media/${item.id}/content`
+    });
+  }
 }
 
 function publishProfile(overrides: Partial<PublishProfile> = {}): PublishProfile {
