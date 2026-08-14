@@ -24,6 +24,7 @@ export type ApiListing = {
   reviewedAt?: string | null;
   rejectionReason?: string | null;
   updatedAt?: string;
+  mediaCount?: number;
   media?: Array<{
     id: string;
     url: string;
@@ -384,6 +385,10 @@ export async function apiPatch<T>(path: string, body: unknown, token?: string) {
     },
     token
   );
+}
+
+export async function apiDelete<T>(path: string, token?: string) {
+  return apiRequest<T>(path, { method: "DELETE" }, token);
 }
 
 export function requestEmailCode(email: string) {

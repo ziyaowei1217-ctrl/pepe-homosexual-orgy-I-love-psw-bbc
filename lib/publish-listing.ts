@@ -1,10 +1,5 @@
 export type PublishStep = "basic" | "media" | "pricing" | "review";
 
-export type PublishMedia = {
-  url: string;
-  kind: string;
-};
-
 export type PublishDraft = {
   title: string;
   area: string;
@@ -14,19 +9,16 @@ export type PublishDraft = {
   baths: number;
   commute: string;
   transit: string;
-  media: PublishMedia[];
   price: number;
   originalPrice: number;
   tags: string[];
   landlordAware: boolean;
   remoteListingId: string | null;
-  uploadedMediaUrls: string[];
 };
 
 export type ListingDto = {
   title: string;
   area: string;
-  image: string;
   availableFrom: string;
   availableTo: string;
   price: number;
@@ -43,21 +35,20 @@ export type ListingDto = {
 export type PublishSaveResult = {
   status: "saved" | "partial" | "submitted";
   remoteListingId: string;
-  uploadedMediaUrls: string[];
   message: string;
 };
 
 type PublishAdapter = {
   create: (dto: ListingDto) => Promise<{ id: string }>;
   update: (id: string, dto: ListingDto) => Promise<unknown>;
-  addMedia: (
-    id: string,
-    media: { url: string; kind: string; sortOrder: number }
-  ) => Promise<unknown>;
   submit: (id: string) => Promise<unknown>;
 };
 
-export function getPublishStepErrors(draft: PublishDraft, step: PublishStep) {
+export function getPublishStepErrors(
+  draft: PublishDraft,
+  step: PublishStep,
+  mediaSummary?: import("./listing-media").ListingMediaSummary
+) {
   const errors: string[] = [];
 
   if (step === "basic" || step === "review") {
@@ -79,9 +70,15 @@ export function getPublishStepErrors(draft: PublishDraft, step: PublishStep) {
   }
 
   if (step === "media" || step === "review") {
-    if (draft.media.length === 0) errors.push("请至少添加一张图片 URL。");
-    if (draft.media.some((item) => !isHttpUrl(item.url))) errors.push("请检查图片 URL。");
-    if (draft.media.some((item) => !item.kind.trim())) errors.push("请为每张图片选择分类。");
+    if (!mediaSummary || mediaSummary.totalCount === 0 || mediaSummary.readyCount === 0) {
+      errors.push("请至少上传一张图片。");
+    }
+    if (mediaSummary && (mediaSummary.pendingCount > 0 || mediaSummary.mutationPending)) {
+      errors.push("请等待所有图片完成上传和校验。");
+    }
+    if (mediaSummary && mediaSummary.failedCount > 0) {
+      errors.push("请删除失败图片或重试上传。");
+    }
   }
 
   if (step === "pricing" || step === "review") {
@@ -105,7 +102,6 @@ export function mapPublishDraftToListingDto(draft: PublishDraft): ListingDto {
   return {
     title: draft.title.trim(),
     area: draft.area.trim(),
-    image: draft.media[0]?.url.trim() ?? "",
     availableFrom: draft.availableFrom,
     availableTo: draft.availableTo,
     price: draft.price,
@@ -123,19 +119,6 @@ export function mapPublishDraftToListingDto(draft: PublishDraft): ListingDto {
 }
 
 export function mapApiListingToPublishDraft(listing: ApiListing): PublishDraft {
-  const orderedMedia = listing.media?.length
-    ? [...listing.media].sort((left, right) => left.sortOrder - right.sortOrder)
-    : [];
-  const media = orderedMedia.length
-    ? orderedMedia.map((item) => ({
-          url: item.url,
-          kind: item.kind
-        }))
-    : listing.image
-      ? [{ url: listing.image, kind: "卧室" }]
-      : [{ url: "", kind: "卧室" }];
-  const uploadedMediaUrls = orderedMedia.map((item) => item.url);
-
   return {
     title: listing.title,
     area: listing.area,
@@ -145,15 +128,13 @@ export function mapApiListingToPublishDraft(listing: ApiListing): PublishDraft {
     baths: listing.baths,
     commute: listing.commute,
     transit: listing.transit,
-    media,
     price: listing.price,
     originalPrice: listing.originalPrice,
     tags: listing.tags.filter((tag) => tag !== "房东知情"),
     landlordAware:
       listing.tags.includes("房东知情") ||
       listing.trust.includes("房东知情"),
-    remoteListingId: listing.id,
-    uploadedMediaUrls
+    remoteListingId: listing.id
   };
 }
 
@@ -164,33 +145,12 @@ export async function executePublishSave(
 ): Promise<PublishSaveResult> {
   const dto = mapPublishDraftToListingDto(draft);
   let remoteListingId = draft.remoteListingId;
-  const uploadedMediaUrls = [...draft.uploadedMediaUrls];
 
   if (remoteListingId) {
     await adapter.update(remoteListingId, dto);
   } else {
     const created = await adapter.create(dto);
     remoteListingId = created.id;
-  }
-
-  for (const [index, media] of draft.media.entries()) {
-    if (uploadedMediaUrls.includes(media.url)) continue;
-
-    try {
-      await adapter.addMedia(remoteListingId, {
-        url: media.url,
-        kind: media.kind,
-        sortOrder: index
-      });
-      uploadedMediaUrls.push(media.url);
-    } catch {
-      return {
-        status: "partial",
-        remoteListingId,
-        uploadedMediaUrls,
-        message: "草稿已保存，部分图片尚未上传。请重试。"
-      };
-    }
   }
 
   if (shouldSubmit) {
@@ -200,14 +160,12 @@ export async function executePublishSave(
       return {
         status: "partial",
         remoteListingId,
-        uploadedMediaUrls,
         message: "草稿已保存，提交审核失败。请重试。"
       };
     }
     return {
       status: "submitted",
       remoteListingId,
-      uploadedMediaUrls,
       message: "房源已提交审核。"
     };
   }
@@ -215,18 +173,8 @@ export async function executePublishSave(
   return {
     status: "saved",
     remoteListingId,
-    uploadedMediaUrls,
     message: "草稿已保存。"
   };
-}
-
-function isHttpUrl(value: string) {
-  try {
-    const url = new URL(value);
-    return url.protocol === "http:" || url.protocol === "https:";
-  } catch {
-    return false;
-  }
 }
 
 function normalizeApiDate(value: string | undefined) {

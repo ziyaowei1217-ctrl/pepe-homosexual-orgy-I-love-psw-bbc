@@ -71,4 +71,15 @@ describe("product API errors", () => {
     expect(error.code).toBeUndefined();
     expect(JSON.stringify(error)).not.toContain(rawCode);
   });
+
+  it.each([
+    ["LISTING_MEDIA_LIMIT_REACHED", "每套房源最多上传 12 张图片。"],
+    ["LISTING_MEDIA_LOCKED", "房源提交审核后，图片已锁定。"],
+    ["IMAGE_TYPE_UNSUPPORTED", "仅支持 JPEG、PNG 或 WebP 图片。"],
+    ["IMAGE_TOO_LARGE", "单张图片不能超过 10 MB。"],
+    ["IMAGE_STORAGE_UNAVAILABLE", "图片服务暂时不可用，请稍后重试。"]
+  ] as const)("maps safe media code %s to actionable copy", (code, message) => {
+    expect(productErrorForStatus(code === "IMAGE_STORAGE_UNAVAILABLE" ? 503 : 409, code))
+      .toMatchObject({ code, message });
+  });
 });
