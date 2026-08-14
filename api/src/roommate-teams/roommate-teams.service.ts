@@ -147,6 +147,21 @@ export class RoommateTeamsService {
           respondedAt: now
         }
       });
+      await transaction.roommateTeamInvite.updateMany({
+        where: {
+          status: "PENDING",
+          OR: [
+            { inviterId: invite.inviterId },
+            { inviteeId: invite.inviterId },
+            { inviterId: invite.inviteeId },
+            { inviteeId: invite.inviteeId }
+          ]
+        },
+        data: {
+          status: "CANCELLED",
+          respondedAt: now
+        }
+      });
 
       return this.findTeamOrThrow(transaction, team.id);
     });

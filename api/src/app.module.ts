@@ -15,6 +15,7 @@ import { ListingsModule } from "./listings/listings.module";
 import { MarketplaceModule } from "./marketplace/marketplace.module";
 import { PrismaModule } from "./prisma/prisma.module";
 import { RoommateConversationsModule } from "./roommate-conversations/roommate-conversations.module";
+import { RoommateTeamsModule } from "./roommate-teams/roommate-teams.module";
 import { RoommatesModule } from "./roommates/roommates.module";
 import { TripsModule } from "./trips/trips.module";
 import { TrustModule } from "./trust/trust.module";
@@ -39,6 +40,7 @@ import { UsersModule } from "./users/users.module";
     ListingsModule,
     ListingMediaModule,
     RoommateConversationsModule,
+    RoommateTeamsModule,
     RoommatesModule,
     GroupsModule,
     TripsModule,

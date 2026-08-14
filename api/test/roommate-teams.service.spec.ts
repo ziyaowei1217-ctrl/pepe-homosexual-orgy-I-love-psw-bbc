@@ -40,6 +40,18 @@ describe("RoommateTeamsService", () => {
     await expect(service.accept("user-b", invite.id)).resolves.toMatchObject({ id: team.id });
   });
 
+  it("cancels every competing pending invitation involving either accepted member", async () => {
+    const prisma = createPrismaMock();
+    const service = new RoommateTeamsService(prisma as never, createDealRoomsStub() as never);
+    const acceptedInvite = await service.invite("user-a", { roommateProfileId: "profile-b" });
+    const competingInvite = await service.invite("user-c", { roommateProfileId: "profile-b" });
+
+    await service.accept("user-b", acceptedInvite.id);
+
+    expect(prisma.roommateTeamInvite.rows.find((invite: { id: string }) => invite.id === competingInvite.id))
+      .toMatchObject({ status: "CANCELLED", respondedAt: expect.any(Date) });
+  });
+
   it("prevents either participant from entering a second active team", async () => {
     const prisma = createPrismaMock();
     const service = new RoommateTeamsService(prisma as never, createDealRoomsStub() as never);
@@ -113,9 +125,13 @@ type Member = ReturnType<typeof memberRecord>;
 function createPrismaMock() {
   const profiles: Profile[] = [
     profileRecord({ id: "profile-a", ownerId: "user-a", name: "A" }),
-    profileRecord({ id: "profile-b", ownerId: "user-b", name: "B" })
+    profileRecord({ id: "profile-b", ownerId: "user-b", name: "B" }),
+    profileRecord({ id: "profile-c", ownerId: "user-c", name: "C" })
   ];
-  const matches = [{ id: "match-ab", firstUserId: "user-a", secondUserId: "user-b", status: "ACTIVE" }];
+  const matches = [
+    { id: "match-ab", firstUserId: "user-a", secondUserId: "user-b", status: "ACTIVE" },
+    { id: "match-bc", firstUserId: "user-b", secondUserId: "user-c", status: "ACTIVE" }
+  ];
   const invites: Array<{
     id: string;
     matchId: string;
