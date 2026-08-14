@@ -93,6 +93,10 @@ model User {
   secondRoommateMatches RoommateMatch[] @relation("RoommateMatchSecondUser")
   roommateConversationMemberships RoommateConversationMember[]
   sentRoommateMessages RoommateMessage[]
+  roommateTeamMemberships RoommateTeamMember[]
+  sentRoommateTeamInvites RoommateTeamInvite[] @relation("RoommateTeamInviteInviter")
+  receivedRoommateTeamInvites RoommateTeamInvite[] @relation("RoommateTeamInviteInvitee")
+  dissolvedRoommateTeams RoommateTeam[] @relation("RoommateTeamDissolver")
 }
 
 model Profile {
@@ -307,6 +311,19 @@ enum RoommateMatchStatus {
   CLOSED
 }
 
+enum RoommateTeamStatus {
+  ACTIVE
+  DISSOLVED
+}
+
+enum RoommateTeamInviteStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  CANCELLED
+  EXPIRED
+}
+
 model RoommateMatch {
   id           String              @id @default(cuid())
   firstUserId  String
@@ -318,10 +335,65 @@ model RoommateMatch {
   firstUser    User                @relation("RoommateMatchFirstUser", fields: [firstUserId], references: [id], onDelete: Cascade)
   secondUser   User                @relation("RoommateMatchSecondUser", fields: [secondUserId], references: [id], onDelete: Cascade)
   conversation RoommateConversation?
+  teamInvites  RoommateTeamInvite[]
 
   @@unique([firstUserId, secondUserId])
   @@index([firstUserId, status, updatedAt])
   @@index([secondUserId, status, updatedAt])
+}
+
+model RoommateTeam {
+  id              String             @id @default(cuid())
+  status          RoommateTeamStatus @default(ACTIVE)
+  dealRoomId      String?            @unique
+  confirmedAt     DateTime           @default(now())
+  dissolvedAt     DateTime?
+  dissolvedById   String?
+  dissolveReason  String?
+  dealRoom        DealRoom?          @relation(fields: [dealRoomId], references: [id], onDelete: SetNull)
+  dissolvedBy     User?              @relation("RoommateTeamDissolver", fields: [dissolvedById], references: [id], onDelete: SetNull)
+  members         RoommateTeamMember[]
+  invites         RoommateTeamInvite[]
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  @@index([status, updatedAt])
+}
+
+model RoommateTeamMember {
+  id        String       @id @default(cuid())
+  teamId    String
+  userId    String
+  snapshot  Json
+  active    Boolean      @default(true)
+  joinedAt  DateTime     @default(now())
+  leftAt    DateTime?
+  team      RoommateTeam @relation(fields: [teamId], references: [id], onDelete: Restrict)
+  user      User         @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@unique([teamId, userId])
+  @@index([userId, active])
+}
+
+model RoommateTeamInvite {
+  id          String                   @id @default(cuid())
+  matchId     String
+  inviterId   String
+  inviteeId   String
+  teamId      String?
+  status      RoommateTeamInviteStatus @default(PENDING)
+  expiresAt   DateTime
+  respondedAt DateTime?
+  match       RoommateMatch            @relation(fields: [matchId], references: [id], onDelete: Restrict)
+  inviter     User                     @relation("RoommateTeamInviteInviter", fields: [inviterId], references: [id], onDelete: Restrict)
+  invitee     User                     @relation("RoommateTeamInviteInvitee", fields: [inviteeId], references: [id], onDelete: Restrict)
+  team        RoommateTeam?            @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  createdAt   DateTime                 @default(now())
+  updatedAt   DateTime                 @updatedAt
+
+  @@index([inviterId, status, createdAt])
+  @@index([inviteeId, status, createdAt])
+  @@index([matchId, status])
 }
 
 model RoommateConversation {
@@ -449,6 +521,7 @@ model DealRoom {
   members           DealRoomMember[]
   tourRequest       TourRequest?
   threads           DealThread[]
+  roommateTeam      RoommateTeam?
   createdAt         DateTime         @default(now())
   updatedAt         DateTime         @updatedAt
 
