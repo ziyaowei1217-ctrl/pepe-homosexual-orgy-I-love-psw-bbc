@@ -53,7 +53,7 @@ The existing roommate-conversation module remains authoritative for direct messa
 
 Add required `availableFrom` and `availableTo` date columns to `Listing`. Existing seeded and migrated records receive explicit safe defaults in the migration/seed path. New or edited listings validate that the end is after the start.
 
-Approved listings that change either availability date return to `SUBMITTED`, because the public offer changed materially.
+Submitted or approved listings that change either availability date enter a fresh `SUBMITTED` review cycle automatically, because the public offer changed materially. Saving the new dates refreshes `submittedAt` and clears the previous reviewer, review timestamp, and rejection reason; the host does not click Submit a second time.
 
 The collection API accepts `moveIn` and `moveOut` only as a pair. A listing matches when:
 
@@ -89,7 +89,9 @@ Supported formats are JPEG, PNG, and WebP. Limits are 10 MB per image and 12 ima
 
 Finalization verifies the stored object rather than trusting request metadata: object existence and byte length, magic-byte file type, a SHA-256 checksum computed from the stored bytes, and decodable image dimensions. Image decoding uses a 40-megapixel input-pixel ceiling. The browser may compute the expected SHA-256 value for comparison, but it cannot approve its own upload.
 
-Media may be changed while a listing is `DRAFT` or `REJECTED`. Submitted or approved media are locked. Any future approved-listing media edit must explicitly move the listing back through review.
+Media may be changed while a listing is `DRAFT` or `REJECTED`. Submitted or approved media are locked. Submission requires at least one MinIO-backed `READY` image, a valid cover, and no remaining `PENDING_UPLOAD`, `UPLOADED_PENDING_VALIDATION`, or `FAILED` images. Any future approved-listing media edit must explicitly move the listing back through review.
+
+Approval changes the listing and all ordered `READY` images to `APPROVED`/`PUBLISHED` in the same transaction. If an approved listing changes dates, its published image records stay locked, but public media delivery also checks the parent listing status and hides the bytes while the listing is back in review.
 
 ### Roommate Teams
 
@@ -100,7 +102,8 @@ Add `RoommateTeam`, `RoommateTeamMember`, and `RoommateTeamInvite`.
 - A team always contains exactly two distinct users.
 - An invitation is allowed only when an active reciprocal `RoommateMatch` exists.
 - A user may belong to only one active team at a time.
-- Accepting an invitation and creating memberships happens in one transaction with concurrency protection.
+- A user may have multiple pending invitations while they have no active team.
+- Accepting an invitation and creating memberships happens in one transaction with concurrency protection; the same transaction cancels every other pending invitation involving either new member.
 - Leaving dissolves the team; conversation and application history remain.
 
 An active team may create or attach to a deal room, but `DealRoom` is not the source of truth for team membership.
@@ -119,11 +122,15 @@ Add `RentalApplication` with a unique active application per listing and applica
 - a bounded free-text note;
 - status timestamps and owner decision metadata.
 
-Statuses are `DRAFT`, `SUBMITTED`, `ACCEPTED`, `REJECTED`, `WITHDRAWN`, and `CANCELLED`.
+Statuses are `DRAFT`, `SUBMITTED`, `ACCEPTED`, `REJECTED`, `WITHDRAWN`, `CANCELLED`, and `COMPLETED`.
 
 A submitted application must fit completely within the current listing availability. Team applications require an active team containing the submitter. Applications never contain sensitive identity or financial documents.
 
-Only the listing owner can list and decide applications for that listing. Applicants can read their own applications and withdraw a submitted application before owner acceptance. After acceptance, either the applicant or listing owner may cancel before funds are released; cancellation records the actor and reason and automatically refunds any held demo funds in the same transaction.
+If a team dissolves, its draft applications lose submission eligibility and its submitted applications become `WITHDRAWN` with the system reason `TEAM_DISSOLVED`. An already accepted application remains accepted and must use the normal cancellation flow so payment and ledger state cannot be bypassed.
+
+Only one application per listing may be accepted and unfinished at a time. While it remains accepted, the listing is marked in progress, new submissions are blocked, and other submitted applications remain pending but cannot be accepted. Cancelling it reopens the listing; releasing its held funds completes the listing workflow and permanently closes it to further applications.
+
+Only the listing owner can list and decide applications for that listing. Applicants can read their own applications and withdraw a submitted application before owner acceptance. After acceptance, either the applicant or listing owner may cancel before the agreed move-in date; cancellation records the actor and reason and automatically refunds any held demo funds in the same transaction. Releasing held funds transitions the application to `COMPLETED`.
 
 ### Demo Payments And Held Funds
 
@@ -132,12 +139,12 @@ Add `DemoPayment`, `DemoPaymentAttempt`, `DemoHeldFund`, and `DemoLedgerEntry`.
 - An accepted application creates or reuses one payment order for exactly one month of listing rent, stored in integer cents.
 - Each simulation appends a payment attempt in `SUCCEEDED` or `FAILED` state while the payment order records its current aggregate state.
 - The first successful attempt creates one held-fund record in `HELD` state; later success retries return the same records.
-- Held funds transition to `REFUNDED` before move-in cancellation or `RELEASED` after both parties confirm move-in.
+- Held funds transition to `REFUNDED` before move-in cancellation or `RELEASED` after both parties confirm move-in on or after the agreed move-in date.
 - The renter and listing owner each have one monotonic move-in confirmation timestamp.
 - Every balance-affecting transition appends an immutable ledger entry.
 - Idempotency keys prevent duplicate payments, refunds, releases, confirmations, and ledger entries.
 
-No card number or payment credential is requested. The demo UI offers deterministic “simulate success” and “simulate failure” actions.
+No card number or payment credential is requested. The demo UI offers deterministic “simulate success” and “simulate failure” actions. Cancellation before move-in closes an unpaid order without manufacturing a refund entry, or atomically refunds a held balance and appends its ledger entry. Post-move-in disputes are outside this demo: held funds remain held until both confirmations arrive.
 
 ## API Shape
 
@@ -188,13 +195,13 @@ POST   /demo-payments/by-application/:applicationId/simulate-failure
 POST   /demo-held-funds/:id/confirm-move-in
 ```
 
-All retryable write routes accept an idempotency key. Authorization uses the authenticated user and server-side resource relationships, never user-supplied ownership fields.
+All retryable write routes accept an idempotency key. The server binds each key to the actor, command, resource, and request hash: an exact replay returns the original result, while reuse with different parameters returns a conflict. Authorization uses the authenticated user and server-side resource relationships, never user-supplied ownership fields.
 
 ## Frontend Experience
 
 ### Search Dates
 
-The existing calendar becomes enabled. Labels use “入住/退租” and duration in days, not hotel-night language. Selecting a valid range updates the URL search parameters and refetches the server collection. Clearing dates restores the unfiltered collection.
+The existing calendar becomes enabled. Labels use “入住/退租” and duration in days, not hotel-night language. A partial pair is retained in the form but does not filter and prompts the renter to complete both dates. Selecting a valid pair updates the URL search parameters and refetches the server collection. Clearing dates restores the unfiltered collection.
 
 ### Roommate Messaging And Teams
 
@@ -223,7 +230,8 @@ Only an accepted application shows the demo payment panel. It repeats the listin
 - MinIO unavailability leaves media retryable and never creates a false `READY` state.
 - State transitions use conditional updates or transactions so stale screens return a conflict response instead of overwriting newer decisions.
 - Team acceptance serializes membership creation to prevent two active teams.
-- Payment and ledger mutations are idempotent and transactional.
+- Team acceptance cancels both members' competing pending invitations in the same transaction.
+- Submission, review, application decisions, payment, refund, confirmation, release, and ledger mutations are idempotent and transactional.
 - UI buttons disable while their command is pending, but reload always recovers from server state.
 - No raw storage URL, credential, token, object-store error, or caught database message appears in logs or client responses.
 
@@ -236,9 +244,9 @@ Required checks include:
 - exact and boundary-inclusive date coverage plus invalid range rejection;
 - listing review reset after availability changes;
 - media type/size/count validation, finalize failure, retry, ordering, removal, and authorization;
-- reciprocal-match requirement, invite lifecycle, concurrent accept protection, one-active-team rule, and dissolve behavior;
-- solo/team application authorization, availability validation, idempotent submission, owner-only decisions, and terminal-state conflicts;
-- simulated success/failure, one payment per accepted application, immutable balanced ledger, idempotent refund/release, and dual move-in confirmation;
+- reciprocal-match requirement, multiple pending invites, competing-invite cancellation, concurrent accept protection, one-active-team rule, and dissolve behavior;
+- solo/team application authorization, availability validation, team-dissolution withdrawal, one unfinished accepted application per listing, idempotent submission, owner-only decisions, and terminal-state conflicts;
+- simulated success/failure, one payment per accepted application, unpaid cancellation, immutable balanced ledger, idempotent refund/release, move-in-date enforcement, and dual move-in confirmation;
 - roommate messaging capability enabled only for a server-confirmed reciprocal conversation;
 - frontend tests for refresh recovery, disabled/pending states, safe error copy, and the mandatory demo-money disclaimer;
 - a Docker-backed smoke journey using PostgreSQL and MinIO from listing creation through held-fund release.
