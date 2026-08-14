@@ -56,7 +56,21 @@ describe("product capabilities", () => {
         apiOnline: true,
         profileRole: "renter"
       }).status
-    ).toBe("unavailable");
+    ).toBe("allowed");
+    expect(
+      checkProductCapability("roommate-message", {
+        authenticated: false,
+        apiOnline: true,
+        profileRole: "renter"
+      }).status
+    ).toBe("requires-auth");
+    expect(
+      checkProductCapability("roommate-message", {
+        authenticated: true,
+        apiOnline: false,
+        profileRole: "renter"
+      }).status
+    ).toBe("api-offline");
   });
 
   it("only enables date filtering when every listing has availability data", () => {

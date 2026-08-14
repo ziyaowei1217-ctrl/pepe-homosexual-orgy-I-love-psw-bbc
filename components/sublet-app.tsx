@@ -2149,6 +2149,7 @@ export default function HomePage({
   }
 
   function handleOpenRoommateDm(targetRoommate: Roommate) {
+    if (!requireCapability("roommate-message")) return;
     const conversation = roommateConversations.find(
       (item) => item.peer.id === targetRoommate.id
     );
@@ -3516,6 +3517,7 @@ function SwipeRoommateDeck({
 }) {
   const reasons = roommate.preferenceFit.reasons.slice(0, 4);
   const gaps = roommate.preferenceFit.gaps.slice(0, 2);
+  const canOpenDm = connectionStatus === "mutual" || connectionStatus === "roommate";
   if (!roommate.name) {
     return (
       <Card className="border-dashed p-8 text-center shadow-card">
@@ -3604,9 +3606,9 @@ function SwipeRoommateDeck({
           </div>
 
           <div className="grid gap-2 rounded-[24px] border border-blue-100 bg-blue-50/70 p-3 sm:grid-cols-2">
-            <Button variant="outline" className="rounded-full font-extrabold" onClick={connectionStatus === "new" ? onSendIntro : onOpenDm}>
+            <Button variant="outline" className="rounded-full font-extrabold" onClick={canOpenDm ? onOpenDm : onSendIntro}>
               <MessageCircle data-icon="inline-start" />
-              室友私信（暂未开放）
+              {canOpenDm ? "打开室友私信" : "室友私信 · 互相喜欢后开放"}
             </Button>
             <Button
               variant="secondary"
@@ -3617,7 +3619,7 @@ function SwipeRoommateDeck({
               组队确认（暂未开放）
             </Button>
             <p className="text-xs font-semibold leading-5 text-muted-foreground sm:col-span-2">
-              {getRoommateStatusDescription(connectionStatus)} 私信与组队确认需等待后端接通。
+              {getRoommateStatusDescription(connectionStatus)} {canOpenDm ? "服务端匹配已确认，可直接私信。" : "双方互相喜欢后会自动创建私信。"} 组队确认将在下一阶段开放。
             </p>
           </div>
         </div>
@@ -3834,7 +3836,7 @@ function LikeQueueScreen({
           )}
         </QueueColumn>
 
-        <QueueColumn title="互相匹配" description="仅显示服务端确认的结果；私信暂未开放" count={mutualMembers.length}>
+        <QueueColumn title="互相匹配" description="仅显示服务端确认的结果；可以直接私信" count={mutualMembers.length}>
           {mutualMembers.length > 0 ? (
             mutualMembers.map((member) => (
               <RoommateConnectionRow

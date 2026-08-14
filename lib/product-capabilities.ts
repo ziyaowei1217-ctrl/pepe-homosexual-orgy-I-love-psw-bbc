@@ -36,14 +36,14 @@ const protectedCapabilities = new Set<ProductCapability>([
   "message-host",
   "request-viewing",
   "roommate-action",
+  "roommate-message",
   "publish-listing"
 ]);
 
 const unavailableCapabilities = new Set<ProductCapability>([
   "application",
   "payment",
-  "escrow",
-  "roommate-message"
+  "escrow"
 ]);
 
 export function checkProductCapability(

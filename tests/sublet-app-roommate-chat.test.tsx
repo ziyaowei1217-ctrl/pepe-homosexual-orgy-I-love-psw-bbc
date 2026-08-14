@@ -277,6 +277,32 @@ describe("SubletApp roommate chat", () => {
     await unmount(renderer);
   });
 
+  it("presents roommate direct messaging as available on discovery cards", async () => {
+    navigationMock.pathname = "/roommates";
+    vi.mocked(api.apiGet).mockImplementation(async (path) =>
+      path === "/roommates"
+        ? [
+            {
+              id: conversation.peer.id,
+              name: conversation.peer.name,
+              age: conversation.peer.age,
+              role: conversation.peer.role,
+              image: conversation.peer.image,
+              match: conversation.peer.match,
+              budget: conversation.peer.budget,
+              commute: conversation.peer.commute,
+              tags: conversation.peer.tags
+            }
+          ]
+        : []
+    );
+    const renderer = await renderMessagesApp({ initialSection: "Roommates" });
+
+    expect(renderedText(renderer.root)).toContain("室友私信");
+    expect(renderedText(renderer.root)).not.toContain("室友私信（暂未开放）");
+    await unmount(renderer);
+  });
+
   it("does not mark an implicitly selected roommate read while narrow /messages shows contacts", async () => {
     const renderer = await renderMessagesApp({
       initialRoommateConversationId: null,
@@ -676,9 +702,11 @@ describe("SubletApp roommate chat", () => {
 });
 
 async function renderMessagesApp({
+  initialSection = "Messages",
   initialRoommateConversationId = conversation.id,
   initialRoommateDmId = null
 }: {
+  initialSection?: "Messages" | "Roommates";
   initialRoommateConversationId?: string | null;
   initialRoommateDmId?: string | null;
 } = {}): Promise<ReactTestRenderer> {
@@ -686,7 +714,7 @@ async function renderMessagesApp({
   await act(async () => {
     renderer = create(
       <SubletApp
-        initialSection="Messages"
+        initialSection={initialSection}
         initialRoommateConversationId={initialRoommateConversationId}
         initialRoommateDmId={initialRoommateDmId}
       />
