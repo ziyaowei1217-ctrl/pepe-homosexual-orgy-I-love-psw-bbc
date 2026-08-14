@@ -1,4 +1,5 @@
 import { Inject, Injectable, NotFoundException } from "@nestjs/common";
+import { Prisma } from "@prisma/client";
 
 import { PrismaService } from "../prisma/prisma.service";
 
@@ -60,35 +61,76 @@ export class DealRoomsService {
       }
     });
 
-    if (input.action !== "LIKE" || !input.createDealRoom) {
-      return {
-        action,
-        dealRoom: null
-      };
-    }
+    return {
+      action,
+      dealRoom: null
+    };
+  }
 
-    const dealRoom = await this.findOrCreateDealRoom(input.userId, roommate);
-    await this.prisma.dealRoomMember.upsert({
+  async ensureForConfirmedTeam(
+    transaction: Prisma.TransactionClient,
+    ownerId: string,
+    teammateId: string
+  ) {
+    if (ownerId === teammateId) throw new NotFoundException("Roommate profiles not found");
+
+    const profiles = await transaction.roommateProfile.findMany({
+      where: { ownerId: { in: [ownerId, teammateId] } }
+    });
+    const ownerProfile = profiles.find((profile) => profile.ownerId === ownerId);
+    const teammateProfile = profiles.find((profile) => profile.ownerId === teammateId);
+    if (!ownerProfile || !teammateProfile) throw new NotFoundException("Roommate profiles not found");
+
+    const existing = await transaction.dealRoom.findFirst({
       where: {
-        dealRoomId_roommateProfileId: {
-          dealRoomId: dealRoom.id,
-          roommateProfileId: roommate.id
-        }
-      },
-      create: {
-        dealRoomId: dealRoom.id,
-        roommateProfileId: roommate.id,
-        snapshot: this.toRoommateSnapshot(roommate)
-      },
-      update: {
-        snapshot: this.toRoommateSnapshot(roommate)
+        status: "ACTIVE",
+        OR: [
+          { ownerId, roommateProfileId: teammateProfile.id },
+          { ownerId: teammateId, roommateProfileId: ownerProfile.id }
+        ]
+      }
+    });
+    const room = existing ?? await transaction.dealRoom.create({
+      data: {
+        ownerId,
+        roommateProfileId: teammateProfile.id,
+        status: "ACTIVE",
+        recommendedHomes: await this.buildRecommendedHomes(transaction, teammateProfile),
+        pipeline: [
+          { label: "Match", status: "active", detail: "Team confirmed" },
+          { label: "Shortlist", status: "ready", detail: "Ready to compare" },
+          { label: "Tour", status: "ready", detail: "Ready to schedule" },
+          { label: "Apply", status: "idle", detail: "Not started" }
+        ],
+        trustChecklist: [
+          { label: "Profile", detail: "Both profiles confirmed", complete: true },
+          { label: "Team", detail: "Two-person team confirmed", complete: true }
+        ]
       }
     });
 
-    return {
-      action,
-      dealRoom: this.toDealRoomResponse(dealRoom)
-    };
+    await Promise.all(
+      [ownerProfile, teammateProfile].map((profile) =>
+        transaction.dealRoomMember.upsert({
+          where: {
+            dealRoomId_roommateProfileId: {
+              dealRoomId: room.id,
+              roommateProfileId: profile.id
+            }
+          },
+          create: {
+            dealRoomId: room.id,
+            roommateProfileId: profile.id,
+            snapshot: this.toRoommateSnapshot(profile)
+          },
+          update: {
+            snapshot: this.toRoommateSnapshot(profile)
+          }
+        })
+      )
+    );
+
+    return room;
   }
 
   async findActiveForUser(userId: string) {
@@ -133,42 +175,6 @@ export class DealRoomsService {
     });
   }
 
-  private async findOrCreateDealRoom(ownerId: string, roommate: RoommateSnapshot) {
-    const existing = await this.prisma.dealRoom.findUnique({
-      where: {
-        ownerId_roommateProfileId: {
-          ownerId,
-          roommateProfileId: roommate.id
-        }
-      }
-    });
-    if (existing) return existing;
-
-    const recommendedHomes = await this.buildRecommendedHomes(roommate);
-
-    return this.prisma.dealRoom.create({
-      data: {
-        ownerId,
-        roommateProfileId: roommate.id,
-        status: "ACTIVE",
-        recommendedHomes,
-        pipeline: [
-          { label: "Match", status: "active", detail: "Matched" },
-          { label: "Shortlist", status: "ready", detail: `${recommendedHomes.length} homes` },
-          { label: "Tour", status: "ready", detail: "Ready to schedule" },
-          { label: "Apply", status: "idle", detail: "Not started" }
-        ],
-        trustChecklist: [
-          { label: "ID verified", detail: "Both verified", complete: true },
-          { label: "University verified", detail: "Both verified", complete: true },
-          { label: "Background check", detail: "Both clear", complete: true },
-          { label: "Payment history", detail: "On track", complete: true },
-          { label: "References", detail: "2 shared", complete: true }
-        ]
-      }
-    });
-  }
-
   private async resolveRoommateProfile(id: string): Promise<RoommateSnapshot> {
     const record = await this.prisma.roommateProfile.findUnique({ where: { id } });
     if (record) return this.toRoommateSnapshot(record);
@@ -176,8 +182,11 @@ export class DealRoomsService {
     throw new NotFoundException("Roommate profile not found");
   }
 
-  private async buildRecommendedHomes(roommate: RoommateSnapshot): Promise<ListingSnapshot[]> {
-    const records = await this.prisma.listing.findMany({
+  private async buildRecommendedHomes(
+    transaction: Prisma.TransactionClient,
+    roommate: RoommateSnapshot
+  ): Promise<ListingSnapshot[]> {
+    const records = await transaction.listing.findMany({
       where: {
         status: "APPROVED"
       },

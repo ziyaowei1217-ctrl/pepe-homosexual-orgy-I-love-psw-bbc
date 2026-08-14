@@ -7,7 +7,7 @@ import { DealRoomsService } from "../src/deal-rooms/deal-rooms.service";
 import { RoommatesService } from "../src/roommates/roommates.service";
 
 describe("match transaction flow", () => {
-  it("authenticates a user, likes a roommate, fetches the active room, and requests a tour", async () => {
+  it("authenticates a user and records a like without creating a room before team confirmation", async () => {
     const prisma = createPrismaMock();
     const jwt = new JwtService({ secret: "test-secret" });
     const auth = new AuthService(prisma as never, jwt, new ConsoleEmailSender(), {
@@ -39,7 +39,6 @@ describe("match transaction flow", () => {
 
     const match = await roommates.recordAction(userContext.id, "roommate-1", "LIKE");
     const activeRooms = await dealRooms.findActiveForUser(userContext.id);
-    const tourRequest = await dealRooms.requestGroupTour(userContext.id, activeRooms[0].id);
 
     expect(userContext).toEqual({
       id: session.user.id,
@@ -47,15 +46,8 @@ describe("match transaction flow", () => {
       role: "USER"
     });
     expect(match.action.action).toBe("LIKE");
-    expect(match.dealRoom?.status).toBe("ACTIVE");
-    expect(activeRooms).toHaveLength(1);
-    expect(activeRooms[0].id).toBe(match.dealRoom?.id);
-    expect(activeRooms[0].canRequestTour).toBe(true);
-    expect(tourRequest).toMatchObject({
-      dealRoomId: activeRooms[0].id,
-      requesterId: userContext.id,
-      status: "REQUESTED"
-    });
+    expect(match.dealRoom).toBeNull();
+    expect(activeRooms).toEqual([]);
   });
 });
 

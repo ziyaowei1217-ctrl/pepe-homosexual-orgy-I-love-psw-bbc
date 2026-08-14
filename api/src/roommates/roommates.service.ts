@@ -105,13 +105,12 @@ export class RoommatesService {
       userId,
       roommateProfileId,
       action,
-      createDealRoom: action === "LIKE" && candidate.localReciprocalLike
+      createDealRoom: false
     });
 
-    const snapshot = result.dealRoom?.members?.[0]?.snapshot as { name?: string } | undefined;
     return {
       ...result,
-      feedback: getActionFeedback(action, snapshot?.name ?? "this roommate")
+      feedback: getActionFeedback(action, candidate.name)
     };
   }
 

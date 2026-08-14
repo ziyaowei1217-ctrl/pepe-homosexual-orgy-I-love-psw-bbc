@@ -62,15 +62,15 @@ describe("RoommatesService", () => {
     ]);
   });
 
-  it("creates a deal room only for a reciprocal like", async () => {
+  it("does not create a deal room before reciprocal users confirm a team", async () => {
     const prisma = createPrismaMock([candidate({ localReciprocalLike: true })]);
     const dealRooms = createDealRoomsMock();
     const service = new RoommatesService(prisma as never, dealRooms as never, createRoommateMatchesMock() as never);
 
     const result = await service.recordAction("user-1", "roommate-1", "LIKE");
 
-    expect(result.dealRoom).toEqual({ id: "deal-room-1", status: "ACTIVE" });
-    expect(dealRooms.inputs[0]?.createDealRoom).toBe(true);
+    expect(result.dealRoom).toBeNull();
+    expect(dealRooms.inputs[0]?.createDealRoom).toBe(false);
   });
 });
 

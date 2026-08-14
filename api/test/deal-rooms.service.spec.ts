@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { DealRoomsService } from "../src/deal-rooms/deal-rooms.service";
 
 describe("DealRoomsService", () => {
-  it("likes a roommate and creates an active deal room", async () => {
+  it("records a roommate action without eagerly creating a deal room", async () => {
     const prisma = createPrismaMock();
     const service = new DealRoomsService(prisma as never);
 
@@ -16,35 +16,29 @@ describe("DealRoomsService", () => {
     });
 
     expect(result.action.action).toBe("LIKE");
-    expect(result.dealRoom?.status).toBe("ACTIVE");
-    expect(result.dealRoom?.canRequestTour).toBe(true);
+    expect(result.dealRoom).toBeNull();
     expect(prisma.roommateAction.upsertCalls[0].where.userId_roommateProfileId).toEqual({
       userId: "user-1",
       roommateProfileId: "roommate-1"
     });
-    expect(prisma.dealRoom.createCalls).toHaveLength(1);
-    expect(prisma.dealRoomMember.upsertCalls).toHaveLength(1);
+    expect(prisma.dealRoom.createCalls).toHaveLength(0);
+    expect(prisma.dealRoomMember.upsertCalls).toHaveLength(0);
   });
 
-  it("returns the existing deal room when liking the same roommate twice", async () => {
+  it("creates and reuses one deal room with both member snapshots after team confirmation", async () => {
     const prisma = createPrismaMock();
     const service = new DealRoomsService(prisma as never);
 
-    const first = await service.recordRoommateAction({
-      userId: "user-1",
-      roommateProfileId: "roommate-1",
-      action: "LIKE",
-      createDealRoom: true
-    });
-    const second = await service.recordRoommateAction({
-      userId: "user-1",
-      roommateProfileId: "roommate-1",
-      action: "LIKE",
-      createDealRoom: true
-    });
+    const first = await service.ensureForConfirmedTeam(prisma as never, "user-1", "user-2");
+    const second = await service.ensureForConfirmedTeam(prisma as never, "user-1", "user-2");
 
-    expect(first.dealRoom?.id).toBe(second.dealRoom?.id);
+    expect(first.id).toBe(second.id);
     expect(prisma.dealRoom.createCalls).toHaveLength(1);
+    expect(prisma.dealRoomMember.upsertCalls).toHaveLength(4);
+    expect(prisma.dealRoomMember.rows.map((member) => member.roommateProfileId).sort()).toEqual([
+      "roommate-1",
+      "roommate-2"
+    ]);
   });
 
   it("does not create a deal room for pass or later actions", async () => {
@@ -67,7 +61,7 @@ describe("DealRoomsService", () => {
     expect(prisma.dealRoom.createCalls).toHaveLength(0);
   });
 
-  it("recommends only approved database listings when creating a deal room", async () => {
+  it("recommends only approved database listings when confirming a team", async () => {
     const prisma = createPrismaMock({
       listings: [
         listingRecord({ id: "draft-listing", status: "DRAFT", score: 5 }),
@@ -76,16 +70,11 @@ describe("DealRoomsService", () => {
     });
     const service = new DealRoomsService(prisma as never);
 
-    const result = await service.recordRoommateAction({
-      userId: "user-1",
-      roommateProfileId: "roommate-1",
-      action: "LIKE",
-      createDealRoom: true
-    });
+    const result = await service.ensureForConfirmedTeam(prisma as never, "user-1", "user-2");
 
     expect(prisma.listing.findManyCalls[0].where).toEqual({ status: "APPROVED" });
-    expect(result.dealRoom?.recommendedHomes).toMatchObject([{ id: "approved-listing" }]);
-    expect(JSON.stringify(result.dealRoom?.recommendedHomes)).not.toContain("draft-listing");
+    expect(result.recommendedHomes).toMatchObject([{ id: "approved-listing" }]);
+    expect(JSON.stringify(result.recommendedHomes)).not.toContain("draft-listing");
   });
 
   it("keeps recommendations empty when no approved database listings exist", async () => {
@@ -94,29 +83,19 @@ describe("DealRoomsService", () => {
     });
     const service = new DealRoomsService(prisma as never);
 
-    const result = await service.recordRoommateAction({
-      userId: "user-1",
-      roommateProfileId: "roommate-1",
-      action: "LIKE",
-      createDealRoom: true
-    });
+    const result = await service.ensureForConfirmedTeam(prisma as never, "user-1", "user-2");
 
     expect(prisma.listing.findManyCalls[0].where).toEqual({ status: "APPROVED" });
-    expect(result.dealRoom?.recommendedHomes).toEqual([]);
+    expect(result.recommendedHomes).toEqual([]);
   });
 
   it("creates a tour request for an owned deal room idempotently", async () => {
     const prisma = createPrismaMock();
     const service = new DealRoomsService(prisma as never);
 
-    const match = await service.recordRoommateAction({
-      userId: "user-1",
-      roommateProfileId: "roommate-1",
-      action: "LIKE",
-      createDealRoom: true
-    });
-    const first = await service.requestGroupTour("user-1", match.dealRoom!.id);
-    const second = await service.requestGroupTour("user-1", match.dealRoom!.id);
+    const room = await service.ensureForConfirmedTeam(prisma as never, "user-1", "user-2");
+    const first = await service.requestGroupTour("user-1", room.id);
+    const second = await service.requestGroupTour("user-1", room.id);
 
     expect(first.id).toBe(second.id);
     expect(first.status).toBe("REQUESTED");
@@ -127,19 +106,15 @@ describe("DealRoomsService", () => {
     const prisma = createPrismaMock();
     const service = new DealRoomsService(prisma as never);
 
-    const match = await service.recordRoommateAction({
-      userId: "user-1",
-      roommateProfileId: "roommate-1",
-      action: "LIKE",
-      createDealRoom: true
-    });
+    const room = await service.ensureForConfirmedTeam(prisma as never, "user-1", "user-2");
 
-    await expect(service.requestGroupTour("user-2", match.dealRoom!.id)).rejects.toBeInstanceOf(NotFoundException);
+    await expect(service.requestGroupTour("user-2", room.id)).rejects.toBeInstanceOf(NotFoundException);
   });
 });
 
 type RoommateRecord = {
   id: string;
+  ownerId: string;
   name: string;
   age: number;
   role: string;
@@ -190,21 +165,40 @@ function createPrismaMock({ listings = [listingRecord()] }: { listings?: Listing
     tours: [] as Array<{ id: string; dealRoomId: string; requesterId: string; status: string; createdAt: Date; updatedAt: Date }>
   };
 
-  const roommate: RoommateRecord = {
-    id: "roommate-1",
-    name: "Mia Chen",
-    age: 22,
-    role: "BU MSBA · Fall",
-    image: "https://example.com/mia.jpg",
-    match: 94,
-    budget: "$1,450/月",
-    commute: "Fenway / Back Bay",
-    tags: ["早睡", "安静"],
-    createdAt: new Date("2026-01-01T00:00:00.000Z")
-  };
+  const roommates: RoommateRecord[] = [
+    {
+      id: "roommate-1",
+      ownerId: "user-1",
+      name: "Mia Chen",
+      age: 22,
+      role: "BU MSBA · Fall",
+      image: "https://example.com/mia.jpg",
+      match: 94,
+      budget: "$1,450/月",
+      commute: "Fenway / Back Bay",
+      tags: ["早睡", "安静"],
+      createdAt: new Date("2026-01-01T00:00:00.000Z")
+    },
+    {
+      id: "roommate-2",
+      ownerId: "user-2",
+      name: "Noah Li",
+      age: 23,
+      role: "NEU MSCS · Fall",
+      image: "https://example.com/noah.jpg",
+      match: 91,
+      budget: "$1,500/月",
+      commute: "Fenway / Back Bay",
+      tags: ["整洁", "早睡"],
+      createdAt: new Date("2026-01-02T00:00:00.000Z")
+    }
+  ];
   const mock = {
     roommateProfile: {
-      findUnique: async ({ where }: { where: { id: string } }) => (where.id === roommate.id ? roommate : null)
+      findUnique: async ({ where }: { where: { id: string } }) =>
+        roommates.find((roommate) => roommate.id === where.id) ?? null,
+      findMany: async ({ where }: { where: { ownerId: { in: string[] } } }) =>
+        roommates.filter((roommate) => where.ownerId.in.includes(roommate.ownerId))
     },
     listing: {
       findManyCalls: [] as Array<{
@@ -253,6 +247,7 @@ function createPrismaMock({ listings = [listingRecord()] }: { listings?: Listing
       }
     },
     dealRoom: {
+      rows: state.rooms,
       createCalls: [] as Array<{ data: { ownerId: string; roommateProfileId: string; status: "ACTIVE"; recommendedHomes: unknown; pipeline: unknown; trustChecklist: unknown } }>,
       findUnique: async ({ where }: { where: { ownerId_roommateProfileId?: { ownerId: string; roommateProfileId: string }; id?: string } }) => {
         if (where.ownerId_roommateProfileId) {
@@ -265,8 +260,17 @@ function createPrismaMock({ listings = [listingRecord()] }: { listings?: Listing
 
         return state.rooms.find((room) => room.id === where.id) ?? null;
       },
-      findFirst: async ({ where }: { where: { id: string; ownerId: string } }) =>
-        state.rooms.find((room) => room.id === where.id && room.ownerId === where.ownerId) ?? null,
+      findFirst: async ({ where }: { where: { id?: string; ownerId?: string; status?: string; OR?: Array<Record<string, string>> } }) =>
+        state.rooms.find((room) => {
+          if (where.id && room.id !== where.id) return false;
+          if (where.ownerId && room.ownerId !== where.ownerId) return false;
+          if (where.status && room.status !== where.status) return false;
+          if (where.OR && !where.OR.some((branch) =>
+            (!branch.ownerId || room.ownerId === branch.ownerId) &&
+            (!branch.roommateProfileId || room.roommateProfileId === branch.roommateProfileId)
+          )) return false;
+          return true;
+        }) ?? null,
       findMany: async ({ where }: { where: { ownerId: string; status: "ACTIVE" } }) =>
         state.rooms.filter((room) => room.ownerId === where.ownerId && room.status === where.status),
       create: async (args: { data: { ownerId: string; roommateProfileId: string; status: "ACTIVE"; recommendedHomes: unknown; pipeline: unknown; trustChecklist: unknown } }) => {
@@ -282,6 +286,7 @@ function createPrismaMock({ listings = [listingRecord()] }: { listings?: Listing
       }
     },
     dealRoomMember: {
+      rows: state.members,
       upsertCalls: [] as Array<{ where: { dealRoomId_roommateProfileId: { dealRoomId: string; roommateProfileId: string } }; create: unknown; update: unknown }>,
       upsert: async (args: { where: { dealRoomId_roommateProfileId: { dealRoomId: string; roommateProfileId: string } }; create: { dealRoomId: string; roommateProfileId: string; snapshot: RoommateRecord }; update: { snapshot: RoommateRecord } }) => {
         mock.dealRoomMember.upsertCalls.push(args);
