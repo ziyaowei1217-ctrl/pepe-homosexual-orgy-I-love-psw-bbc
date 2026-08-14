@@ -48,7 +48,7 @@ const existingProfile: ApiRoommate = {
 const completeDraft: UpsertAdminRoommateInput = {
   name: "Lina Park",
   age: 23,
-  role: "UCLA · Grad student · Fall 2026",
+  role: "UCLA · 研究生 · 2026 秋季",
   image: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=900&q=80",
   match: 90,
   budget: "$1,650/月",
@@ -102,7 +102,7 @@ describe("AdminRoommatesScreen", () => {
     onAuthenticationError.mockClear();
     onToast.mockClear();
 
-    await click(renderer.root, "Refresh");
+    await click(renderer.root, "刷新");
 
     expect(api.getAdminRoommates).toHaveBeenNthCalledWith(2, "ordinary-token");
     expect(onAuthenticationError).toHaveBeenCalledTimes(1);
@@ -122,7 +122,7 @@ describe("AdminRoommatesScreen", () => {
     const renderer = await renderScreen({ onAuthenticationError, onToast });
 
     expect(onAuthenticationError).not.toHaveBeenCalled();
-    expect(onToast).toHaveBeenCalledWith(expect.stringContaining("Failed to load roommate profiles"));
+    expect(onToast).toHaveBeenCalledWith(expect.stringContaining("加载室友资料失败："));
     await unmount(renderer);
   });
 
@@ -130,20 +130,20 @@ describe("AdminRoommatesScreen", () => {
     const onStepUpRequired = vi.fn();
     const renderer = await renderScreen({ onStepUpRequired });
 
-    await changeInput(renderer.root, "Name", completeDraft.name);
-    await click(renderer.root, "Save profile");
+    await changeInput(renderer.root, "姓名", completeDraft.name);
+    await click(renderer.root, "保存资料");
 
     expect(onStepUpRequired).toHaveBeenCalledTimes(1);
     expect(api.createAdminRoommate).not.toHaveBeenCalled();
-    expect(inputValue(renderer.root, "Name")).toBe(completeDraft.name);
+    expect(inputValue(renderer.root, "姓名")).toBe(completeDraft.name);
     await unmount(renderer);
   });
 
   it("creates a roommate profile with the live enhanced token", async () => {
     const renderer = await renderScreen({ stepUpSession: enhancedSession });
 
-    await changeInput(renderer.root, "Name", completeDraft.name);
-    await click(renderer.root, "Save profile");
+    await changeInput(renderer.root, "姓名", completeDraft.name);
+    await click(renderer.root, "保存资料");
 
     expect(api.createAdminRoommate).toHaveBeenCalledWith("enhanced-token", completeDraft);
     await unmount(renderer);
@@ -163,12 +163,12 @@ describe("AdminRoommatesScreen", () => {
       stepUpSession: enhancedSession
     });
 
-    await changeInput(renderer.root, "Name", completeDraft.name);
-    await click(renderer.root, "Save profile");
+    await changeInput(renderer.root, "姓名", completeDraft.name);
+    await click(renderer.root, "保存资料");
 
     expect(api.createAdminRoommate).toHaveBeenCalledWith("enhanced-token", completeDraft);
     expect(onStepUpRequired).toHaveBeenCalledTimes(1);
-    expect(inputValue(renderer.root, "Name")).toBe(completeDraft.name);
+    expect(inputValue(renderer.root, "姓名")).toBe(completeDraft.name);
     await unmount(renderer);
   });
 
@@ -180,11 +180,11 @@ describe("AdminRoommatesScreen", () => {
       stepUpSession: enhancedSession
     });
 
-    await changeInput(renderer.root, "Name", completeDraft.name);
-    await click(renderer.root, "Save profile");
+    await changeInput(renderer.root, "姓名", completeDraft.name);
+    await click(renderer.root, "保存资料");
 
     expect(onAuthenticationError).toHaveBeenCalledWith({ status: 401 });
-    expect(inputValue(renderer.root, "Name")).toBe(completeDraft.name);
+    expect(inputValue(renderer.root, "姓名")).toBe(completeDraft.name);
     await unmount(renderer);
   });
 
@@ -192,8 +192,8 @@ describe("AdminRoommatesScreen", () => {
     vi.mocked(api.getAdminRoommates).mockResolvedValue([existingProfile]);
     const renderer = await renderScreen({ stepUpSession: enhancedSession });
 
-    await changeInput(renderer.root, "Name", "Avery Chen Updated");
-    await click(renderer.root, "Save profile");
+    await changeInput(renderer.root, "姓名", "Avery Chen Updated");
+    await click(renderer.root, "保存资料");
 
     expect(api.updateAdminRoommate).toHaveBeenCalledWith(
       "enhanced-token",
@@ -210,10 +210,35 @@ describe("AdminRoommatesScreen", () => {
       }
     );
 
-    await click(renderer.root, "Archive");
+    await click(renderer.root, "归档");
 
     expect(api.archiveAdminRoommate).toHaveBeenCalledWith("enhanced-token", existingProfile.id);
     await unmount(renderer);
+  });
+
+  it("renders the roommate administrator workspace in Chinese", async () => {
+    vi.mocked(api.getAdminRoommates).mockResolvedValue([existingProfile]);
+    const renderer = await renderScreen();
+    const text = renderedText(renderer.root);
+
+    expect(text).toContain("室友资料管理");
+    expect(text).toContain("新增、调整和归档用于匹配推荐的室友资料。");
+    expect(text).toContain("编辑 Avery Chen");
+    expect(text).toContain("基础匹配度 92%");
+    expect(text).toContain("启用");
+    expect(text).not.toContain("Roommate Admin");
+    expect(text).not.toContain("Save profile");
+    await unmount(renderer);
+  });
+
+  it("shows Chinese administrator gates", async () => {
+    const signedOut = await renderScreen({ token: null, user: null });
+    expect(renderedText(signedOut.root)).toContain("请先登录管理员账户");
+    await unmount(signedOut);
+
+    const ordinary = await renderScreen({ user: { ...admin, role: "USER" } });
+    expect(renderedText(ordinary.root)).toContain("需要管理员权限");
+    await unmount(ordinary);
   });
 });
 

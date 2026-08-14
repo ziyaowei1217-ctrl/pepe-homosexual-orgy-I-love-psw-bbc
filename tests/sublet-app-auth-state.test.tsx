@@ -543,8 +543,8 @@ describe("SubletApp auth state flow", () => {
     vi.mocked(api.getAdminRoommates).mockResolvedValue([]);
     const renderer = await renderSubletApp("AdminRoommates");
 
-    expect(renderedText(renderer.root)).toContain("Roommate Admin");
-    expect(hasButton(renderer.root, "New profile")).toBe(true);
+    expect(renderedText(renderer.root)).toContain("室友资料管理");
+    expect(hasButton(renderer.root, "新建资料")).toBe(true);
     expect(api.getAdminRoommates).toHaveBeenCalledWith("stored-admin-token");
     await unmount(renderer);
   });
