@@ -7,11 +7,11 @@ export type RoommateTeamControlsProps = {
   action: RoommateTeamAction;
   pending: boolean;
   error: string | null;
-  onInvite(): void | Promise<void>;
-  onAccept(inviteId: string): void | Promise<void>;
-  onDecline(inviteId: string): void | Promise<void>;
-  onCancel(inviteId: string): void | Promise<void>;
-  onLeave(): void | Promise<void>;
+  onInvite(): unknown;
+  onAccept(inviteId: string): unknown;
+  onDecline(inviteId: string): unknown;
+  onCancel(inviteId: string): unknown;
+  onLeave(): unknown;
 };
 
 export function RoommateTeamControls({

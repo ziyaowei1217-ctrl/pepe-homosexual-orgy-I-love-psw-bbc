@@ -279,28 +279,78 @@ describe("SubletApp roommate chat", () => {
 
   it("presents roommate direct messaging as available on discovery cards", async () => {
     navigationMock.pathname = "/roommates";
-    vi.mocked(api.apiGet).mockImplementation(async (path) =>
-      path === "/roommates"
-        ? [
-            {
-              id: conversation.peer.id,
-              name: conversation.peer.name,
-              age: conversation.peer.age,
-              role: conversation.peer.role,
-              image: conversation.peer.image,
-              match: conversation.peer.match,
-              budget: conversation.peer.budget,
-              commute: conversation.peer.commute,
-              tags: conversation.peer.tags
-            }
-          ]
-        : []
-    );
+    vi.mocked(api.apiGet).mockImplementation(async (path) => {
+      if (path === "/roommate-teams/current") return null;
+      if (path === "/roommates") {
+        return [
+          {
+            id: conversation.peer.id,
+            name: conversation.peer.name,
+            age: conversation.peer.age,
+            role: conversation.peer.role,
+            image: conversation.peer.image,
+            match: conversation.peer.match,
+            budget: conversation.peer.budget,
+            commute: conversation.peer.commute,
+            tags: conversation.peer.tags
+          }
+        ];
+      }
+      return [];
+    });
     const renderer = await renderMessagesApp({ initialSection: "Roommates" });
 
     expect(renderedText(renderer.root)).toContain("室友私信");
     expect(renderedText(renderer.root)).not.toContain("室友私信（暂未开放）");
     await unmount(renderer);
+  });
+
+  it("restores an incoming roommate-team invite from the server and accepts it", async () => {
+    navigationMock.pathname = "/roommates";
+    const incomingInvite = {
+      id: "invite-a-b",
+      matchId: conversation.matchId,
+      inviterId: "user-b",
+      inviteeId: user.id,
+      teamId: null,
+      status: "PENDING" as const,
+      expiresAt: "2026-08-21T00:00:00.000Z",
+      respondedAt: null
+    };
+    vi.mocked(api.apiGet).mockImplementation(async (path) => {
+      if (path === "/roommates") {
+        return [{
+          id: conversation.peer.id,
+          name: conversation.peer.name,
+          age: conversation.peer.age,
+          role: conversation.peer.role,
+          image: conversation.peer.image,
+          match: conversation.peer.match,
+          budget: conversation.peer.budget,
+          commute: conversation.peer.commute,
+          tags: conversation.peer.tags
+        }];
+      }
+      if (path === "/roommate-teams/current") return null;
+      if (path === "/roommate-teams/invites") return [incomingInvite];
+      return [];
+    });
+    const renderer = await renderMessagesApp({ initialSection: "Roommates" });
+
+    try {
+      expect(renderedText(renderer.root)).toContain("接受邀请");
+      expect(renderedText(renderer.root)).not.toContain("组队确认（暂未开放）");
+
+      await clickButton(renderer.root, "接受邀请");
+
+      expect(api.apiPost).toHaveBeenCalledWith(
+        "/roommate-teams/invites/invite-a-b/accept",
+        {},
+        "stored-token"
+      );
+    } finally {
+      await unmount(renderer);
+    }
   });
 
   it("does not mark an implicitly selected roommate read while narrow /messages shows contacts", async () => {

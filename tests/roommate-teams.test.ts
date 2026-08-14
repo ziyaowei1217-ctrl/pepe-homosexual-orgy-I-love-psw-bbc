@@ -1,6 +1,13 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { deriveRoommateTeamAction, type ApiRoommateTeam, type ApiRoommateTeamInvite } from "../lib/roommate-teams";
+import {
+  acceptRoommateTeamInvite,
+  createRoommateTeamInvite,
+  deriveRoommateTeamAction,
+  getRoommateTeamState,
+  type ApiRoommateTeam,
+  type ApiRoommateTeamInvite
+} from "../lib/roommate-teams";
 
 const activeTeam: ApiRoommateTeam = {
   id: "team-1",
@@ -17,6 +24,8 @@ const activeTeam: ApiRoommateTeam = {
 };
 
 describe("deriveRoommateTeamAction", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
   it("prioritizes an active team over stale pending invitations", () => {
     expect(
       deriveRoommateTeamAction({
@@ -57,6 +66,24 @@ describe("deriveRoommateTeamAction", () => {
         pendingInvite({ inviterId: "user-a", inviteeId: "user-c" })
       ])
     ).toEqual({ kind: "invite" });
+  });
+
+  it("uses the authenticated team endpoints and refreshes both resources", async () => {
+    const fetchMock = vi.fn(async (url: string, _init?: RequestInit) => new Response(JSON.stringify(
+      url.endsWith("/current") ? activeTeam : url.endsWith("/invites") ? [] : { id: "ok" }
+    ), { status: 200, headers: { "Content-Type": "application/json" } }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(getRoommateTeamState("token-1")).resolves.toEqual({ team: activeTeam, invites: [] });
+    await createRoommateTeamInvite("token-1", "profile-b");
+    await acceptRoommateTeamInvite("token-1", "invite-1");
+
+    expect(fetchMock.mock.calls.map(([url, init]) => [String(url), (init as RequestInit).method])).toEqual([
+      ["http://localhost:4000/api/v1/roommate-teams/current", "GET"],
+      ["http://localhost:4000/api/v1/roommate-teams/invites", "GET"],
+      ["http://localhost:4000/api/v1/roommate-teams/invites", "POST"],
+      ["http://localhost:4000/api/v1/roommate-teams/invites/invite-1/accept", "POST"]
+    ]);
   });
 });
 

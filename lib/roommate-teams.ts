@@ -1,3 +1,5 @@
+import { apiGet, apiPost } from "./api";
+
 export type ApiRoommateTeamMember = {
   id: string;
   userId: string;
@@ -65,4 +67,32 @@ export function deriveRoommateTeamAction(input: {
   }
 
   return { kind: "invite" };
+}
+
+export async function getRoommateTeamState(token: string) {
+  const [team, invites] = await Promise.all([
+    apiGet<ApiRoommateTeam | null>("/roommate-teams/current", token),
+    apiGet<ApiRoommateTeamInvite[]>("/roommate-teams/invites", token)
+  ]);
+  return { team, invites };
+}
+
+export function createRoommateTeamInvite(token: string, roommateProfileId: string) {
+  return apiPost<ApiRoommateTeamInvite>("/roommate-teams/invites", { roommateProfileId }, token);
+}
+
+export function acceptRoommateTeamInvite(token: string, inviteId: string) {
+  return apiPost<ApiRoommateTeam>(`/roommate-teams/invites/${encodeURIComponent(inviteId)}/accept`, {}, token);
+}
+
+export function declineRoommateTeamInvite(token: string, inviteId: string) {
+  return apiPost<ApiRoommateTeamInvite>(`/roommate-teams/invites/${encodeURIComponent(inviteId)}/decline`, {}, token);
+}
+
+export function cancelRoommateTeamInvite(token: string, inviteId: string) {
+  return apiPost<ApiRoommateTeamInvite>(`/roommate-teams/invites/${encodeURIComponent(inviteId)}/cancel`, {}, token);
+}
+
+export function leaveRoommateTeam(token: string) {
+  return apiPost<ApiRoommateTeam>("/roommate-teams/current/leave", {}, token);
 }

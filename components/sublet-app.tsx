@@ -47,6 +47,7 @@ import { AdminRoommatesScreen } from "@/components/admin-roommates-screen";
 import { AdminStepUpPanel } from "@/components/admin-step-up-panel";
 import { AdminTrustScreen } from "@/components/admin-trust-screen";
 import { ListingMediaUploader } from "@/components/listing-media-uploader";
+import { RoommateTeamControls } from "@/components/roommate-team-controls";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -197,8 +198,7 @@ import { getRoommateConnectionStatus, type RoommateConnectionState, type Roommat
 import {
   getRoommateStateKey,
   getThreadParticipantNames,
-  hasCompleteRoommateGenderData,
-  selectSingleDealRoom
+  hasCompleteRoommateGenderData
 } from "@/lib/roommate-product-data";
 import { classifyRoommateQueue } from "@/lib/roommate-queue";
 import {
@@ -225,6 +225,18 @@ import {
 } from "@/lib/product-capabilities";
 import { ProductApiError, toProductApiError } from "@/lib/product-errors";
 import type { ListingMediaSummary } from "@/lib/listing-media";
+import {
+  acceptRoommateTeamInvite,
+  cancelRoommateTeamInvite,
+  createRoommateTeamInvite,
+  declineRoommateTeamInvite,
+  deriveRoommateTeamAction,
+  getRoommateTeamState,
+  leaveRoommateTeam,
+  type ApiRoommateTeam,
+  type ApiRoommateTeamInvite,
+  type RoommateTeamAction
+} from "@/lib/roommate-teams";
 import {
   executePublishSave,
   getPublishStepErrors,
@@ -557,18 +569,23 @@ function normalizeRoommate(roommate: ApiRoommate): Roommate {
   };
 }
 
-function getRoommatesFromDealRooms(dealRooms: ApiDealRoom[]): Roommate[] {
-  const seen = new Set<string>();
-  const members = dealRooms.flatMap((room) => room.members ?? []);
-
-  return members.flatMap((member) => {
-    if (!member.snapshot) return [];
-    const roommate = normalizeRoommate(member.snapshot);
-    const key = getRoommateKey(roommate);
-    if (seen.has(key)) return [];
-    seen.add(key);
-
-    return [roommate];
+function getRoommatesFromTeam(team: ApiRoommateTeam | null, viewerId?: string): Roommate[] {
+  if (!team || team.status !== "ACTIVE") return [];
+  return team.members.flatMap((member) => {
+    if (!member.active || member.userId === viewerId) return [];
+    const snapshot = member.snapshot as Partial<Roommate>;
+    if (!snapshot.name) return [];
+    return [{
+      id: snapshot.id,
+      name: snapshot.name,
+      age: snapshot.age ?? 0,
+      role: snapshot.role ?? "室友",
+      image: snapshot.image ?? "",
+      match: snapshot.match ?? 0,
+      budget: snapshot.budget ?? "",
+      commute: snapshot.commute ?? "",
+      tags: snapshot.tags ?? []
+    }];
   });
 }
 
@@ -748,6 +765,10 @@ export default function HomePage({
   >({});
   const roommateReadRetryTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const [groupMembers, setGroupMembers] = useState<Roommate[]>([]);
+  const [roommateTeam, setRoommateTeam] = useState<ApiRoommateTeam | null>(null);
+  const [roommateTeamInvites, setRoommateTeamInvites] = useState<ApiRoommateTeamInvite[]>([]);
+  const [roommateTeamPending, setRoommateTeamPending] = useState(false);
+  const [roommateTeamError, setRoommateTeamError] = useState<string | null>(null);
   const [likedRoommateIds, setLikedRoommateIds] = useState<Set<string>>(new Set());
   const [likedMeRoommateIds, setLikedMeRoommateIds] = useState<Set<string>>(new Set());
   const [introSentRoommateIds] = useState<Set<string>>(new Set());
@@ -1103,6 +1124,11 @@ export default function HomePage({
         const nextConversations = await getRoommateConversations(currentToken);
         if (!requestIsCurrent()) return null;
         setRoommateConversations(nextConversations);
+        const reciprocalProfileIds = nextConversations
+          .map((conversation) => conversation.peer.id)
+          .filter((profileId): profileId is string => Boolean(profileId));
+        setLikedRoommateIds((current) => new Set([...current, ...reciprocalProfileIds]));
+        setLikedMeRoommateIds((current) => new Set([...current, ...reciprocalProfileIds]));
         setRoommateConversationsLoaded(true);
         return nextConversations;
       } catch (error) {
@@ -1114,6 +1140,22 @@ export default function HomePage({
     },
     [handleRoommateApiError]
   );
+
+  const refreshRoommateTeamState = useCallback(async (currentToken: string) => {
+    try {
+      const nextState = await getRoommateTeamState(currentToken);
+      if (tokenRef.current !== currentToken) return null;
+      setRoommateTeam(nextState.team);
+      setRoommateTeamInvites(nextState.invites);
+      setRoommateTeamError(null);
+      return nextState;
+    } catch (error) {
+      if (tokenRef.current === currentToken) {
+        setRoommateTeamError(toProductApiError(error).message);
+      }
+      return null;
+    }
+  }, []);
 
   const refreshRoommateHistory = useCallback(
     async (currentToken: string, conversationId: string, cursor?: string) => {
@@ -1188,6 +1230,33 @@ export default function HomePage({
     refreshRoommateConversations,
     token
   ]);
+
+  useEffect(() => {
+    setRoommateTeam(null);
+    setRoommateTeamInvites([]);
+    setRoommateTeamError(null);
+    setRoommateTeamPending(false);
+    if (!token) return;
+    void refreshRoommateTeamState(token);
+  }, [refreshRoommateTeamState, token]);
+
+  useEffect(() => {
+    if (!user || roommateTeam?.status !== "ACTIVE") {
+      setGroupMembers([]);
+      setActiveDealRoomId(null);
+      setGroupTourContext(null);
+      return;
+    }
+
+    const members = getRoommatesFromTeam(roommateTeam, user.id);
+    setGroupMembers(members);
+    setActiveDealRoomId(roommateTeam.dealRoomId);
+    if (initialGroupTourDealRoomId === roommateTeam.dealRoomId && roommateTeam.dealRoomId) {
+      setGroupTourContext({ dealRoomId: roommateTeam.dealRoomId, members });
+    } else {
+      setGroupTourContext(null);
+    }
+  }, [initialGroupTourDealRoomId, roommateTeam, user]);
 
   useEffect(() => {
     if (!initialRoommateRouteKey || !roommateConversationsLoaded) return;
@@ -1273,33 +1342,15 @@ export default function HomePage({
       try {
         const nextDealRooms = await apiGet<ApiDealRoom[]>("/deal-rooms/active", currentToken);
         if (cancelled) return;
-        const allDealRoomMembers = getRoommatesFromDealRooms(nextDealRooms);
         const routedDealRoom = initialGroupTourDealRoomId
           ? nextDealRooms.find((room) => room.id === initialGroupTourDealRoomId) ?? null
           : null;
-        const activeDealRoom = routedDealRoom ?? selectSingleDealRoom(nextDealRooms);
-        const activeDealRoomMembers = activeDealRoom
-          ? getRoommatesFromDealRooms([activeDealRoom])
-          : [];
         setDealRooms(nextDealRooms);
-        setActiveDealRoomId(activeDealRoom?.id ?? null);
-        const matchedIds = allDealRoomMembers.map(getRoommateKey);
-        setLikedRoommateIds(new Set(matchedIds));
-        setLikedMeRoommateIds(new Set(matchedIds));
-        setGroupMembers(activeDealRoomMembers.slice(-4));
-        setGroupTourContext(
-          routedDealRoom
-            ? {
-                dealRoomId: routedDealRoom.id,
-                members: activeDealRoomMembers.slice(-4)
-              }
-            : null
-        );
         if (initialGroupTourDealRoomId && !routedDealRoom) {
           setGroupTourSelecting(false);
           setToast("所选室友小组已失效，请返回喜欢列表重新选择。");
         }
-        setTourRequested(activeDealRoom?.tourRequest?.status === "REQUESTED");
+        setTourRequested(routedDealRoom?.tourRequest?.status === "REQUESTED");
         setApiOnline(true);
       } catch (error) {
         if (!cancelled) setToast(`室友小组加载失败：${toProductApiError(error).message}`);
@@ -1346,7 +1397,9 @@ export default function HomePage({
     };
   }, [initialGroupTourDealRoomId, token]);
 
-  const canRequestTour = groupMembers.length > 0;
+  const canRequestTour = Boolean(
+    roommateTeam?.status === "ACTIVE" && roommateTeam.dealRoomId && groupMembers.length > 0
+  );
   const catalogSource = useMemo(
     () => filterSavedListings(allListings, favoriteIds, savedOnly),
     [allListings, favoriteIds, savedOnly]
@@ -2090,6 +2143,98 @@ export default function HomePage({
     setToast("在线申请、支付与托管暂未开放。");
   }
 
+  function roommateTeamActionFor(targetRoommate: Roommate): RoommateTeamAction {
+    const conversation = roommateConversations.find(
+      (item) => item.peer.id === targetRoommate.id
+    );
+    const relatedInvite = roommateTeamInvites.find(
+      (invite) => invite.matchId === conversation?.matchId
+    );
+    const targetMember = roommateTeam?.members.find(
+      (member) =>
+        member.active &&
+        (member.snapshot as { id?: unknown }).id === targetRoommate.id
+    );
+    const targetUserId =
+      targetMember?.userId ??
+      (relatedInvite && user
+        ? relatedInvite.inviterId === user.id
+          ? relatedInvite.inviteeId
+          : relatedInvite.inviterId
+        : `profile:${targetRoommate.id ?? "unknown"}`);
+
+    return deriveRoommateTeamAction({
+      viewerId: user?.id ?? "",
+      targetUserId,
+      hasReciprocalMatch: Boolean(conversation),
+      team: roommateTeam,
+      invites: roommateTeamInvites
+    });
+  }
+
+  async function runRoommateTeamCommand(command: () => Promise<unknown>, successMessage: string) {
+    if (!token || roommateTeamPending) return false;
+    setRoommateTeamPending(true);
+    setRoommateTeamError(null);
+    try {
+      await command();
+      await refreshRoommateTeamState(token);
+      setToast(successMessage);
+      return true;
+    } catch (error) {
+      const message = toProductApiError(error).message;
+      setRoommateTeamError(message);
+      setToast(message);
+      return false;
+    } finally {
+      setRoommateTeamPending(false);
+    }
+  }
+
+  function handleInviteRoommateTeam(targetRoommate: Roommate) {
+    if (!targetRoommate.id || !token) return Promise.resolve(false);
+    return runRoommateTeamCommand(
+      () => createRoommateTeamInvite(token, targetRoommate.id!),
+      `已邀请 ${targetRoommate.name} 组成两人小组。`
+    );
+  }
+
+  function handleAcceptRoommateTeamInvite(inviteId: string) {
+    if (!token) return Promise.resolve(false);
+    return runRoommateTeamCommand(
+      () => acceptRoommateTeamInvite(token, inviteId),
+      "已组成两人小组。"
+    );
+  }
+
+  function handleDeclineRoommateTeamInvite(inviteId: string) {
+    if (!token) return Promise.resolve(false);
+    return runRoommateTeamCommand(
+      () => declineRoommateTeamInvite(token, inviteId),
+      "已拒绝组队邀请。"
+    );
+  }
+
+  function handleCancelRoommateTeamInvite(inviteId: string) {
+    if (!token) return Promise.resolve(false);
+    return runRoommateTeamCommand(
+      () => cancelRoommateTeamInvite(token, inviteId),
+      "已取消组队邀请。"
+    );
+  }
+
+  function handleLeaveRoommateTeam() {
+    if (!token) return Promise.resolve(false);
+    const confirmed =
+      typeof window.confirm !== "function" ||
+      window.confirm("退出后小组将立即解散；未接受的小组申请会自动撤回，历史消息仍会保留。确定退出吗？");
+    if (!confirmed) return Promise.resolve(false);
+    return runRoommateTeamCommand(
+      () => leaveRoommateTeam(token),
+      "两人小组已解散，历史消息仍然保留。"
+    );
+  }
+
   async function handleAcceptRoommate(targetRoommate: Roommate) {
     if (!requireCapability("roommate-action") || !token || !targetRoommate.id) return false;
     const targetKey = getRoommateKey(targetRoommate);
@@ -2104,22 +2249,6 @@ export default function HomePage({
       );
       setLikedRoommateIds((current) => new Set(current).add(targetKey));
       setTourRequested(false);
-      if (response.dealRoom) {
-        const responseDealRoom: ApiDealRoom =
-          response.dealRoom.members?.length
-            ? response.dealRoom
-            : {
-                ...response.dealRoom,
-                members: [{ snapshot: targetRoommate }]
-              };
-        setLikedMeRoommateIds((current) => new Set(current).add(targetKey));
-        setDealRooms((current) => [
-          responseDealRoom,
-          ...current.filter((room) => room.id !== responseDealRoom.id)
-        ]);
-        setActiveDealRoomId(responseDealRoom.id);
-        setGroupMembers(getRoommatesFromDealRooms([responseDealRoom]).slice(-4));
-      }
       if (response.conversation) {
         setLikedMeRoommateIds((current) => new Set(current).add(targetKey));
         await refreshRoommateConversations(token);
@@ -2133,8 +2262,6 @@ export default function HomePage({
           )
         );
         setToast(`你和 ${targetRoommate.name} 已互相匹配，可以开始聊天。`);
-      } else if (response.dealRoom) {
-        setToast(`你和 ${targetRoommate.name} 已互相匹配。`);
       } else {
         setToast(`已喜欢 ${targetRoommate.name}，等待对方回应。`);
       }
@@ -2169,11 +2296,6 @@ export default function HomePage({
         { conversationId: conversation.id }
       )
     );
-  }
-
-  async function handleDecideRoommate(targetRoommate: Roommate) {
-    setToast(`${targetRoommate.name} 的组队确认功能暂未开放。`);
-    return false;
   }
 
   async function handleRejectRoommate(targetRoommate: Roommate) {
@@ -2214,11 +2336,13 @@ export default function HomePage({
   }
 
   function handleSelectDealRoom(dealRoomId: string) {
+    if (dealRoomId !== roommateTeam?.dealRoomId) {
+      setToast("只能使用当前有效两人小组关联的协作空间。");
+      return;
+    }
     const selectedRoom = dealRooms.find((room) => room.id === dealRoomId);
     if (!selectedRoom) return;
-    const selectedMembers = getRoommatesFromDealRooms([selectedRoom]);
     setActiveDealRoomId(selectedRoom.id);
-    setGroupMembers(selectedMembers.slice(-4));
     setGroupTourContext(null);
     setTourRequested(selectedRoom.tourRequest?.status === "REQUESTED");
     setToast(`当前小组已切换为：${getDealRoomLabel(selectedRoom)}`);
@@ -2559,7 +2683,14 @@ export default function HomePage({
           onPass={handleRejectRoommate}
           onSendIntro={handleSendRoommateIntro}
           onOpenDm={handleOpenRoommateDm}
-          onDecideRoommate={handleDecideRoommate}
+          teamActionFor={roommateTeamActionFor}
+          teamPending={roommateTeamPending}
+          teamError={roommateTeamError}
+          onTeamInvite={handleInviteRoommateTeam}
+          onTeamAccept={handleAcceptRoommateTeamInvite}
+          onTeamDecline={handleDeclineRoommateTeamInvite}
+          onTeamCancel={handleCancelRoommateTeamInvite}
+          onTeamLeave={handleLeaveRoommateTeam}
           onOpenDiscover={() => navigateToSection("Discover")}
           onOpenLikeQueue={() => navigateToSection("LikeQueue")}
         />
@@ -2577,7 +2708,14 @@ export default function HomePage({
           onOpenRoommates={() => navigateToSection("Roommates")}
           onOpenMessages={() => navigateToSection("Messages")}
           onOpenDm={handleOpenRoommateDm}
-          onDecideRoommate={handleDecideRoommate}
+          teamActionFor={roommateTeamActionFor}
+          teamPending={roommateTeamPending}
+          teamError={roommateTeamError}
+          onTeamInvite={handleInviteRoommateTeam}
+          onTeamAccept={handleAcceptRoommateTeamInvite}
+          onTeamDecline={handleDeclineRoommateTeamInvite}
+          onTeamCancel={handleCancelRoommateTeamInvite}
+          onTeamLeave={handleLeaveRoommateTeam}
           onSelectDealRoom={handleSelectDealRoom}
           onRequestTour={handleRequestGroupTour}
         />
@@ -2906,7 +3044,14 @@ function RoommatesMarketplaceScreen({
   onPass,
   onSendIntro,
   onOpenDm,
-  onDecideRoommate,
+  teamActionFor,
+  teamPending,
+  teamError,
+  onTeamInvite,
+  onTeamAccept,
+  onTeamDecline,
+  onTeamCancel,
+  onTeamLeave,
   onOpenDiscover,
   onOpenLikeQueue
 }: {
@@ -2922,7 +3067,14 @@ function RoommatesMarketplaceScreen({
   onPass: (roommate: Roommate) => Promise<boolean>;
   onSendIntro: (roommate: Roommate) => void;
   onOpenDm: (roommate: Roommate) => void;
-  onDecideRoommate: (roommate: Roommate) => void;
+  teamActionFor: (roommate: Roommate) => RoommateTeamAction;
+  teamPending: boolean;
+  teamError: string | null;
+  onTeamInvite: (roommate: Roommate) => Promise<boolean>;
+  onTeamAccept: (inviteId: string) => Promise<boolean>;
+  onTeamDecline: (inviteId: string) => Promise<boolean>;
+  onTeamCancel: (inviteId: string) => Promise<boolean>;
+  onTeamLeave: () => Promise<boolean>;
   onOpenDiscover: () => void;
   onOpenLikeQueue: () => void;
 }) {
@@ -3168,7 +3320,14 @@ function RoommatesMarketplaceScreen({
               onPass={() => handlePass(activeDeckRoommate)}
               onSendIntro={() => onSendIntro(activeDeckRoommate)}
               onOpenDm={() => onOpenDm(activeDeckRoommate)}
-              onDecideRoommate={() => onDecideRoommate(activeDeckRoommate)}
+              teamAction={teamActionFor(activeDeckRoommate)}
+              teamPending={teamPending}
+              teamError={teamError}
+              onTeamInvite={() => onTeamInvite(activeDeckRoommate)}
+              onTeamAccept={onTeamAccept}
+              onTeamDecline={onTeamDecline}
+              onTeamCancel={onTeamCancel}
+              onTeamLeave={onTeamLeave}
             />
           ) : (
             <Card className="border-dashed p-8 text-center shadow-card">
@@ -3503,7 +3662,14 @@ function SwipeRoommateDeck({
   onPass,
   onSendIntro,
   onOpenDm,
-  onDecideRoommate
+  teamAction,
+  teamPending,
+  teamError,
+  onTeamInvite,
+  onTeamAccept,
+  onTeamDecline,
+  onTeamCancel,
+  onTeamLeave
 }: {
   roommate: RankedRoommate<Roommate>;
   nextRoommate?: RankedRoommate<Roommate>;
@@ -3515,7 +3681,14 @@ function SwipeRoommateDeck({
   onPass: () => void;
   onSendIntro: () => void;
   onOpenDm: () => void;
-  onDecideRoommate: () => void;
+  teamAction: RoommateTeamAction;
+  teamPending: boolean;
+  teamError: string | null;
+  onTeamInvite: () => unknown;
+  onTeamAccept: (inviteId: string) => unknown;
+  onTeamDecline: (inviteId: string) => unknown;
+  onTeamCancel: (inviteId: string) => unknown;
+  onTeamLeave: () => unknown;
 }) {
   const reasons = roommate.preferenceFit.reasons.slice(0, 4);
   const gaps = roommate.preferenceFit.gaps.slice(0, 2);
@@ -3607,21 +3780,23 @@ function SwipeRoommateDeck({
             <SwipeActionButton icon={Heart} label={pending ? "提交中" : liked ? "已喜欢" : "喜欢"} tone="like" onClick={onLike} disabled={pending} />
           </div>
 
-          <div className="grid gap-2 rounded-[24px] border border-blue-100 bg-blue-50/70 p-3 sm:grid-cols-2">
+          <div className="grid gap-3 rounded-[24px] border border-blue-100 bg-blue-50/70 p-3">
             <Button variant="outline" className="rounded-full font-extrabold" onClick={canOpenDm ? onOpenDm : onSendIntro}>
               <MessageCircle data-icon="inline-start" />
               {canOpenDm ? "打开室友私信" : "室友私信 · 互相喜欢后开放"}
             </Button>
-            <Button
-              variant="secondary"
-              className="rounded-full font-extrabold"
-              onClick={onDecideRoommate}
-            >
-              <UserCheck data-icon="inline-start" />
-              组队确认（暂未开放）
-            </Button>
-            <p className="text-xs font-semibold leading-5 text-muted-foreground sm:col-span-2">
-              {getRoommateStatusDescription(connectionStatus)} {canOpenDm ? "服务端匹配已确认，可直接私信。" : "双方互相喜欢后会自动创建私信。"} 组队确认将在下一阶段开放。
+            <RoommateTeamControls
+              action={teamAction}
+              pending={teamPending}
+              error={teamError}
+              onInvite={onTeamInvite}
+              onAccept={onTeamAccept}
+              onDecline={onTeamDecline}
+              onCancel={onTeamCancel}
+              onLeave={onTeamLeave}
+            />
+            <p className="text-xs font-semibold leading-5 text-muted-foreground">
+              {getRoommateStatusDescription(connectionStatus)} {canOpenDm ? "服务端匹配已确认，可直接私信。" : "双方互相喜欢后会自动创建私信。"}
             </p>
           </div>
         </div>
@@ -3729,7 +3904,14 @@ function LikeQueueScreen({
   onOpenRoommates,
   onOpenMessages,
   onOpenDm,
-  onDecideRoommate,
+  teamActionFor,
+  teamPending,
+  teamError,
+  onTeamInvite,
+  onTeamAccept,
+  onTeamDecline,
+  onTeamCancel,
+  onTeamLeave,
   onSelectDealRoom,
   onRequestTour
 }: {
@@ -3744,7 +3926,14 @@ function LikeQueueScreen({
   onOpenRoommates: () => void;
   onOpenMessages: () => void;
   onOpenDm: (roommate: Roommate) => void;
-  onDecideRoommate: (roommate: Roommate) => void;
+  teamActionFor: (roommate: Roommate) => RoommateTeamAction;
+  teamPending: boolean;
+  teamError: string | null;
+  onTeamInvite: (roommate: Roommate) => Promise<boolean>;
+  onTeamAccept: (inviteId: string) => Promise<boolean>;
+  onTeamDecline: (inviteId: string) => Promise<boolean>;
+  onTeamCancel: (inviteId: string) => Promise<boolean>;
+  onTeamLeave: () => Promise<boolean>;
   onSelectDealRoom: (dealRoomId: string) => void;
   onRequestTour: () => void;
 }) {
@@ -3830,7 +4019,14 @@ function LikeQueueScreen({
                 roommate={member}
                 state={connectionState}
                 onOpenDm={onOpenDm}
-                onDecideRoommate={onDecideRoommate}
+                teamAction={teamActionFor(member)}
+                teamPending={teamPending}
+                teamError={teamError}
+                onTeamInvite={() => onTeamInvite(member)}
+                onTeamAccept={onTeamAccept}
+                onTeamDecline={onTeamDecline}
+                onTeamCancel={onTeamCancel}
+                onTeamLeave={onTeamLeave}
               />
             ))
           ) : (
@@ -3846,7 +4042,14 @@ function LikeQueueScreen({
                 roommate={member}
                 state={connectionState}
                 onOpenDm={onOpenDm}
-                onDecideRoommate={onDecideRoommate}
+                teamAction={teamActionFor(member)}
+                teamPending={teamPending}
+                teamError={teamError}
+                onTeamInvite={() => onTeamInvite(member)}
+                onTeamAccept={onTeamAccept}
+                onTeamDecline={onTeamDecline}
+                onTeamCancel={onTeamCancel}
+                onTeamLeave={onTeamLeave}
               />
             ))
           ) : (
@@ -3918,38 +4121,58 @@ function RoommateConnectionRow({
   roommate,
   state,
   onOpenDm,
-  onDecideRoommate
+  teamAction,
+  teamPending,
+  teamError,
+  onTeamInvite,
+  onTeamAccept,
+  onTeamDecline,
+  onTeamCancel,
+  onTeamLeave
 }: {
   roommate: Roommate;
   state: RoommateConnectionState;
   onOpenDm: (roommate: Roommate) => void;
-  onDecideRoommate: (roommate: Roommate) => void;
+  teamAction: RoommateTeamAction;
+  teamPending: boolean;
+  teamError: string | null;
+  onTeamInvite: () => unknown;
+  onTeamAccept: (inviteId: string) => unknown;
+  onTeamDecline: (inviteId: string) => unknown;
+  onTeamCancel: (inviteId: string) => unknown;
+  onTeamLeave: () => unknown;
 }) {
   const key = getRoommateKey(roommate);
   const status = getRoommateConnectionStatus(key, state);
 
   return (
-    <div className="grid min-w-0 grid-cols-[1fr_auto] items-center gap-3 rounded-[24px] border border-blue-100 bg-white p-3 shadow-sm">
-      <div className="flex min-w-0 items-center gap-3">
-        <Avatar className="size-12 ring-2 ring-blue-100">
-          <AvatarImage src={roommate.image} alt="" />
-          <AvatarFallback>{roommate.name.slice(0, 1)}</AvatarFallback>
-        </Avatar>
-        <div className="min-w-0 flex-1">
-          <div className="truncate text-sm font-extrabold text-primary">{roommate.name}</div>
-          <div className="mt-1 truncate text-xs font-semibold text-muted-foreground">{getRoommateStatusLabel(status)}</div>
+    <div className="min-w-0 space-y-3 rounded-[24px] border border-blue-100 bg-white p-3 shadow-sm">
+      <div className="grid grid-cols-[1fr_auto] items-center gap-3">
+        <div className="flex min-w-0 items-center gap-3">
+          <Avatar className="size-12 ring-2 ring-blue-100">
+            <AvatarImage src={roommate.image} alt="" />
+            <AvatarFallback>{roommate.name.slice(0, 1)}</AvatarFallback>
+          </Avatar>
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-sm font-extrabold text-primary">{roommate.name}</div>
+            <div className="mt-1 truncate text-xs font-semibold text-muted-foreground">{getRoommateStatusLabel(status)}</div>
+          </div>
         </div>
-      </div>
-      <div className="flex shrink-0 gap-1">
         <Button size="icon" variant="secondary" className="size-9 rounded-full" onClick={() => onOpenDm(roommate)}>
           <MessageCircle className="size-4" aria-hidden="true" />
           <span className="sr-only">打开室友私信</span>
         </Button>
-        <Button size="icon" variant="secondary" className="size-9 rounded-full" onClick={() => onDecideRoommate(roommate)}>
-          <UserCheck className="size-4" aria-hidden="true" />
-          <span className="sr-only">组队确认暂未开放</span>
-        </Button>
       </div>
+      <RoommateTeamControls
+        action={teamAction}
+        pending={teamPending}
+        error={teamError}
+        onInvite={onTeamInvite}
+        onAccept={onTeamAccept}
+        onDecline={onTeamDecline}
+        onCancel={onTeamCancel}
+        onLeave={onTeamLeave}
+      />
     </div>
   );
 }
