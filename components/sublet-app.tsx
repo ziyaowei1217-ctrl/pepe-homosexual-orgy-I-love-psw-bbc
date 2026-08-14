@@ -889,7 +889,10 @@ export default function HomePage({
 
   useEffect(() => {
     let cancelled = false;
-    const listingsPath = buildPublicListingsPath(filters);
+    const listingsPath = buildPublicListingsPath({
+      checkIn: filters.checkIn,
+      checkOut: filters.checkOut
+    });
 
     if (!listingsPath) return;
     const requestPath = listingsPath;
@@ -1356,7 +1359,6 @@ export default function HomePage({
   );
   const visibleListings = catalogPage.items;
   const visibleSelectedListing = getVisibleSelectedListing(selectedListing, visibleListings);
-  const dateFilterAvailable = true;
   const viewingSlots = useMemo(
     () => buildViewingSlots(filters.checkIn || "2026-08-20"),
     [filters.checkIn]
@@ -1761,8 +1763,7 @@ export default function HomePage({
     const result = checkProductCapability(capability, {
       authenticated: Boolean(token && user),
       apiOnline,
-      profileRole: profile?.role,
-      datesAvailable: dateFilterAvailable
+      profileRole: profile?.role
     });
 
     if (result.status === "allowed") return true;
@@ -2480,7 +2481,6 @@ export default function HomePage({
           pageCount={catalogPage.pageCount}
           heading={catalogPage.heading}
           summary={catalogPage.summary}
-          dateFilterAvailable={dateFilterAvailable}
           previewDataEnabled={previewDataEnabled}
           serviceUnavailable={Boolean(apiError) && !previewDataEnabled}
           selectedListing={visibleSelectedListing}
@@ -3960,7 +3960,6 @@ function DiscoverScreen({
   pageCount,
   heading,
   summary,
-  dateFilterAvailable,
   previewDataEnabled,
   serviceUnavailable,
   selectedListing,
@@ -3984,7 +3983,6 @@ function DiscoverScreen({
   pageCount: number;
   heading: string;
   summary: string;
-  dateFilterAvailable: boolean;
   previewDataEnabled: boolean;
   serviceUnavailable: boolean;
   selectedListing: Listing;
@@ -4017,7 +4015,6 @@ function DiscoverScreen({
       <SearchHero
         filters={filters}
         resultCount={totalListingCount}
-        dateFilterAvailable={dateFilterAvailable}
         previewDataEnabled={previewDataEnabled}
         onFiltersChange={onFiltersChange}
         onAmenityChange={onAmenityChange}
@@ -4084,7 +4081,6 @@ function DiscoverScreen({
 function SearchHero({
   filters,
   resultCount,
-  dateFilterAvailable,
   previewDataEnabled,
   onFiltersChange,
   onAmenityChange,
@@ -4092,7 +4088,6 @@ function SearchHero({
 }: {
   filters: SearchFilters;
   resultCount: number;
-  dateFilterAvailable: boolean;
   previewDataEnabled: boolean;
   onFiltersChange: (filters: SearchFilters) => void;
   onAmenityChange: (value: string) => void;
@@ -4140,7 +4135,6 @@ function SearchHero({
           <div className="col-span-4 xl:col-span-3">
             <DateRangePicker
               range={filters}
-              enabled={dateFilterAvailable}
               onChange={(range) => onFiltersChange({ ...filters, ...range, page: 1 })}
             />
           </div>
@@ -4289,11 +4283,9 @@ function SearchHero({
 
 function DateRangePicker({
   range,
-  enabled,
   onChange
 }: {
   range: DateRange;
-  enabled: boolean;
   onChange: (range: DateRange) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -4325,7 +4317,6 @@ function DateRangePicker({
   }, [open]);
 
   function toggleDialog(field: "checkIn" | "checkOut", trigger: HTMLButtonElement) {
-    if (!enabled) return;
     lastTriggerRef.current = trigger;
     setActiveField(field);
     setVisibleMonth(range.checkIn || "2026-08-01");
@@ -4356,12 +4347,10 @@ function DateRangePicker({
   return (
     <div className="relative flex flex-col gap-2 text-sm font-semibold">
       日期
-      {!enabled ? <span className="text-xs font-semibold text-muted-foreground">日期筛选暂未开放</span> : null}
       <div className="grid grid-cols-2 gap-2">
         <Button
           variant={activeField === "checkIn" && open ? "secondary" : "outline"}
           className="h-11 justify-start"
-          disabled={!enabled}
           aria-haspopup="dialog"
           aria-expanded={open && activeField === "checkIn"}
           onClick={(event) => toggleDialog("checkIn", event.currentTarget)}
@@ -4372,7 +4361,6 @@ function DateRangePicker({
         <Button
           variant={activeField === "checkOut" && open ? "secondary" : "outline"}
           className="h-11 justify-start"
-          disabled={!enabled}
           aria-haspopup="dialog"
           aria-expanded={open && activeField === "checkOut"}
           onClick={(event) => toggleDialog("checkOut", event.currentTarget)}

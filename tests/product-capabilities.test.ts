@@ -73,20 +73,18 @@ describe("product capabilities", () => {
     ).toBe("api-offline");
   });
 
-  it("only enables date filtering when every listing has availability data", () => {
+  it("treats date filtering as an available API-backed capability", () => {
     expect(
       checkProductCapability("date-filter", {
         authenticated: false,
-        apiOnline: true,
-        datesAvailable: false
-      }).status
-    ).toBe("unavailable");
-    expect(
-      checkProductCapability("date-filter", {
-        authenticated: false,
-        apiOnline: true,
-        datesAvailable: true
+        apiOnline: true
       }).status
     ).toBe("allowed");
+    expect(
+      checkProductCapability("date-filter", {
+        authenticated: false,
+        apiOnline: false
+      }).status
+    ).toBe("api-offline");
   });
 });

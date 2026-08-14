@@ -19,7 +19,7 @@ describe("search insights", () => {
     expect(insight.status).toBe("healthy");
     expect(insight.chips).toEqual([
       "Los Angeles",
-      "8月20日 - 11月30日 · 102 晚",
+      "8月20日 - 11月30日 · 102 天",
       "$1,200 - $4,200",
       "Wi-Fi"
     ]);

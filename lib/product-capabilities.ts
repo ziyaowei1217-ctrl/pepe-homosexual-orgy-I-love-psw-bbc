@@ -23,7 +23,6 @@ export type ProductCapabilityContext = {
   authenticated: boolean;
   apiOnline: boolean;
   profileRole?: ApiProfile["role"];
-  datesAvailable?: boolean;
 };
 
 export type ProductCapabilityResult = {
@@ -52,12 +51,6 @@ export function checkProductCapability(
 ): ProductCapabilityResult {
   if (unavailableCapabilities.has(capability)) {
     return { status: "unavailable", message: "此功能暂未开放。" };
-  }
-
-  if (capability === "date-filter") {
-    return context.datesAvailable
-      ? { status: "allowed", message: "" }
-      : { status: "unavailable", message: "日期筛选暂未开放。" };
   }
 
   if (protectedCapabilities.has(capability) && !context.authenticated) {
