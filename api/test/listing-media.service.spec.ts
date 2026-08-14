@@ -263,6 +263,42 @@ describe("ListingMediaService", () => {
     await expect(service.findOwned("owner-2", "listing-1")).rejects.toBeInstanceOf(NotFoundException);
   });
 
+  it("delivers exact bytes only for published media", async () => {
+    const bytes = Buffer.from([1, 2, 3, 4]);
+    const database = createDatabase({
+      media: [
+        mediaRow({
+          storageStatus: "PUBLISHED",
+          originalKey: "listing-media/listing-1/published",
+          mimeType: "image/png",
+          sizeBytes: bytes.length
+        })
+      ]
+    });
+    const storage = createStorage(bytes);
+    const service = createService(database, storage);
+
+    await expect(service.readPublished("media-1")).resolves.toEqual({
+      bytes,
+      mimeType: "image/png"
+    });
+    expect(storage.read).toHaveBeenCalledWith("listing-media/listing-1/published");
+  });
+
+  it("hides ready, missing, and corrupted public media", async () => {
+    const readyDatabase = createDatabase({ media: [mediaRow({ storageStatus: "READY" })] });
+    await expect(
+      createService(readyDatabase, createStorage()).readPublished("media-1")
+    ).rejects.toBeInstanceOf(NotFoundException);
+
+    const corruptedDatabase = createDatabase({
+      media: [mediaRow({ storageStatus: "PUBLISHED", sizeBytes: 5 })]
+    });
+    await expect(
+      createService(corruptedDatabase, createStorage(Buffer.from([1]))).readPublished("media-1")
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
   it("rejects invalid service input even when HTTP validation is bypassed", async () => {
     const database = createDatabase();
     const service = createService(database, createStorage());

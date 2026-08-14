@@ -1,7 +1,7 @@
 import { Body, Controller, Get, Inject, Param, Patch, Post, Query, Req, UseGuards, ValidationPipe } from "@nestjs/common";
 
 import { AuthGuard, AuthenticatedRequest } from "../auth/auth.guard";
-import { CreateListingDto, CreateListingMediaDto, ListingAvailabilityQueryDto, UpdateListingDto } from "./dto";
+import { CreateListingDto, ListingAvailabilityQueryDto, UpdateListingDto } from "./dto";
 import { ListingsService } from "./listings.service";
 
 const createListingBodyPipe = new ValidationPipe({
@@ -16,13 +16,6 @@ const updateListingBodyPipe = new ValidationPipe({
   forbidNonWhitelisted: true,
   transform: true,
   expectedType: UpdateListingDto
-});
-
-const createListingMediaBodyPipe = new ValidationPipe({
-  whitelist: true,
-  forbidNonWhitelisted: true,
-  transform: true,
-  expectedType: CreateListingMediaDto
 });
 
 const listingAvailabilityQueryPipe = new ValidationPipe({
@@ -62,16 +55,6 @@ export class ListingsController {
   @Post(":id/submit")
   submit(@Req() request: AuthenticatedRequest, @Param("id") id: string) {
     return this.listings.submit(request.user.id, id);
-  }
-
-  @UseGuards(AuthGuard)
-  @Post(":id/media")
-  addMedia(
-    @Req() request: AuthenticatedRequest,
-    @Param("id") id: string,
-    @Body(createListingMediaBodyPipe) dto: CreateListingMediaDto
-  ) {
-    return this.listings.addMedia(request.user.id, id, dto);
   }
 
   @UseGuards(AuthGuard)

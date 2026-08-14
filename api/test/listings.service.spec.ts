@@ -12,7 +12,7 @@ type ListingRecord = {
   ownerId: string;
   title: string;
   area: string;
-  image: string;
+  image: string | null;
   availableFrom: Date;
   availableTo: Date;
   price: number;
@@ -265,6 +265,16 @@ describe("ListingsService", () => {
     expect(prisma.listing.createCalls[0]?.data.status).toBe("DRAFT");
   });
 
+  it("keeps the draft cover image server-controlled until media is published", async () => {
+    const prisma = createPrismaMock();
+    const service = new ListingsService(prisma as never, new AuditService());
+    const dto = listingDto();
+
+    await service.create("owner-1", dto as ListingDto);
+
+    expect(prisma.listing.createCalls[0]?.data.image).toBeNull();
+  });
+
   it.each([
     ["blank display name", { displayName: " " }],
     ["blank school", { school: " " }],
@@ -351,31 +361,7 @@ describe("ListingsService", () => {
     });
   });
 
-  it.each(["DRAFT", "REJECTED"] as const)("allows owners to add media to %s listings", async (status) => {
-    const prisma = createPrismaMock({ listings: [listingRecord({ id: "listing-1", ownerId: "owner-1", status })] });
-    const service = new ListingsService(prisma as never, new AuditService());
-
-    const media = await service.addMedia("owner-1", "listing-1", {
-      url: "https://example.com/bedroom.jpg",
-      kind: "bedroom",
-      sortOrder: 2
-    });
-
-    expect(media).toMatchObject({
-      listingId: "listing-1",
-      url: "https://example.com/bedroom.jpg",
-      kind: "bedroom",
-      sortOrder: 2
-    });
-    expect(prisma.listingMedia.createCalls[0]?.data).toEqual({
-      listingId: "listing-1",
-      url: "https://example.com/bedroom.jpg",
-      kind: "bedroom",
-      sortOrder: 2
-    });
-  });
-
-  it.each(["add media", "update", "submit"] as const)(
+  it.each(["update", "submit"] as const)(
     "blocks %s for an owner whose publish profile is incomplete",
     async (operation) => {
       const prisma = createPrismaMock({
@@ -384,24 +370,16 @@ describe("ListingsService", () => {
       });
       const service = new ListingsService(prisma as never, new AuditService());
 
-      const result =
-        operation === "add media"
-          ? service.addMedia("owner-1", "listing-1", {
-              url: "https://example.com/bedroom.jpg",
-              kind: "bedroom",
-              sortOrder: 1
-            })
-          : operation === "update"
-            ? service.update("owner-1", "listing-1", { title: "Updated title" })
-            : service.submit("owner-1", "listing-1");
+      const result = operation === "update"
+        ? service.update("owner-1", "listing-1", { title: "Updated title" })
+        : service.submit("owner-1", "listing-1");
 
       await expect(result).rejects.toThrow(ForbiddenException);
-      expect(prisma.listingMedia.createCalls).toHaveLength(0);
       expect(prisma.listing.updateCalls).toHaveLength(0);
     }
   );
 
-  it.each(["add media", "update", "submit"] as const)(
+  it.each(["update", "submit"] as const)(
     "blocks %s for an owner whose complete profile is renter-only",
     async (operation) => {
       const prisma = createPrismaMock({
@@ -410,50 +388,14 @@ describe("ListingsService", () => {
       });
       const service = new ListingsService(prisma as never, new AuditService());
 
-      const result =
-        operation === "add media"
-          ? service.addMedia("owner-1", "listing-1", {
-              url: "https://example.com/bedroom.jpg",
-              kind: "bedroom",
-              sortOrder: 1
-            })
-          : operation === "update"
-            ? service.update("owner-1", "listing-1", { title: "Updated title" })
-            : service.submit("owner-1", "listing-1");
+      const result = operation === "update"
+        ? service.update("owner-1", "listing-1", { title: "Updated title" })
+        : service.submit("owner-1", "listing-1");
 
       await expect(result).rejects.toThrow(ForbiddenException);
-      expect(prisma.listingMedia.createCalls).toHaveLength(0);
       expect(prisma.listing.updateCalls).toHaveLength(0);
     }
   );
-
-  it("returns not found when a non-owner adds media", async () => {
-    const prisma = createPrismaMock({
-      listings: [listingRecord({ id: "listing-1", ownerId: "owner-1", status: "DRAFT" })]
-    });
-    const service = new ListingsService(prisma as never, new AuditService());
-
-    await expect(
-      service.addMedia("owner-2", "listing-1", {
-        url: "https://example.com/bedroom.jpg",
-        kind: "bedroom",
-        sortOrder: 1
-      })
-    ).rejects.toThrow(NotFoundException);
-  });
-
-  it.each(["SUBMITTED", "APPROVED"] as const)("blocks owners from adding media to %s listings", async (status) => {
-    const prisma = createPrismaMock({ listings: [listingRecord({ id: "listing-1", ownerId: "owner-1", status })] });
-    const service = new ListingsService(prisma as never, new AuditService());
-
-    await expect(
-      service.addMedia("owner-1", "listing-1", {
-        url: "https://example.com/bedroom.jpg",
-        kind: "bedroom",
-        sortOrder: 1
-      })
-    ).rejects.toThrow(BadRequestException);
-  });
 
   it.each(["DRAFT", "REJECTED"] as const)("allows owners to update %s listings", async (status) => {
     const prisma = createPrismaMock({ listings: [listingRecord({ id: "listing-1", ownerId: "owner-1", status })] });
@@ -725,7 +667,6 @@ function listingDto(overrides: Partial<ListingDto> = {}): ListingDto {
   return {
     title: "Fenway verified sublet",
     area: "Boston - Fenway",
-    image: "https://example.com/home.jpg",
     availableFrom: "2026-08-20",
     availableTo: "2026-12-31",
     price: 1420,
@@ -749,7 +690,7 @@ function listingRecord(overrides: Partial<ListingRecord> = {}): ListingRecord {
     ownerId: "owner-1",
     title: dto.title,
     area: dto.area,
-    image: dto.image,
+    image: null,
     availableFrom: new Date(`${dto.availableFrom}T00:00:00.000Z`),
     availableTo: new Date(`${dto.availableTo}T00:00:00.000Z`),
     price: dto.price,

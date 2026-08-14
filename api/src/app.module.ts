@@ -10,6 +10,7 @@ import { DealThreadsModule } from "./deal-threads/deal-threads.module";
 import { DealRoomsModule } from "./deal-rooms/deal-rooms.module";
 import { GroupsModule } from "./groups/groups.module";
 import { HealthModule } from "./health/health.module";
+import { ListingMediaModule } from "./listing-media/listing-media.module";
 import { ListingsModule } from "./listings/listings.module";
 import { MarketplaceModule } from "./marketplace/marketplace.module";
 import { PrismaModule } from "./prisma/prisma.module";
@@ -36,6 +37,7 @@ import { UsersModule } from "./users/users.module";
     UsersModule,
     MarketplaceModule,
     ListingsModule,
+    ListingMediaModule,
     RoommateConversationsModule,
     RoommatesModule,
     GroupsModule,

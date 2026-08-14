@@ -4,7 +4,8 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
-  NotFoundException
+  NotFoundException,
+  ServiceUnavailableException
 } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 
@@ -194,6 +195,35 @@ export class ListingMediaService {
       where: { listingId },
       orderBy: { sortOrder: "asc" }
     });
+  }
+
+  async readPublished(mediaId: string) {
+    const media = await this.prisma.listingMedia.findUnique({ where: { id: mediaId } });
+    if (
+      !media ||
+      media.storageStatus !== "PUBLISHED" ||
+      !media.originalKey ||
+      !media.mimeType ||
+      !media.sizeBytes ||
+      !(SUPPORTED_LISTING_MEDIA_MIME_TYPES as readonly string[]).includes(media.mimeType)
+    ) {
+      throw new NotFoundException("Listing media not found");
+    }
+
+    try {
+      const bytes = await this.storage.read(media.originalKey);
+      if (bytes.length !== media.sizeBytes) throw new NotFoundException("Listing media not found");
+      return { bytes, mimeType: media.mimeType as SupportedListingMediaMimeType };
+    } catch (error) {
+      if (error instanceof NotFoundException) throw error;
+      if (error instanceof ListingMediaStorageError && error.code === "IMAGE_STORAGE_UNAVAILABLE") {
+        throw new ServiceUnavailableException({
+          code: error.code,
+          message: "图片暂时无法读取，请稍后重试。"
+        });
+      }
+      throw new NotFoundException("Listing media not found");
+    }
   }
 
   async reorder(ownerId: string, listingId: string, input: ReorderListingMediaDto) {

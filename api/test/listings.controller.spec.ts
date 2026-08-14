@@ -35,18 +35,6 @@ describe("ListingsController", () => {
     expect(listings.submitCalls).toEqual([{ ownerId: "owner-1", id: "listing-1" }]);
   });
 
-  it("delegates media creation with the owner id", async () => {
-    const listings = createListingsServiceMock();
-    const controller = new ListingsController(listings as never);
-    const dto = {
-      url: "https://example.com/bedroom.jpg",
-      kind: "bedroom",
-      sortOrder: 2
-    };
-
-    await expect(controller.addMedia(requestFor("owner-1"), "listing-1", dto)).resolves.toEqual({ id: "media-1" });
-    expect(listings.addMediaCalls).toEqual([{ ownerId: "owner-1", id: "listing-1", dto }]);
-  });
 });
 
 describe("AdminListingsController", () => {
@@ -129,7 +117,6 @@ function createListingsServiceMock() {
     findAllCalls: [] as Array<{ moveIn?: string; moveOut?: string }>,
     findMineCalls: [] as string[],
     submitCalls: [] as Array<{ ownerId: string; id: string }>,
-    addMediaCalls: [] as Array<{ ownerId: string; id: string; dto: { url: string; kind: string; sortOrder?: number } }>,
     findReviewQueueCalls: 0,
     approveCalls: [] as Array<{ id: string; actor: AuditActor }>,
     rejectCalls: [] as Array<{ id: string; actor: AuditActor; reason: string }>,
@@ -144,10 +131,6 @@ function createListingsServiceMock() {
     submit: async (ownerId: string, id: string) => {
       service.submitCalls.push({ ownerId, id });
       return { id };
-    },
-    addMedia: async (ownerId: string, id: string, dto: { url: string; kind: string; sortOrder?: number }) => {
-      service.addMediaCalls.push({ ownerId, id, dto });
-      return { id: "media-1" };
     },
     findReviewQueue: async () => {
       service.findReviewQueueCalls += 1;

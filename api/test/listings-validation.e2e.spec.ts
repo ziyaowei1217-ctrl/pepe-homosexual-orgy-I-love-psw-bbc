@@ -133,6 +133,31 @@ describe("listing HTTP validation", () => {
       .expect(400);
   });
 
+  it("creates a draft without a client-supplied image URL", async () => {
+    const http = request(app.getHttpServer());
+    const { image: _legacyImage, ...payload } = listingPayload();
+
+    await http
+      .post("/api/v1/listings")
+      .set("Authorization", `Bearer ${token}`)
+      .send(payload)
+      .expect(201)
+      .expect(({ body }: { body: Record<string, unknown> }) => {
+        expect(body.image).toBeNull();
+      });
+  });
+
+  it("retires the legacy URL metadata route from the full application", async () => {
+    const http = request(app.getHttpServer());
+    const created = await createListing(http, token);
+
+    await http
+      .post(`/api/v1/listings/${created.id}/media`)
+      .set("Authorization", `Bearer ${token}`)
+      .send(mediaPayload())
+      .expect(404);
+  });
+
   it("allows trimmed partial updates and rejects empty updates", async () => {
     const http = request(app.getHttpServer());
     const created = await createListing(http, token);
@@ -176,86 +201,6 @@ describe("listing HTTP validation", () => {
       });
   });
 
-  it("validates listing media payloads and stores owner media", async () => {
-    const http = request(app.getHttpServer());
-    const created = await createListing(http, token);
-
-    await http
-      .post(`/api/v1/listings/${created.id}/media`)
-      .set("Authorization", `Bearer ${token}`)
-      .send({
-        url: "not-a-url",
-        kind: "bedroom"
-      })
-      .expect(400);
-
-    await http
-      .post(`/api/v1/listings/${created.id}/media`)
-      .set("Authorization", `Bearer ${token}`)
-      .send({
-        url: "https://example.com/bedroom.jpg",
-        kind: "   "
-      })
-      .expect(400);
-
-    await http
-      .post(`/api/v1/listings/${created.id}/media`)
-      .set("Authorization", `Bearer ${token}`)
-      .send({
-        url: "https://example.com/bedroom.jpg",
-        kind: "bedroom",
-        extra: true
-      })
-      .expect(400);
-
-    await http
-      .post(`/api/v1/listings/${created.id}/media`)
-      .set("Authorization", `Bearer ${token}`)
-      .send({
-        url: "https://example.com/bedroom.jpg",
-        kind: "bedroom",
-        sortOrder: 1.5
-      })
-      .expect(400);
-
-    await http
-      .post(`/api/v1/listings/${created.id}/media`)
-      .set("Authorization", `Bearer ${token}`)
-      .send({
-        url: " https://example.com/bedroom.jpg ",
-        kind: " bedroom ",
-        sortOrder: 2
-      })
-      .expect(201)
-      .expect(({ body }: { body: Record<string, unknown> }) => {
-        expect(body).toMatchObject({
-          listingId: created.id,
-          url: "https://example.com/bedroom.jpg",
-          kind: "bedroom",
-          sortOrder: 2
-        });
-      });
-  });
-
-  it("hides listing media creation from non-owners and blocks submitted listings", async () => {
-    const http = request(app.getHttpServer());
-    const created = await createListing(http, token);
-    const otherToken = await signIn(app, "other@example.com");
-
-    await http
-      .post(`/api/v1/listings/${created.id}/media`)
-      .set("Authorization", `Bearer ${otherToken}`)
-      .send(mediaPayload())
-      .expect(404);
-
-    await http.post(`/api/v1/listings/${created.id}/submit`).set("Authorization", `Bearer ${token}`).expect(201);
-
-    await http
-      .post(`/api/v1/listings/${created.id}/media`)
-      .set("Authorization", `Bearer ${token}`)
-      .send(mediaPayload())
-      .expect(400);
-  });
 });
 
 async function signIn(app: INestApplication, email: string) {
@@ -300,7 +245,8 @@ async function completePublisherProfile(app: INestApplication, token: string) {
 }
 
 async function createListing(http: ReturnType<typeof request>, token: string) {
-  const response = await http.post("/api/v1/listings").set("Authorization", `Bearer ${token}`).send(listingPayload()).expect(201);
+  const { image: _legacyImage, ...payload } = listingPayload();
+  const response = await http.post("/api/v1/listings").set("Authorization", `Bearer ${token}`).send(payload).expect(201);
   return response.body as { id: string };
 }
 

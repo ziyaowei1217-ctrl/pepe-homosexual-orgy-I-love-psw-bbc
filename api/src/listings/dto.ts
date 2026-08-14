@@ -8,7 +8,6 @@ import {
   IsNumber,
   IsOptional,
   IsString,
-  IsUrl,
   Matches,
   Max,
   MaxLength,
@@ -21,7 +20,6 @@ import {
 const editableListingFields = [
   "title",
   "area",
-  "image",
   "availableFrom",
   "availableTo",
   "price",
@@ -41,8 +39,6 @@ const maxShortTextLength = 140;
 const maxLongTextLength = 280;
 const maxTags = 12;
 const maxTagLength = 40;
-const maxMediaKindLength = 40;
-const maxMediaSortOrder = 10_000;
 const maxRejectionReasonLength = 500;
 const isoDatePattern = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -90,13 +86,6 @@ export class CreateListingDto {
   @IsNotEmpty()
   @MaxLength(maxShortTextLength)
   area!: string;
-
-  @Trim()
-  @IsString()
-  @IsNotEmpty()
-  @IsUrl()
-  @MaxLength(maxLongTextLength)
-  image!: string;
 
   @Trim()
   @IsString()
@@ -181,14 +170,6 @@ export class UpdateListingDto {
   @IsNotEmpty()
   @MaxLength(maxShortTextLength)
   area?: string;
-
-  @IsOptional()
-  @Trim()
-  @IsString()
-  @IsNotEmpty()
-  @IsUrl()
-  @MaxLength(maxLongTextLength)
-  image?: string;
 
   @IsOptional()
   @Trim()
@@ -278,27 +259,6 @@ export class ListingAvailabilityQueryDto {
   @IsString()
   @Matches(isoDatePattern)
   moveOut?: string;
-}
-
-export class CreateListingMediaDto {
-  @Trim()
-  @IsString()
-  @IsNotEmpty()
-  @IsUrl()
-  @MaxLength(maxLongTextLength)
-  url!: string;
-
-  @Trim()
-  @IsString()
-  @IsNotEmpty()
-  @MaxLength(maxMediaKindLength)
-  kind!: string;
-
-  @IsOptional()
-  @IsInt()
-  @Min(0)
-  @Max(maxMediaSortOrder)
-  sortOrder?: number;
 }
 
 export class RejectListingDto {

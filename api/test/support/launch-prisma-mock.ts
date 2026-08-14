@@ -36,7 +36,7 @@ type ListingRecord = {
   ownerId: string;
   title: string;
   area: string;
-  image: string;
+  image: string | null;
   availableFrom: Date;
   availableTo: Date;
   price: number;
@@ -641,7 +641,7 @@ export function createLaunchPrismaMock() {
           ownerId: data.ownerId,
           title: data.title,
           area: data.area ?? "",
-          image: data.image ?? "",
+          image: data.image ?? null,
           availableFrom: data.availableFrom ?? new Date("2026-08-01T00:00:00.000Z"),
           availableTo: data.availableTo ?? new Date("2027-08-01T00:00:00.000Z"),
           price: data.price ?? 0,
