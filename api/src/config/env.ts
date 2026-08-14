@@ -13,6 +13,28 @@ type AuthSecurityConfigInput = {
   trustedProxyHops?: string;
 };
 
+export type ListingMediaStorageConfigInput = {
+  nodeEnv?: string;
+  endpoint?: string;
+  uploadEndpoint?: string;
+  region?: string;
+  bucket?: string;
+  accessKeyId?: string;
+  secretAccessKey?: string;
+  uploadTtlSeconds?: string;
+};
+
+export type ListingMediaStorageConfig = {
+  endpoint: string;
+  uploadEndpoint: string;
+  region: string;
+  bucket: string;
+  accessKeyId: string;
+  secretAccessKey: string;
+  uploadTtlSeconds: number;
+  forcePathStyle: true;
+};
+
 export type AuthSecurityConfig = {
   otpHashSecret: string;
   securityIdentifierHashSecret: string;
@@ -102,6 +124,70 @@ export function getAuthSecurityConfig(input: AuthSecurityConfigInput = {}): Auth
   };
 }
 
+export function getListingMediaStorageConfig(
+  input: ListingMediaStorageConfigInput = {}
+): ListingMediaStorageConfig {
+  const nodeEnv = input.nodeEnv ?? process.env.NODE_ENV ?? "development";
+  const endpoint = storageValue(
+    "LISTING_MEDIA_STORAGE_ENDPOINT",
+    input.endpoint ?? process.env.LISTING_MEDIA_STORAGE_ENDPOINT,
+    "http://localhost:9000",
+    nodeEnv
+  );
+  const uploadEndpoint = storageValue(
+    "LISTING_MEDIA_UPLOAD_ENDPOINT",
+    input.uploadEndpoint ?? process.env.LISTING_MEDIA_UPLOAD_ENDPOINT,
+    endpoint,
+    nodeEnv
+  );
+  const region = storageValue(
+    "LISTING_MEDIA_STORAGE_REGION",
+    input.region ?? process.env.LISTING_MEDIA_STORAGE_REGION,
+    "us-east-1",
+    nodeEnv
+  );
+  const bucket = storageValue(
+    "LISTING_MEDIA_STORAGE_BUCKET",
+    input.bucket ?? process.env.LISTING_MEDIA_STORAGE_BUCKET,
+    "listing-media",
+    nodeEnv
+  );
+  const accessKeyId = storageValue(
+    "LISTING_MEDIA_STORAGE_ACCESS_KEY_ID",
+    input.accessKeyId ?? process.env.LISTING_MEDIA_STORAGE_ACCESS_KEY_ID,
+    "minio",
+    nodeEnv
+  );
+  const secretAccessKey = storageValue(
+    "LISTING_MEDIA_STORAGE_SECRET_ACCESS_KEY",
+    input.secretAccessKey ?? process.env.LISTING_MEDIA_STORAGE_SECRET_ACCESS_KEY,
+    "minio-development",
+    nodeEnv
+  );
+  const uploadTtlSeconds = parsePositiveInteger(
+    "LISTING_MEDIA_UPLOAD_TTL_SECONDS",
+    input.uploadTtlSeconds ?? process.env.LISTING_MEDIA_UPLOAD_TTL_SECONDS,
+    600
+  );
+  if (uploadTtlSeconds !== 600) {
+    throw new Error("LISTING_MEDIA_UPLOAD_TTL_SECONDS must be 600");
+  }
+
+  validateStorageEndpoint("LISTING_MEDIA_STORAGE_ENDPOINT", endpoint);
+  validateStorageEndpoint("LISTING_MEDIA_UPLOAD_ENDPOINT", uploadEndpoint);
+
+  return {
+    endpoint,
+    uploadEndpoint,
+    region,
+    bucket,
+    accessKeyId,
+    secretAccessKey,
+    uploadTtlSeconds,
+    forcePathStyle: true
+  };
+}
+
 function parsePositiveInteger(name: string, value: string | undefined, fallback: number) {
   const parsed = value === undefined ? fallback : Number(value);
   if (!Number.isSafeInteger(parsed) || parsed <= 0) throw new Error(`${name} must be a positive safe integer`);
@@ -116,4 +202,22 @@ function parseNonNegativeInteger(name: string, value: string | undefined, fallba
 
 function requireProductionValue(name: string, actual: number, expected: number) {
   if (actual !== expected) throw new Error(`${name} must be ${expected} in production`);
+}
+
+function storageValue(name: string, value: string | undefined, developmentDefault: string, nodeEnv: string) {
+  const normalized = value?.trim();
+  if (nodeEnv === "production" && !normalized) throw new Error(`${name} is required in production`);
+  return normalized || developmentDefault;
+}
+
+function validateStorageEndpoint(name: string, value: string) {
+  let parsedEndpoint: URL;
+  try {
+    parsedEndpoint = new URL(value);
+  } catch {
+    throw new Error(`${name} must be a valid URL`);
+  }
+  if (parsedEndpoint.protocol !== "http:" && parsedEndpoint.protocol !== "https:") {
+    throw new Error(`${name} must use HTTP or HTTPS`);
+  }
 }
