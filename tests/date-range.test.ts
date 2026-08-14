@@ -29,6 +29,6 @@ describe("date range", () => {
       checkIn: "2026-08-20",
       checkOut: "2026-09-19"
     });
-    expect(formatDateRangeLabel({ checkIn: "2026-08-20", checkOut: "2026-09-19" })).toBe("8月20日 - 9月19日 · 30 晚");
+    expect(formatDateRangeLabel({ checkIn: "2026-08-20", checkOut: "2026-09-19" })).toBe("8月20日 - 9月19日 · 30 天");
   });
 });

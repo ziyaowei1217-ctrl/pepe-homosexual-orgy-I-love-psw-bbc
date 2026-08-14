@@ -56,7 +56,7 @@ export function formatDateRangeLabel(range: DateRange) {
   if (!range.checkIn) return "选择日期";
   if (!range.checkOut) return `${formatShortDate(range.checkIn)} 入住`;
 
-  return `${formatShortDate(range.checkIn)} - ${formatShortDate(range.checkOut)} · ${countNights(range)} 晚`;
+  return `${formatShortDate(range.checkIn)} - ${formatShortDate(range.checkOut)} · ${countNights(range)} 天`;
 }
 
 export function buildCalendarMonths(startIso: string, count: number): CalendarMonth[] {

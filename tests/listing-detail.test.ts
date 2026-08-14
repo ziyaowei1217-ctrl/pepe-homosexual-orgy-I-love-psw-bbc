@@ -30,7 +30,7 @@ describe("listing detail", () => {
       checkOut: "2026-09-19"
     });
 
-    expect(detail.stayLabel).toBe("8月20日 - 9月19日 · 30 晚");
+    expect(detail.stayLabel).toBe("8月20日 - 9月19日 · 30 天");
     expect(detail.gallery).toHaveLength(4);
     expect(detail.gallery[0]).toBe(listing.image);
     expect(detail.monthlySavings).toBe(300);

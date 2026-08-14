@@ -61,6 +61,7 @@ import { Separator } from "@/components/ui/separator";
 import {
   apiGet,
   apiPatch,
+  buildPublicListingsPath,
   getRoommateConversations,
   getRoommateMessages,
   getMyProfile,
@@ -214,7 +215,6 @@ import {
 } from "@/lib/listing-map";
 import {
   buildCatalogPage,
-  canFilterCatalogByDate,
   type CatalogSort
 } from "@/lib/listing-catalog";
 import { createPreviewListings, isPreviewDataEnabled } from "@/lib/preview-data";
@@ -535,8 +535,8 @@ function normalizeListing(listing: ApiListing): Listing {
     trust: listing.trust,
     tags: listing.tags,
     score: listing.score,
-    availableFrom: listing.availableFrom,
-    availableTo: listing.availableTo
+    availableFrom: listing.availableFrom?.slice(0, 10),
+    availableTo: listing.availableTo?.slice(0, 10)
   };
 }
 
@@ -889,10 +889,14 @@ export default function HomePage({
 
   useEffect(() => {
     let cancelled = false;
+    const listingsPath = buildPublicListingsPath(filters);
+
+    if (!listingsPath) return;
+    const requestPath = listingsPath;
 
     async function loadListings() {
       try {
-        const apiListings = await apiGet<ApiListing[]>("/listings");
+        const apiListings = await apiGet<ApiListing[]>(requestPath);
         if (cancelled) return;
         const nextListings = previewDataEnabled
           ? previewListings
@@ -922,6 +926,16 @@ export default function HomePage({
       }
     }
 
+    void loadListings();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [filters.checkIn, filters.checkOut, initialListingId]);
+
+  useEffect(() => {
+    let cancelled = false;
+
     async function loadRoommates() {
       try {
         const apiRoommateData = await apiGet<ApiRoommate[]>("/roommates");
@@ -931,13 +945,11 @@ export default function HomePage({
       }
     }
 
-    void loadListings();
     void loadRoommates();
-
     return () => {
       cancelled = true;
     };
-  }, [initialListingId]);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -1344,7 +1356,7 @@ export default function HomePage({
   );
   const visibleListings = catalogPage.items;
   const visibleSelectedListing = getVisibleSelectedListing(selectedListing, visibleListings);
-  const dateFilterAvailable = canFilterCatalogByDate(allListings);
+  const dateFilterAvailable = true;
   const viewingSlots = useMemo(
     () => buildViewingSlots(filters.checkIn || "2026-08-20"),
     [filters.checkIn]
@@ -4288,11 +4300,11 @@ function DateRangePicker({
   const [visibleMonth, setVisibleMonth] = useState(range.checkIn || "2026-08-01");
   const lastTriggerRef = useRef<HTMLButtonElement | null>(null);
   const months = useMemo(() => buildCalendarMonths(visibleMonth, 2), [visibleMonth]);
-  const nights = countNights(range);
+  const days = countNights(range);
   const flexibleStays = [
-    { label: "周末", nights: 2 },
-    { label: "一周", nights: 7 },
-    { label: "一个月", nights: 30 }
+    { label: "一个月", days: 30 },
+    { label: "三个月", days: 90 },
+    { label: "半年", days: 180 }
   ];
 
   useEffect(() => setMounted(true), []);
@@ -4364,7 +4376,7 @@ function DateRangePicker({
           onClick={(event) => toggleDialog("checkOut", event.currentTarget)}
         >
           <CalendarDays data-icon="inline-start" />
-          {range.checkOut ? formatShortDate(range.checkOut) : "搬出"}
+          {range.checkOut ? formatShortDate(range.checkOut) : "退租"}
         </Button>
       </div>
       {mounted && open ? createPortal(
@@ -4373,14 +4385,14 @@ function DateRangePicker({
           className="max-h-[calc(100vh-1.5rem)] w-full max-w-[760px] overflow-y-auto rounded-[24px] border bg-white p-4 shadow-panel sm:p-5"
           role="dialog"
           aria-modal="true"
-          aria-label="选择入住和搬出日期"
+          aria-label="选择入住和退租日期"
           onMouseDown={(event) => event.stopPropagation()}
         >
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <div className="text-base font-extrabold text-primary">{formatDateRangeLabel(range)}</div>
               <div className="text-xs font-semibold text-muted-foreground">
-                {nights > 0 ? "先选入住，再选搬出；结果会自动更新。" : "请选择入住和搬出日期。"}
+                {days > 0 ? "先选入住，再选退租；结果会自动更新。" : "请选择入住和退租日期。"}
               </div>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -4390,7 +4402,7 @@ function DateRangePicker({
                   variant="secondary"
                   size="sm"
                   onClick={() => {
-                    onChange(applyFlexibleStay(range, stay.nights));
+                    onChange(applyFlexibleStay(range, stay.days));
                     setActiveField("checkIn");
                   }}
                 >
@@ -4439,7 +4451,7 @@ function DateRangePicker({
                         )}
                         type="button"
                         onClick={() => handleDateClick(day.iso)}
-                        aria-label={`${day.iso}${isStart ? " 入住" : isEnd ? " 搬出" : ""}`}
+                        aria-label={`${day.iso}${isStart ? " 入住" : isEnd ? " 退租" : ""}`}
                       >
                         {day.day}
                       </button>

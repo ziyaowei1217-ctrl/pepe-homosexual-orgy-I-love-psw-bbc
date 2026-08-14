@@ -351,6 +351,32 @@ describe("SubletApp auth state flow", () => {
     await unmount(renderer);
   });
 
+  it("presents date search as available instead of an unreleased capability", async () => {
+    navigationMock.pathname = "/";
+    vi.mocked(api.apiGet).mockImplementation(async (path) =>
+      path === "/listings"
+        ? [
+            {
+              ...headerOffsetListing,
+              status: "APPROVED",
+              availableFrom: "2026-08-01",
+              availableTo: "2027-08-01"
+            }
+          ]
+        : []
+    );
+
+    const renderer = await renderSubletApp("Discover");
+
+    expect(renderedText(renderer.root)).not.toContain("日期筛选暂未开放");
+    expect(
+      renderer.root
+        .findAllByType("button")
+        .find((button) => renderedText(button).includes("入住"))?.props.disabled
+    ).not.toBe(true);
+    await unmount(renderer);
+  });
+
   it("opens publish-required for an incomplete lister without rendering a publish submit control", async () => {
     writeStoredAuthSession("stored-token");
     const profileRequest = deferred<ApiProfile>();
