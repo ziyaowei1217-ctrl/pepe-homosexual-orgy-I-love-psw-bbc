@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Image from "next/image";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -213,7 +214,14 @@ export function ListingMediaUploader({
           {rows.map((row, index) => (
             <li key={row.key} className="grid gap-3 rounded-md border bg-white p-3">
               {row.previewUrl ? (
-                <img className="h-36 w-full rounded-md object-cover" src={row.previewUrl} alt={`${row.media.kind}预览`} />
+                <Image
+                  unoptimized
+                  width={720}
+                  height={288}
+                  className="h-36 w-full rounded-md object-cover"
+                  src={row.previewUrl}
+                  alt={`${row.media.kind}预览`}
+                />
               ) : (
                 <div className="grid h-24 place-items-center rounded-md bg-secondary text-xs text-muted-foreground">已保存图片</div>
               )}
