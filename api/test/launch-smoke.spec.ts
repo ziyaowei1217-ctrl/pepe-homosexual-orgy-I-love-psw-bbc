@@ -23,7 +23,6 @@ describeSmoke("launch smoke against real PostgreSQL", () => {
   const roommateId = `launch-roommate-${runId}`;
   let ownerId = "";
   let adminId = "";
-  let dealRoomId = "";
 
   beforeAll(async () => {
     process.env.NODE_ENV = "development";
@@ -60,6 +59,13 @@ describeSmoke("launch smoke against real PostgreSQL", () => {
         role: "lister"
       }
     });
+    await prisma.betaInvite.create({
+      data: {
+        normalizedEmail: signupEmail,
+        createdBy: "[REDACTED]",
+        reason: "Launch smoke registration"
+      }
+    });
 
     await prisma.roommateProfile.create({
       data: {
@@ -79,10 +85,6 @@ describeSmoke("launch smoke against real PostgreSQL", () => {
 
   afterAll(async () => {
     if (prisma) {
-      if (dealRoomId) {
-        await prisma.tourRequest.deleteMany({ where: { dealRoomId } });
-        await prisma.dealRoomMember.deleteMany({ where: { dealRoomId } });
-      }
       if (ownerId) {
         await prisma.dealRoom.deleteMany({ where: { ownerId } });
         await prisma.roommateAction.deleteMany({ where: { userId: ownerId } });
@@ -92,6 +94,7 @@ describeSmoke("launch smoke against real PostgreSQL", () => {
       await prisma.verificationCode.deleteMany({
         where: { email: { in: [ownerEmail, adminEmail, signupEmail] } }
       });
+      await prisma.betaInvite.deleteMany({ where: { normalizedEmail: signupEmail } });
       await prisma.profile.deleteMany({
         where: { email: { in: [ownerEmail, adminEmail, signupEmail] } }
       });
@@ -141,6 +144,22 @@ describeSmoke("launch smoke against real PostgreSQL", () => {
       .expect(201);
     expect(listingResponse.body.status).toBe("DRAFT");
 
+    const media = await prisma.listingMedia.create({
+      data: {
+        listingId: listingResponse.body.id,
+        kind: "室内",
+        sortOrder: 0,
+        originalKey: `launch-smoke/${runId}.png`,
+        mimeType: "image/png",
+        sizeBytes: 67,
+        checksum: "0".repeat(64),
+        width: 1,
+        height: 1,
+        storageStatus: "READY",
+        finalizedAt: new Date()
+      }
+    });
+
     await http.get(`/api/v1/listings/${listingResponse.body.id}`).expect(404);
 
     await http
@@ -168,7 +187,14 @@ describeSmoke("launch smoke against real PostgreSQL", () => {
       .expect(({ body }: { body: Record<string, unknown> }) => {
         expect(body).toMatchObject({
           id: listingResponse.body.id,
-          status: "APPROVED"
+          status: "APPROVED",
+          media: [
+            {
+              id: media.id,
+              storageStatus: "PUBLISHED",
+              contentUrl: `/api/v1/listing-media/${media.id}/content`
+            }
+          ]
         });
       });
 
@@ -177,26 +203,14 @@ describeSmoke("launch smoke against real PostgreSQL", () => {
       .set("Authorization", `Bearer ${ownerToken}`)
       .send({ action: "LIKE" })
       .expect(201);
-    expect(matchResponse.body.dealRoom.status).toBe("ACTIVE");
+    expect(matchResponse.body.action.action).toBe("LIKE");
+    expect(matchResponse.body.dealRoom).toBeNull();
 
     const activeRoomsResponse = await http
       .get("/api/v1/deal-rooms/active")
       .set("Authorization", `Bearer ${ownerToken}`)
       .expect(200);
-    expect(activeRoomsResponse.body).toHaveLength(1);
-    dealRoomId = activeRoomsResponse.body[0].id;
-
-    await http
-      .post(`/api/v1/deal-rooms/${dealRoomId}/tour-requests`)
-      .set("Authorization", `Bearer ${ownerToken}`)
-      .expect(201)
-      .expect(({ body }: { body: Record<string, unknown> }) => {
-        expect(body).toMatchObject({
-          dealRoomId,
-          requesterId: ownerId,
-          status: "REQUESTED"
-        });
-      });
+    expect(activeRoomsResponse.body).toEqual([]);
   });
 });
 
@@ -204,7 +218,6 @@ function listingPayload() {
   return {
     title: "Launch smoke verified sublet",
     area: "Boston - Fenway",
-    image: "https://example.com/smoke-listing.jpg",
     availableFrom: "2026-08-20",
     availableTo: "2026-12-31",
     price: 1900,
