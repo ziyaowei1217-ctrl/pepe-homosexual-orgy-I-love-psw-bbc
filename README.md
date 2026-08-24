@@ -164,6 +164,10 @@ DATABASE_URL='postgresql://sublet:sublet@localhost:5432/sublet_pipeline?schema=p
 
 ## Launch Readiness
 
+For the provider-independent production configuration and operator checklist, see
+[`docs/production-launch-checklist.md`](docs/production-launch-checklist.md). Run the complete local
+release gate with `pnpm release:check` after PostgreSQL and MinIO are available.
+
 `GET /api/v1/health` is a process-liveness check and does not query PostgreSQL. `GET /api/v1/ready`
 queries PostgreSQL and reports the sanitized roommate-messaging infrastructure state. A database
 failure makes readiness fail; messaging fallback leaves the database-backed API available with

@@ -119,7 +119,12 @@ describe("DemoPaymentsService", () => {
     const held = await service.simulateSuccess("renter-1", application.id, "success-key-0001");
 
     await expect(service.confirmMoveIn("renter-1", held.heldFund!.id, "confirm-key-renter"))
-      .rejects.toBeInstanceOf(ConflictException);
+      .rejects.toMatchObject({
+        response: {
+          code: "DEMO_MOVE_IN_NOT_STARTED",
+          message: "约定入住日期前不能确认入住"
+        }
+      });
     vi.setSystemTime(new Date("2026-09-01T12:00:00.000Z"));
     const renterConfirmed = await service.confirmMoveIn("renter-1", held.heldFund!.id, "confirm-key-renter");
     expect(renterConfirmed.heldFund).toMatchObject({ status: "HELD", renterConfirmedAt: expect.any(Date) });

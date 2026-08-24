@@ -61,13 +61,13 @@ export function toProductApiError(error: unknown): ProductApiError {
 
 export function productErrorForStatus(status: number, code?: unknown): ProductApiError {
   const safeCode = safeErrorCode(code);
-  const mediaMessage = safeCode ? listingMediaMessages[safeCode] : undefined;
+  const productMessage = safeCode ? productCodeMessages[safeCode] : undefined;
 
-  if (mediaMessage) {
+  if (productMessage) {
     return new ProductApiError({
       category: status >= 500 ? "service" : "validation",
       code: safeCode,
-      message: mediaMessage,
+      message: productMessage,
       retryable: status >= 500 || safeCode === "LISTING_MEDIA_STATE_CONFLICT",
       status
     });
@@ -118,7 +118,7 @@ export function productErrorForStatus(status: number, code?: unknown): ProductAp
   });
 }
 
-const listingMediaMessages: Record<string, string> = {
+const productCodeMessages: Record<string, string> = {
   LISTING_MEDIA_LIMIT_REACHED: "每套房源最多上传 12 张图片。",
   LISTING_MEDIA_LOCKED: "房源提交审核后，图片已锁定。",
   LISTING_MEDIA_STATE_CONFLICT: "图片状态已变化，请刷新后重试。",
@@ -130,7 +130,8 @@ const listingMediaMessages: Record<string, string> = {
   IMAGE_CHECKSUM_MISMATCH: "图片完整性校验失败，请重新上传。",
   IMAGE_DIMENSIONS_UNSAFE: "图片尺寸无法安全读取，请更换图片。",
   IMAGE_VALIDATION_FAILED: "图片安全校验失败，请更换图片。",
-  IMAGE_STORAGE_UNAVAILABLE: "图片服务暂时不可用，请稍后重试。"
+  IMAGE_STORAGE_UNAVAILABLE: "图片服务暂时不可用，请稍后重试。",
+  DEMO_MOVE_IN_NOT_STARTED: "约定入住日期前不能确认入住。"
 };
 
 function safeErrorCode(code: unknown) {

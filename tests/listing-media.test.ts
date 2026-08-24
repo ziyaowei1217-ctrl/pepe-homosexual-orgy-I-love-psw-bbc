@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   MAX_LISTING_MEDIA_BYTES,
   buildListingMediaSummary,
+  getListingCoverUrl,
   listingFileError,
   runMediaUploadQueue,
   sha256Hex
@@ -35,6 +36,23 @@ describe("listing media browser workflow", () => {
       failedCount: 1,
       mutationPending: true
     });
+  });
+
+  it("uses the first published media URL as the public listing cover", () => {
+    expect(getListingCoverUrl({
+      image: null,
+      media: [
+        { id: "media-2", kind: "卧室", sortOrder: 2, contentUrl: "/api/v1/listing-media/media-2/content" },
+        { id: "media-1", kind: "封面", sortOrder: 1, contentUrl: "/api/v1/listing-media/media-1/content" }
+      ]
+    }, "https://api.example.test/api/v1")).toBe(
+      "https://api.example.test/api/v1/listing-media/media-1/content"
+    );
+  });
+
+  it("never returns an empty or null public listing cover", () => {
+    expect(getListingCoverUrl({ image: null, media: [] }, "https://api.example.test/api/v1"))
+      .toMatch(/^https:\/\/images\.unsplash\.com\//);
   });
 
   it("runs at most three uploads concurrently and isolates failures", async () => {

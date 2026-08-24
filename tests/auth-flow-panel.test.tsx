@@ -107,6 +107,32 @@ describe("auth panel state transitions", () => {
     });
   });
 
+  it("uses a server-issued development code even when the web bundle is production-built", async () => {
+    const result = await runEmailCodeRequest(
+      {
+        email: "maya@example.edu",
+        currentCode: "",
+        isDevelopment: false
+      },
+      {
+        lock: { current: false },
+        request: vi.fn().mockResolvedValue({
+          email: "maya@example.edu",
+          expiresAt: "2026-07-29T01:10:00.000Z",
+          devCode: "123456"
+        }),
+        now: () => 1_000,
+        onPendingChange: vi.fn()
+      }
+    );
+
+    expect(result).toMatchObject({
+      status: "success",
+      transition: { code: "123456" },
+      hasDevelopmentCode: true
+    });
+  });
+
   it("blocks a repeated request while the first request is pending", async () => {
     let resolveRequest:
       | ((response: { email: string; expiresAt: string }) => void)

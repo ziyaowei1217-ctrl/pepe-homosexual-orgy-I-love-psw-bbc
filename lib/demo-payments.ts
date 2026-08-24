@@ -62,3 +62,16 @@ export function demoPaymentStatusLabel(status: ApiDemoPaymentState["payment"]["s
     CLOSED: "订单已关闭"
   }[status];
 }
+
+export function canConfirmDemoMoveIn(moveIn: string, now = Date.now()) {
+  const moveInAt = Date.parse(moveIn);
+  return Number.isFinite(moveInAt) && now >= moveInAt;
+}
+
+export function demoLedgerAccountLabel(account: string) {
+  return {
+    RENTER_CLEARING: "租客清算账户",
+    HELD_FUNDS: "托管资金账户",
+    HOST_CLEARING: "房东清算账户"
+  }[account] ?? account;
+}

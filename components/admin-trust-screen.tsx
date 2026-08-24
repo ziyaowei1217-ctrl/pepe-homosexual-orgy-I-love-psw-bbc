@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import {
   approveAdminListing,
+  getAdminListingMediaContent,
   getAdminListingReviewQueue,
   rejectAdminListing,
   type ApiListing,
@@ -20,6 +21,7 @@ import {
   type AdminStepUpSession
 } from "@/lib/admin-step-up";
 import { toProductApiError } from "@/lib/product-errors";
+import { useWindowFocusRefresh } from "@/lib/use-window-focus-refresh";
 
 type PendingDecision = {
   listingId: string;
@@ -52,6 +54,7 @@ export function AdminTrustScreen({
   const [loading, setLoading] = useState(false);
   const [pendingDecision, setPendingDecision] = useState<PendingDecision | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [reviewMediaUrls, setReviewMediaUrls] = useState<Record<string, string>>({});
   const onToastRef = useRef(onToast);
   onToastRef.current = onToast;
   const onAuthenticationErrorRef = useRef(onAuthenticationError);
@@ -86,6 +89,35 @@ export function AdminTrustScreen({
     setLoading(true);
     void loadQueue();
   }, [loadQueue, token, user?.role]);
+  useWindowFocusRefresh(loadQueue);
+
+  useEffect(() => {
+    if (!token || user?.role !== "ADMIN") return;
+    let active = true;
+    const createdUrls: string[] = [];
+    const targets = listings.flatMap((listing) =>
+      (listing.media ?? []).flatMap((media) =>
+        media.reviewContentUrl ? [{ path: media.reviewContentUrl }] : []
+      )
+    );
+
+    void Promise.all(targets.map(async ({ path }) => {
+      const blob = await getAdminListingMediaContent(token, path);
+      const objectUrl = URL.createObjectURL(blob);
+      createdUrls.push(objectUrl);
+      return [path, objectUrl] as const;
+    })).then((entries) => {
+      if (!active) return;
+      setReviewMediaUrls(Object.fromEntries(entries));
+    }).catch((error) => {
+      if (active) onToastRef.current(`审核图片加载失败：${toProductApiError(error).message}`);
+    });
+
+    return () => {
+      active = false;
+      createdUrls.forEach((url) => URL.revokeObjectURL(url));
+    };
+  }, [listings, token, user?.role]);
 
   if (!token) {
     return <AdminTrustGate title="请登录管理员账户" detail="登录后可以审核待发布房源。" />;
@@ -202,7 +234,7 @@ export function AdminTrustScreen({
         {listings.map((listing) => {
           const decision = pendingDecision?.listingId === listing.id ? pendingDecision : null;
           const tags = listing.tags.map((tag) => tag.trim()).filter(Boolean);
-          const reviewMedia = getReviewMedia(listing);
+          const reviewMedia = getReviewMedia(listing, reviewMediaUrls);
           return (
             <Card key={listing.id} className="shadow-panel">
               <CardHeader>
@@ -349,10 +381,15 @@ function displayText(value: string | null | undefined, fallback: string) {
   return normalized || fallback;
 }
 
-function getReviewMedia(listing: ApiListing) {
+function getReviewMedia(listing: ApiListing, protectedUrls: Record<string, string> = {}) {
   const candidates = [
     { url: listing.image, kind: "封面", sortOrder: -1 },
-    ...(listing.media ?? [])
+    ...(listing.media ?? []).map((media) => ({
+      ...media,
+      url: media.reviewContentUrl
+        ? protectedUrls[media.reviewContentUrl]
+        : media.url ?? media.contentUrl
+    }))
   ].sort((left, right) => left.sortOrder - right.sortOrder);
   const seen = new Set<string>();
 
@@ -368,7 +405,9 @@ function safeReviewMediaUrl(value: string | null | undefined) {
   if (!value?.trim()) return null;
   try {
     const url = new URL(value.trim());
-    return url.protocol === "http:" || url.protocol === "https:" ? url.href : null;
+    return url.protocol === "http:" || url.protocol === "https:" || url.protocol === "blob:"
+      ? url.href
+      : null;
   } catch {
     return null;
   }

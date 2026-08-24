@@ -191,8 +191,18 @@ export function createMarketplaceDemoPrismaMock() {
       },
       findFirst: async ({ where }: { where: Record<string, any> }) =>
         applications.find((record) => matchesApplication(record, where, teams)) ?? null,
-      findMany: async ({ where = {} }: { where?: Record<string, any>; orderBy?: unknown; include?: unknown }) =>
-        applications.filter((record) => matchesApplication(record, where, teams)).sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime()),
+      findMany: async ({ where = {}, include }: { where?: Record<string, any>; orderBy?: unknown; include?: { listing?: unknown } }) => {
+        const matched = applications
+          .filter((record) => matchesApplication(record, where, teams))
+          .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+        if (!include?.listing) return matched;
+        return matched.map((record) => ({
+          ...record,
+          listing: {
+            title: listings.find((listing) => listing.id === record.listingId)?.title ?? "房源"
+          }
+        }));
+      },
       create: async ({ data }: { data: Omit<MarketplaceApplicationRecord, "id" | "createdAt" | "updatedAt"> }) => {
         if (applications.some((record) => record.createKey === data.createKey || (data.activeKey && record.activeKey === data.activeKey))) {
           throw uniqueConflict();

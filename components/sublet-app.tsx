@@ -89,12 +89,20 @@ import {
   type VerifyEmailResponse,
   type CreateViewingRequestInput
 } from "@/lib/api";
+import { getListingCoverUrl } from "@/lib/listing-media";
+import { useWindowFocusRefresh } from "@/lib/use-window-focus-refresh";
 import {
   clearStoredAuthSession,
   readStoredAuthSession,
   writeStoredAuthSession
 } from "@/lib/auth-session";
-import { getActiveAdminStepUpToken, type AdminStepUpSession } from "@/lib/admin-step-up";
+import {
+  clearStoredAdminStepUpSession,
+  getActiveAdminStepUpToken,
+  readStoredAdminStepUpSession,
+  writeStoredAdminStepUpSession,
+  type AdminStepUpSession
+} from "@/lib/admin-step-up";
 import {
   beginLatestRequest,
   commitLatestRequest,
@@ -542,7 +550,7 @@ function normalizeListing(listing: ApiListing): Listing {
     id: String(listing.id),
     title: listing.title,
     area: listing.area,
-    image: listing.image,
+    image: getListingCoverUrl(listing),
     price: listing.price,
     originalPrice: listing.originalPrice,
     beds: listing.beds,
@@ -814,21 +822,30 @@ export default function HomePage({
     : initialRoommateDmId
       ? `peer:${initialRoommateDmId}`
       : null;
-  const adminStepUpIdentity = token && user
-    ? `${token}:${user.id}:${user.email}:${user.role}`
+  const adminStepUpIdentity = useMemo(
+    () => token && user?.role === "ADMIN" ? { id: user.id, email: user.email } : null,
+    [token, user?.email, user?.id, user?.role]
+  );
+  const adminStepUpIdentityKey = adminStepUpIdentity
+    ? `${adminStepUpIdentity.id}:${adminStepUpIdentity.email}`
     : null;
   tokenRef.current = token;
 
   useEffect(() => {
-    if (adminStepUpIdentityRef.current === adminStepUpIdentity) return;
-    adminStepUpIdentityRef.current = adminStepUpIdentity;
-    setAdminStepUpSession(null);
+    if (adminStepUpIdentityRef.current === adminStepUpIdentityKey) return;
+    adminStepUpIdentityRef.current = adminStepUpIdentityKey;
+    setAdminStepUpSession(
+      adminStepUpIdentity && window.sessionStorage
+        ? readStoredAdminStepUpSession(window.sessionStorage, adminStepUpIdentity)
+        : null
+    );
     setAdminStepUpOpen(false);
-  }, [adminStepUpIdentity]);
+  }, [adminStepUpIdentity, adminStepUpIdentityKey]);
 
   useEffect(() => {
     if (!adminStepUpSession) return;
     if (!getActiveAdminStepUpToken(adminStepUpSession)) {
+      clearStoredAdminStepUpSession(window.sessionStorage);
       setAdminStepUpSession(null);
       return;
     }
@@ -839,6 +856,7 @@ export default function HomePage({
           ? null
           : current
       );
+      clearStoredAdminStepUpSession(window.sessionStorage);
     }, delay);
     return () => window.clearTimeout(timer);
   }, [adminStepUpSession]);
@@ -1019,6 +1037,7 @@ export default function HomePage({
             const productError = toProductApiError(error);
             if (shouldClearAuthSession(productError)) {
               clearStoredAuthSession();
+              clearStoredAdminStepUpSession(window.sessionStorage);
               setToken(null);
               setUser(null);
               setResolvedUserToken(null);
@@ -1046,6 +1065,7 @@ export default function HomePage({
     const productError = toProductApiError(error);
     if (!shouldClearAuthSession(productError)) return false;
     clearStoredAuthSession();
+    clearStoredAdminStepUpSession(window.sessionStorage);
     invalidateLatestRequests(profileRequestGuard);
     setAdminStepUpSession(null);
     setAdminStepUpOpen(false);
@@ -1084,6 +1104,7 @@ export default function HomePage({
     const productError = toProductApiError(error);
     if (shouldClearAuthSession(productError)) {
       clearStoredAuthSession();
+      clearStoredAdminStepUpSession(window.sessionStorage);
       setToken(null);
       setUser(null);
       setProfile(null);
@@ -1400,6 +1421,28 @@ export default function HomePage({
       cancelled = true;
     };
   }, [initialGroupTourDealRoomId, token]);
+
+  useWindowFocusRefresh(async () => {
+    const currentToken = tokenRef.current;
+    if (!currentToken) return;
+
+    try {
+      const ownedListings = await apiGet<ApiListing[]>("/listings/mine", currentToken);
+      if (tokenRef.current !== currentToken) return;
+      setMyListings(
+        sortOwnerListings(
+          ownedListings.filter(
+            (listing): listing is ApiListing & { status: ListingStatus } => Boolean(listing.status)
+          )
+        )
+      );
+      setApiOnline(true);
+    } catch (error) {
+      if (tokenRef.current === currentToken) {
+        setToast(`房东房源加载失败：${toProductApiError(error).message}`);
+      }
+    }
+  });
 
   const canRequestTour = Boolean(
     roommateTeam?.status === "ACTIVE" && roommateTeam.dealRoomId && groupMembers.length > 0
@@ -2440,6 +2483,7 @@ export default function HomePage({
 
   function handleAuthenticated(response: VerifyEmailResponse) {
     writeStoredAuthSession(response.accessToken);
+    clearStoredAdminStepUpSession(window.sessionStorage);
     setAdminStepUpSession(null);
     setAdminStepUpOpen(false);
     setToken(response.accessToken);
@@ -2457,6 +2501,7 @@ export default function HomePage({
 
   function handleLogout() {
     clearStoredAuthSession();
+    clearStoredAdminStepUpSession(window.sessionStorage);
     invalidateLatestRequests(profileRequestGuard);
     setAdminStepUpSession(null);
     setAdminStepUpOpen(false);
@@ -2600,6 +2645,9 @@ export default function HomePage({
         sessionToken={token ?? ""}
         email={user?.email ?? ""}
         onVerified={(session) => {
+          if (adminStepUpIdentity) {
+            writeStoredAdminStepUpSession(window.sessionStorage, adminStepUpIdentity, session);
+          }
           setAdminStepUpSession(session);
           setAdminStepUpOpen(false);
         }}
@@ -6346,6 +6394,24 @@ function EmptyResults({ filters, onClear }: { filters: SearchFilters; onClear: (
   );
 }
 
+function createEmptyPublishDraft(): PublishDraft {
+  return {
+    title: "",
+    area: "",
+    availableFrom: "",
+    availableTo: "",
+    beds: 1,
+    baths: 1,
+    commute: "",
+    transit: "",
+    price: 0,
+    originalPrice: 0,
+    tags: [],
+    landlordAware: false,
+    remoteListingId: null
+  };
+}
+
 function PublishingFlow({
   initialDraft,
   isPublishing,
@@ -6365,22 +6431,7 @@ function PublishingFlow({
   ];
   const [stepIndex, setStepIndex] = useState(0);
   const [draft, setDraft] = useState<PublishDraft>(
-    () =>
-      initialDraft ?? {
-        title: "",
-        area: "",
-        availableFrom: "",
-        availableTo: "",
-        beds: 1,
-        baths: 1,
-        commute: "",
-        transit: "",
-        price: 0,
-        originalPrice: 0,
-        tags: [],
-        landlordAware: false,
-        remoteListingId: null
-      }
+    () => initialDraft ?? createEmptyPublishDraft()
   );
   const [mediaSummary, setMediaSummary] = useState<ListingMediaSummary>({
     totalCount: 0,
@@ -6391,6 +6442,7 @@ function PublishingFlow({
   });
   const [errors, setErrors] = useState<string[]>([]);
   const [confirmSubmit, setConfirmSubmit] = useState(false);
+  const [submittedResult, setSubmittedResult] = useState<PublishSaveResult | null>(null);
   const step = steps[stepIndex];
 
   async function goToStep(nextIndex: number) {
@@ -6429,6 +6481,11 @@ function PublishingFlow({
 
     const result = await onSave(draft, shouldSubmit);
     if (!result) return;
+    if (result.status === "submitted") {
+      setSubmittedResult(result);
+      setConfirmSubmit(false);
+      return;
+    }
     setDraft((current) => ({
       ...current,
       remoteListingId: result.remoteListingId
@@ -6443,6 +6500,45 @@ function PublishingFlow({
         ? current.tags.filter((item) => item !== tag)
         : [...current.tags, tag]
     }));
+  }
+
+  if (submittedResult) {
+    return (
+      <Card className="shadow-panel">
+        <CardContent className="flex min-h-[320px] flex-col items-center justify-center gap-4 p-8 text-center">
+          <div className="flex size-14 items-center justify-center rounded-full bg-emerald-50 text-trust-green">
+            <CheckCircle2 className="size-7" aria-hidden="true" />
+          </div>
+          <div>
+            <h2 className="text-xl font-black text-primary">房源已提交审核</h2>
+            <p className="mt-2 max-w-md text-sm font-semibold text-muted-foreground">
+              当前房源及图片已锁定，审核完成前不能继续编辑。你可以在“我的房源”查看审核状态。
+            </p>
+            <p className="mt-2 text-xs font-semibold text-muted-foreground">
+              房源编号：{submittedResult.remoteListingId}
+            </p>
+          </div>
+          <Button
+            variant="outline"
+            onClick={() => {
+              setSubmittedResult(null);
+              setDraft(createEmptyPublishDraft());
+              setMediaSummary({
+                totalCount: 0,
+                readyCount: 0,
+                pendingCount: 0,
+                failedCount: 0,
+                mutationPending: false
+              });
+              setErrors([]);
+              setStepIndex(0);
+            }}
+          >
+            发布另一套房源
+          </Button>
+        </CardContent>
+      </Card>
+    );
   }
 
   return (

@@ -29,7 +29,7 @@ const detailGalleryFallbacks = [
 ];
 
 export function buildListingGallery(listing: Pick<DetailListing, "image">) {
-  return Array.from(new Set([listing.image, ...detailGalleryFallbacks]));
+  return Array.from(new Set([listing.image, ...detailGalleryFallbacks].filter(Boolean)));
 }
 
 export function getGalleryIndex(currentIndex: number, direction: -1 | 1, galleryLength: number) {

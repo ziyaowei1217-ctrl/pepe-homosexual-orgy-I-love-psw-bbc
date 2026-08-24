@@ -15,6 +15,7 @@ vi.mock("../lib/api", async () => {
   return {
     ...actual,
     approveAdminListing: vi.fn(),
+    getAdminListingMediaContent: vi.fn(),
     getAdminListingReviewQueue: vi.fn(),
     rejectAdminListing: vi.fn()
   };
@@ -71,6 +72,7 @@ describe("AdminTrustScreen", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(api.getAdminListingReviewQueue).mockResolvedValue([queuedListing]);
+    vi.mocked(api.getAdminListingMediaContent).mockResolvedValue(new Blob(["image"], { type: "image/png" }));
     vi.mocked(api.approveAdminListing).mockResolvedValue({
       ...queuedListing,
       status: "APPROVED"
@@ -147,6 +149,38 @@ describe("AdminTrustScreen", () => {
     expect(text).toContain("未提供可安全预览的房源图片");
     expect(reviewMediaBackgrounds(renderer.root)).toEqual([]);
     await unmount(renderer);
+  });
+
+  it("loads ready review media with the administrator session and releases its object URL", async () => {
+    const createObjectUrl = vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:admin-review-media");
+    const revokeObjectUrl = vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => undefined);
+    vi.mocked(api.getAdminListingReviewQueue).mockResolvedValue([
+      {
+        ...queuedListing,
+        image: null,
+        media: [
+          {
+            id: "ready-media",
+            reviewContentUrl: "/api/v1/admin/listings/listing-codex-0812/media/ready-media/content",
+            kind: "卧室",
+            sortOrder: 0
+          }
+        ]
+      }
+    ]);
+
+    const renderer = await renderScreen();
+
+    expect(api.getAdminListingMediaContent).toHaveBeenCalledWith(
+      "ordinary-token",
+      "/api/v1/admin/listings/listing-codex-0812/media/ready-media/content"
+    );
+    expect(reviewMediaBackgrounds(renderer.root)).toEqual(['url("blob:admin-review-media")']);
+
+    await unmount(renderer);
+    expect(revokeObjectUrl).toHaveBeenCalledWith("blob:admin-review-media");
+    createObjectUrl.mockRestore();
+    revokeObjectUrl.mockRestore();
   });
 
   it("requires step-up and confirmation before approving, then removes only after server success", async () => {

@@ -9,6 +9,9 @@ coverage/
 *.tsbuildinfo
 .env
 .env.*
+!.env.example
 api/.env
 api/.env.*
+!api/.env.example
+!api/.env.production.example
 .DS_Store

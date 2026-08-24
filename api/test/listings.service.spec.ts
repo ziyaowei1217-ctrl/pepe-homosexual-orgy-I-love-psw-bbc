@@ -65,6 +65,9 @@ type ListingOrderBy = {
 
 type ListingInclude = {
   media?: {
+    where?: {
+      storageStatus?: ListingMediaRecord["storageStatus"];
+    };
     orderBy?: {
       sortOrder?: "asc" | "desc";
     };
@@ -139,6 +142,34 @@ describe("ListingsService", () => {
     const service = new ListingsService(prisma as never, new AuditService());
 
     await expect(service.findAll()).resolves.toMatchObject([{ id: "approved" }]);
+  });
+
+  it("returns published media in cover order for public discovery", async () => {
+    const prisma = createPrismaMock({
+      listings: [listingRecord({ id: "approved", status: "APPROVED" })],
+      media: [
+        mediaRecord({ id: "media-2", listingId: "approved", sortOrder: 2, storageStatus: "PUBLISHED" }),
+        mediaRecord({ id: "media-1", listingId: "approved", sortOrder: 1, storageStatus: "PUBLISHED" }),
+        mediaRecord({ id: "media-ready", listingId: "approved", sortOrder: 0, storageStatus: "READY" })
+      ]
+    });
+    const service = new ListingsService(prisma as never, new AuditService());
+
+    await expect(service.findAll()).resolves.toMatchObject([
+      {
+        id: "approved",
+        media: [
+          { id: "media-1", contentUrl: "/api/v1/listing-media/media-1/content" },
+          { id: "media-2", contentUrl: "/api/v1/listing-media/media-2/content" }
+        ]
+      }
+    ]);
+    expect(prisma.listing.findManyCalls[0]?.include).toEqual({
+      media: {
+        where: { storageStatus: "PUBLISHED" },
+        orderBy: { sortOrder: "asc" }
+      }
+    });
   });
 
   it("returns only approved listings that fully cover the requested stay", async () => {
@@ -586,6 +617,26 @@ describe("ListingsService", () => {
     expectSafeListingMedia((await service.findReviewQueue())[0]!.media);
   });
 
+  it("gives administrators a protected preview path for ready review media", async () => {
+    const prisma = createPrismaMock({
+      listings: [listingRecord({ id: "submitted", status: "SUBMITTED" })],
+      media: [mediaRecord({ id: "media-ready", listingId: "submitted", storageStatus: "READY" })]
+    });
+    const service = new ListingsService(prisma as never, new AuditService());
+
+    await expect(service.findReviewQueue()).resolves.toMatchObject([
+      {
+        id: "submitted",
+        media: [
+          {
+            id: "media-ready",
+            reviewContentUrl: "/api/v1/admin/listings/submitted/media/media-ready/content"
+          }
+        ]
+      }
+    ]);
+  });
+
   it("approves and audits in the same transaction", async () => {
     const prisma = createPrismaMock({ listings: [listingRecord({ id: reviewListingId, status: "SUBMITTED" })] });
     const service = new ListingsService(prisma as never, new AuditService());
@@ -962,7 +1013,10 @@ function withListingIncludes(listing: ListingRecord, media: ListingMediaRecord[]
   if (!include?.media) return listing;
 
   const sortedMedia = [...media]
-    .filter((item) => item.listingId === listing.id)
+    .filter((item) =>
+      item.listingId === listing.id &&
+      (!include.media?.where?.storageStatus || item.storageStatus === include.media.where.storageStatus)
+    )
     .sort((first, second) =>
       include.media?.orderBy?.sortOrder === "desc" ? second.sortOrder - first.sortOrder : first.sortOrder - second.sortOrder
     );

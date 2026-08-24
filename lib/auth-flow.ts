@@ -118,17 +118,14 @@ export function getEmailCodeRequestTransition({
   currentCode: _currentCode,
   response,
   succeededAt,
-  isDevelopment
+  isDevelopment: _isDevelopment
 }: EmailCodeRequestTransitionInput) {
   return {
     step: "code" as const,
     sentEmail: response.email,
     expiresAt: response.expiresAt,
     resendAvailableAt: succeededAt + 60_000,
-    code:
-      isDevelopment && response.devCode
-        ? normalizeVerificationCode(response.devCode)
-        : ""
+    code: response.devCode ? normalizeVerificationCode(response.devCode) : ""
   };
 }
 
@@ -155,9 +152,7 @@ export async function runEmailCodeRequest(
         succeededAt,
         isDevelopment: input.isDevelopment
       }),
-      hasDevelopmentCode: Boolean(
-        input.isDevelopment && response.devCode
-      )
+      hasDevelopmentCode: Boolean(response.devCode)
     };
   } catch (requestError) {
     return {

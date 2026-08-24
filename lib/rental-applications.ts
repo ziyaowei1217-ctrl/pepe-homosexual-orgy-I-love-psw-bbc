@@ -9,6 +9,7 @@ export type RentalGuarantorStatus = "AVAILABLE" | "NOT_AVAILABLE" | "NOT_NEEDED"
 export type ApiRentalApplication = {
   id: string;
   listingId: string;
+  listingTitle?: string;
   listingOwnerId: string;
   submitterId: string;
   teamId: string | null;

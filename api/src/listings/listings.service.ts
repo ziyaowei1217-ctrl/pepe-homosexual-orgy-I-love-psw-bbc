@@ -16,6 +16,16 @@ const listingMediaInclude = {
     }
   }
 };
+const publicListingMediaInclude = {
+  media: {
+    where: {
+      storageStatus: "PUBLISHED" as const
+    },
+    orderBy: {
+      sortOrder: "asc" as const
+    }
+  }
+};
 
 @Injectable()
 export class ListingsService {
@@ -28,10 +38,11 @@ export class ListingsService {
     const availabilityWhere = buildListingAvailabilityWhere(query);
     const records = await this.prisma.listing.findMany({
       where: { status: "APPROVED", ...availabilityWhere },
-      orderBy: { createdAt: "desc" }
+      orderBy: { createdAt: "desc" },
+      include: publicListingMediaInclude
     });
 
-    return records.map(presentApprovedListing);
+    return records.map((record) => presentListingWithMedia(presentApprovedListing(record)));
   }
 
   async findOne(id: string) {
@@ -133,7 +144,7 @@ export class ListingsService {
       orderBy: { submittedAt: "asc" },
       include: listingMediaInclude
     });
-    return records.map(presentListingWithMedia);
+    return records.map(presentListingForReview);
   }
 
   async approve(id: string, actor: AuditActor) {
@@ -304,4 +315,16 @@ function presentApprovedListing<T extends { trust: string }>(listing: T): T {
 
 function presentListingWithMedia<T extends { media: ListingMediaPresentationSource[] }>(listing: T) {
   return { ...listing, media: listing.media.map(presentListingMedia) };
+}
+
+function presentListingForReview<
+  T extends { id: string; media: Array<ListingMediaPresentationSource & { listingId: string }> }
+>(listing: T) {
+  return {
+    ...listing,
+    media: listing.media.map((media) => ({
+      ...presentListingMedia(media),
+      reviewContentUrl: `/api/v1/admin/listings/${listing.id}/media/${media.id}/content`
+    }))
+  };
 }

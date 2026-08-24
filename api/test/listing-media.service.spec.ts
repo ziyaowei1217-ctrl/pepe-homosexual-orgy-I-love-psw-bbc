@@ -285,6 +285,25 @@ describe("ListingMediaService", () => {
     expect(storage.read).toHaveBeenCalledWith("listing-media/listing-1/published");
   });
 
+  it("delivers ready bytes to review only while the listing is submitted", async () => {
+    const bytes = Buffer.from([1, 2, 3, 4]);
+    const database = createDatabase({
+      listings: [listingRow({ status: "SUBMITTED" })],
+      media: [mediaRow({ storageStatus: "READY", sizeBytes: bytes.length })]
+    });
+    const storage = createStorage(bytes);
+    const service = createService(database, storage);
+
+    await expect(service.readForReview("listing-1", "media-1")).resolves.toEqual({
+      bytes,
+      mimeType: "image/png"
+    });
+
+    database.prisma.listing.findUnique = async () => listingRow({ status: "DRAFT" });
+    await expect(service.readForReview("listing-1", "media-1"))
+      .rejects.toMatchObject({ response: { code: "LISTING_MEDIA_NOT_AVAILABLE" } });
+  });
+
   it("hides ready, missing, and corrupted public media behind a stable safe code", async () => {
     const readyDatabase = createDatabase({ media: [mediaRow({ storageStatus: "READY" })] });
     await expect(

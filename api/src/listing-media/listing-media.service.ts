@@ -228,6 +228,43 @@ export class ListingMediaService {
     }
   }
 
+  async readForReview(listingId: string, mediaId: string) {
+    const [listing, media] = await Promise.all([
+      this.prisma.listing.findUnique({ where: { id: listingId } }),
+      this.prisma.listingMedia.findUnique({ where: { id: mediaId } })
+    ]);
+    if (
+      !listing ||
+      listing.status !== "SUBMITTED" ||
+      !media ||
+      media.listingId !== listingId ||
+      (media.storageStatus !== "READY" && media.storageStatus !== "PUBLISHED") ||
+      !media.originalKey ||
+      !media.mimeType ||
+      !media.sizeBytes ||
+      !(SUPPORTED_LISTING_MEDIA_MIME_TYPES as readonly string[]).includes(media.mimeType)
+    ) {
+      throw productNotFound("LISTING_MEDIA_NOT_AVAILABLE", "Listing media not available");
+    }
+
+    try {
+      const bytes = await this.storage.read(media.originalKey);
+      if (bytes.length !== media.sizeBytes) {
+        throw productNotFound("LISTING_MEDIA_NOT_AVAILABLE", "Listing media not available");
+      }
+      return { bytes, mimeType: media.mimeType as SupportedListingMediaMimeType };
+    } catch (error) {
+      if (error instanceof NotFoundException) throw error;
+      if (error instanceof ListingMediaStorageError && error.code === "IMAGE_STORAGE_UNAVAILABLE") {
+        throw new ServiceUnavailableException({
+          code: error.code,
+          message: "图片暂时无法读取，请稍后重试。"
+        });
+      }
+      throw productNotFound("LISTING_MEDIA_NOT_AVAILABLE", "Listing media not available");
+    }
+  }
+
   async reorder(ownerId: string, listingId: string, input: ReorderListingMediaDto) {
     await this.requireEditableListing(this.prisma, ownerId, listingId);
     const ids = input.mediaIds;

@@ -1,9 +1,12 @@
 import { apiDelete, apiGet, apiPatch, apiPost } from "./api";
+import type { ApiListing } from "./api";
 import { toProductApiError } from "./product-errors";
 
 export const MAX_LISTING_MEDIA_BYTES = 10 * 1024 * 1024;
 export const MAX_LISTING_MEDIA_COUNT = 12;
 export const LISTING_MEDIA_MIME_TYPES = ["image/jpeg", "image/png", "image/webp"] as const;
+export const LISTING_IMAGE_FALLBACK =
+  "https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?auto=format&fit=crop&w=1200&q=80";
 
 export type ListingMediaMimeType = (typeof LISTING_MEDIA_MIME_TYPES)[number];
 export type ListingMediaStorageStatus =
@@ -47,6 +50,30 @@ export type ListingMediaSummary = {
 };
 
 type FileDescriptor = Pick<File, "type" | "size"> | { type: string; size: number };
+
+export function getListingCoverUrl(
+  listing: Pick<ApiListing, "image" | "media">,
+  apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000/api/v1"
+) {
+  const mediaUrl = [...(listing.media ?? [])]
+    .sort((left, right) => left.sortOrder - right.sortOrder)
+    .map((media) => media.contentUrl)
+    .find((value): value is string => Boolean(value?.trim()));
+
+  return resolveHttpUrl(mediaUrl, apiBaseUrl) ??
+    resolveHttpUrl(listing.image, apiBaseUrl) ??
+    LISTING_IMAGE_FALLBACK;
+}
+
+function resolveHttpUrl(value: string | null | undefined, baseUrl: string) {
+  if (!value?.trim()) return null;
+  try {
+    const url = new URL(value.trim(), baseUrl);
+    return url.protocol === "http:" || url.protocol === "https:" ? url.href : null;
+  } catch {
+    return null;
+  }
+}
 
 export function listingFileError(file: FileDescriptor, currentCount: number): string | null {
   if (currentCount >= MAX_LISTING_MEDIA_COUNT) return "每套房源最多上传 12 张图片。";

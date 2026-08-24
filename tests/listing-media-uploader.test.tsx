@@ -115,7 +115,87 @@ describe("ListingMediaUploader", () => {
 
     expect(fetchMock).not.toHaveBeenCalled();
   });
+
+  it("replaces the editor with a locked confirmation immediately after review submission", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === "string"
+        ? input
+        : input instanceof Request
+          ? input.url
+          : String(input);
+      const payload = url.includes("/media")
+        ? [media({ id: "ready-1", storageStatus: "READY" })]
+        : [];
+      return new Response(JSON.stringify(payload), {
+        status: 200,
+        headers: { "Content-Type": "application/json" }
+      });
+    }));
+    const onSave = vi.fn().mockResolvedValue({
+      status: "submitted",
+      remoteListingId: "listing-1",
+      message: "房源已提交审核。"
+    });
+    let renderer!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      renderer = TestRenderer.create(
+        <PublishScreen
+          isPublishing={false}
+          token="token-1"
+          listings={[editableListing()]}
+          user={{ id: "owner-1", email: "owner@example.edu", role: "USER" }}
+          publishAccess={{ status: "allowed", message: "" }}
+          editingListingId="listing-1"
+          onEditListing={() => undefined}
+          onSave={onSave}
+        />
+      );
+    });
+
+    await clickButton(renderer.root, "图片与分类");
+    await clickButton(renderer.root, "预览与提交");
+    await clickButton(renderer.root, "提交审核");
+    await clickButton(renderer.root, "确认提交审核");
+
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ remoteListingId: "listing-1" }), true);
+    expect(text(renderer.root)).toContain("房源已提交审核");
+    expect(renderer.root.findAllByType("button").some((node) => text(node) === "保存草稿")).toBe(false);
+    expect(renderer.root.findAllByType("button").some((node) => text(node).includes("提交审核"))).toBe(false);
+  });
 });
+
+function editableListing() {
+  return {
+    id: "listing-1",
+    title: "Westwood 主卧短租",
+    area: "Los Angeles · Westwood",
+    image: "",
+    availableFrom: "2026-08-20",
+    availableTo: "2026-12-31",
+    price: 1680,
+    originalPrice: 1900,
+    beds: 1,
+    baths: 1,
+    commute: "步行 12 分钟到 UCLA",
+    transit: "公交 5 分钟",
+    trust: "房东知情声明 · 待平台审核",
+    tags: ["带家具", "Wi-Fi", "房东知情"],
+    score: 4.8,
+    status: "DRAFT" as const
+  };
+}
+
+async function clickButton(root: TestRenderer.ReactTestInstance, label: string) {
+  const button = root.findAllByType("button").find((node) => text(node).includes(label));
+  if (!button) {
+    throw new Error(`Button ${label} was not found. Buttons: ${root.findAllByType("button").map(text).join(" | ")}. Screen: ${text(root)}`);
+  }
+  await act(async () => {
+    button.props.onClick();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+}
 
 function media(overrides: Record<string, unknown>) {
   return {

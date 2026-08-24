@@ -82,4 +82,11 @@ describe("product API errors", () => {
     expect(productErrorForStatus(code === "IMAGE_STORAGE_UNAVAILABLE" ? 503 : 409, code))
       .toMatchObject({ code, message });
   });
+
+  it("maps an early move-in confirmation to its actionable date message", () => {
+    expect(productErrorForStatus(409, "DEMO_MOVE_IN_NOT_STARTED")).toMatchObject({
+      code: "DEMO_MOVE_IN_NOT_STARTED",
+      message: "约定入住日期前不能确认入住。"
+    });
+  });
 });

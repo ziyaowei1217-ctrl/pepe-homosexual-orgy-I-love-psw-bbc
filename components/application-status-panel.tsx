@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { toProductApiError } from "@/lib/product-errors";
+import { useWindowFocusRefresh } from "@/lib/use-window-focus-refresh";
 import {
   cancelRentalApplication,
   getMyRentalApplications,
@@ -30,16 +31,18 @@ export function ApplicationStatusPanel({
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    setApplications(await getMyRentalApplications(token));
+    setError(null);
+    try {
+      setApplications(await getMyRentalApplications(token));
+    } catch (caught) {
+      setError(toProductApiError(caught).message);
+    }
   }, [token]);
 
   useEffect(() => {
-    let active = true;
-    void getMyRentalApplications(token)
-      .then((next) => { if (active) setApplications(next); })
-      .catch((caught) => { if (active) setError(toProductApiError(caught).message); });
-    return () => { active = false; };
-  }, [token]);
+    void load();
+  }, [load]);
+  useWindowFocusRefresh(load);
 
   async function withdraw(application: ApiRentalApplication) {
     if (!confirmAction("确认撤回这份申请？")) return;
@@ -74,7 +77,7 @@ export function ApplicationStatusPanel({
           const copy = getRentalApplicationStatusCopy(application.status);
           return (
             <article key={application.id} className="space-y-3 rounded-md border bg-white p-4">
-              <div className="flex items-start justify-between gap-3"><div><h3 className="font-extrabold">房源 {application.listingId}</h3><p className="text-sm text-muted-foreground">{application.moveIn.slice(0, 10)} 至 {application.moveOut.slice(0, 10)} · {application.scope === "TEAM" ? "小组" : "个人"}</p></div><Badge variant={application.status === "ACCEPTED" || application.status === "COMPLETED" ? "success" : "trust"}>{copy.label}</Badge></div>
+              <div className="flex items-start justify-between gap-3"><div><h3 className="font-extrabold">{application.listingTitle ?? "房源"}</h3><p className="text-sm text-muted-foreground">{application.moveIn.slice(0, 10)} 至 {application.moveOut.slice(0, 10)} · {application.scope === "TEAM" ? "小组" : "个人"}</p></div><Badge variant={application.status === "ACCEPTED" || application.status === "COMPLETED" ? "success" : "trust"}>{copy.label}</Badge></div>
               <p className="text-sm font-semibold text-muted-foreground">{copy.description}</p>
               {application.decisionReason ? <p className="rounded-md bg-secondary p-3 text-sm">{application.decisionReason}</p> : null}
               {application.status === "SUBMITTED" ? <Button variant="outline" disabled={pendingId === application.id} onClick={() => void withdraw(application)}>撤回申请</Button> : null}

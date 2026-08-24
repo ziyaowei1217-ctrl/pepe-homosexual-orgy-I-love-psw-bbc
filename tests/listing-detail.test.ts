@@ -62,6 +62,13 @@ describe("listing detail", () => {
     expect(new Set(gallery).size).toBe(gallery.length);
   });
 
+  it("does not put an empty image URL into the detail gallery", () => {
+    const gallery = buildListingGallery({ image: "" });
+
+    expect(gallery).toHaveLength(3);
+    expect(gallery).not.toContain("");
+  });
+
   it("wraps listing gallery navigation in both directions", () => {
     expect(getGalleryIndex(0, -1, 4)).toBe(3);
     expect(getGalleryIndex(3, 1, 4)).toBe(0);

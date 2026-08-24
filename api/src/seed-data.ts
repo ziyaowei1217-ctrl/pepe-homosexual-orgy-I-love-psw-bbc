@@ -389,8 +389,8 @@ export const seedListings = [
   }
 ].map((listing) => ({
   ...listing,
-  availableFrom: "2026-08-01",
-  availableTo: "2027-08-01"
+  availableFrom: "2026-08-01T00:00:00.000Z",
+  availableTo: "2027-08-01T00:00:00.000Z"
 }));
 
 export const seedRoommates = [

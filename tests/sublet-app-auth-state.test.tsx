@@ -113,12 +113,21 @@ class MemoryStorage implements Storage {
 }
 
 const localStorage = new MemoryStorage();
+const sessionStorage = new MemoryStorage();
+const windowEventListeners = new Map<string, Set<() => void>>();
 Object.defineProperty(globalThis, "window", {
   configurable: true,
   value: {
-    addEventListener: vi.fn(),
+    addEventListener: vi.fn((type: string, listener: () => void) => {
+      const listeners = windowEventListeners.get(type) ?? new Set<() => void>();
+      listeners.add(listener);
+      windowEventListeners.set(type, listeners);
+    }),
     localStorage,
-    removeEventListener: vi.fn(),
+    sessionStorage,
+    removeEventListener: vi.fn((type: string, listener: () => void) => {
+      windowEventListeners.get(type)?.delete(listener);
+    }),
     requestAnimationFrame: (callback: FrameRequestCallback) => {
       callback(0);
       return 1;
@@ -203,6 +212,8 @@ const submittedRentalApplication = {
 beforeEach(() => {
   vi.clearAllMocks();
   localStorage.clear();
+  sessionStorage.clear();
+  windowEventListeners.clear();
   navigationMock.pathname = "/host/listings";
   authPanelCapture.current = null;
   adminStepUpPanelCapture.current = null;
@@ -441,6 +452,32 @@ describe("SubletApp auth state flow", () => {
     expect(renderedText(renderer.root)).toContain("房东申请箱");
     expect(renderedText(renderer.root)).toContain("Lin");
     expect(api.apiGet).toHaveBeenCalledWith("/applications/host-inbox", "stored-host-token");
+    await unmount(renderer);
+  });
+
+  it("refreshes the owner's listing review status when the page regains focus", async () => {
+    navigationMock.pathname = "/host/listings";
+    writeStoredAuthSession("stored-host-token");
+    let ownedListingReads = 0;
+    vi.mocked(api.apiGet).mockImplementation(async (path) => {
+      if (path !== "/listings/mine") return [];
+      ownedListingReads += 1;
+      return [{
+        ...headerOffsetListing,
+        title: "聚焦刷新房源",
+        status: ownedListingReads === 1 ? "SUBMITTED" : "APPROVED"
+      }];
+    });
+    const renderer = await renderSubletApp("Publish");
+    expect(renderedText(renderer.root)).toContain("审核中");
+
+    await act(async () => {
+      windowEventListeners.get("focus")?.forEach((listener) => listener());
+      await flushMicrotasks();
+    });
+
+    expect(ownedListingReads).toBeGreaterThanOrEqual(2);
+    expect(renderedText(renderer.root)).toContain("已上线");
     await unmount(renderer);
   });
 
@@ -774,6 +811,40 @@ describe("SubletApp auth state flow", () => {
     expect(capturedAuthPanel().token).toBeNull();
     expect(capturedAuthPanel().user).toBeNull();
     await unmount(renderer);
+  });
+
+  it("restores administrator step-up verification after an admin route remount", async () => {
+    navigationMock.pathname = "/admin/trust";
+    writeStoredAuthSession("stored-admin-token");
+    vi.mocked(api.getSessionUser).mockResolvedValue({ ...user, role: "ADMIN" });
+    vi.mocked(api.getAdminListingReviewQueue).mockResolvedValue([adminReviewListing]);
+    const firstRenderer = await renderSubletApp("Trust");
+    const firstStepUpPanel = adminStepUpPanelCapture.current as {
+      onVerified: (session: { accessToken: string; reauthenticatedUntil: string }) => void;
+    };
+
+    await act(async () => {
+      firstStepUpPanel.onVerified({
+        accessToken: "enhanced-token",
+        reauthenticatedUntil: new Date(Date.now() + 30 * 60 * 1000).toISOString()
+      });
+      await flushMicrotasks();
+    });
+    await unmount(firstRenderer);
+
+    vi.mocked(api.approveAdminListing).mockClear();
+    const secondRenderer = await renderSubletApp("Trust");
+    await act(async () => {
+      clickButton(secondRenderer.root, "通过");
+      await flushMicrotasks();
+    });
+    await act(async () => {
+      clickButton(secondRenderer.root, "确认通过");
+      await flushMicrotasks();
+    });
+
+    expect(api.approveAdminListing).toHaveBeenCalledWith("enhanced-token", adminReviewListing.id);
+    await unmount(secondRenderer);
   });
 
   it("clears the application-owned administrator session when metrics 401 follows a catalog refresh 503", async () => {

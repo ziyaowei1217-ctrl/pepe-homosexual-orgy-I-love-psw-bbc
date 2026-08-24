@@ -140,7 +140,10 @@ export class DemoPaymentsService {
         throw new NotFoundException("Held fund not found");
       }
       if (Date.now() < application.moveIn.getTime()) {
-        throw new ConflictException("约定入住日期前不能确认入住");
+        throw new ConflictException({
+          code: "DEMO_MOVE_IN_NOT_STARTED",
+          message: "约定入住日期前不能确认入住"
+        });
       }
       if (heldFund.status === "REFUNDED") throw new ConflictException("已退款资金不能确认入住");
       const isRenter = application.submitterId === userId;

@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { toProductApiError } from "@/lib/product-errors";
+import { useWindowFocusRefresh } from "@/lib/use-window-focus-refresh";
 import {
   acceptRentalApplication,
   cancelRentalApplication,
@@ -33,17 +34,18 @@ export function HostApplicationInbox({
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    const next = await getHostRentalApplications(token);
-    setApplications(next);
+    setError(null);
+    try {
+      setApplications(await getHostRentalApplications(token));
+    } catch (caught) {
+      setError(toProductApiError(caught).message);
+    }
   }, [token]);
 
   useEffect(() => {
-    let active = true;
-    void getHostRentalApplications(token)
-      .then((next) => { if (active) setApplications(next); })
-      .catch((caught) => { if (active) setError(toProductApiError(caught).message); });
-    return () => { active = false; };
-  }, [token]);
+    void load();
+  }, [load]);
+  useWindowFocusRefresh(load);
 
   async function decide(application: ApiRentalApplication, decision: "accept" | "reject") {
     if (!confirmDecision(decision === "accept" ? "确认接受这份申请？" : "确认拒绝这份申请？")) return;
@@ -97,7 +99,7 @@ export function HostApplicationInbox({
             const copy = getRentalApplicationStatusCopy(application.status);
             return (
               <article key={application.id} className="space-y-3 rounded-md border bg-white p-4">
-                <div className="flex items-start justify-between gap-3"><div><h3 className="font-extrabold">房源 {application.listingId}</h3><p className="text-sm text-muted-foreground">{application.memberSnapshots.map((member) => member.displayName).join("、")} · {application.moveIn.slice(0, 10)} 至 {application.moveOut.slice(0, 10)}</p></div><Badge variant={application.status === "ACCEPTED" || application.status === "COMPLETED" ? "success" : "trust"}>{copy.label}</Badge></div>
+                <div className="flex items-start justify-between gap-3"><div><h3 className="font-extrabold">{application.listingTitle ?? "房源"}</h3><p className="text-sm text-muted-foreground">{application.memberSnapshots.map((member) => member.displayName).join("、")} · {application.moveIn.slice(0, 10)} 至 {application.moveOut.slice(0, 10)}</p></div><Badge variant={application.status === "ACCEPTED" || application.status === "COMPLETED" ? "success" : "trust"}>{copy.label}</Badge></div>
                 <p className="text-sm font-semibold">{application.schoolOrOccupation}</p>
                 {application.note ? <p className="rounded-md bg-secondary p-3 text-sm">{application.note}</p> : null}
                 {application.status === "SUBMITTED" ? <div className="flex gap-2"><Button variant="accept" disabled={pendingId === application.id} onClick={() => void decide(application, "accept")}>接受申请</Button><Button variant="outline" disabled={pendingId === application.id} onClick={() => void decide(application, "reject")}>拒绝申请</Button></div> : null}

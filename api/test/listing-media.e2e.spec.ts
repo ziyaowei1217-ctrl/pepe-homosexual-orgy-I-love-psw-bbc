@@ -5,8 +5,10 @@ import { Test } from "@nestjs/testing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AuthGuard } from "../src/auth/auth.guard";
+import { AdminGuard } from "../src/auth/admin.guard";
 import { AuthenticatedUserService } from "../src/auth/authenticated-user.service";
 import {
+  AdminListingMediaController,
   ListingMediaController,
   PublicListingMediaController
 } from "../src/listing-media/listing-media.controller";
@@ -21,7 +23,7 @@ describe("listing media HTTP API", () => {
   beforeEach(async () => {
     service = createService();
     const moduleRef = await Test.createTestingModule({
-      controllers: [ListingMediaController, PublicListingMediaController],
+      controllers: [ListingMediaController, PublicListingMediaController, AdminListingMediaController],
       providers: [{ provide: ListingMediaService, useValue: service }]
     })
       .overrideGuard(AuthGuard)
@@ -35,6 +37,8 @@ describe("listing media HTTP API", () => {
           return true;
         }
       })
+      .overrideGuard(AdminGuard)
+      .useValue({ canActivate: () => true })
       .compile();
 
     app = moduleRef.createNestApplication();
@@ -170,6 +174,20 @@ describe("listing media HTTP API", () => {
       });
   });
 
+  it("delivers ready media through the protected administrator review route", async () => {
+    await request(app.getHttpServer())
+      .get("/api/v1/admin/listings/listing-1/media/media-1/content")
+      .expect(200)
+      .expect("Content-Type", "image/png")
+      .expect("Cache-Control", "private, no-store")
+      .expect("X-Content-Type-Options", "nosniff")
+      .expect(({ body }: { body: Buffer }) => {
+        expect(body).toEqual(Buffer.from([1, 2, 3, 4]));
+      });
+
+    expect(service.readForReview).toHaveBeenCalledWith("listing-1", "media-1");
+  });
+
   it("returns a safe 404 before media is published", async () => {
     await request(app.getHttpServer())
       .get("/api/v1/listing-media/unpublished/content")
@@ -220,7 +238,11 @@ function createService() {
         });
       }
       return { bytes: Buffer.from([1, 2, 3, 4]), mimeType: "image/png" };
-    })
+    }),
+    readForReview: vi.fn(async () => ({
+      bytes: Buffer.from([1, 2, 3, 4]),
+      mimeType: "image/png"
+    }))
   };
 }
 

@@ -8,6 +8,7 @@
     "build": "prisma generate && nest build",
     "test:cli-build": "npm run build && RUN_CLI_BUILD_SMOKE=1 vitest run test/operations-cli-build.spec.ts",
     "start": "node dist/src/main.js",
+    "pretest": "prisma generate",
     "test": "vitest run",
     "typecheck": "prisma generate && tsc --noEmit",
     "launch:check": "npm run test && npm run typecheck && npm run build && DATABASE_URL=\"${DATABASE_URL:-postgresql://sublet:sublet@localhost:5432/sublet_pipeline?schema=public}\" prisma validate",

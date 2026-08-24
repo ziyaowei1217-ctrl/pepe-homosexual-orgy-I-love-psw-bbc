@@ -5,6 +5,7 @@ import { getListingMediaStorageConfig } from "../config/env";
 import { PrismaModule } from "../prisma/prisma.module";
 import { PrismaService } from "../prisma/prisma.service";
 import {
+  AdminListingMediaController,
   ListingMediaController,
   PublicListingMediaController
 } from "./listing-media.controller";
@@ -17,7 +18,7 @@ import {
 
 @Module({
   imports: [AuthModule, PrismaModule],
-  controllers: [ListingMediaController, PublicListingMediaController],
+  controllers: [ListingMediaController, PublicListingMediaController, AdminListingMediaController],
   providers: [
     {
       provide: LISTING_MEDIA_STORAGE,

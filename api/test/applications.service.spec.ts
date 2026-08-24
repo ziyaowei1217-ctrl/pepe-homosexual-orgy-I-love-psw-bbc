@@ -93,8 +93,12 @@ describe("ApplicationsService draft and submit workflow", () => {
     });
 
     await expect(service.findOne("stranger-1", solo.id)).rejects.toBeInstanceOf(NotFoundException);
-    expect((await service.mine("renter-1")).map((record) => record.id).sort()).toEqual(["application-1", "application-team"]);
-    expect((await service.hostInbox("owner-1")).map((record) => record.id).sort()).toEqual(["application-1", "application-team"]);
+    const mine = await service.mine("renter-1");
+    const hostInbox = await service.hostInbox("owner-1");
+    expect(mine.map((record) => record.id).sort()).toEqual(["application-1", "application-team"]);
+    expect(hostInbox.map((record) => record.id).sort()).toEqual(["application-1", "application-team"]);
+    expect(mine.every((record) => record.listingTitle === "Westwood room")).toBe(true);
+    expect(hostInbox.every((record) => record.listingTitle === "Westwood room")).toBe(true);
     expect((await service.findOne("renter-2", "application-team")).id).toBe("application-team");
   });
 

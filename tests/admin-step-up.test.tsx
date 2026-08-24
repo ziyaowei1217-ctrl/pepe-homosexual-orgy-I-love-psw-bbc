@@ -8,7 +8,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import * as api from "../lib/api";
 import { AdminStepUpPanel } from "../components/admin-step-up-panel";
-import { getActiveAdminStepUpToken } from "../lib/admin-step-up";
+import {
+  clearStoredAdminStepUpSession,
+  getActiveAdminStepUpToken,
+  readStoredAdminStepUpSession,
+  writeStoredAdminStepUpSession
+} from "../lib/admin-step-up";
 import { ProductApiError } from "../lib/product-errors";
 
 vi.mock("../lib/api", async () => {
@@ -76,6 +81,43 @@ describe("administrator step-up", () => {
         now
       )
     ).toBeNull();
+  });
+
+  it("restores an unexpired enhanced session only for the same administrator", () => {
+    const storage = new MemoryStorage();
+    const session = {
+      accessToken: "enhanced",
+      reauthenticatedUntil: "2026-08-12T08:30:00.000Z"
+    };
+
+    writeStoredAdminStepUpSession(storage, { id: "admin-1", email: "admin@example.com" }, session);
+
+    expect(readStoredAdminStepUpSession(
+      storage,
+      { id: "admin-1", email: "admin@example.com" },
+      Date.parse("2026-08-12T08:05:00.000Z")
+    )).toEqual(session);
+    expect(readStoredAdminStepUpSession(
+      storage,
+      { id: "admin-2", email: "other@example.com" },
+      Date.parse("2026-08-12T08:05:00.000Z")
+    )).toBeNull();
+  });
+
+  it("removes an expired enhanced session from tab storage", () => {
+    const storage = new MemoryStorage();
+    writeStoredAdminStepUpSession(storage, { id: "admin-1", email: "admin@example.com" }, {
+      accessToken: "enhanced",
+      reauthenticatedUntil: "2026-08-12T08:30:00.000Z"
+    });
+
+    expect(readStoredAdminStepUpSession(
+      storage,
+      { id: "admin-1", email: "admin@example.com" },
+      Date.parse("2026-08-12T08:30:00.000Z")
+    )).toBeNull();
+    clearStoredAdminStepUpSession(storage);
+    expect(storage.length).toBe(0);
   });
 
   it("hands a verified memory-only enhanced session to the administrator workspace", async () => {
@@ -263,6 +305,16 @@ describe("administrator step-up", () => {
     await unmount(renderer);
   });
 });
+
+class MemoryStorage implements Storage {
+  private readonly values = new Map<string, string>();
+  get length() { return this.values.size; }
+  clear() { this.values.clear(); }
+  getItem(key: string) { return this.values.get(key) ?? null; }
+  key(index: number) { return Array.from(this.values.keys())[index] ?? null; }
+  removeItem(key: string) { this.values.delete(key); }
+  setItem(key: string, value: string) { this.values.set(key, value); }
+}
 
 async function renderPanel(
   onVerified: ReturnType<typeof vi.fn>,

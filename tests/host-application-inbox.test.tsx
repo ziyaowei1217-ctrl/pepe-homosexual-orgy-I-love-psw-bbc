@@ -25,6 +25,8 @@ describe("HostApplicationInbox", () => {
     });
 
     expect(text(renderer.root)).toContain("等待房东处理");
+    expect(text(renderer.root)).toContain("Westwood 阳光主卧");
+    expect(text(renderer.root)).not.toContain("房源 listing-1");
     const accept = renderer.root.findAllByType("button").find((node) => text(node).includes("接受申请"))!;
     await act(async () => accept.props.onClick());
     expect(confirmDecision).toHaveBeenCalledOnce();
@@ -68,6 +70,7 @@ function application(status: string) {
   return {
     id: "application-1",
     listingId: "listing-1",
+    listingTitle: "Westwood 阳光主卧",
     listingOwnerId: "owner-1",
     submitterId: "renter-1",
     teamId: null,

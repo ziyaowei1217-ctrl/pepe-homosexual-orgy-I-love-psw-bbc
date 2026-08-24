@@ -14,6 +14,7 @@ import {
 } from "@nestjs/common";
 
 import { AuthGuard, type AuthenticatedRequest } from "../auth/auth.guard";
+import { AdminGuard } from "../auth/admin.guard";
 import {
   InitializeListingMediaUploadDto,
   ReorderListingMediaDto
@@ -110,6 +111,26 @@ export class PublicListingMediaController {
     response.setHeader("Content-Type", content.mimeType);
     response.setHeader("Content-Length", String(content.bytes.length));
     response.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+    response.setHeader("X-Content-Type-Options", "nosniff");
+    return response.send(content.bytes);
+  }
+}
+
+@UseGuards(AuthGuard, AdminGuard)
+@Controller("admin/listings/:listingId/media")
+export class AdminListingMediaController {
+  constructor(@Inject(ListingMediaService) private readonly media: ListingMediaService) {}
+
+  @Get(":mediaId/content")
+  async content(
+    @Param("listingId") listingId: string,
+    @Param("mediaId") mediaId: string,
+    @Res() response: BinaryResponse
+  ) {
+    const content = await this.media.readForReview(listingId, mediaId);
+    response.setHeader("Content-Type", content.mimeType);
+    response.setHeader("Content-Length", String(content.bytes.length));
+    response.setHeader("Cache-Control", "private, no-store");
     response.setHeader("X-Content-Type-Options", "nosniff");
     return response.send(content.bytes);
   }

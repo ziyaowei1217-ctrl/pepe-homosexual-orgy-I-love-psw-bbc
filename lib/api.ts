@@ -8,7 +8,7 @@ export type ApiListing = {
   id: string;
   title: string;
   area: string;
-  image: string;
+  image: string | null;
   price: number;
   originalPrice: number;
   beds: number;
@@ -27,7 +27,9 @@ export type ApiListing = {
   mediaCount?: number;
   media?: Array<{
     id: string;
-    url: string;
+    url?: string;
+    contentUrl?: string;
+    reviewContentUrl?: string;
     kind: string;
     sortOrder: number;
   }>;
@@ -443,6 +445,29 @@ export function getAdminListingReviewQueue(token: string) {
   return apiGet<ApiListing[]>("/admin/listings/review-queue", token);
 }
 
+export async function getAdminListingMediaContent(token: string, path: string) {
+  if (!/^\/api\/v1\/admin\/listings\/[^/]+\/media\/[^/]+\/content$/.test(path)) {
+    throw productErrorForStatus(400);
+  }
+
+  let response: Response;
+  try {
+    response = await fetch(`${apiOrigin()}${path}`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        ...(getBrowserDeviceId() ? { "X-Device-ID": getBrowserDeviceId()! } : {})
+      }
+    });
+  } catch (error) {
+    throw toProductApiError(error);
+  }
+
+  if (!response.ok) {
+    throw productErrorForStatus(response.status, await readSafeErrorCode(response));
+  }
+  return response.blob();
+}
+
 export function approveAdminListing(token: string, id: string) {
   return apiPost<ApiListing>(
     `/admin/listings/${encodeURIComponent(id)}/approve`,
@@ -538,4 +563,8 @@ async function readSafeErrorCode(response: Response) {
   } catch {
     return undefined;
   }
+}
+
+function apiOrigin() {
+  return new URL(API_BASE_URL).origin;
 }

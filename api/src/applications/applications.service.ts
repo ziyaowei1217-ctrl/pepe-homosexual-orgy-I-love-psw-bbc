@@ -28,6 +28,13 @@ const unavailablePaymentCommands: ApplicationPaymentCommands = {
     throw new Error("Demo payment commands are not configured");
   }
 };
+const applicationListingInclude = {
+  listing: {
+    select: {
+      title: true
+    }
+  }
+};
 
 @Injectable()
 export class ApplicationsService {
@@ -115,7 +122,8 @@ export class ApplicationsService {
           { team: { members: { some: { userId } } } }
         ]
       },
-      orderBy: { updatedAt: "desc" }
+      orderBy: { updatedAt: "desc" },
+      include: applicationListingInclude
     });
     return applications.map(presentRentalApplication);
   }
@@ -123,7 +131,8 @@ export class ApplicationsService {
   async hostInbox(userId: string) {
     const applications = await this.prisma.rentalApplication.findMany({
       where: { listingOwnerId: userId },
-      orderBy: { updatedAt: "desc" }
+      orderBy: { updatedAt: "desc" },
+      include: applicationListingInclude
     });
     return applications.map(presentRentalApplication);
   }
