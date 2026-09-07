@@ -2,6 +2,7 @@ type ApplicationStatus =
   | "DRAFT"
   | "SUBMITTED"
   | "ACCEPTED"
+  | "CANCELLATION_PENDING"
   | "REJECTED"
   | "WITHDRAWN"
   | "CANCELLED"

@@ -31,6 +31,16 @@ describe("AuthenticatedUserService", () => {
     expect(rejection).toBeInstanceOf(UnauthorizedException);
     expect((rejection as UnauthorizedException).message).toBe("Invalid bearer token");
   });
+
+  it.each([undefined, "", 42, { id: "user-1" }])("rejects an invalid signed token subject: %j", async (sub) => {
+    const jwt = new JwtService({ secret: "test-secret" });
+    const token = await jwt.signAsync({ sub });
+    const service = new AuthenticatedUserService(jwt, {
+      user: { findUnique: async () => { throw new Error("Invalid subjects must not reach the database"); } }
+    } as never);
+
+    await expect(service.fromBearerToken(token)).rejects.toBeInstanceOf(UnauthorizedException);
+  });
 });
 
 async function rejectionOf(promise: Promise<unknown>) {

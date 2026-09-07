@@ -31,7 +31,6 @@ export type ProductCapabilityResult = {
 };
 
 const protectedCapabilities = new Set<ProductCapability>([
-  "favorite-listing",
   "message-host",
   "request-viewing",
   "roommate-action",

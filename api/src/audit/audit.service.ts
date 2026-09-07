@@ -20,7 +20,7 @@ const sixDigitCode = /(?<!\p{Nd})\p{Nd}(?:[^\p{L}\p{N}]*\p{Nd}){5}(?!\p{Nd})/u;
 
 type AuditMetadataKey = (typeof auditMetadataKeys)[number];
 
-export type AuditMetadata = Partial<Record<AuditMetadataKey, string>>;
+export type AuditMetadata = Partial<Record<AuditMetadataKey, string>> & { reviewedRevision?: number };
 
 export type AuditInput = AuditActor & {
   action: string;
@@ -104,6 +104,9 @@ function sanitizeMetadata(metadata: AuditMetadata | undefined): Prisma.InputJson
       sanitized[key] =
         key === "reason" ? sanitizeReason(value) : key === "code" ? sanitizeCode(value) : sanitizeMethod(value);
     }
+  }
+  if (typeof metadata.reviewedRevision === "number" && Number.isSafeInteger(metadata.reviewedRevision) && metadata.reviewedRevision >= 0) {
+    sanitized.reviewedRevision = metadata.reviewedRevision;
   }
   return sanitized;
 }

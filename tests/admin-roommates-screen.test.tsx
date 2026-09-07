@@ -1,9 +1,11 @@
+// @vitest-environment jsdom
+
 import {
   act,
   create,
   type ReactTestInstance,
   type ReactTestRenderer
-} from "react-test-renderer";
+} from "./support/dom-test-renderer";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AdminRoommatesScreen } from "../components/admin-roommates-screen";
@@ -49,7 +51,7 @@ const completeDraft: UpsertAdminRoommateInput = {
   name: "Lina Park",
   age: 23,
   role: "UCLA · 研究生 · 2026 秋季",
-  image: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=900&q=80",
+  image: "",
   match: 90,
   budget: "$1,650/月",
   commute: "Westwood / Sawtelle",
@@ -284,7 +286,9 @@ function findButton(root: ReactTestInstance, label: string) {
 
 function findInput(root: ReactTestInstance, label: string) {
   const input = root.findAllByType("input").find((candidate) => {
-    const labelElement = candidate.parent?.parent;
+    const labelElement = candidate.parent?.type === "label"
+      ? candidate.parent
+      : candidate.parent?.parent;
     return labelElement?.type === "label" && renderedText(labelElement).startsWith(label);
   });
   if (!input) throw new Error(`Input ${label} was not found`);

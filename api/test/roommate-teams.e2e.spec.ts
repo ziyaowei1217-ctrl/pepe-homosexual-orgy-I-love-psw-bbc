@@ -49,6 +49,14 @@ describe("roommate teams HTTP API", () => {
 
   afterEach(async () => app.close());
 
+  it("serializes the absence of a current team as JSON null", async () => {
+    teams.currentTeam = null;
+    const response = await request(app.getHttpServer())
+      .get("/api/v1/roommate-teams/current").auth(token, { type: "bearer" }).expect(200);
+    expect(response.text).toBe("null");
+    expect(response.headers["content-type"]).toContain("application/json");
+  });
+
   it("requires authentication for every team route", async () => {
     const http = request(app.getHttpServer());
     await http.get("/api/v1/roommate-teams/current").expect(401);
@@ -87,7 +95,7 @@ describe("roommate teams HTTP API", () => {
     await http.post("/api/v1/roommate-teams/invites/invite-1/decline").auth(token, { type: "bearer" }).expect(201);
     await http.post("/api/v1/roommate-teams/invites/invite-1/cancel").auth(token, { type: "bearer" }).expect(201);
     await http.get("/api/v1/roommate-teams/current").auth(token, { type: "bearer" }).expect(200);
-    await http.post("/api/v1/roommate-teams/current/leave").auth(token, { type: "bearer" }).expect(201);
+    await http.post("/api/v1/roommate-teams/current/leave").auth(token, { type: "bearer" }).send({ teamId: " team-1 " }).expect(201);
 
     expect(teams.calls).toEqual([
       ["invite", "user-a", { roommateProfileId: "profile-b" }],
@@ -96,17 +104,26 @@ describe("roommate teams HTTP API", () => {
       ["decline", "user-a", "invite-1"],
       ["cancel", "user-a", "invite-1"],
       ["current", "user-a"],
-      ["leave", "user-a"]
+      ["leave", "user-a", "team-1"]
     ]);
+  });
+
+  it.each([
+    {}, { teamId: null }, { teamId: "" }, { teamId: "   " }, { teamId: 123 },
+    { teamId: [] }, { teamId: "x".repeat(192) }, { teamId: "team-1", unexpected: true }
+  ])("rejects invalid leave target %j", async (body) => {
+    await request(app.getHttpServer()).post("/api/v1/roommate-teams/current/leave")
+      .auth(token, { type: "bearer" }).send(body).expect(400);
   });
 });
 
 function createRoommateTeamsStub() {
   const service = {
     calls: [] as unknown[][],
+    currentTeam: { id: "team-1", status: "ACTIVE", members: [] } as { id: string; status: string; members: unknown[] } | null,
     current: async (userId: string) => {
       service.calls.push(["current", userId]);
-      return { id: "team-1", status: "ACTIVE", members: [] };
+      return service.currentTeam;
     },
     listInvites: async (userId: string) => {
       service.calls.push(["listInvites", userId]);
@@ -128,8 +145,8 @@ function createRoommateTeamsStub() {
       service.calls.push(["cancel", userId, inviteId]);
       return { id: inviteId, status: "CANCELLED" };
     },
-    leave: async (userId: string) => {
-      service.calls.push(["leave", userId]);
+    leave: async (userId: string, teamId: string) => {
+      service.calls.push(["leave", userId, teamId]);
       return { id: "team-1", status: "DISSOLVED" };
     }
   };

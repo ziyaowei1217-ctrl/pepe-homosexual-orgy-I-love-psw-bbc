@@ -21,7 +21,8 @@ export function AdminStepUpPanel({
   email,
   onVerified,
   onCancel,
-  onAuthenticationError
+  onAuthenticationError,
+  assertSessionCurrent
 }: {
   open: boolean;
   sessionToken: string;
@@ -29,6 +30,7 @@ export function AdminStepUpPanel({
   onVerified: (session: AdminStepUpSession) => void;
   onCancel: () => void;
   onAuthenticationError?: (error: unknown) => boolean;
+  assertSessionCurrent?: () => void;
 }) {
   const panelId = useId();
   const [step, setStep] = useState<"request" | "verify">("request");
@@ -52,7 +54,9 @@ export function AdminStepUpPanel({
     setPending(true);
     setError(null);
     try {
+      assertSessionCurrent?.();
       const response = await requestAdminStepUpCode(sessionToken);
+      assertSessionCurrent?.();
       setExpiresAt(response.expiresAt);
       setCode(response.devCode ? normalizeVerificationCode(response.devCode) : "");
       setStep("verify");
@@ -81,7 +85,9 @@ export function AdminStepUpPanel({
     setPending(true);
     setError(null);
     try {
+      assertSessionCurrent?.();
       const session = await verifyAdminStepUpCode(sessionToken, normalizedCode);
+      assertSessionCurrent?.();
       if (!getActiveAdminStepUpToken(session)) {
         setError("操作未完成，请稍后重试。");
         return;

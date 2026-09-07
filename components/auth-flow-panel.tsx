@@ -32,6 +32,7 @@ export type AuthFlowPanelProps = {
   apiError: string | null;
   onboardingReason: OnboardingReason | null;
   isPinnedToPublish: boolean;
+  contextMessage?: string | null;
   onAuthenticated: (response: VerifyEmailResponse) => void;
   onProfileSave: (draft: UpdateProfileInput) => Promise<ApiProfile | null>;
   onOnboardingDismiss: () => void;
@@ -50,6 +51,7 @@ export function AuthFlowPanel({
   apiError,
   onboardingReason,
   isPinnedToPublish,
+  contextMessage,
   onAuthenticated,
   onProfileSave,
   onOnboardingDismiss,
@@ -144,7 +146,7 @@ export function AuthFlowPanel({
     if (result.hasDevelopmentCode) {
       onToast("本地开发验证码已填入");
     } else if (!isDevelopment) {
-      onToast("验证码已发送");
+      onToast("请检查邮箱，未收到验证码请联系管理员获取邀请");
     }
   }
 
@@ -260,6 +262,11 @@ export function AuthFlowPanel({
               <h2 id={`${panelId}-title`} className="text-xl font-black text-primary">
                 邮箱登录
               </h2>
+              {contextMessage ? (
+                <p className="mt-2 text-sm font-semibold text-muted-foreground">
+                  {contextMessage}
+                </p>
+              ) : null}
             </div>
             {!isPinnedToPublish ? (
               <Button
@@ -300,15 +307,11 @@ export function AuthFlowPanel({
             </form>
           ) : (
             <form className="mt-5 grid gap-3" onSubmit={handleCodeSubmit} noValidate>
-              {showNeutralDevelopmentGuidance ? (
-                <p className="text-sm font-semibold text-muted-foreground">
-                  如果该邮箱具备测试资格，请输入收到的验证码；否则请联系测试管理员。
-                </p>
-              ) : (
-                <p className="text-sm font-semibold text-muted-foreground">
-                  验证码已发送至 <strong className="text-primary">{sentEmail}</strong>
-                </p>
-              )}
+              <p className="text-sm font-semibold text-muted-foreground">
+                若该邮箱已获邀请或已有账户，验证码将发送至{" "}
+                <strong className="text-primary">{sentEmail}</strong>
+                ；未收到请联系管理员获取邀请。
+              </p>
               <label
                 htmlFor={`${panelId}-code`}
                 className="grid gap-1 text-xs font-black uppercase text-muted-foreground"
@@ -409,6 +412,9 @@ function AuthenticatedProfilePanel({
   onLogout,
   onClose
 }: AuthenticatedProfilePanelProps) {
+  const organizationLabel =
+    draft.role === "lister" || draft.role === "both" ? "学校或公司" : "学校";
+
   function updateDraft(field: keyof UpdateProfileInput, value: string) {
     onDraftChange({
       ...draft,
@@ -467,7 +473,7 @@ function AuthenticatedProfilePanel({
               />
               <ProfileField
                 id={`${panelId}-school`}
-                label="学校"
+                label={organizationLabel}
                 name="school"
                 autoComplete="organization"
                 value={draft.school ?? ""}

@@ -32,6 +32,7 @@ export class MarketplaceService {
 
   async createRoommateProfile(ownerId: string, email: string, dto: CreateRoommateProfileDto) {
     this.assertBudgetRange(dto.budgetMin, dto.budgetMax);
+    this.assertDateRange(dateValue(dto.moveInDate), dateValue(dto.moveOutDate));
     const profile = await this.ensureProfile(email);
 
     return this.prisma.$transaction(async (transaction) => {
@@ -55,9 +56,12 @@ export class MarketplaceService {
   }
 
   async updateRoommateProfile(ownerId: string, email: string, id: string, dto: UpdateRoommateProfileDto) {
-    this.assertBudgetRange(dto.budgetMin, dto.budgetMax);
     const profile = await this.ensureProfile(email);
     return this.prisma.$transaction(async (transaction) => {
+      // Serialize partial updates before reading the bounds they will merge with.
+      // Non-key row locking remains compatible with foreign-key readers.
+      await transaction.$queryRaw`SELECT "id" FROM "roommate_profiles"
+        WHERE "id" = ${id}::uuid AND "user_id" = ${profile.id}::uuid FOR NO KEY UPDATE`;
       const existing = await transaction.roommateMatchingProfile.findFirst({
         where: {
           id,
@@ -65,6 +69,11 @@ export class MarketplaceService {
         }
       });
       if (!existing) throw new NotFoundException("Roommate profile not found");
+      this.assertBudgetRange(
+        dto.budgetMin !== undefined ? dto.budgetMin : existing.budgetMin,
+        dto.budgetMax !== undefined ? dto.budgetMax : existing.budgetMax
+      );
+      this.assertDateRange(dateValue(dto.moveInDate) ?? existing.moveInDate, dateValue(dto.moveOutDate) ?? existing.moveOutDate);
 
       const matchingProfile = await transaction.roommateMatchingProfile.update({
         where: { id },
@@ -83,9 +92,16 @@ export class MarketplaceService {
     });
   }
 
-  private assertBudgetRange(budgetMin?: number, budgetMax?: number) {
-    if (budgetMin !== undefined && budgetMax !== undefined && budgetMin > budgetMax) {
+  private assertBudgetRange(budgetMin?: number | null, budgetMax?: number | null) {
+    if (budgetMin != null && budgetMax != null && budgetMin > budgetMax) {
       throw new BadRequestException("budgetMin cannot be greater than budgetMax");
+    }
+  }
+
+  private assertDateRange(moveInDate?: Date | null, moveOutDate?: Date | null) {
+    // These columns are date-only; compare the UTC dates PostgreSQL stores.
+    if (moveInDate && moveOutDate && moveInDate.toISOString().slice(0, 10) > moveOutDate.toISOString().slice(0, 10)) {
+      throw new BadRequestException("moveInDate cannot be later than moveOutDate");
     }
   }
 

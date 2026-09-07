@@ -25,6 +25,7 @@ import { useWindowFocusRefresh } from "@/lib/use-window-focus-refresh";
 
 type PendingDecision = {
   listingId: string;
+  revision: number | undefined;
   kind: "approve" | "reject";
   reason: string;
 };
@@ -38,6 +39,7 @@ export function AdminTrustScreen({
   onTrustMetricsChanged,
   onToast,
   onAuthenticationError,
+  assertSessionCurrent,
   trustMetrics = []
 }: {
   token: string | null;
@@ -48,6 +50,7 @@ export function AdminTrustScreen({
   onTrustMetricsChanged: () => Promise<void>;
   onToast: (message: string) => void;
   onAuthenticationError?: (error: unknown) => void;
+  assertSessionCurrent?: () => void;
   trustMetrics?: ApiTrustQueue[];
 }) {
   const [listings, setListings] = useState<ApiListing[]>([]);
@@ -129,6 +132,10 @@ export function AdminTrustScreen({
 
   async function submitDecision() {
     if (!pendingDecision || submitting) return;
+    if (pendingDecision.revision === undefined || !Number.isInteger(pendingDecision.revision)) {
+      onToast("房源审核版本不可用，请刷新审核队列后重试。");
+      return;
+    }
     const enhancedToken = getActiveAdminStepUpToken(stepUpSession);
     if (!enhancedToken) {
       onStepUpRequired();
@@ -138,16 +145,19 @@ export function AdminTrustScreen({
 
     setSubmitting(true);
     try {
+      assertSessionCurrent?.();
       if (pendingDecision.kind === "approve") {
-        await approveAdminListing(enhancedToken, pendingDecision.listingId);
+        await approveAdminListing(enhancedToken, pendingDecision.listingId, pendingDecision.revision);
       } else {
         await rejectAdminListing(
           enhancedToken,
           pendingDecision.listingId,
-          pendingDecision.reason.trim()
+          pendingDecision.reason.trim(),
+          pendingDecision.revision
         );
       }
 
+      assertSessionCurrent?.();
       setListings((current) => current.filter((listing) => listing.id !== pendingDecision.listingId));
       setPendingDecision(null);
       try {
@@ -289,11 +299,11 @@ export function AdminTrustScreen({
                 )}
                 {!decision ? (
                   <div className="flex flex-wrap gap-2">
-                    <Button type="button" variant="trust" disabled={submitting} onClick={() => setPendingDecision({ listingId: listing.id, kind: "approve", reason: "" })}>
+                    <Button type="button" variant="trust" disabled={submitting} onClick={() => setPendingDecision({ listingId: listing.id, revision: listing.revision, kind: "approve", reason: "" })}>
                       <CheckCircle2 data-icon="inline-start" />
                       通过
                     </Button>
-                    <Button type="button" variant="destructive" disabled={submitting} onClick={() => setPendingDecision({ listingId: listing.id, kind: "reject", reason: "" })}>
+                    <Button type="button" variant="destructive" disabled={submitting} onClick={() => setPendingDecision({ listingId: listing.id, revision: listing.revision, kind: "reject", reason: "" })}>
                       <XCircle data-icon="inline-start" />
                       拒绝
                     </Button>

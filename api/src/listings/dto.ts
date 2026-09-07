@@ -13,6 +13,7 @@ import {
   MaxLength,
   Min,
   registerDecorator,
+  ValidateIf,
   ValidationArguments,
   ValidationOptions
 } from "class-validator";
@@ -157,78 +158,78 @@ export class UpdateListingDto {
   })
   private readonly _atLeastOneEditableField?: true;
 
-  @IsOptional()
+  @ValidateIf((_object, value) => value !== undefined)
   @Trim()
   @IsString()
   @IsNotEmpty()
   @MaxLength(maxShortTextLength)
   title?: string;
 
-  @IsOptional()
+  @ValidateIf((_object, value) => value !== undefined)
   @Trim()
   @IsString()
   @IsNotEmpty()
   @MaxLength(maxShortTextLength)
   area?: string;
 
-  @IsOptional()
+  @ValidateIf((_object, value) => value !== undefined)
   @Trim()
   @IsString()
   @Matches(isoDatePattern)
   availableFrom?: string;
 
-  @IsOptional()
+  @ValidateIf((_object, value) => value !== undefined)
   @Trim()
   @IsString()
   @Matches(isoDatePattern)
   availableTo?: string;
 
-  @IsOptional()
+  @ValidateIf((_object, value) => value !== undefined)
   @IsInt()
   @Min(1)
   @Max(maxPrice)
   price?: number;
 
-  @IsOptional()
+  @ValidateIf((_object, value) => value !== undefined)
   @IsInt()
   @Min(1)
   @Max(maxPrice)
   originalPrice?: number;
 
-  @IsOptional()
+  @ValidateIf((_object, value) => value !== undefined)
   @IsInt()
   @Min(0)
   @Max(maxRooms)
   beds?: number;
 
-  @IsOptional()
+  @ValidateIf((_object, value) => value !== undefined)
   @IsInt()
   @Min(0)
   @Max(maxRooms)
   baths?: number;
 
-  @IsOptional()
+  @ValidateIf((_object, value) => value !== undefined)
   @Trim()
   @IsString()
   @IsNotEmpty()
   @MaxLength(maxLongTextLength)
   commute?: string;
 
-  @IsOptional()
+  @ValidateIf((_object, value) => value !== undefined)
   @Trim()
   @IsString()
   @IsNotEmpty()
   @MaxLength(maxLongTextLength)
   transit?: string;
 
-  @IsOptional()
+  @ValidateIf((_object, value) => value !== undefined)
   @Trim()
   @IsString()
   @IsNotEmpty()
   @MaxLength(maxLongTextLength)
   trust?: string;
 
-  @IsOptional()
+  @ValidateIf((_object, value) => value !== undefined)
   @TrimStringArray()
   @IsArray()
   @ArrayNotEmpty()
@@ -238,7 +239,7 @@ export class UpdateListingDto {
   @MaxLength(maxTagLength, { each: true })
   tags?: string[];
 
-  @IsOptional()
+  @ValidateIf((_object, value) => value !== undefined)
   @IsNumber()
   @Min(0)
   @Max(5)
@@ -261,7 +262,14 @@ export class ListingAvailabilityQueryDto {
   moveOut?: string;
 }
 
-export class RejectListingDto {
+export class ReviewListingDto {
+  @IsInt()
+  @Min(0)
+  @Max(2_147_483_647)
+  revision!: number;
+}
+
+export class RejectListingDto extends ReviewListingDto {
   @Trim()
   @IsString()
   @IsNotEmpty()

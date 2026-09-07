@@ -1,9 +1,11 @@
+// @vitest-environment jsdom
+
 import {
   act,
   create,
   type ReactTestInstance,
   type ReactTestRenderer
-} from "react-test-renderer";
+} from "./support/dom-test-renderer";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AdminTrustScreen } from "../components/admin-trust-screen";
@@ -37,6 +39,7 @@ const ordinaryUser: SessionUser = {
 };
 
 const queuedListing: ApiListing = {
+  revision: 7,
   id: "listing-codex-0812",
   title: "Codex 浏览验收测试房源 0812",
   area: "Westwood",
@@ -207,7 +210,7 @@ describe("AdminTrustScreen", () => {
     });
     await click(renderer.root, "确认通过");
 
-    expect(api.approveAdminListing).toHaveBeenCalledWith("enhanced-token", queuedListing.id);
+    expect(api.approveAdminListing).toHaveBeenCalledWith("enhanced-token", queuedListing.id, queuedListing.revision);
     expect(renderedText(renderer.root)).toContain(queuedListing.title);
 
     await act(async () => {
@@ -239,7 +242,8 @@ describe("AdminTrustScreen", () => {
     expect(api.rejectAdminListing).toHaveBeenCalledWith(
       "enhanced-token",
       queuedListing.id,
-      "图片无法核验"
+      "图片无法核验",
+      queuedListing.revision
     );
     expect(renderedText(renderer.root)).toContain(queuedListing.title);
     expect(findInput(renderer.root, "rejection-reason").props.value).toBe("  图片无法核验  ");
@@ -450,7 +454,7 @@ function renderedText(node: ReactTestInstance): string {
 
 function reviewMediaBackgrounds(root: ReactTestInstance) {
   return root
-    .findAll((node) => node.props.role === "img" && node.props.style?.backgroundImage)
+    .findAll((node) => Boolean(node.props.role === "img" && node.props.style?.backgroundImage))
     .map((node) => node.props.style.backgroundImage);
 }
 

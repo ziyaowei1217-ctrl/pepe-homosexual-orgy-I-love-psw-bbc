@@ -15,6 +15,7 @@ import { HealthModule } from "./health/health.module";
 import { ListingMediaModule } from "./listing-media/listing-media.module";
 import { ListingsModule } from "./listings/listings.module";
 import { MarketplaceModule } from "./marketplace/marketplace.module";
+import { PaymentsModule } from "./payments/payments.module";
 import { PrismaModule } from "./prisma/prisma.module";
 import { RoommateConversationsModule } from "./roommate-conversations/roommate-conversations.module";
 import { RoommateTeamsModule } from "./roommate-teams/roommate-teams.module";
@@ -34,8 +35,9 @@ import { UsersModule } from "./users/users.module";
     PrismaModule,
     AuditModule,
     AuthModule,
-    DemoPaymentsModule,
+    ...(process.env.NODE_ENV === "production" ? [] : [DemoPaymentsModule]),
     ApplicationsModule,
+    PaymentsModule,
     HealthModule,
     DealThreadsModule,
     DealRoomsModule,

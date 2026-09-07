@@ -2,13 +2,14 @@ import "reflect-metadata";
 import { INestApplication, ValidationPipe } from "@nestjs/common";
 import { JwtModule, JwtService } from "@nestjs/jwt";
 import { Test } from "@nestjs/testing";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ApplicationsService } from "../src/applications/applications.service";
 import { AuthGuard } from "../src/auth/auth.guard";
 import { AuthenticatedUserService } from "../src/auth/authenticated-user.service";
 import { DemoPaymentsController, DemoHeldFundsController } from "../src/demo-payments/demo-payments.controller";
 import { DemoPaymentsService } from "../src/demo-payments/demo-payments.service";
+import { PAYMENT_COMMANDS } from "../src/payments/payment-commands";
 import { PrismaService } from "../src/prisma/prisma.service";
 import { createMarketplaceDemoPrismaMock } from "./support/marketplace-demo-prisma-mock";
 
@@ -20,6 +21,8 @@ describe("demo payment HTTP API", () => {
   let applicationId: string;
 
   beforeEach(async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-08-31T12:00:00.000Z"));
     const prisma = createMarketplaceDemoPrismaMock();
     const moduleRef = await Test.createTestingModule({
       imports: [JwtModule.register({ secret: "demo-payments-http-secret" })],
@@ -29,6 +32,7 @@ describe("demo payment HTTP API", () => {
         AuthenticatedUserService,
         ApplicationsService,
         DemoPaymentsService,
+        { provide: PAYMENT_COMMANDS, useExisting: DemoPaymentsService },
         { provide: PrismaService, useValue: prisma }
       ]
     }).compile();
@@ -58,7 +62,10 @@ describe("demo payment HTTP API", () => {
     applicationId = draft.id;
   });
 
-  afterEach(async () => app.close());
+  afterEach(async () => {
+    vi.useRealTimers();
+    await app.close();
+  });
 
   it("exposes deterministic attempts, held funds, and dual-confirmation release without payment credentials", async () => {
     const http = request(app.getHttpServer());

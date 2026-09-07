@@ -93,6 +93,6 @@ export function cancelRoommateTeamInvite(token: string, inviteId: string) {
   return apiPost<ApiRoommateTeamInvite>(`/roommate-teams/invites/${encodeURIComponent(inviteId)}/cancel`, {}, token);
 }
 
-export function leaveRoommateTeam(token: string) {
-  return apiPost<ApiRoommateTeam>("/roommate-teams/current/leave", {}, token);
+export function leaveRoommateTeam(token: string, teamId: string) {
+  return apiPost<ApiRoommateTeam>("/roommate-teams/current/leave", { teamId }, token);
 }

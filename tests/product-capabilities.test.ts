@@ -5,7 +5,7 @@ import { checkProductCapability } from "../lib/product-capabilities";
 describe("product capabilities", () => {
   it("allows public browsing but sends guests to authentication for protected actions", () => {
     expect(checkProductCapability("browse-listings", { authenticated: false, apiOnline: true }).status).toBe("allowed");
-    expect(checkProductCapability("favorite-listing", { authenticated: false, apiOnline: true }).status).toBe("requires-auth");
+    expect(checkProductCapability("favorite-listing", { authenticated: false, apiOnline: true }).status).toBe("allowed");
     expect(checkProductCapability("message-host", { authenticated: false, apiOnline: true }).status).toBe("requires-auth");
     expect(checkProductCapability("request-viewing", { authenticated: false, apiOnline: true }).status).toBe("requires-auth");
     expect(checkProductCapability("roommate-action", { authenticated: false, apiOnline: true }).status).toBe("requires-auth");

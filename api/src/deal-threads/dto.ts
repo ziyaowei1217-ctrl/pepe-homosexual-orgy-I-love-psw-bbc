@@ -5,8 +5,11 @@ import {
   IsArray,
   IsEnum,
   IsISO8601,
+  IsInt,
+  Min,
   IsOptional,
   IsString,
+  IsUUID,
   MaxLength,
   MinLength
 } from "class-validator";
@@ -43,6 +46,9 @@ export class CreateDealThreadDto {
 }
 
 export class SendDealMessageDto {
+  @IsUUID()
+  clientMessageId!: string;
+
   @Trim()
   @IsString()
   @MinLength(1)
@@ -72,4 +78,10 @@ export class CreateViewingRequestDto {
   @MinLength(1, { each: true })
   @MaxLength(80, { each: true })
   participantNames!: string[];
+}
+
+export class DecideViewingRequestDto {
+  @IsInt()
+  @Min(1)
+  expectedRevision!: number;
 }

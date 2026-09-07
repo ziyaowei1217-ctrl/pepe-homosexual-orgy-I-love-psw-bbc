@@ -1,4 +1,6 @@
-import { act, create, type ReactTestInstance, type ReactTestRenderer } from "react-test-renderer";
+// @vitest-environment jsdom
+
+import { act, create, type ReactTestInstance, type ReactTestRenderer } from "./support/dom-test-renderer";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const navigationMock = vi.hoisted(() => ({
@@ -88,19 +90,18 @@ class MemoryStorage implements Storage {
 }
 
 const localStorage = new MemoryStorage();
-const windowListeners = new Map<string, EventListener>();
-const documentListeners = new Map<string, EventListener>();
 const desktopMessageLayout = {
   matches: false,
   listeners: new Set<(event: MediaQueryListEvent) => void>()
 };
 
-Object.defineProperty(globalThis, "window", {
+Object.defineProperty(window, "localStorage", {
   configurable: true,
-  value: {
-    addEventListener: vi.fn((name: string, listener: EventListener) => windowListeners.set(name, listener)),
-    localStorage,
-    matchMedia: vi.fn((media: string) => ({
+  value: localStorage
+});
+Object.defineProperty(window, "matchMedia", {
+  configurable: true,
+  value: vi.fn((media: string) => ({
       matches: desktopMessageLayout.matches,
       media,
       onchange: null,
@@ -110,23 +111,18 @@ Object.defineProperty(globalThis, "window", {
       removeEventListener: (_name: string, listener: (event: MediaQueryListEvent) => void) => {
         desktopMessageLayout.listeners.delete(listener);
       }
-    })),
-    removeEventListener: vi.fn((name: string) => windowListeners.delete(name)),
-    requestAnimationFrame: (callback: FrameRequestCallback) => {
-      callback(0);
-      return 1;
-    },
-    scrollTo: vi.fn()
+    }))
+});
+Object.defineProperty(window, "requestAnimationFrame", {
+  configurable: true,
+  value: (callback: FrameRequestCallback) => {
+    callback(0);
+    return 1;
   }
 });
-
-Object.defineProperty(globalThis, "document", {
+Object.defineProperty(window, "scrollTo", {
   configurable: true,
-  value: {
-    visibilityState: "visible",
-    addEventListener: vi.fn((name: string, listener: EventListener) => documentListeners.set(name, listener)),
-    removeEventListener: vi.fn((name: string) => documentListeners.delete(name))
-  }
+  value: vi.fn()
 });
 
 const user: SessionUser = {
@@ -193,8 +189,6 @@ const readState: ApiRoommateConversationReadState = {
 beforeEach(() => {
   vi.clearAllMocks();
   localStorage.clear();
-  windowListeners.clear();
-  documentListeners.clear();
   desktopMessageLayout.matches = false;
   desktopMessageLayout.listeners.clear();
   setDocumentVisibility("visible");
@@ -879,10 +873,8 @@ function summaryWithMessage(
 }
 
 function dispatchWindowEvent(name: string) {
-  const listener = windowListeners.get(name);
-  if (!listener) throw new Error(`Window listener "${name}" was not found`);
   act(() => {
-    listener({ type: name } as Event);
+    window.dispatchEvent(new Event(name));
   });
 }
 

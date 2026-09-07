@@ -2,6 +2,9 @@
 
 Frontend + backend MVP for a high-trust sublet marketplace and co-living matching product.
 
+中文交接与体验说明见 [README_先看这里.md](README_先看这里.md)。无需运行服务即可打开
+[当前界面截图预览](output/handoff-preview/index.html)；完整交互以启动后的网页为准。
+
 ## Stack
 
 - Next.js App Router
@@ -14,7 +17,7 @@ Frontend + backend MVP for a high-trust sublet marketplace and co-living matchin
 - Prisma
 - PostgreSQL
 - Socket.IO
-- Valkey (optional, for distributed roommate messaging)
+- Valkey (required in production for distributed realtime messaging)
 
 ## Run Full Local Stack With Docker
 
@@ -30,14 +33,18 @@ Then open:
 - API: `http://localhost:4000/api/v1`
 - Database UI: `http://localhost:8080`
 
-The Compose stack starts PostgreSQL, waits for it to become healthy, prepares Prisma for the API, starts the NestJS backend, and then starts the Next.js frontend.
+The Compose stack starts PostgreSQL and private MinIO, applies checked-in database migrations,
+starts the NestJS backend, and then starts the Next.js frontend. To add sample listings after the
+API is ready, run `docker compose exec api pnpm -C api seed:marketplace`. This is local development
+configuration; production uses `compose.production.yml` and genuine provider credentials.
 
 ## Local Product Environment
 
 Install dependencies, start Docker Desktop, then prepare PostgreSQL and seed the product catalog:
 
 ```bash
-pnpm install
+corepack enable
+pnpm install --frozen-lockfile
 pnpm local:setup
 pnpm dev:local
 ```
@@ -168,6 +175,11 @@ For the provider-independent production configuration and operator checklist, se
 [`docs/production-launch-checklist.md`](docs/production-launch-checklist.md). Run the complete local
 release gate with `pnpm release:check` after PostgreSQL and MinIO are available.
 
+The four provider connection points are documented in
+[`docs/external-integrations.md`](docs/external-integrations.md): email, payment, map tiles, and
+realtime messages. Run `pnpm production:check-config` with production variables loaded before
+building deployment images.
+
 `GET /api/v1/health` is a process-liveness check and does not query PostgreSQL. `GET /api/v1/ready`
 queries PostgreSQL and reports the sanitized roommate-messaging infrastructure state. A database
 failure makes readiness fail; messaging fallback leaves the database-backed API available with
@@ -216,7 +228,7 @@ Listing uploads accept JPEG, PNG, and WebP only, with a 10 MB per-image limit an
 listing. Every simulated-money surface displays `演示模式，不会真实扣款`. This demo never collects
 payment credentials, moves real money, or claims to provide regulated escrow.
 
-Valkey is optional. To start only the Compose service used by the distributed smoke gate, then run
+Valkey is optional in local development. To start only the Compose service used by the distributed smoke gate, then run
 the combined Lua limiter and two-instance Socket.IO test:
 
 ```bash
@@ -228,8 +240,8 @@ RUN_DB_SMOKE=1 RUN_VALKEY_SMOKE=1 \
 ```
 
 Ordinary test runs skip database- and Valkey-gated integration suites when their opt-in flags are
-absent and do not connect to those services. Keep `VALKEY_URL` empty when distributed fan-out and
-rate limiting are not needed.
+absent and do not connect to those services. In local development, keep `VALKEY_URL` empty when distributed fan-out and
+rate limiting are not needed. Production requires a TLS Valkey endpoint.
 
 ## Current Scope
 
@@ -250,5 +262,6 @@ completed applications retain their normal payment/cancellation history.
 Accepted applications expose an explicitly simulated one-month payment order, held/refunded/released
 fund states, append-only balanced ledger entries, and renter/owner move-in confirmations. Host listing
 images use private MinIO-backed direct uploads, stored-byte validation, ordering, cover selection,
-and publish-on-approval. Production hosting, Stripe, Mapbox, real email delivery, Redis queues, and
-production moderation providers remain outside the current scope.
+and publish-on-approval. Production email, payment-adapter, map and realtime integration boundaries
+are implemented; provider accounts, credentials, public hosting and provider acceptance remain
+operator-owned setup. Repository tests do not certify actual email delivery or live payment behavior.

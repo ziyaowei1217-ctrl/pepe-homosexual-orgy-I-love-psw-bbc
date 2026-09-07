@@ -1,4 +1,5 @@
-import { randomUUID } from "node:crypto";
+import { listingMediaUploadAttemptId } from "./listing-media.presentation";
+import { createHash, randomUUID } from "node:crypto";
 
 import {
   BadRequestException,
@@ -49,71 +50,88 @@ export class ListingMediaService {
     input: InitializeListingMediaUploadDto
   ) {
     const normalized = normalizeUploadInput(input);
-    await this.requireEditableListing(this.prisma, ownerId, listingId);
+    if (typeof input.commandId !== "string" || !/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i.test(input.commandId)) {
+      throw productBadRequest("LISTING_MEDIA_INPUT_INVALID", "上传命令标识无效。");
+    }
+    const commandId = input.commandId.toLowerCase();
+    const fingerprint = createHash("sha256").update(JSON.stringify({ ownerId, listingId, ...normalized })).digest("hex");
+    await this.requireOwnedListing(this.prisma, ownerId, listingId);
 
-    const objectKey = this.objectKey(listingId);
-    const upload = await this.storage.createUploadUrl(
-      objectKey,
-      normalized.mimeType,
-      normalized.sizeBytes
-    );
-
-    const media = await this.prisma.$transaction(
-      async (transaction) => {
-        await this.requireEditableListing(transaction, ownerId, listingId);
-        const existing = await transaction.listingMedia.findMany({
-          where: { listingId },
-          orderBy: { sortOrder: "asc" }
-        });
-        if (existing.length >= MAX_LISTING_MEDIA_COUNT) {
-          throw productBadRequest(
-            "LISTING_MEDIA_LIMIT_REACHED",
-            "每套房源最多上传 12 张图片。"
-          );
-        }
-        const nextSortOrder = existing.length
-          ? Math.max(...existing.map((item) => item.sortOrder)) + 1
-          : 0;
-
-        return transaction.listingMedia.create({
-          data: {
-            listingId,
-            url: null,
-            kind: normalized.kind,
-            sortOrder: nextSortOrder,
-            originalKey: objectKey,
-            mimeType: normalized.mimeType,
-            sizeBytes: normalized.sizeBytes,
-            checksum: normalized.checksumSha256,
-            uploadExpiresAt: upload.expiresAt,
-            storageStatus: "PENDING_UPLOAD",
-            reviewStatus: "PENDING",
-            securityErrorCode: null
+    try {
+      return await this.prisma.$transaction(async (transaction) => {
+        // Serialize command lookup and creation without changing a replayed
+        // listing's reviewed revision. FK inserts can still take KEY SHARE.
+        await transaction.$queryRaw`SELECT "id" FROM "Listing" WHERE "id" = ${listingId} FOR NO KEY UPDATE`;
+        const listing = await this.requireOwnedListing(transaction, ownerId, listingId);
+        const receipt = await transaction.listingMediaInitialization.findUnique({ where: { ownerId_commandId: { ownerId, commandId } } });
+        if (receipt) {
+          if (receipt.fingerprint !== fingerprint) {
+            throw productConflict("LISTING_MEDIA_COMMAND_CONFLICT", "上传命令已用于其他图片或房源。");
           }
-        });
-      },
-      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }
-    );
+          if (!receipt.mediaId) throw productConflict("LISTING_MEDIA_COMMAND_DELETED", "这次上传已被删除，请重新选择图片。");
+          const previous = await transaction.listingMedia.findUnique({ where: { id: receipt.mediaId } });
+          if (!previous) throw productConflict("LISTING_MEDIA_COMMAND_DELETED", "这次上传已被删除，请重新选择图片。");
+          if (editableListingStatuses.has(listing.status) && previous.storageStatus === "PENDING_UPLOAD" && previous.originalKey) {
+            const upload = await this.storage.createUploadUrl(previous.originalKey, normalized.mimeType, normalized.sizeBytes);
+            const refreshed = await transaction.listingMedia.update({ where: { id: previous.id }, data: { uploadExpiresAt: upload.expiresAt } });
+            return { media: refreshed, ...upload, uploadAttemptId: listingMediaUploadAttemptId(previous.originalKey)! };
+          }
+          return { media: previous, uploadUrl: null, expiresAt: null, uploadAttemptId: listingMediaUploadAttemptId(previous.originalKey)! };
+        }
 
-    return { media, ...upload };
+        await this.lockEditableListing(transaction, ownerId, listingId);
+        const existing = await transaction.listingMedia.findMany({ where: { listingId }, orderBy: { sortOrder: "asc" } });
+        if (existing.length >= MAX_LISTING_MEDIA_COUNT) {
+          throw productBadRequest("LISTING_MEDIA_LIMIT_REACHED", "每套房源最多上传 12 张图片。");
+        }
+        const objectKey = this.objectKey(listingId);
+        const upload = await this.storage.createUploadUrl(objectKey, normalized.mimeType, normalized.sizeBytes);
+        const media = await transaction.listingMedia.create({ data: {
+          listingId,
+          url: null,
+          kind: normalized.kind,
+          sortOrder: existing.length ? Math.max(...existing.map((item) => item.sortOrder)) + 1 : 0,
+          originalKey: objectKey,
+          mimeType: normalized.mimeType,
+          sizeBytes: normalized.sizeBytes,
+          checksum: normalized.checksumSha256,
+          uploadExpiresAt: upload.expiresAt,
+          storageStatus: "PENDING_UPLOAD",
+          reviewStatus: "PENDING",
+          securityErrorCode: null
+        } });
+        await transaction.listingMediaInitialization.create({ data: { ownerId, commandId, fingerprint, listingId, mediaId: media.id } });
+        return { media, ...upload, uploadAttemptId: listingMediaUploadAttemptId(objectKey)! };
+      });
+    } catch (error) {
+      // Different listings lock different rows, so the unique receipt constraint
+      // also rejects concurrent reuse of one owner's command across listings.
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+        throw productConflict("LISTING_MEDIA_COMMAND_CONFLICT", "上传命令已用于其他图片或房源。");
+      }
+      throw error;
+    }
   }
 
-  async finalize(ownerId: string, listingId: string, mediaId: string) {
+  async finalize(ownerId: string, listingId: string, mediaId: string, uploadAttemptId: string) {
     const media = await this.requireOwnedEditableMedia(ownerId, listingId, mediaId);
-    const started = await this.prisma.listingMedia.updateMany({
-      where: { id: mediaId, listingId, storageStatus: "PENDING_UPLOAD" },
+    requireUploadAttempt(media.originalKey, uploadAttemptId);
+    const started = await this.withEditableListing(ownerId, listingId, (transaction) => transaction.listingMedia.updateMany({
+      where: { id: mediaId, listingId, storageStatus: "PENDING_UPLOAD", originalKey: media.originalKey },
       data: {
         storageStatus: "UPLOADED_PENDING_VALIDATION",
         securityErrorCode: null
       }
-    });
+    }));
     if (started.count !== 1) {
       throw productConflict("LISTING_MEDIA_STATE_CONFLICT", "图片状态已变化，请刷新后重试。");
     }
     if (!media.originalKey || !media.mimeType || !media.sizeBytes || !media.checksum) {
-      return this.failValidation(mediaId, "IMAGE_VALIDATION_FAILED");
+      return this.failValidation(ownerId, listingId, mediaId, "IMAGE_VALIDATION_FAILED");
     }
 
+    let frozenKey: string | undefined;
+    let committed = false;
     try {
       const bytes = await this.storage.read(media.originalKey);
       const validated = await validateListingImage(bytes, {
@@ -121,7 +139,11 @@ export class ListingMediaService {
         sizeBytes: media.sizeBytes,
         checksumSha256: media.checksum
       });
-      const completed = await this.prisma.listingMedia.updateMany({
+      // Freeze the buffer we validated, never a second read/copy of the upload object.
+      // This namespace is never used when signing client upload URLs.
+      frozenKey = `listing-media-frozen/${listingId}/${randomUUID()}`;
+      await this.storage.write(frozenKey, bytes, validated.mimeType);
+      const completed = await this.withEditableListing(ownerId, listingId, (transaction) => transaction.listingMedia.updateMany({
         where: {
           id: mediaId,
           listingId,
@@ -129,6 +151,7 @@ export class ListingMediaService {
         },
         data: {
           storageStatus: "READY",
+          processedKey: frozenKey,
           mimeType: validated.mimeType,
           sizeBytes: validated.sizeBytes,
           width: validated.width,
@@ -137,21 +160,24 @@ export class ListingMediaService {
           securityErrorCode: null,
           finalizedAt: this.now()
         }
-      });
+      }));
       if (completed.count !== 1) {
         throw productConflict("LISTING_MEDIA_STATE_CONFLICT", "图片状态已变化，请刷新后重试。");
       }
+      committed = true;
       return this.requireMedia(mediaId);
     } catch (error) {
+      if (frozenKey && !committed) await this.cleanupUnreferencedFrozen(mediaId, frozenKey);
       if (error instanceof ConflictException) throw error;
-      return this.failValidation(mediaId, mediaFailureCode(error));
+      return this.failValidation(ownerId, listingId, mediaId, mediaFailureCode(error));
     }
   }
 
-  async retry(ownerId: string, listingId: string, mediaId: string) {
+  async retry(ownerId: string, listingId: string, mediaId: string, uploadAttemptId: string) {
     const media = await this.requireOwnedEditableMedia(ownerId, listingId, mediaId);
-    if (media.storageStatus !== "FAILED") {
-      throw productConflict("LISTING_MEDIA_STATE_CONFLICT", "只有校验失败的图片可以重试。");
+    requireUploadAttempt(media.originalKey, uploadAttemptId);
+    if (media.storageStatus !== "FAILED" && media.storageStatus !== "PENDING_UPLOAD") {
+      throw productConflict("LISTING_MEDIA_STATE_CONFLICT", "只有未完成上传或校验失败的图片可以重试。");
     }
     if (!media.mimeType || !media.sizeBytes || !media.checksum) {
       throw productBadRequest("LISTING_MEDIA_RETRY_UNAVAILABLE", "这张图片无法重试，请删除后重新选择。");
@@ -163,36 +189,47 @@ export class ListingMediaService {
       asSupportedMimeType(media.mimeType),
       media.sizeBytes
     );
-    if (media.originalKey) await this.storage.delete(media.originalKey);
-
-    const updated = await this.prisma.listingMedia.updateMany({
-      where: { id: mediaId, listingId, storageStatus: "FAILED" },
-      data: {
-        originalKey: objectKey,
-        processedKey: null,
-        publicMainKey: null,
-        publicThumbnailKey: null,
-        uploadExpiresAt: upload.expiresAt,
-        storageStatus: "PENDING_UPLOAD",
-        reviewStatus: "PENDING",
-        securityErrorCode: null,
-        width: null,
-        height: null,
-        finalizedAt: null,
-        publishedAt: null
+    const retriedMedia = await this.withEditableListing(ownerId, listingId, async (transaction) => {
+      const updated = await transaction.listingMedia.updateMany({
+        where: { id: mediaId, listingId, storageStatus: media.storageStatus, originalKey: media.originalKey },
+        data: {
+          originalKey: objectKey,
+          processedKey: null,
+          publicMainKey: null,
+          publicThumbnailKey: null,
+          uploadExpiresAt: upload.expiresAt,
+          storageStatus: "PENDING_UPLOAD",
+          reviewStatus: "PENDING",
+          securityErrorCode: null,
+          width: null,
+          height: null,
+          finalizedAt: null,
+          publishedAt: null
+        }
+      });
+      if (updated.count !== 1) {
+        throw productConflict("LISTING_MEDIA_STATE_CONFLICT", "图片状态已变化，请刷新后重试。");
       }
-    });
-    if (updated.count !== 1) {
-      throw productConflict("LISTING_MEDIA_STATE_CONFLICT", "图片状态已变化，请刷新后重试。");
-    }
 
-    return { media: await this.requireMedia(mediaId), ...upload };
+      const current = await transaction.listingMedia.findUnique({ where: { id: mediaId } });
+      if (!current) throw new NotFoundException("Listing media not found");
+      return current;
+    });
+
+    try {
+      await this.deleteObjects(media);
+    } catch {
+      // The retry is committed and these keys are no longer referenced. Cleanup
+      // failure must not hide the new URL and strand the pending upload.
+    }
+    return { media: retriedMedia, ...upload, uploadAttemptId: listingMediaUploadAttemptId(objectKey)! };
   }
 
   async findOwned(ownerId: string, listingId: string) {
     await this.requireOwnedListing(this.prisma, ownerId, listingId);
     return this.prisma.listingMedia.findMany({
       where: { listingId },
+      include: { initializationReceipt: { select: { commandId: true } } },
       orderBy: { sortOrder: "asc" }
     });
   }
@@ -202,7 +239,7 @@ export class ListingMediaService {
     if (
       !media ||
       media.storageStatus !== "PUBLISHED" ||
-      !media.originalKey ||
+      !(media.processedKey || media.originalKey) ||
       !media.mimeType ||
       !media.sizeBytes ||
       !(SUPPORTED_LISTING_MEDIA_MIME_TYPES as readonly string[]).includes(media.mimeType)
@@ -211,8 +248,9 @@ export class ListingMediaService {
     }
 
     try {
-      const bytes = await this.storage.read(media.originalKey);
-      if (bytes.length !== media.sizeBytes) {
+      const bytes = await this.storage.read((media.processedKey || media.originalKey)!);
+      if (bytes.length !== media.sizeBytes || !media.checksum ||
+          createHash("sha256").update(bytes).digest("hex") !== media.checksum) {
         throw productNotFound("LISTING_MEDIA_NOT_AVAILABLE", "Listing media not available");
       }
       return { bytes, mimeType: media.mimeType as SupportedListingMediaMimeType };
@@ -239,7 +277,7 @@ export class ListingMediaService {
       !media ||
       media.listingId !== listingId ||
       (media.storageStatus !== "READY" && media.storageStatus !== "PUBLISHED") ||
-      !media.originalKey ||
+      !(media.processedKey || media.originalKey) ||
       !media.mimeType ||
       !media.sizeBytes ||
       !(SUPPORTED_LISTING_MEDIA_MIME_TYPES as readonly string[]).includes(media.mimeType)
@@ -248,8 +286,9 @@ export class ListingMediaService {
     }
 
     try {
-      const bytes = await this.storage.read(media.originalKey);
-      if (bytes.length !== media.sizeBytes) {
+      const bytes = await this.storage.read((media.processedKey || media.originalKey)!);
+      if (bytes.length !== media.sizeBytes || !media.checksum ||
+          createHash("sha256").update(bytes).digest("hex") !== media.checksum) {
         throw productNotFound("LISTING_MEDIA_NOT_AVAILABLE", "Listing media not available");
       }
       return { bytes, mimeType: media.mimeType as SupportedListingMediaMimeType };
@@ -276,17 +315,15 @@ export class ListingMediaService {
       throw productBadRequest("LISTING_MEDIA_ORDER_INVALID", "图片排序必须包含每张图片且不能重复。");
     }
 
-    const existing = await this.prisma.listingMedia.findMany({
-      where: { listingId },
-      orderBy: { sortOrder: "asc" }
-    });
-    const existingIds = new Set(existing.map((item) => item.id));
-    if (existing.length !== ids.length || ids.some((id) => !existingIds.has(id))) {
-      throw productBadRequest("LISTING_MEDIA_ORDER_INVALID", "图片排序必须包含每张图片且不能重复。");
-    }
-
-    await this.prisma.$transaction(async (transaction) => {
-      await this.requireEditableListing(transaction, ownerId, listingId);
+    await this.withEditableListing(ownerId, listingId, async (transaction) => {
+      const existing = await transaction.listingMedia.findMany({
+        where: { listingId },
+        orderBy: { sortOrder: "asc" }
+      });
+      const existingIds = new Set(existing.map((item) => item.id));
+      if (existing.length !== ids.length || ids.some((id) => !existingIds.has(id))) {
+        throw productBadRequest("LISTING_MEDIA_ORDER_INVALID", "图片排序必须包含每张图片且不能重复。");
+      }
       for (const [sortOrder, id] of ids.entries()) {
         await transaction.listingMedia.update({ where: { id }, data: { sortOrder } });
       }
@@ -295,23 +332,71 @@ export class ListingMediaService {
   }
 
   async remove(ownerId: string, listingId: string, mediaId: string) {
-    const media = await this.requireOwnedEditableMedia(ownerId, listingId, mediaId);
-    await this.prisma.listingMedia.delete({ where: { id: mediaId } });
-    if (media.originalKey) await this.storage.delete(media.originalKey);
+    await this.requireOwnedEditableMedia(ownerId, listingId, mediaId);
+    const media = await this.withEditableListing(ownerId, listingId, (transaction) =>
+      transaction.listingMedia.delete({ where: { id: mediaId } })
+    );
+    await this.deleteObjects(media);
     return { removed: true };
   }
 
-  private async failValidation(mediaId: string, code: ListingMediaSecurityCode) {
+  private async deleteObjects(media: { originalKey: string | null; processedKey: string | null; publicMainKey: string | null; publicThumbnailKey: string | null }) {
+    const keys = new Set([media.originalKey, media.processedKey, media.publicMainKey, media.publicThumbnailKey]);
+    await Promise.all([...keys].filter((key): key is string => Boolean(key)).map((key) => this.storage.delete(key)));
+  }
+
+  private async cleanupUnreferencedFrozen(mediaId: string, key: string) {
+    try {
+      // A commit response can be lost. Never remove a key the database references,
+      // including one already published while this request was finishing.
+      const current = await this.prisma.listingMedia.findUnique({ where: { id: mediaId } });
+      if (current && [current.processedKey, current.publicMainKey, current.publicThumbnailKey].includes(key)) return;
+      await this.storage.delete(key);
+    } catch {
+      // Fail closed on uncertain DB/storage state; an orphan is safer than data loss.
+    }
+  }
+
+  private async failValidation(ownerId: string, listingId: string, mediaId: string, code: ListingMediaSecurityCode) {
     const failedAt = this.now();
-    await this.prisma.listingMedia.updateMany({
+    await this.withEditableListing(ownerId, listingId, (transaction) => transaction.listingMedia.updateMany({
       where: { id: mediaId, storageStatus: "UPLOADED_PENDING_VALIDATION" },
       data: {
         storageStatus: "FAILED",
         securityErrorCode: code,
         finalizedAt: failedAt
       }
-    });
+    }));
     return this.requireMedia(mediaId);
+  }
+
+  private async withEditableListing<T>(
+    ownerId: string,
+    listingId: string,
+    operation: (transaction: Prisma.TransactionClient) => Promise<T>
+  ) {
+    return this.prisma.$transaction(async (transaction) => {
+      await this.lockEditableListing(transaction, ownerId, listingId);
+      return operation(transaction);
+    });
+  }
+
+  private async lockEditableListing(
+    transaction: Pick<Prisma.TransactionClient, "listing">,
+    ownerId: string,
+    listingId: string
+  ) {
+    // Independent photo operations can wait for the same listing row without
+    // invalidating each other. The editable-state predicate is rechecked after
+    // waiting, and the row stays locked until the media transaction commits.
+    const locked = await transaction.listing.updateMany({
+      where: { id: listingId, ownerId, status: { in: ["DRAFT", "REJECTED"] } },
+      data: { revision: { increment: 1 } }
+    });
+    if (locked.count !== 1) {
+      await this.requireEditableListing(transaction, ownerId, listingId);
+      throw productConflict("LISTING_MEDIA_LOCKED", "房源已变化，请刷新后重试。");
+    }
   }
 
   private async requireOwnedEditableMedia(ownerId: string, listingId: string, mediaId: string) {
@@ -401,4 +486,13 @@ function productConflict(code: string, message: string) {
 
 function productNotFound(code: string, message: string) {
   return new NotFoundException({ code, message });
+}
+
+function requireUploadAttempt(originalKey: string | null, attemptId: string) {
+  if (typeof attemptId !== "string" || !checksumPattern.test(attemptId)) {
+    throw productBadRequest("LISTING_MEDIA_INPUT_INVALID", "请刷新后重试图片上传。");
+  }
+  if (attemptId !== listingMediaUploadAttemptId(originalKey)) {
+    throw productConflict("LISTING_MEDIA_STATE_CONFLICT", "上传已更新，请刷新后重试。");
+  }
 }

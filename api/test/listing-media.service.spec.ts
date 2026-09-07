@@ -1,3 +1,4 @@
+import { listingMediaUploadAttemptId } from "../src/listing-media/listing-media.presentation";
 import { createHash } from "node:crypto";
 
 import { BadRequestException, ConflictException, NotFoundException } from "@nestjs/common";
@@ -6,7 +7,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { MAX_LISTING_MEDIA_BYTES } from "../src/listing-media/listing-media.constants";
 import { ListingMediaService } from "../src/listing-media/listing-media.service";
-import type { ListingMediaStorage } from "../src/listing-media/listing-media-storage";
+import { ListingMediaStorageError, type ListingMediaStorage } from "../src/listing-media/listing-media-storage";
 
 type ListingStatus = "DRAFT" | "REJECTED" | "SUBMITTED" | "APPROVED";
 type StorageStatus =
@@ -20,9 +21,11 @@ type ListingRow = {
   id: string;
   ownerId: string;
   status: ListingStatus;
+  revision: number;
 };
 
 type MediaRow = {
+
   id: string;
   listingId: string;
   url: string | null;
@@ -74,6 +77,15 @@ describe("ListingMediaService", () => {
     );
   });
 
+  it("does not resurrect a deleted upload when its initialization command is replayed", async () => {
+    const database = createDatabase();
+    const service = createService(database, createStorage());
+    const first = await service.initializeUpload("owner-1", "listing-1", uploadInput());
+    await service.remove("owner-1", "listing-1", first.media.id);
+    await expect(service.initializeUpload("owner-1", "listing-1", uploadInput())).rejects.toMatchObject({ status: 409 });
+    expect(database.media).toHaveLength(0);
+  });
+
   it("enforces the 12-item limit without creating another media row", async () => {
     const database = createDatabase({
       media: Array.from({ length: 12 }, (_, index) => mediaRow({ id: `media-${index}`, sortOrder: index }))
@@ -112,7 +124,7 @@ describe("ListingMediaService", () => {
     const storage = createStorage(bytes);
     const service = createService(database, storage);
 
-    await expect(service.finalize("owner-1", "listing-1", "media-1")).resolves.toMatchObject({
+    await expect(service.finalize("owner-1", "listing-1", "media-1", listingMediaUploadAttemptId(database.media[0]!.originalKey)!)).resolves.toMatchObject({
       storageStatus: "READY",
       mimeType: "image/png",
       sizeBytes: bytes.length,
@@ -126,6 +138,87 @@ describe("ListingMediaService", () => {
       "UPLOADED_PENDING_VALIDATION",
       "READY"
     ]);
+  });
+
+  it("freezes validated bytes before READY, independent of later upload replacement", async () => {
+    const bytes = await pngBytes();
+    const database = createDatabase({ media: [mediaRow({ sizeBytes: bytes.length, checksum: sha256(bytes) })] });
+    const storage = createStorage(bytes);
+    const objects = new Map<string, Buffer>();
+    storage.write = vi.fn(async (key: string, value: Buffer) => { objects.set(key, Buffer.from(value)); });
+    storage.read = vi.fn(async (key?: string) => objects.get(key!) ?? bytes);
+    const service = createService(database, storage);
+    const ready = await service.finalize("owner-1", "listing-1", "media-1", listingMediaUploadAttemptId(database.media[0]!.originalKey)!);
+    expect(ready.processedKey).toBeTruthy();
+    expect(ready.processedKey).not.toBe(ready.originalKey);
+    objects.set(ready.originalKey!, Buffer.alloc(bytes.length));
+    database.prisma.listing.findUnique = async () => listingRow({ status: "SUBMITTED" });
+    expect((await service.readForReview("listing-1", "media-1")).bytes).toEqual(bytes);
+    database.media[0]!.storageStatus = "PUBLISHED";
+    expect((await service.readPublished("media-1")).bytes).toEqual(bytes);
+  });
+
+  it.each(["review", "public"])("rejects same-size legacy tampering on %s reads", async (target) => {
+    const bytes = Buffer.from("original");
+    const database = createDatabase({ listings: [listingRow({ status: "SUBMITTED" })], media: [mediaRow({ storageStatus: "PUBLISHED", sizeBytes: bytes.length, checksum: sha256(bytes) })] });
+    const service = createService(database, createStorage(Buffer.from("tampered")));
+    await expect(target === "review" ? service.readForReview("listing-1", "media-1") : service.readPublished("media-1"))
+      .rejects.toMatchObject({ response: { code: "LISTING_MEDIA_NOT_AVAILABLE" } });
+  });
+
+  it("removes both staging and frozen objects after deleting the row", async () => {
+    const database = createDatabase({ media: [mediaRow({ processedKey: "frozen", storageStatus: "READY" })] });
+    const storage = createStorage();
+    await createService(database, storage).remove("owner-1", "listing-1", "media-1");
+    expect(storage.delete).toHaveBeenCalledWith("frozen");
+  });
+
+  it("marks a failed freeze as FAILED and cleans its unreferenced object", async () => {
+    const bytes = await pngBytes();
+    const database = createDatabase({ media: [mediaRow({ sizeBytes: bytes.length, checksum: sha256(bytes) })] });
+    const storage = createStorage(bytes);
+    const objects = new Map<string, Buffer>();
+    storage.write = vi.fn(async (key: string, value: Buffer) => {
+      objects.set(key, value);
+      throw new ListingMediaStorageError("IMAGE_STORAGE_UNAVAILABLE");
+    });
+    storage.delete = vi.fn(async (key?: string) => { objects.delete(key!); });
+    const failed = await createService(database, storage).finalize("owner-1", "listing-1", "media-1", listingMediaUploadAttemptId(database.media[0]!.originalKey)!);
+    expect(failed).toMatchObject({ storageStatus: "FAILED", processedKey: null, securityErrorCode: "IMAGE_STORAGE_UNAVAILABLE" });
+    expect(objects.size).toBe(0);
+  });
+
+  it("cleans only the candidate when READY loses a race to another state", async () => {
+    const bytes = await pngBytes();
+    const database = createDatabase({ media: [mediaRow({ sizeBytes: bytes.length, checksum: sha256(bytes) })] });
+    const storage = createStorage(bytes);
+    const objects = new Map<string, Buffer>([["already-published", bytes]]);
+    storage.write = vi.fn(async (key: string, value: Buffer) => {
+      objects.set(key, value);
+      database.media[0]!.storageStatus = "PUBLISHED";
+      database.media[0]!.processedKey = "already-published";
+    });
+    storage.delete = vi.fn(async (key?: string) => { objects.delete(key!); });
+    await expect(createService(database, storage).finalize("owner-1", "listing-1", "media-1", listingMediaUploadAttemptId(database.media[0]!.originalKey)!)).rejects.toBeInstanceOf(ConflictException);
+    expect([...objects.keys()]).toEqual(["already-published"]);
+  });
+
+  it("preserves a referenced frozen object when the commit response is lost", async () => {
+    const bytes = await pngBytes();
+    const database = createDatabase({ media: [mediaRow({ sizeBytes: bytes.length, checksum: sha256(bytes) })] });
+    const storage = createStorage(bytes);
+    const objects = new Map<string, Buffer>();
+    storage.write = vi.fn(async (key: string, value: Buffer) => { objects.set(key, value); });
+    storage.delete = vi.fn(async (key?: string) => { objects.delete(key!); });
+    const transaction = database.prisma.$transaction;
+    let calls = 0;
+    database.prisma.$transaction = async (operation) => {
+      const result = await transaction(operation);
+      if (++calls === 2) throw new ConflictException("lost commit response");
+      return result;
+    };
+    await expect(createService(database, storage).finalize("owner-1", "listing-1", "media-1", listingMediaUploadAttemptId(database.media[0]!.originalKey)!)).rejects.toBeInstanceOf(ConflictException);
+    expect(objects.get(database.media[0]!.processedKey!)).toEqual(bytes);
   });
 
   it("records a stable security code when stored bytes fail validation", async () => {
@@ -142,7 +235,7 @@ describe("ListingMediaService", () => {
     });
     const service = createService(database, createStorage(bytes));
 
-    await expect(service.finalize("owner-1", "listing-1", "media-1")).resolves.toMatchObject({
+    await expect(service.finalize("owner-1", "listing-1", "media-1", listingMediaUploadAttemptId(database.media[0]!.originalKey)!)).resolves.toMatchObject({
       storageStatus: "FAILED",
       securityErrorCode: "IMAGE_TYPE_UNSUPPORTED"
     });
@@ -156,7 +249,7 @@ describe("ListingMediaService", () => {
     const database = createDatabase({ media: [mediaRow({ checksum: null })] });
     const service = createService(database, createStorage());
 
-    await expect(service.finalize("owner-1", "listing-1", "media-1")).resolves.toMatchObject({
+    await expect(service.finalize("owner-1", "listing-1", "media-1", listingMediaUploadAttemptId(database.media[0]!.originalKey)!)).resolves.toMatchObject({
       storageStatus: "FAILED",
       securityErrorCode: "IMAGE_VALIDATION_FAILED"
     });
@@ -166,7 +259,7 @@ describe("ListingMediaService", () => {
     const database = createDatabase({ media: [mediaRow({ storageStatus: "READY" })] });
     const service = createService(database, createStorage());
 
-    await expect(service.finalize("owner-1", "listing-1", "media-1")).rejects.toBeInstanceOf(
+    await expect(service.finalize("owner-1", "listing-1", "media-1", listingMediaUploadAttemptId(database.media[0]!.originalKey)!)).rejects.toBeInstanceOf(
       ConflictException
     );
   });
@@ -187,7 +280,7 @@ describe("ListingMediaService", () => {
     const storage = createStorage();
     const service = createService(database, storage);
 
-    await expect(service.retry("owner-1", "listing-1", "media-1")).resolves.toMatchObject({
+    await expect(service.retry("owner-1", "listing-1", "media-1", listingMediaUploadAttemptId(database.media[0]!.originalKey)!)).resolves.toMatchObject({
       media: {
         id: "media-1",
         originalKey: "listing-media/listing-1/object-1",
@@ -200,6 +293,29 @@ describe("ListingMediaService", () => {
       uploadUrl: "http://localhost:9000/signed"
     });
     expect(storage.delete).toHaveBeenCalledWith("listing-media/listing-1/old-object");
+  });
+
+  it("returns the committed retry upload URL when discarded-object cleanup is unavailable", async () => {
+    const database = createDatabase({ media: [mediaRow({ storageStatus: "FAILED", originalKey: "discarded" })] });
+    const storage = createStorage();
+    storage.delete.mockRejectedValue(new ListingMediaStorageError("IMAGE_STORAGE_UNAVAILABLE"));
+    const retried = await createService(database, storage).retry("owner-1", "listing-1", "media-1", listingMediaUploadAttemptId(database.media[0]!.originalKey)!);
+    expect(retried).toMatchObject({
+      media: { storageStatus: "PENDING_UPLOAD", originalKey: "listing-media/listing-1/object-1" },
+      uploadUrl: "http://localhost:9000/signed"
+    });
+    expect(database.media[0]!.originalKey).not.toBe("discarded");
+    expect(storage.delete).toHaveBeenCalledWith("discarded");
+  });
+
+  it("reissues a fresh upload for a pending row after a failed browser PUT", async () => {
+    const database = createDatabase({ media: [mediaRow({ storageStatus: "PENDING_UPLOAD", originalKey: "expired-upload" })] });
+    const storage = createStorage();
+    await expect(createService(database, storage).retry("owner-1", "listing-1", "media-1", listingMediaUploadAttemptId(database.media[0]!.originalKey)!)).resolves.toMatchObject({
+      media: { storageStatus: "PENDING_UPLOAD", originalKey: "listing-media/listing-1/object-1" },
+      uploadUrl: "http://localhost:9000/signed"
+    });
+    expect(storage.delete).toHaveBeenCalledWith("expired-upload");
   });
 
   it("reorders every media id atomically and makes the first id the cover", async () => {
@@ -271,7 +387,8 @@ describe("ListingMediaService", () => {
           storageStatus: "PUBLISHED",
           originalKey: "listing-media/listing-1/published",
           mimeType: "image/png",
-          sizeBytes: bytes.length
+          sizeBytes: bytes.length,
+          checksum: sha256(bytes)
         })
       ]
     });
@@ -289,7 +406,7 @@ describe("ListingMediaService", () => {
     const bytes = Buffer.from([1, 2, 3, 4]);
     const database = createDatabase({
       listings: [listingRow({ status: "SUBMITTED" })],
-      media: [mediaRow({ storageStatus: "READY", sizeBytes: bytes.length })]
+      media: [mediaRow({ storageStatus: "READY", checksum: sha256(bytes), sizeBytes: bytes.length })]
     });
     const storage = createStorage(bytes);
     const service = createService(database, storage);
@@ -353,6 +470,7 @@ function createService(database: ReturnType<typeof createDatabase>, storage: Ret
 
 function uploadInput() {
   return {
+    commandId: "fa4750e3-b777-44d6-8c5b-6933672f0051",
     kind: "卧室",
     mimeType: "image/png" as const,
     sizeBytes: 128,
@@ -361,7 +479,7 @@ function uploadInput() {
 }
 
 function listingRow(overrides: Partial<ListingRow> = {}): ListingRow {
-  return { id: "listing-1", ownerId: "owner-1", status: "DRAFT", ...overrides };
+  return { id: "listing-1", ownerId: "owner-1", status: "DRAFT", revision: 0, ...overrides };
 }
 
 function mediaRow(overrides: Partial<MediaRow> = {}): MediaRow {
@@ -402,17 +520,32 @@ function createDatabase({
   const listingRows = listings.map((row) => ({ ...row }));
   const mediaRows = media.map((row) => ({ ...row }));
   const statusHistory: StorageStatus[] = [];
+  const receipts: Array<{ ownerId: string; commandId: string; fingerprint: string; listingId: string; mediaId: string | null }> = [];
 
   const prisma = {
+    $queryRaw: async () => [],
+    listingMediaInitialization: {
+      findUnique: async ({ where }: { where: { ownerId_commandId: { ownerId: string; commandId: string } } }) => receipts.find((row) => row.ownerId === where.ownerId_commandId.ownerId && row.commandId === where.ownerId_commandId.commandId) ?? null,
+      create: async ({ data }: { data: typeof receipts[number] }) => { receipts.push({ ...data }); return data; }
+    },
     listing: {
       findUnique: async ({ where }: { where: { id: string } }) =>
-        listingRows.find((row) => row.id === where.id) ?? null
+        listingRows.find((row) => row.id === where.id) ?? null,
+      updateMany: async ({ where, data }: {
+        where: { id: string; ownerId: string; status: { in: ListingStatus[] } };
+        data: { revision: { increment: number } };
+      }) => {
+        const row = listingRows.find((row) => row.id === where.id && row.ownerId === where.ownerId &&
+          where.status.in.includes(row.status));
+        if (!row) return { count: 0 };
+        row.revision += data.revision.increment;
+        return { count: 1 };
+      }
     },
     listingMedia: {
       count: async ({ where }: { where: { listingId: string } }) =>
         mediaRows.filter((row) => row.listingId === where.listingId).length,
-      findUnique: async ({ where }: { where: { id: string } }) =>
-        mediaRows.find((row) => row.id === where.id) ?? null,
+      findUnique: async ({ where }: { where: { id: string } }) => mediaRows.find((row) => row.id === where.id) ?? null,
       findMany: async ({
         where,
         orderBy
@@ -456,6 +589,7 @@ function createDatabase({
       delete: async ({ where }: { where: { id: string } }) => {
         const index = mediaRows.findIndex((row) => row.id === where.id);
         if (index < 0) throw new Error("missing media");
+        for (const receipt of receipts) if (receipt.mediaId === where.id) receipt.mediaId = null;
         return mediaRows.splice(index, 1)[0]!;
       }
     }
@@ -476,8 +610,9 @@ function createStorage(bytes: Buffer<ArrayBufferLike> = Buffer.from("stored")) {
       uploadUrl: "http://localhost:9000/signed",
       expiresAt: new Date("2026-08-14T05:10:00.000Z")
     })),
-    read: vi.fn(async () => bytes),
-    delete: vi.fn(async () => undefined)
+    write: vi.fn(async (_key: string, _bytes: Buffer, _mimeType?: string) => undefined),
+    read: vi.fn(async (_key?: string) => bytes),
+    delete: vi.fn(async (_key?: string) => undefined)
   } satisfies ListingMediaStorage;
 }
 

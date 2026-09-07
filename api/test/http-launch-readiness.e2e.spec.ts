@@ -139,6 +139,7 @@ describe("backend launch readiness HTTP flow", () => {
     await http
       .post(`/api/v1/admin/listings/${listingResponse.body.id}/approve`)
       .set("Authorization", `Bearer ${steppedUpAdminToken}`)
+      .send({ revision: submittedResponse.body.revision })
       .expect(201)
       .expect(({ body }: { body: Record<string, unknown> }) => {
         expect(body).toMatchObject({

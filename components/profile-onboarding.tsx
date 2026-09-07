@@ -24,13 +24,6 @@ export type ProfileOnboardingProps = {
   onDismiss: () => void;
 };
 
-const fieldLabels = {
-  displayName: "显示名称",
-  role: "身份",
-  school: "学校",
-  city: "城市"
-} as const;
-
 export function ProfileOnboarding({
   reason,
   profile,
@@ -45,6 +38,10 @@ export function ProfileOnboarding({
     error: null,
     dirtyFields: []
   });
+  const organizationLabel =
+    formState.draft.role === "lister" || formState.draft.role === "both"
+      ? "学校或公司"
+      : "学校";
 
   useEffect(() => {
     dispatch({ type: "hydrate-profile", profile });
@@ -57,6 +54,12 @@ export function ProfileOnboarding({
     const missing = getMissingProfileFields(input);
 
     if (missing.length > 0) {
+      const fieldLabels = {
+        displayName: "显示名称",
+        role: "身份",
+        school: organizationLabel,
+        city: "城市"
+      } as const;
       dispatch({
         type: "set-error",
         error: `请填写${missing.map((field) => fieldLabels[field]).join("、")}。`
@@ -147,7 +150,7 @@ export function ProfileOnboarding({
                 htmlFor={`${fieldId}-school`}
                 className="grid gap-1 text-xs font-black uppercase text-muted-foreground"
               >
-                学校
+                {organizationLabel}
                 <Input
                   id={`${fieldId}-school`}
                   name="school"
@@ -160,7 +163,7 @@ export function ProfileOnboarding({
                       value: event.target.value
                     })
                   }
-                  placeholder="UCLA"
+                  placeholder={organizationLabel === "学校" ? "UCLA" : "UCLA 或公司名称"}
                 />
               </label>
 

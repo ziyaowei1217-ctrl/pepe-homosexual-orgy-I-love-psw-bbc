@@ -1,3 +1,5 @@
+import { createNationwideSeedListings } from "./nationwide-listing-seeds";
+
 const seedTimestamp = new Date().toISOString();
 
 const listingImages = [
@@ -26,7 +28,7 @@ const roommateImages = [
   "https://images.unsplash.com/photo-1547425260-76bcadfb4f2c?auto=format&fit=crop&w=900&q=80"
 ];
 
-export const seedListings = [
+const localSeedListings = [
   {
     id: "seed-listing-1",
     title: "Westwood UCLA 步行圈阳光主卧",
@@ -386,7 +388,120 @@ export const seedListings = [
     ownerId: "seed-user",
     createdAt: seedTimestamp,
     updatedAt: seedTimestamp
+  },
+  {
+    id: "seed-listing-boston-1",
+    title: "Back Bay 棕石公寓一居",
+    area: "Boston · Back Bay",
+    image: listingImages[2],
+    price: 2470,
+    originalPrice: 2760,
+    beds: 1,
+    baths: 1,
+    commute: "步行 9 分钟到 Copley Square",
+    transit: "Green Line 12 分钟到 Fenway",
+    trust: "房源资料完整 · 演示房源",
+    tags: ["带家具", "洗烘", "近地铁"],
+    score: 4.88,
+    ownerId: "seed-user",
+    createdAt: seedTimestamp,
+    updatedAt: seedTimestamp
+  },
+  {
+    id: "seed-listing-boston-2",
+    title: "Fenway 学生友好 Studio",
+    area: "Boston · Fenway",
+    image: listingImages[3],
+    price: 2180,
+    originalPrice: 2440,
+    beds: 1,
+    baths: 1,
+    commute: "步行 11 分钟到 Northeastern",
+    transit: "Green Line 8 分钟到 Back Bay",
+    trust: "房源资料完整 · 演示房源",
+    tags: ["学生友好", "带家具", "近地铁"],
+    score: 4.84,
+    ownerId: "seed-user",
+    createdAt: seedTimestamp,
+    updatedAt: seedTimestamp
+  },
+  {
+    id: "seed-listing-boston-3",
+    title: "Allston 绿线旁合租主卧",
+    area: "Boston · Allston",
+    image: listingImages[4],
+    price: 1580,
+    originalPrice: 1810,
+    beds: 3,
+    baths: 2,
+    commute: "公交 14 分钟到 Boston University",
+    transit: "步行 6 分钟到 Green Line",
+    trust: "房源资料完整 · 演示房源",
+    tags: ["合租", "Wi-Fi", "近地铁"],
+    score: 4.78,
+    ownerId: "seed-user",
+    createdAt: seedTimestamp,
+    updatedAt: seedTimestamp
+  },
+  {
+    id: "seed-listing-boston-4",
+    title: "Cambridge 红线通勤 2B1B",
+    area: "Boston · Cambridge",
+    image: listingImages[5],
+    price: 3290,
+    originalPrice: 3650,
+    beds: 2,
+    baths: 1,
+    commute: "骑行 10 分钟到 MIT",
+    transit: "Red Line 16 分钟到 Downtown Crossing",
+    trust: "房源资料完整 · 演示房源",
+    tags: ["整租", "学习友好", "近地铁"],
+    score: 4.91,
+    ownerId: "seed-user",
+    createdAt: seedTimestamp,
+    updatedAt: seedTimestamp
+  },
+  {
+    id: "seed-listing-boston-5",
+    title: "Somerville 安静采光次卧",
+    area: "Boston · Somerville",
+    image: listingImages[6],
+    price: 1740,
+    originalPrice: 1990,
+    beds: 2,
+    baths: 1,
+    commute: "Green Line 18 分钟到 Downtown Boston",
+    transit: "步行 7 分钟到 Gilman Square",
+    trust: "房源资料完整 · 演示房源",
+    tags: ["采光好", "无烟", "近地铁"],
+    score: 4.81,
+    ownerId: "seed-user",
+    createdAt: seedTimestamp,
+    updatedAt: seedTimestamp
+  },
+  {
+    id: "seed-listing-boston-6",
+    title: "Seaport 海港景观一居",
+    area: "Boston · Seaport",
+    image: listingImages[7],
+    price: 2980,
+    originalPrice: 3340,
+    beds: 1,
+    baths: 1,
+    commute: "步行 13 分钟到 South Station",
+    transit: "Silver Line 12 分钟到 Downtown",
+    trust: "房源资料完整 · 演示房源",
+    tags: ["景观", "门卫", "健身房"],
+    score: 4.86,
+    ownerId: "seed-user",
+    createdAt: seedTimestamp,
+    updatedAt: seedTimestamp
   }
+];
+
+export const seedListings = [
+  ...localSeedListings,
+  ...createNationwideSeedListings(seedTimestamp, listingImages)
 ].map((listing) => ({
   ...listing,
   availableFrom: "2026-08-01T00:00:00.000Z",

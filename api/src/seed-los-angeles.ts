@@ -18,6 +18,25 @@ async function main() {
     }
   });
 
+  await prisma.profile.upsert({
+    where: { email: "la-seed-owner@example.com" },
+    update: {
+      displayName: "Marketplace Seed Owner",
+      school: "Property Management",
+      city: "United States",
+      role: "lister",
+      bio: "Property manager for the nationwide marketplace demo inventory."
+    },
+    create: {
+      email: "la-seed-owner@example.com",
+      displayName: "Marketplace Seed Owner",
+      school: "Property Management",
+      city: "United States",
+      role: "lister",
+      bio: "Property manager for the nationwide marketplace demo inventory."
+    }
+  });
+
   for (const listing of seedListings) {
     const { createdAt: _createdAt, updatedAt: _updatedAt, ...data } = listing;
 
@@ -82,7 +101,7 @@ async function main() {
     });
   }
 
-  console.log(`Seeded ${seedListings.length} Los Angeles listings and ${seedRoommates.length} roommates.`);
+  console.log(`Seeded ${seedListings.length} marketplace listings and ${seedRoommates.length} roommates.`);
 }
 
 main()

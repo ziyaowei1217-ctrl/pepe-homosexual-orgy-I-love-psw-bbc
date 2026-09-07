@@ -25,6 +25,7 @@ type ListingRecord = {
   tags: string[];
   score: number;
   status: ListingStatus;
+  revision: number;
   submittedAt: Date | null;
   reviewedAt: Date | null;
   reviewerId: string | null;
@@ -53,6 +54,7 @@ type ListingWhere = {
   id?: string;
   ownerId?: string;
   status?: ListingStatus;
+  revision?: number;
   availableFrom?: { lte: Date };
   availableTo?: { gte: Date };
 };
@@ -99,11 +101,8 @@ type ListingUpdateArgs = {
 };
 
 type ListingUpdateManyArgs = {
-  where: {
-    id: string;
-    status: "SUBMITTED";
-  };
-  data: Partial<ListingRecord>;
+  where: ListingWhere & { id: string };
+  data: Omit<Partial<ListingRecord>, "revision"> & { revision?: number | { increment: number } };
 };
 
 type ListingMediaCreateArgs = {
@@ -263,7 +262,8 @@ describe("ListingsService", () => {
       listings: [listingRecord({ id: "approved", ownerId: "owner-1", status: "APPROVED" })],
       media: [
         mediaRecord({ id: "media-2", listingId: "approved", sortOrder: 2, storageStatus: "PUBLISHED" }),
-        mediaRecord({ id: "media-1", listingId: "approved", sortOrder: 1, storageStatus: "PUBLISHED" })
+        mediaRecord({ id: "media-1", listingId: "approved", sortOrder: 1, storageStatus: "PUBLISHED" }),
+        mediaRecord({ id: "private", listingId: "approved", sortOrder: 0, storageStatus: "PENDING_UPLOAD" })
       ]
     });
     const service = new ListingsService(prisma as never, new AuditService());
@@ -273,7 +273,7 @@ describe("ListingsService", () => {
       media: [{ id: "media-1" }, { id: "media-2" }]
     });
     expect(prisma.listing.findUniqueCalls[0]?.include).toEqual({
-      media: { orderBy: { sortOrder: "asc" } }
+      media: { where: { storageStatus: "PUBLISHED" }, orderBy: { sortOrder: "asc" } }
     });
     expectSafeListingMedia((await service.findOne("approved")).media);
   });
@@ -641,7 +641,7 @@ describe("ListingsService", () => {
     const prisma = createPrismaMock({ listings: [listingRecord({ id: reviewListingId, status: "SUBMITTED" })] });
     const service = new ListingsService(prisma as never, new AuditService());
 
-    const approved = await service.approve(reviewListingId, auditActor);
+    const approved = await service.approve(reviewListingId, auditActor, 0);
 
     expect(approved.status).toBe("APPROVED");
     expect(approved.reviewedAt).toBeInstanceOf(Date);
@@ -654,7 +654,7 @@ describe("ListingsService", () => {
       actorUserId: "admin-1",
       requestId: "request-1",
       outcome: "SUCCESS",
-      metadata: { reason: "manual_review_approved" }
+      metadata: { reason: "manual_review_approved", reviewedRevision: 0 }
     });
     expect(prisma.transactionCount).toBe(1);
   });
@@ -669,7 +669,7 @@ describe("ListingsService", () => {
     });
     const service = new ListingsService(prisma as never, new AuditService());
 
-    await service.approve(reviewListingId, auditActor);
+    await service.approve(reviewListingId, auditActor, 0);
 
     expect(prisma.listingMedia.rows).toEqual([
       expect.objectContaining({ storageStatus: "PUBLISHED", reviewStatus: "APPROVED", publishedAt: expect.any(Date) }),
@@ -684,7 +684,7 @@ describe("ListingsService", () => {
     });
     const service = new ListingsService(prisma as never, new AuditService());
 
-    await expect(service.approve(reviewListingId, auditActor)).rejects.toThrow("audit create failed");
+    await expect(service.approve(reviewListingId, auditActor, 0)).rejects.toThrow("audit create failed");
 
     expect(prisma.listing.rows[0].status).toBe("SUBMITTED");
     expect(prisma.auditEvent.rows).toHaveLength(0);
@@ -695,7 +695,7 @@ describe("ListingsService", () => {
     const prisma = createPrismaMock({ listings: [listingRecord({ id: reviewListingId, status: "SUBMITTED" })] });
     const service = new ListingsService(prisma as never, new AuditService());
 
-    const rejected = await service.reject(reviewListingId, auditActor, "  Please add clearer bedroom photos  ");
+    const rejected = await service.reject(reviewListingId, auditActor, "  Please add clearer bedroom photos  ", 0);
 
     expect(rejected.status).toBe("REJECTED");
     expect(rejected.reviewedAt).toBeInstanceOf(Date);
@@ -708,7 +708,7 @@ describe("ListingsService", () => {
       actorUserId: "admin-1",
       requestId: "request-1",
       outcome: "SUCCESS",
-      metadata: { reason: "Please add clearer bedroom photos" }
+      metadata: { reason: "Please add clearer bedroom photos", reviewedRevision: 0 }
     });
     expect(prisma.transactionCount).toBe(1);
   });
@@ -718,8 +718,8 @@ describe("ListingsService", () => {
     const service = new ListingsService(prisma as never, new AuditService());
 
     const decisions = await Promise.allSettled([
-      service.approve(reviewListingId, auditActor),
-      service.reject(reviewListingId, auditActor, "Please add clearer bedroom photos")
+      service.approve(reviewListingId, auditActor, 0),
+      service.reject(reviewListingId, auditActor, "Please add clearer bedroom photos", 0)
     ]);
 
     expect(decisions.filter((decision) => decision.status === "fulfilled")).toHaveLength(1);
@@ -735,15 +735,15 @@ describe("ListingsService", () => {
     const prisma = createPrismaMock({ listings: [listingRecord({ id: reviewListingId, status: "SUBMITTED" })] });
     const service = new ListingsService(prisma as never, new AuditService());
 
-    await expect(service.reject(reviewListingId, auditActor, "   ")).rejects.toThrow(BadRequestException);
+    await expect(service.reject(reviewListingId, auditActor, "   ", 0)).rejects.toThrow(BadRequestException);
   });
 
   it.each(["DRAFT", "APPROVED", "REJECTED"] as const)("blocks admin review for %s listings", async (status) => {
     const prisma = createPrismaMock({ listings: [listingRecord({ id: "listing-1", status })] });
     const service = new ListingsService(prisma as never, new AuditService());
 
-    await expect(service.approve("listing-1", auditActor)).rejects.toThrow(BadRequestException);
-    await expect(service.reject("listing-1", auditActor, "Reason")).rejects.toThrow(BadRequestException);
+    await expect(service.approve("listing-1", auditActor, 0)).rejects.toThrow(BadRequestException);
+    await expect(service.reject("listing-1", auditActor, "Reason", 0)).rejects.toThrow(BadRequestException);
   });
 });
 
@@ -786,6 +786,7 @@ function listingRecord(overrides: Partial<ListingRecord> = {}): ListingRecord {
     trust: dto.trust,
     tags: dto.tags,
     status: "DRAFT",
+    revision: 0,
     submittedAt: null,
     reviewedAt: null,
     reviewerId: null,
@@ -911,13 +912,16 @@ function createPrismaMock({
       updateMany: async (args: ListingUpdateManyArgs) => {
         mock.listing.updateManyCalls.push(args);
         const index = records.findIndex(
-          (listing) => listing.id === args.where.id && listing.status === args.where.status
+          (listing) => matchesWhere(listing, args.where)
         );
         if (index === -1) return { count: 0 };
 
         records[index] = {
           ...records[index],
           ...args.data,
+          revision: typeof args.data.revision === "object"
+            ? records[index].revision + args.data.revision.increment
+            : args.data.revision ?? records[index].revision,
           updatedAt: args.data.updatedAt ?? new Date()
         };
         return { count: 1 };
@@ -989,6 +993,7 @@ function matchesWhere(listing: ListingRecord, where: ListingWhere = {}) {
   if (where.id && listing.id !== where.id) return false;
   if (where.ownerId && listing.ownerId !== where.ownerId) return false;
   if (where.status && listing.status !== where.status) return false;
+  if (where.revision !== undefined && listing.revision !== where.revision) return false;
   if (where.availableFrom?.lte && listing.availableFrom > where.availableFrom.lte) return false;
   if (where.availableTo?.gte && listing.availableTo < where.availableTo.gte) return false;
   return true;

@@ -15,6 +15,21 @@ export class RoommatesController {
     return this.roommates.findDeck(query, request.user?.id);
   }
 
+  @UseGuards(OptionalAuthGuard)
+  @Get("deck/:candidateId")
+  findDeckCandidate(
+    @Param("candidateId") candidateId: string,
+    @Req() request: Partial<AuthenticatedRequest>
+  ) {
+    return this.roommates.findDeckCandidate(candidateId, request.user?.id);
+  }
+
+  @UseGuards(AuthGuard)
+  @Get("activity")
+  findActivity(@Req() request: AuthenticatedRequest) {
+    return this.roommates.findActivity(request.user.id);
+  }
+
   @Get()
   findAll() {
     return this.roommates.findAll();

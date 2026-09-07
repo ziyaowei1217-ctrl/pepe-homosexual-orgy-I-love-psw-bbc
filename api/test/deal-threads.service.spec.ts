@@ -1,4 +1,5 @@
 import { BadRequestException, ConflictException, NotFoundException } from "@nestjs/common";
+import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
 
 import { DealThreadsService } from "../src/deal-threads/deal-threads.service";
@@ -26,8 +27,8 @@ describe("DealThreadsService", () => {
     const prisma = createPrismaMock();
     const service = new DealThreadsService(prisma as never);
     const created = await service.createOrFindThread("renter-1", { listingId: "listing-1" });
-    await service.sendMessage("renter-1", created.id, { body: "Hello host" });
-    await service.sendMessage("host-1", created.id, { body: "Hello renter" });
+    await service.sendMessage("renter-1", created.id, { body: "Hello host", clientMessageId: randomUUID() });
+    await service.sendMessage("host-1", created.id, { body: "Hello renter", clientMessageId: randomUUID() });
 
     const [renterThread] = await service.findForUser("renter-1");
     const [hostThread] = await service.findForUser("host-1");
@@ -43,7 +44,7 @@ describe("DealThreadsService", () => {
     const service = new DealThreadsService(prisma as never);
     const thread = await service.createOrFindThread("renter-1", { listingId: "listing-1" });
 
-    await expect(service.sendMessage("other-1", thread.id, { body: "hello" })).rejects.toBeInstanceOf(
+    await expect(service.sendMessage("other-1", thread.id, { body: "hello", clientMessageId: randomUUID() })).rejects.toBeInstanceOf(
       NotFoundException
     );
   });
@@ -56,6 +57,19 @@ describe("DealThreadsService", () => {
     await expect(
       service.createOrFindThread("renter-1", { listingId: "listing-1", dealRoomId: "room-2" })
     ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it("returns existing threads for unavailable listings while enforcing requested deal-room ownership and binding", async () => {
+    const prisma = createPrismaMock();
+    const service = new DealThreadsService(prisma as never);
+    const original = await service.createOrFindThread("renter-1", { listingId: "listing-1", dealRoomId: "room-1" });
+    prisma.state.listings[0]!.status = "SUBMITTED";
+    await expect(service.createOrFindThread("renter-1", { listingId: "listing-1", dealRoomId: "room-1" }))
+      .resolves.toMatchObject({ id: original.id, dealRoomId: "room-1" });
+    await expect(service.createOrFindThread("renter-1", { listingId: "listing-1", dealRoomId: "room-2" }))
+      .rejects.toBeInstanceOf(ConflictException);
+    await expect(service.createOrFindThread("renter-1", { listingId: "listing-1", dealRoomId: "not-owned" }))
+      .rejects.toBeInstanceOf(NotFoundException);
   });
 
   it("allows only the renter to create or adjust a viewing request", async () => {
@@ -89,10 +103,10 @@ describe("DealThreadsService", () => {
     });
     const requestId = withRequest.viewingRequests[0].id;
 
-    const confirmed = await service.confirmViewingRequest("host-1", thread.id, requestId);
+    const confirmed = await service.confirmViewingRequest("host-1", thread.id, requestId, 1);
     expect(confirmed.viewingRequests[0].status).toBe("CONFIRMED");
     expect(confirmed.messages.at(-1)?.body).toContain("已确认");
-    const declined = await service.declineViewingRequest("host-1", thread.id, requestId);
+    const declined = await service.declineViewingRequest("host-1", thread.id, requestId, 2);
     expect(declined.viewingRequests[0].status).toBe("CANCELLED");
     expect(declined.messages.at(-1)?.body).toContain("已拒绝");
   });
@@ -109,11 +123,11 @@ describe("DealThreadsService", () => {
     });
     const requestId = withRequest.viewingRequests[0].id;
 
-    await expect(service.confirmViewingRequest("renter-1", thread.id, requestId)).rejects.toBeInstanceOf(
+    await expect(service.confirmViewingRequest("renter-1", thread.id, requestId, 1)).rejects.toBeInstanceOf(
       NotFoundException
     );
-    await service.declineViewingRequest("host-1", thread.id, requestId);
-    await expect(service.confirmViewingRequest("host-1", thread.id, requestId)).rejects.toBeInstanceOf(
+    await service.declineViewingRequest("host-1", thread.id, requestId, 1);
+    await expect(service.confirmViewingRequest("host-1", thread.id, requestId, 2)).rejects.toBeInstanceOf(
       BadRequestException
     );
   });
@@ -153,7 +167,10 @@ function createPrismaMock() {
     viewingRequests: requests.filter((item) => item.threadId === thread.id)
   });
 
-  return {
+  const mock = {
+    $queryRaw: async () => [],
+    $transaction: async (operation: (transaction: any) => Promise<unknown>): Promise<any> => operation(mock),
+    state: { listings },
     user: {
       findUnique: async ({ where }: any) => users.find((user) => user.id === where.id) ?? null
     },
@@ -218,6 +235,8 @@ function createPrismaMock() {
       }
     },
     dealMessage: {
+      findUnique: async ({ where }: any) => messages.find(message =>
+        message.senderId === where.senderId_clientMessageId.senderId && message.clientMessageId === where.senderId_clientMessageId.clientMessageId) ?? null,
       create: async ({ data }: any) => {
         const created = { id: `message-${messages.length + 1}`, ...data, createdAt: now() };
         messages.push(created);
@@ -225,6 +244,12 @@ function createPrismaMock() {
       }
     },
     viewingRequest: {
+      updateMany: async ({ where, data }: any) => {
+        const request = requests.find(item => Object.entries(where).every(([key, value]) => item[key] === value));
+        if (!request) return { count: 0 };
+        Object.assign(request, data, { revision: request.revision + data.revision.increment });
+        return { count: 1 };
+      },
       findFirst: async ({ where }: any) =>
         requests.find(
           (request) => request.threadId === where.threadId && where.status.in.includes(request.status)
@@ -233,6 +258,7 @@ function createPrismaMock() {
       create: async ({ data }: any) => {
         const created = {
           id: `viewing-${requests.length + 1}`,
+          revision: 1,
           ...data,
           createdAt: now(),
           updatedAt: now()
@@ -242,9 +268,10 @@ function createPrismaMock() {
       },
       update: async ({ where, data }: any) => {
         const request = requests.find((item) => item.id === where.id);
-        Object.assign(request, data, { updatedAt: now() });
+        Object.assign(request, data, { revision: request.revision + (data.revision?.increment ?? 0), updatedAt: now() });
         return request;
       }
     }
   };
+  return mock;
 }

@@ -1,14 +1,19 @@
+import { writeStoredAuthSession } from "../lib/auth-session";
+// @vitest-environment jsdom
+
 import React from "react";
-import TestRenderer, { act } from "react-test-renderer";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import TestRenderer, { act } from "./support/dom-test-renderer";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ListingMediaUploader } from "../components/listing-media-uploader";
 import { PublishScreen } from "../components/sublet-app";
 import type { ListingMediaSummary } from "../lib/listing-media";
 
 describe("ListingMediaUploader", () => {
+  beforeEach(() => writeStoredAuthSession("token-1"));
   afterEach(() => {
     vi.unstubAllGlobals();
+    localStorage.clear();
   });
 
   it("recovers server media, reports the submission summary, and exposes only supported file types", async () => {

@@ -1,7 +1,7 @@
 import { Body, Controller, Get, Inject, Param, Post, Req, UseGuards, ValidationPipe } from "@nestjs/common";
 
 import { AuthGuard, AuthenticatedRequest } from "../auth/auth.guard";
-import { CreateDealThreadDto, CreateViewingRequestDto, SendDealMessageDto } from "./dto";
+import { CreateDealThreadDto, CreateViewingRequestDto, DecideViewingRequestDto, SendDealMessageDto } from "./dto";
 import { DealThreadsService } from "./deal-threads.service";
 
 const createThreadBodyPipe = new ValidationPipe({
@@ -23,6 +23,10 @@ const createViewingBodyPipe = new ValidationPipe({
   transform: true,
   whitelist: true,
   expectedType: CreateViewingRequestDto
+});
+
+const decideViewingBodyPipe = new ValidationPipe({
+  forbidNonWhitelisted: true, transform: true, whitelist: true, expectedType: DecideViewingRequestDto
 });
 
 @UseGuards(AuthGuard)
@@ -62,17 +66,19 @@ export class DealThreadsController {
   confirmViewingRequest(
     @Req() request: AuthenticatedRequest,
     @Param("threadId") threadId: string,
-    @Param("requestId") requestId: string
+    @Param("requestId") requestId: string,
+    @Body(decideViewingBodyPipe) dto: DecideViewingRequestDto
   ) {
-    return this.dealThreads.confirmViewingRequest(request.user.id, threadId, requestId);
+    return this.dealThreads.confirmViewingRequest(request.user.id, threadId, requestId, dto.expectedRevision);
   }
 
   @Post(":threadId/viewing-requests/:requestId/decline")
   declineViewingRequest(
     @Req() request: AuthenticatedRequest,
     @Param("threadId") threadId: string,
-    @Param("requestId") requestId: string
+    @Param("requestId") requestId: string,
+    @Body(decideViewingBodyPipe) dto: DecideViewingRequestDto
   ) {
-    return this.dealThreads.declineViewingRequest(request.user.id, threadId, requestId);
+    return this.dealThreads.declineViewingRequest(request.user.id, threadId, requestId, dto.expectedRevision);
   }
 }

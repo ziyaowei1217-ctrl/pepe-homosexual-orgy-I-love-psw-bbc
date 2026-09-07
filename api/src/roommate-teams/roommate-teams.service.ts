@@ -175,7 +175,7 @@ export class RoommateTeamsService {
     return this.respondToInvite(userId, inviteId, "inviterId", "CANCELLED");
   }
 
-  async leave(userId: string) {
+  async leave(userId: string, teamId: string) {
     return this.withSerializableRetry(async (transaction) => {
       const membership = await transaction.roommateTeamMember.findFirst({
         where: {
@@ -186,6 +186,7 @@ export class RoommateTeamsService {
         include: { team: { include: { members: true } } }
       });
       if (!membership?.team) throw new NotFoundException("Active roommate team not found");
+      if (membership.team.id !== teamId) throw new ConflictException("组队状态已更新，请刷新后重试");
 
       const now = new Date();
       const dissolved = await transaction.roommateTeam.updateMany({

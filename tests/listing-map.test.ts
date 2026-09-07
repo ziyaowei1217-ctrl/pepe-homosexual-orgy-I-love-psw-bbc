@@ -6,7 +6,7 @@ import {
   getMapMarkers,
   getMapSummary,
   getMapTiles,
-  osmTileUrl
+  mapTileUrl
 } from "../lib/listing-map";
 
 describe("listing map", () => {
@@ -15,6 +15,41 @@ describe("listing map", () => {
       lat: 34.0635,
       lng: -118.4455
     });
+  });
+
+  it("resolves Boston neighborhood coordinates instead of falling back to Los Angeles", () => {
+    expect(getListingCoordinates("Boston · Back Bay")).toMatchObject({
+      lat: 42.3503,
+      lng: -71.081
+    });
+  });
+
+  it("keeps nationwide metro neighborhoods near their own city centers", () => {
+    const seattle = getListingCoordinates("Seattle · University District");
+    const newYork = getListingCoordinates("New York · Morningside Heights");
+
+    expect(seattle.lat).toBeGreaterThan(47.5);
+    expect(seattle.lat).toBeLessThan(47.8);
+    expect(seattle.lng).toBeGreaterThan(-122.5);
+    expect(seattle.lng).toBeLessThan(-122.1);
+    expect(newYork.lat).toBeGreaterThan(40.6);
+    expect(newYork.lat).toBeLessThan(40.9);
+    expect(newYork.lng).toBeGreaterThan(-74.2);
+    expect(newYork.lng).toBeLessThan(-73.7);
+  });
+
+  it("uses listing coordinates as the source of truth for map center and markers", () => {
+    const listings = [{
+      id: "seattle-custom",
+      area: "Seattle · Custom district",
+      price: 2100,
+      latitude: 47.62,
+      longitude: -122.31
+    }];
+
+    expect(getMapCenterForListings(listings)).toEqual({ lat: 47.62, lng: -122.31 });
+    expect(getMapMarkers(listings, { lat: 47.62, lng: -122.31 }, 11, { width: 640, height: 360 })[0])
+      .toMatchObject({ lat: 47.62, lng: -122.31, x: 320, y: 180 });
   });
 
   it("projects listing markers into the map viewport", () => {
@@ -50,11 +85,19 @@ describe("listing map", () => {
     expect(marker.y).toBeLessThanOrEqual(332);
   });
 
-  it("builds OSM tile URLs around the current map center", () => {
+  it("uses the unblocked default basemap provider around the current map center", () => {
     const tiles = getMapTiles({ lat: 34.0522, lng: -118.2437 }, 11, { width: 640, height: 360 });
 
     expect(tiles.length).toBeGreaterThan(4);
-    expect(tiles[0].url).toBe(osmTileUrl(tiles[0].xTile, tiles[0].yTile, 11));
+    expect(tiles[0].url).toBe(
+      `https://tile.openstreetmap.de/11/${tiles[0].xTile}/${tiles[0].yTile}.png`
+    );
+    expect(tiles.every((tile) => Number.isInteger(tile.x) && Number.isInteger(tile.y))).toBe(true);
+  });
+
+  it("supports a production map-provider tile template", () => {
+    expect(mapTileUrl(4, 5, 6, "https://maps.example.com/{z}/{x}/{y}.png?key=public"))
+      .toBe("https://maps.example.com/6/4/5.png?key=public");
   });
 
   it("summarizes visible listing prices for the map header", () => {

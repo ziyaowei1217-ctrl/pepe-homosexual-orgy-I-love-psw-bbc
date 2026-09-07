@@ -1,0 +1,529 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sublet Pipeline 产品展示</title>
+  <style>
+    :root { color-scheme: light; --ink:#10233f; --blue:#006aff; --line:#dce8f8; --muted:#60708a; --paper:#f5f9ff; }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC",sans-serif; color:var(--ink); background:radial-gradient(circle at 8% 0%,#dcebff 0,transparent 27rem),var(--paper); }
+    button { font:inherit; }
+    .hero { padding:72px max(24px,calc((100vw - 1480px)/2)); border-bottom:1px solid var(--line); background:rgba(255,255,255,.72); backdrop-filter:blur(18px); }
+    .brand { display:flex; align-items:center; gap:12px; font-weight:900; letter-spacing:-.02em; }
+    .brand-mark { width:42px; height:42px; display:grid; place-items:center; color:white; border-radius:18px; background:linear-gradient(135deg,#006aff,#0c4598); box-shadow:0 16px 40px #006aff33; }
+    .eyebrow { margin-top:54px; color:var(--blue); font-size:12px; font-weight:900; letter-spacing:.14em; text-transform:uppercase; }
+    h1 { max-width:900px; margin:12px 0 18px; font-size:clamp(42px,7vw,90px); line-height:.95; letter-spacing:-.065em; }
+    .lede { max-width:760px; margin:0; color:var(--muted); font-size:18px; line-height:1.7; font-weight:650; }
+    .stats { display:flex; flex-wrap:wrap; gap:12px; margin-top:32px; }
+    .stat { min-width:150px; padding:18px 20px; border:1px solid var(--line); border-radius:22px; background:white; }
+    .stat strong { display:block; font-size:28px; }
+    .stat span { color:var(--muted); font-size:13px; font-weight:750; }
+    .toolbar { position:sticky; top:0; z-index:10; display:flex; gap:8px; overflow:auto; padding:14px max(24px,calc((100vw - 1480px)/2)); border-bottom:1px solid var(--line); background:#f8fbffed; backdrop-filter:blur(18px); }
+    .filter { white-space:nowrap; border:1px solid var(--line); border-radius:999px; padding:10px 15px; color:var(--muted); background:white; font-weight:800; cursor:pointer; }
+    .filter.active { border-color:var(--blue); color:white; background:var(--blue); }
+    .gallery { display:grid; grid-template-columns:repeat(auto-fill,minmax(min(100%,390px),1fr)); gap:22px; max-width:1480px; margin:auto; padding:32px 24px 80px; }
+    .shot-card { overflow:hidden; border:1px solid var(--line); border-radius:28px; background:white; box-shadow:0 22px 65px rgba(35,77,126,.09); }
+    .shot-card[hidden] { display:none; }
+    .shot-open { display:block; width:100%; height:310px; padding:0; border:0; background:#eaf2ff; cursor:zoom-in; overflow:hidden; }
+    .shot-open img { width:100%; height:100%; object-fit:cover; object-position:top; transition:transform .35s ease; }
+    .shot-open:hover img { transform:scale(1.018); }
+    .shot-copy { padding:20px 22px 24px; }
+    .shot-meta { display:flex; gap:8px; color:var(--blue); font-size:11px; font-weight:900; letter-spacing:.08em; text-transform:uppercase; }
+    .shot-meta span+span:before { content:"/"; margin-right:8px; color:#9fb4d0; }
+    h2 { margin:10px 0 7px; font-size:22px; letter-spacing:-.03em; }
+    .shot-copy p { margin:0; color:var(--muted); line-height:1.55; font-weight:600; }
+    dialog { width:min(94vw,1480px); max-height:94vh; padding:0; border:0; border-radius:26px; background:#0a1627; box-shadow:0 40px 120px #00142b88; }
+    dialog::backdrop { background:#06101fda; backdrop-filter:blur(8px); }
+    .modal-bar { display:flex; align-items:center; justify-content:space-between; gap:16px; padding:14px 18px; color:white; }
+    .modal-bar strong { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .modal-close { border:1px solid #ffffff33; border-radius:999px; padding:8px 12px; color:white; background:#ffffff14; cursor:pointer; }
+    .modal-image { display:block; width:100%; max-height:calc(94vh - 58px); object-fit:contain; background:#0a1627; }
+    @media (max-width:640px) { .hero{padding-top:40px;padding-bottom:44px}.eyebrow{margin-top:38px}.shot-open{height:240px}.gallery{padding-inline:14px}.toolbar{padding-inline:14px} }
+  </style>
+</head>
+<body>
+  <header class="hero">
+    <div class="brand"><span class="brand-mark">⌂</span><span>Sublet Pipeline</span></div>
+    <div class="eyebrow">Product experience archive · 2026</div>
+    <h1>从找房到入住，完整看见每一步。</h1>
+    <p class="lede">覆盖公共浏览、租客决策、室友匹配、房东运营、管理员审核，以及申请、演示支付、资金流水和双方入住确认。</p>
+    <div class="stats"><div class="stat"><strong>12</strong><span>完整界面</span></div><div class="stat"><strong>34</strong><span>功能面板</span></div><div class="stat"><strong>46</strong><span>真实产品截图</span></div></div>
+  </header>
+  <nav class="toolbar" aria-label="展示筛选"><button type="button" class="filter active" data-filter="全部">全部</button><button type="button" class="filter" data-filter="完整界面">完整界面</button><button type="button" class="filter" data-filter="功能面板">功能面板</button><button type="button" class="filter" data-filter="公共浏览">公共浏览</button><button type="button" class="filter" data-filter="账户">账户</button><button type="button" class="filter" data-filter="室友">室友</button><button type="button" class="filter" data-filter="消息">消息</button><button type="button" class="filter" data-filter="租客">租客</button><button type="button" class="filter" data-filter="房东">房东</button><button type="button" class="filter" data-filter="管理员">管理员</button></nav>
+  <main class="gallery">
+        <article class="shot-card" data-kind="page" data-category="公共浏览" data-index="0">
+          <button class="shot-open" type="button" aria-label="放大查看 找房首页">
+            <img src="screenshots/page-home.png" alt="找房首页" loading="lazy">
+          </button>
+          <div class="shot-copy">
+            <div class="shot-meta"><span>完整界面</span><span>公共浏览</span></div>
+            <h2>找房首页</h2>
+            <p>房源目录、搜索筛选与地图浏览的完整桌面界面。</p>
+          </div>
+        </article>
+        <article class="shot-card" data-kind="page" data-category="公共浏览" data-index="1">
+          <button class="shot-open" type="button" aria-label="放大查看 房源详情">
+            <img src="screenshots/page-listing-detail.png" alt="房源详情" loading="lazy">
+          </button>
+          <div class="shot-copy">
+            <div class="shot-meta"><span>完整界面</span><span>公共浏览</span></div>
+            <h2>房源详情</h2>
+            <p>房源图片、价格、设施、房东信息与行动入口的完整视图。</p>
+          </div>
+        </article>
+        <article class="shot-card" data-kind="page" data-category="账户" data-index="2">
+          <button class="shot-open" type="button" aria-label="放大查看 邮箱登录">
+            <img src="screenshots/page-login.png" alt="邮箱登录" loading="lazy">
+          </button>
+          <div class="shot-copy">
+            <div class="shot-meta"><span>完整界面</span><span>账户</span></div>
+            <h2>邮箱登录</h2>
+            <p>通过邮箱验证码进入产品的登录界面。</p>
+          </div>
+        </article>
+        <article class="shot-card" data-kind="page" data-category="账户" data-index="3">
+          <button class="shot-open" type="button" aria-label="放大查看 新用户引导">
+            <img src="screenshots/page-account-onboarding.png" alt="新用户引导" loading="lazy">
+          </button>
+          <div class="shot-copy">
+            <div class="shot-meta"><span>完整界面</span><span>账户</span></div>
+            <h2>新用户引导</h2>
+            <p>登录后的个人资料补全与首次使用引导。</p>
+          </div>
+        </article>
+        <article class="shot-card" data-kind="page" data-category="账户" data-index="4">
+          <button class="shot-open" type="button" aria-label="放大查看 账户中心">
+            <img src="screenshots/page-account.png" alt="账户中心" loading="lazy">
+          </button>
+          <div class="shot-copy">
+            <div class="shot-meta"><span>完整界面</span><span>账户</span></div>
+            <h2>账户中心</h2>
+            <p>个人资料、身份状态与账户相关设置。</p>
+          </div>
+        </article>
+        <article class="shot-card" data-kind="page" data-category="室友" data-index="5">
+          <button class="shot-open" type="button" aria-label="放大查看 室友发现">
+            <img src="screenshots/page-roommates.png" alt="室友发现" loading="lazy">
+          </button>
+          <div class="shot-copy">
+            <div class="shot-meta"><span>完整界面</span><span>室友</span></div>
+            <h2>室友发现</h2>
+            <p>基于生活方式与预算偏好的室友卡片推荐界面。</p>
+          </div>
+        </article>
+        <article class="shot-card" data-kind="page" data-category="室友" data-index="6">
+          <button class="shot-open" type="button" aria-label="放大查看 室友意向队列">
+            <img src="screenshots/page-roommate-likes.png" alt="室友意向队列" loading="lazy">
+          </button>
+          <div class="shot-copy">
+            <div class="shot-meta"><span>完整界面</span><span>室友</span></div>
+            <h2>室友意向队列</h2>
+            <p>集中查看已喜欢、互相匹配与待处理的室友关系。</p>
+          </div>
+        </article>
+        <article class="shot-card" data-kind="page" data-category="消息" data-index="7">
+          <button class="shot-open" type="button" aria-label="放大查看 统一消息中心">
+            <img src="screenshots/page-messages.png" alt="统一消息中心" loading="lazy">
+          </button>
+          <div class="shot-copy">
+            <div class="shot-meta"><span>完整界面</span><span>消息</span></div>
+            <h2>统一消息中心</h2>
+            <p>在同一收件箱处理房东沟通与室友会话。</p>
+          </div>
+        </article>
+        <article class="shot-card" data-kind="page" data-category="租客" data-index="8">
+          <button class="shot-open" type="button" aria-label="放大查看 行程与申请">
+            <img src="screenshots/page-trips.png" alt="行程与申请" loading="lazy">
+          </button>
+          <div class="shot-copy">
+            <div class="shot-meta"><span>完整界面</span><span>租客</span></div>
+            <h2>行程与申请</h2>
+            <p>查看租房申请、支付状态和入住确认的完整旅程。</p>
+          </div>
+        </article>
+        <article class="shot-card" data-kind="page" data-category="房东" data-index="9">
+          <button class="shot-open" type="button" aria-label="放大查看 房东发布中心">
+            <img src="screenshots/page-host-listings.png" alt="房东发布中心" loading="lazy">
+          </button>
+          <div class="shot-copy">
+            <div class="shot-meta"><span>完整界面</span><span>房东</span></div>
+            <h2>房东发布中心</h2>
+            <p>创建房源、管理图片并处理现有房源与申请。</p>
+          </div>
+        </article>
+        <article class="shot-card" data-kind="page" data-category="管理员" data-index="10">
+          <button class="shot-open" type="button" aria-label="放大查看 信任与审核后台">
+            <img src="screenshots/page-admin-trust.png" alt="信任与审核后台" loading="lazy">
+          </button>
+          <div class="shot-copy">
+            <div class="shot-meta"><span>完整界面</span><span>管理员</span></div>
+            <h2>信任与审核后台</h2>
+            <p>管理员审核房源并执行受保护的审核操作。</p>
+          </div>
+        </article>
+        <article class="shot-card" data-kind="page" data-category="管理员" data-index="11">
+          <button class="shot-open" type="button" aria-label="放大查看 室友资料后台">
+            <img src="screenshots/page-admin-roommates.png" alt="室友资料后台" loading="lazy">
+          </button>
+          <div class="shot-copy">
+            <div class="shot-meta"><span>完整界面</span><span>管理员</span></div>
+            <h2>室友资料后台</h2>
+            <p>创建、编辑与归档室友发现卡片。</p>
+          </div>
+        </article>
+        <article class="shot-card" data-kind="panel" data-category="公共浏览" data-index="12">
+          <button class="shot-open" type="button" aria-label="放大查看 搜索筛选">
+            <img src="screenshots/panel-search-filters.png" alt="搜索筛选" loading="lazy">
+          </button>
+          <div class="shot-copy">
+            <div class="shot-meta"><span>功能面板</span><span>公共浏览</span></div>
+            <h2>搜索筛选</h2>
+            <p>按日期、价格与居住条件缩小房源范围。</p>
+          </div>
+        </article>
+        <article class="shot-card" data-kind="panel" data-category="公共浏览" data-index="13">
+          <button class="shot-open" type="button" aria-label="放大查看 入住日期选择">
+            <img src="screenshots/panel-date-picker.png" alt="入住日期选择" loading="lazy">
+          </button>
+          <div class="shot-copy">
+            <div class="shot-meta"><span>功能面板</span><span>公共浏览</span></div>
+            <h2>入住日期选择</h2>
+            <p>选择精确入住区间或灵活日期。</p>
+          </div>
+        </article>
+        <article class="shot-card" data-kind="panel" data-category="公共浏览" data-index="14">
+          <button class="shot-open" type="button" aria-label="放大查看 房源地图">
+            <img src="screenshots/panel-map.png" alt="房源地图" loading="lazy">
+          </button>
+          <div class="shot-copy">
+            <div class="shot-meta"><span>功能面板</span><span>公共浏览</span></div>
+            <h2>房源地图</h2>
+            <p>通过地图标记和价格快速理解房源分布。</p>
+          </div>
+        </article>
+        <article class="shot-card" data-kind="panel" data-category="公共浏览" data-index="15">
+          <button class="shot-open" type="button" aria-label="放大查看 房源卡片">
+            <img src="screenshots/panel-listing-card.png" alt="房源卡片" loading="lazy">
+          </button>
+          <div class="shot-copy">
+            <div class="shot-meta"><span>功能面板</span><span>公共浏览</span></div>
+            <h2>房源卡片</h2>
+            <p>价格、信任信息、通勤与收藏入口的紧凑摘要。</p>
+          </div>
+        </article>
+        <article class="shot-card" data-kind="panel" data-category="公共浏览" data-index="16">
+          <button class="shot-open" type="button" aria-label="放大查看 本地收藏">
+            <img src="screenshots/panel-local-favorites.png" alt="本地收藏" loading="lazy">
+          </button>
+          <div class="shot-copy">
+            <div class="shot-meta"><span>功能面板</span><span>公共浏览</span></div>
+            <h2>本地收藏</h2>
+            <p>集中浏览访客在本机保存的房源。</p>
+          </div>
+        </article>
+        <article class="shot-card" data-kind="panel" data-category="租客" data-index="17">
+          <button class="shot-open" type="button" aria-label="放大查看 房源决策面板">
+            <img src="screenshots/panel-listing-detail.png" alt="房源决策面板" loading="lazy">
+          </button>
+          <div class="shot-copy">
+            <div class="shot-meta"><span>功能面板</span><span>租客</span></div>
+            <h2>房源决策面板</h2>
+            <p>将房源信息、可信度和关键行动收拢在一个决策视图中。</p>
+          </div>
+        </article>
+        <article class="shot-card" data-kind="panel" data-category="租客" data-index="18">
+          <button class="shot-open" type="button" aria-label="放大查看 动态匹配提示">
+            <img src="screenshots/panel-dynamic-match.png" alt="动态匹配提示" loading="lazy">
+          </button>
+          <div class="shot-copy">
+            <div class="shot-meta"><span>功能面板</span><span>租客</span></div>
+            <h2>动态匹配提示</h2>
+            <p>根据当前筛选条件解释房源匹配程度。</p>
+          </div>
+        </article>
+        <article class="shot-card" data-kind="panel" data-category="租客" data-index="19">
+          <button class="shot-open" type="button" aria-label="放大查看 看房预约">
+            <img src="screenshots/panel-viewing-schedule.png" alt="看房预约" loading="lazy">
+          </button>
+          <div class="shot-copy">
+            <div class="shot-meta"><span>功能面板</span><span>租客</span></div>
+            <h2>看房预约</h2>
+            <p>选择可用时间并向房东提交看房请求。</p>
+          </div>
+        </article>
+        <article class="shot-card" data-kind="panel" data-category="租客" data-index="20">
+          <button class="shot-open" type="button" aria-label="放大查看 租房申请">
+            <img src="screenshots/panel-rental-application.png" alt="租房申请" loading="lazy">
+          </button>
+          <div class="shot-copy">
+            <div class="shot-meta"><span>功能面板</span><span>租客</span></div>
+            <h2>租房申请</h2>
+            <p>支持个人或双人室友团队提交正式申请。</p>
+          </div>
+        </article>
+        <article class="shot-card" data-kind="panel" data-category="租客" data-index="21">
+          <button class="shot-open" type="button" aria-label="放大查看 申请状态">
+            <img src="screenshots/panel-application-status.png" alt="申请状态" loading="lazy">
+          </button>
+          <div class="shot-copy">
+            <div class="shot-meta"><span>功能面板</span><span>租客</span></div>
+            <h2>申请状态</h2>
+            <p>展示申请审核、支付和入住确认的当前阶段。</p>
+          </div>
+        </article>
+        <article class="shot-card" data-kind="panel" data-category="租客" data-index="22">
+          <button class="shot-open" type="button" aria-label="放大查看 演示支付">
+            <img src="screenshots/panel-demo-payment.png" alt="演示支付" loading="lazy">
+          </button>
+          <div class="shot-copy">
+            <div class="shot-meta"><span>功能面板</span><span>租客</span></div>
+            <h2>演示支付</h2>
+            <p>明确标注演示模式的付款、资金持有与流水状态。</p>
+          </div>
+        </article>
+        <article class="shot-card" data-kind="panel" data-category="租客" data-index="23">
+          <button class="shot-open" type="button" aria-label="放大查看 下一步行动">
+            <img src="screenshots/panel-next-actions.png" alt="下一步行动" loading="lazy">
+          </button>
+          <div class="shot-copy">
+            <div class="shot-meta"><span>功能面板</span><span>租客</span></div>
+            <h2>下一步行动</h2>
+            <p>根据当前旅程阶段给出清晰的后续操作。</p>
+          </div>
+        </article>
+        <article class="shot-card" data-kind="panel" data-category="室友" data-index="24">
+          <button class="shot-open" type="button" aria-label="放大查看 室友偏好">
+            <img src="screenshots/panel-roommate-preferences.png" alt="室友偏好" loading="lazy">
+          </button>
+          <div class="shot-copy">
+            <div class="shot-meta"><span>功能面板</span><span>室友</span></div>
+            <h2>室友偏好</h2>
+            <p>设置预算、学校、生活习惯与合租性别偏好。</p>
+          </div>
+        </article>
+        <article class="shot-card" data-kind="panel" data-category="室友" data-index="25">
+          <button class="shot-open" type="button" aria-label="放大查看 室友推荐卡">
+            <img src="screenshots/panel-roommate-discovery.png" alt="室友推荐卡" loading="lazy">
+          </button>
+          <div class="shot-copy">
+            <div class="shot-meta"><span>功能面板</span><span>室友</span></div>
+            <h2>室友推荐卡</h2>
+            <p>呈现匹配分数、共同点、注意事项和破冰建议。</p>
+          </div>
+        </article>
+        <article class="shot-card" data-kind="panel" data-category="室友" data-index="26">
+          <button class="shot-open" type="button" aria-label="放大查看 室友意向操作">
+            <img src="screenshots/panel-like-actions.png" alt="室友意向操作" loading="lazy">
+          </button>
+          <div class="shot-copy">
+            <div class="shot-meta"><span>功能面板</span><span>室友</span></div>
+            <h2>室友意向操作</h2>
+            <p>对推荐对象执行跳过、喜欢与后续匹配操作。</p>
+          </div>
+        </article>
+        <article class="shot-card" data-kind="panel" data-category="室友" data-index="27">
+          <button class="shot-open" type="button" aria-label="放大查看 室友意向列表">
+            <img src="screenshots/panel-like-list.png" alt="室友意向列表" loading="lazy">
+          </button>
+          <div class="shot-copy">
+            <div class="shot-meta"><span>功能面板</span><span>室友</span></div>
+            <h2>室友意向列表</h2>
+            <p>查看已表达意向和已经互相匹配的对象。</p>
+          </div>
+        </article>
+        <article class="shot-card" data-kind="panel" data-category="室友" data-index="28">
+          <button class="shot-open" type="button" aria-label="放大查看 双人室友团队">
+            <img src="screenshots/panel-two-person-team.png" alt="双人室友团队" loading="lazy">
+          </button>
+          <div class="shot-copy">
+            <div class="shot-meta"><span>功能面板</span><span>室友</span></div>
+            <h2>双人室友团队</h2>
+            <p>处理邀请、确认与解散双人申请团队。</p>
+          </div>
+        </article>
+        <article class="shot-card" data-kind="panel" data-category="消息" data-index="29">
+          <button class="shot-open" type="button" aria-label="放大查看 统一收件箱">
+            <img src="screenshots/panel-unified-inbox.png" alt="统一收件箱" loading="lazy">
+          </button>
+          <div class="shot-copy">
+            <div class="shot-meta"><span>功能面板</span><span>消息</span></div>
+            <h2>统一收件箱</h2>
+            <p>将房东与室友会话按未读状态集中排列。</p>
+          </div>
+        </article>
+        <article class="shot-card" data-kind="panel" data-category="消息" data-index="30">
+          <button class="shot-open" type="button" aria-label="放大查看 房东会话">
+            <img src="screenshots/panel-landlord-messages.png" alt="房东会话" loading="lazy">
+          </button>
+          <div class="shot-copy">
+            <div class="shot-meta"><span>功能面板</span><span>消息</span></div>
+            <h2>房东会话</h2>
+            <p>围绕房源咨询、看房和后续决策与房东沟通。</p>
+          </div>
+        </article>
+        <article class="shot-card" data-kind="panel" data-category="消息" data-index="31">
+          <button class="shot-open" type="button" aria-label="放大查看 室友聊天">
+            <img src="screenshots/panel-roommate-chat.png" alt="室友聊天" loading="lazy">
+          </button>
+          <div class="shot-copy">
+            <div class="shot-meta"><span>功能面板</span><span>消息</span></div>
+            <h2>室友聊天</h2>
+            <p>匹配成功后的持久化一对一室友会话。</p>
+          </div>
+        </article>
+        <article class="shot-card" data-kind="panel" data-category="消息" data-index="32">
+          <button class="shot-open" type="button" aria-label="放大查看 通知中心">
+            <img src="screenshots/panel-notifications.png" alt="通知中心" loading="lazy">
+          </button>
+          <div class="shot-copy">
+            <div class="shot-meta"><span>功能面板</span><span>消息</span></div>
+            <h2>通知中心</h2>
+            <p>汇总申请、消息和旅程中的重要提醒。</p>
+          </div>
+        </article>
+        <article class="shot-card" data-kind="panel" data-category="房东" data-index="33">
+          <button class="shot-open" type="button" aria-label="放大查看 房源发布表单">
+            <img src="screenshots/panel-listing-form.png" alt="房源发布表单" loading="lazy">
+          </button>
+          <div class="shot-copy">
+            <div class="shot-meta"><span>功能面板</span><span>房东</span></div>
+            <h2>房源发布表单</h2>
+            <p>录入位置、租期、价格、设施与房源说明。</p>
+          </div>
+        </article>
+        <article class="shot-card" data-kind="panel" data-category="房东" data-index="34">
+          <button class="shot-open" type="button" aria-label="放大查看 图片上传起始状态">
+            <img src="screenshots/panel-media-uploader-empty.png" alt="图片上传起始状态" loading="lazy">
+          </button>
+          <div class="shot-copy">
+            <div class="shot-meta"><span>功能面板</span><span>房东</span></div>
+            <h2>图片上传起始状态</h2>
+            <p>尚未上传图片时的文件要求和操作入口。</p>
+          </div>
+        </article>
+        <article class="shot-card" data-kind="panel" data-category="房东" data-index="35">
+          <button class="shot-open" type="button" aria-label="放大查看 房源图片管理">
+            <img src="screenshots/panel-media-uploader.png" alt="房源图片管理" loading="lazy">
+          </button>
+          <div class="shot-copy">
+            <div class="shot-meta"><span>功能面板</span><span>房东</span></div>
+            <h2>房源图片管理</h2>
+            <p>上传、排序并选择房源封面图片。</p>
+          </div>
+        </article>
+        <article class="shot-card" data-kind="panel" data-category="房东" data-index="36">
+          <button class="shot-open" type="button" aria-label="放大查看 提交审核">
+            <img src="screenshots/panel-listing-submit.png" alt="提交审核" loading="lazy">
+          </button>
+          <div class="shot-copy">
+            <div class="shot-meta"><span>功能面板</span><span>房东</span></div>
+            <h2>提交审核</h2>
+            <p>完成校验后保存草稿或提交管理员审核。</p>
+          </div>
+        </article>
+        <article class="shot-card" data-kind="panel" data-category="房东" data-index="37">
+          <button class="shot-open" type="button" aria-label="放大查看 我的房源">
+            <img src="screenshots/panel-my-listings.png" alt="我的房源" loading="lazy">
+          </button>
+          <div class="shot-copy">
+            <div class="shot-meta"><span>功能面板</span><span>房东</span></div>
+            <h2>我的房源</h2>
+            <p>查看房东名下房源及其审核与发布状态。</p>
+          </div>
+        </article>
+        <article class="shot-card" data-kind="panel" data-category="房东" data-index="38">
+          <button class="shot-open" type="button" aria-label="放大查看 申请收件箱">
+            <img src="screenshots/panel-host-application-inbox.png" alt="申请收件箱" loading="lazy">
+          </button>
+          <div class="shot-copy">
+            <div class="shot-meta"><span>功能面板</span><span>房东</span></div>
+            <h2>申请收件箱</h2>
+            <p>查看租客资料并接受或拒绝租房申请。</p>
+          </div>
+        </article>
+        <article class="shot-card" data-kind="panel" data-category="账户" data-index="39">
+          <button class="shot-open" type="button" aria-label="放大查看 邮箱登录面板">
+            <img src="screenshots/panel-email-login.png" alt="邮箱登录面板" loading="lazy">
+          </button>
+          <div class="shot-copy">
+            <div class="shot-meta"><span>功能面板</span><span>账户</span></div>
+            <h2>邮箱登录面板</h2>
+            <p>输入受邀邮箱并请求一次性验证码。</p>
+          </div>
+        </article>
+        <article class="shot-card" data-kind="panel" data-category="账户" data-index="40">
+          <button class="shot-open" type="button" aria-label="放大查看 验证码确认">
+            <img src="screenshots/panel-verification-code.png" alt="验证码确认" loading="lazy">
+          </button>
+          <div class="shot-copy">
+            <div class="shot-meta"><span>功能面板</span><span>账户</span></div>
+            <h2>验证码确认</h2>
+            <p>输入邮件验证码并继续返回原始产品流程。</p>
+          </div>
+        </article>
+        <article class="shot-card" data-kind="panel" data-category="账户" data-index="41">
+          <button class="shot-open" type="button" aria-label="放大查看 个人资料引导">
+            <img src="screenshots/panel-profile-onboarding.png" alt="个人资料引导" loading="lazy">
+          </button>
+          <div class="shot-copy">
+            <div class="shot-meta"><span>功能面板</span><span>账户</span></div>
+            <h2>个人资料引导</h2>
+            <p>为首次登录用户补全昵称、学校与个人介绍。</p>
+          </div>
+        </article>
+        <article class="shot-card" data-kind="panel" data-category="账户" data-index="42">
+          <button class="shot-open" type="button" aria-label="放大查看 账户资料">
+            <img src="screenshots/panel-account-profile.png" alt="账户资料" loading="lazy">
+          </button>
+          <div class="shot-copy">
+            <div class="shot-meta"><span>功能面板</span><span>账户</span></div>
+            <h2>账户资料</h2>
+            <p>编辑已登录用户的公开身份与租住偏好。</p>
+          </div>
+        </article>
+        <article class="shot-card" data-kind="panel" data-category="管理员" data-index="43">
+          <button class="shot-open" type="button" aria-label="放大查看 管理员二次验证">
+            <img src="screenshots/panel-admin-step-up.png" alt="管理员二次验证" loading="lazy">
+          </button>
+          <div class="shot-copy">
+            <div class="shot-meta"><span>功能面板</span><span>管理员</span></div>
+            <h2>管理员二次验证</h2>
+            <p>执行审核写操作前要求短时有效的安全验证。</p>
+          </div>
+        </article>
+        <article class="shot-card" data-kind="panel" data-category="管理员" data-index="44">
+          <button class="shot-open" type="button" aria-label="放大查看 房源信任审核">
+            <img src="screenshots/panel-trust-review.png" alt="房源信任审核" loading="lazy">
+          </button>
+          <div class="shot-copy">
+            <div class="shot-meta"><span>功能面板</span><span>管理员</span></div>
+            <h2>房源信任审核</h2>
+            <p>查看待审房源并记录管理员审核决定。</p>
+          </div>
+        </article>
+        <article class="shot-card" data-kind="panel" data-category="管理员" data-index="45">
+          <button class="shot-open" type="button" aria-label="放大查看 室友资料管理">
+            <img src="screenshots/panel-roommate-management.png" alt="室友资料管理" loading="lazy">
+          </button>
+          <div class="shot-copy">
+            <div class="shot-meta"><span>功能面板</span><span>管理员</span></div>
+            <h2>室友资料管理</h2>
+            <p>维护室友推荐资料、标签、匹配信号与归档状态。</p>
+          </div>
+        </article></main>
+  <dialog id="viewer"><div class="modal-bar"><strong id="viewer-title"></strong><button class="modal-close" type="button">关闭</button></div><img class="modal-image" alt=""></dialog>
+  <script>
+    const cards=[...document.querySelectorAll('.shot-card')];
+    document.querySelectorAll('.filter').forEach(button=>button.addEventListener('click',()=>{
+      document.querySelectorAll('.filter').forEach(item=>item.classList.toggle('active',item===button));
+      const filter=button.dataset.filter;
+      cards.forEach(card=>card.hidden=!(filter==='全部'||(filter==='完整界面'&&card.dataset.kind==='page')||(filter==='功能面板'&&card.dataset.kind==='panel')||card.dataset.category===filter));
+    }));
+    const viewer=document.querySelector('#viewer'); const viewerImage=viewer.querySelector('img'); const viewerTitle=document.querySelector('#viewer-title');
+    document.querySelectorAll('.shot-open').forEach(button=>button.addEventListener('click',()=>{ const card=button.closest('.shot-card'); const image=button.querySelector('img'); viewerImage.src=image.src; viewerImage.alt=image.alt; viewerTitle.textContent=card.querySelector('h2').textContent; viewer.showModal(); }));
+    document.querySelector('.modal-close').addEventListener('click',()=>viewer.close());
+    viewer.addEventListener('click',event=>{ if(event.target===viewer) viewer.close(); });
+  </script>
+</body>
+</html>

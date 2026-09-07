@@ -27,6 +27,7 @@ export interface ListingMediaStorage {
     mimeType: SupportedListingMediaMimeType,
     sizeBytes: number
   ): Promise<ListingMediaUploadTarget>;
+  write(key: string, bytes: Buffer, mimeType: SupportedListingMediaMimeType): Promise<void>;
   read(key: string): Promise<Buffer>;
   delete(key: string): Promise<void>;
 }
@@ -43,7 +44,7 @@ export class ListingMediaStorageError extends Error {
   }
 }
 
-type StorageCommand = GetObjectCommand | DeleteObjectCommand;
+type StorageCommand = GetObjectCommand | DeleteObjectCommand | PutObjectCommand;
 type StorageResponse = GetObjectCommandOutput | DeleteObjectCommandOutput;
 type StorageClient = {
   send(command: StorageCommand): Promise<StorageResponse>;
@@ -111,6 +112,21 @@ export class S3CompatibleListingMediaStorage implements ListingMediaStorage {
         uploadUrl,
         expiresAt: new Date(this.now().getTime() + this.config.uploadTtlSeconds * 1000)
       };
+    } catch {
+      throw new ListingMediaStorageError("IMAGE_STORAGE_UNAVAILABLE");
+    }
+  }
+
+  async write(key: string, bytes: Buffer, mimeType: SupportedListingMediaMimeType): Promise<void> {
+    try {
+      await this.client.send(new PutObjectCommand({
+        Bucket: this.config.bucket,
+        Key: key,
+        Body: bytes,
+        ContentType: mimeType,
+        ContentLength: bytes.length,
+        IfNoneMatch: "*"
+      }));
     } catch {
       throw new ListingMediaStorageError("IMAGE_STORAGE_UNAVAILABLE");
     }

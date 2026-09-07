@@ -1,9 +1,19 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { getAuthSecurityConfig, getJwtSecret } from "../src/config/env";
+import { assertProductionRuntimeConfig, getAuthSecurityConfig, getJwtSecret } from "../src/config/env";
 import { ConsoleEmailSender, createEmailSender } from "../src/email/email-sender";
 
 describe("environment config", () => {
+  it("requires production database, origin, and distributed messaging infrastructure", () => {
+    expect(() => assertProductionRuntimeConfig({ NODE_ENV: "production" })).toThrow("DATABASE_URL");
+    expect(() => assertProductionRuntimeConfig({
+      NODE_ENV: "production",
+      DATABASE_URL: "postgresql://db.example.com/app?sslmode=require",
+      WEB_ORIGIN: "https://app.example.com",
+      VALKEY_URL: "rediss://cache.example.com:6379"
+    })).not.toThrow();
+  });
+
   it("uses the development fallback outside production", () => {
     expect(getJwtSecret({ nodeEnv: "development" })).toBe("dev-change-me");
   });

@@ -1,5 +1,6 @@
-import SubletApp from "@/components/sublet-app";
+import { AdminRoommatesExperience } from "@/components/marketplace/admin-experiences";
+import { AdminShell } from "@/components/marketplace/workspace-shells";
 
 export default function AdminRoommatesPage() {
-  return <SubletApp initialSection="AdminRoommates" />;
+  return <AdminShell active="roommates"><AdminRoommatesExperience /></AdminShell>;
 }

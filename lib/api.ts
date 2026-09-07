@@ -6,6 +6,7 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4
 
 export type ApiListing = {
   id: string;
+  revision?: number;
   title: string;
   area: string;
   image: string | null;
@@ -193,14 +194,14 @@ export type ApiProfile = {
 };
 
 export type UpdateProfileInput = {
-  displayName?: string;
-  avatarUrl?: string;
-  school?: string;
-  city?: string;
+  displayName?: string | null;
+  avatarUrl?: string | null;
+  school?: string | null;
+  city?: string | null;
   role?: "renter" | "lister" | "both";
-  wechat?: string;
-  instagram?: string;
-  bio?: string;
+  wechat?: string | null;
+  instagram?: string | null;
+  bio?: string | null;
 };
 
 export type EmailCodeResponse = {
@@ -245,6 +246,12 @@ export type ApiRoommateActionResponse = {
     matchId: string;
   } | null;
   dealRoom?: ApiDealRoom | null;
+};
+
+export type ApiRoommateActivity = {
+  inbound: Array<{ action: "LIKE"; profile: ApiRoommate }>;
+  outbound: Array<{ action: "LIKE"; profile: ApiRoommate }>;
+  matchedProfileIds: string[];
 };
 
 export type ApiRoommateMessage = {
@@ -320,6 +327,7 @@ export type ApiDealMessage = {
 
 export type ApiViewingRequest = {
   id: string;
+  revision: number;
   threadId: string;
   requesterId: string;
   listingId: string;
@@ -468,18 +476,18 @@ export async function getAdminListingMediaContent(token: string, path: string) {
   return response.blob();
 }
 
-export function approveAdminListing(token: string, id: string) {
+export function approveAdminListing(token: string, id: string, revision: number) {
   return apiPost<ApiListing>(
     `/admin/listings/${encodeURIComponent(id)}/approve`,
-    {},
+    { revision },
     token
   );
 }
 
-export function rejectAdminListing(token: string, id: string, reason: string) {
+export function rejectAdminListing(token: string, id: string, reason: string, revision: number) {
   return apiPost<ApiListing>(
     `/admin/listings/${encodeURIComponent(id)}/reject`,
-    { reason },
+    { reason, revision },
     token
   );
 }
@@ -530,7 +538,7 @@ async function apiRequest<T>(path: string, init: RequestInit, token?: string): P
   let response: Response;
   const deviceId = getBrowserDeviceId();
   try {
-    response = await fetch(`${API_BASE_URL}${path}`, {
+    response = await fetch(`${apiBaseUrl()}${path}`, {
       ...init,
       headers: {
         "Content-Type": "application/json",
@@ -565,6 +573,11 @@ async function readSafeErrorCode(response: Response) {
   }
 }
 
+function apiBaseUrl() {
+  const internalUrl = typeof window === "undefined" ? process.env.API_INTERNAL_BASE_URL?.trim() : undefined;
+  return internalUrl || API_BASE_URL;
+}
+
 function apiOrigin() {
-  return new URL(API_BASE_URL).origin;
+  return new URL(apiBaseUrl()).origin;
 }

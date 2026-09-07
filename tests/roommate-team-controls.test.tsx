@@ -1,4 +1,6 @@
-import { act, create, type ReactTestRenderer } from "react-test-renderer";
+// @vitest-environment jsdom
+
+import { act, create, type ReactTestRenderer } from "./support/dom-test-renderer";
 import { describe, expect, it, vi } from "vitest";
 
 import { RoommateTeamControls } from "../components/roommate-team-controls";

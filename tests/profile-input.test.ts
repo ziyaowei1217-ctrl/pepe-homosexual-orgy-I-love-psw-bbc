@@ -6,7 +6,7 @@ import {
 } from "../lib/profile-input";
 
 describe("profile update input", () => {
-  it("omits blank optional fields rejected by the backend DTO", () => {
+  it("uses null for explicitly cleared fields and omits fields absent from the patch", () => {
     expect(
       buildProfileUpdateInput({
         displayName: "  测试房东  ",
@@ -21,8 +21,15 @@ describe("profile update input", () => {
       displayName: "测试房东",
       school: "UCLA",
       city: "LA",
-      role: "lister"
+      role: "lister",
+      instagram: null,
+      wechat: null,
+      bio: null
     });
+  });
+
+  it("preserves explicit clearing when a caller normalizes an already normalized patch", () => {
+    expect(buildProfileUpdateInput({ bio: null, avatarUrl: null })).toEqual({ bio: null, avatarUrl: null });
   });
 
   it("trims the four required onboarding fields", () => {

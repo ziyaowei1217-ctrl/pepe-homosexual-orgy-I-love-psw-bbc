@@ -26,7 +26,7 @@ const emptyDraft: UpsertAdminRoommateInput = {
   name: "",
   age: 23,
   role: "UCLA · 研究生 · 2026 秋季",
-  image: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=900&q=80",
+  image: "",
   match: 90,
   budget: "$1,650/月",
   commute: "Westwood / Sawtelle",
@@ -39,7 +39,8 @@ export function AdminRoommatesScreen({
   stepUpSession,
   onStepUpRequired,
   onAuthenticationError,
-  onToast
+  onToast,
+  assertSessionCurrent
 }: {
   token: string | null;
   user: SessionUser | null;
@@ -47,6 +48,7 @@ export function AdminRoommatesScreen({
   onStepUpRequired: () => void;
   onAuthenticationError?: (error: unknown) => void;
   onToast: (message: string) => void;
+  assertSessionCurrent?: () => void;
 }) {
   const [profiles, setProfiles] = useState<ApiRoommate[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -117,9 +119,11 @@ export function AdminRoommatesScreen({
 
     setSaving(true);
     try {
+      assertSessionCurrent?.();
       const saved = selectedProfile?.id
         ? await updateAdminRoommate(enhancedToken, selectedProfile.id, draft)
         : await createAdminRoommate(enhancedToken, draft);
+      assertSessionCurrent?.();
       setProfiles((current) => {
         const exists = current.some((profile) => profile.id === saved.id);
         return exists
@@ -152,7 +156,9 @@ export function AdminRoommatesScreen({
 
     setSaving(true);
     try {
+      assertSessionCurrent?.();
       const archived = await archiveAdminRoommate(enhancedToken, selectedProfile.id);
+      assertSessionCurrent?.();
       setProfiles((current) => current.map((profile) => profile.id === archived.id ? archived : profile));
       onToast(`${archived.name} 已归档，已从活跃推荐中移除。`);
     } catch (error) {

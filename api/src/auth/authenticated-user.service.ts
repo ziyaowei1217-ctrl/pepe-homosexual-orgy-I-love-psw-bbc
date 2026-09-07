@@ -18,23 +18,24 @@ export class AuthenticatedUserService {
   ) {}
 
   async fromBearerToken(token: string): Promise<AuthenticatedUser> {
+    let payload: { sub?: string; adminReauthenticatedAt?: unknown };
     try {
-      const payload = await this.jwt.verifyAsync<{ sub?: string; adminReauthenticatedAt?: unknown }>(token);
-      if (!payload.sub) throw new UnauthorizedException("Invalid bearer token");
-
-      const user = await this.prisma.user.findUnique({ where: { id: payload.sub } });
-      if (!user) throw new UnauthorizedException("Invalid bearer token");
-
-      return {
-        id: user.id,
-        email: user.email,
-        role: user.role,
-        ...(Number.isSafeInteger(payload.adminReauthenticatedAt)
-          ? { adminReauthenticatedAt: payload.adminReauthenticatedAt as number }
-          : {})
-      };
+      payload = await this.jwt.verifyAsync<typeof payload>(token);
+      if (!payload || typeof payload.sub !== "string" || !payload.sub) throw new UnauthorizedException("Invalid bearer token");
     } catch {
       throw new UnauthorizedException("Invalid bearer token");
     }
+
+    const user = await this.prisma.user.findUnique({ where: { id: payload.sub } });
+    if (!user) throw new UnauthorizedException("Invalid bearer token");
+
+    return {
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      ...(Number.isSafeInteger(payload.adminReauthenticatedAt)
+        ? { adminReauthenticatedAt: payload.adminReauthenticatedAt as number }
+        : {})
+    };
   }
 }

@@ -3,7 +3,7 @@ set -eu
 
 database_url="${DATABASE_URL:-postgresql://sublet:sublet@localhost:5432/sublet_pipeline?schema=public}"
 
-docker compose up -d db
+docker compose up -d db minio
 
 attempt=0
 until docker compose exec -T db pg_isready -U sublet -d sublet_pipeline >/dev/null 2>&1; do
@@ -14,6 +14,9 @@ until docker compose exec -T db pg_isready -U sublet -d sublet_pipeline >/dev/nu
   fi
   sleep 1
 done
+
+# Run in the foreground so bucket setup failures stop the setup command.
+docker compose run --rm minio-init
 
 if [ ! -f api/.env ]; then
   cp api/.env.example api/.env

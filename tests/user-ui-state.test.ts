@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import {
   emptyUserUiState,
+  getGuestUiStorageKey,
   getUserUiStorageKey,
+  mergeFavoriteListingIds,
   markNotificationRead,
   normalizeUserUiState
 } from "../lib/user-ui-state";
@@ -12,6 +14,17 @@ describe("user UI state", () => {
     expect(getUserUiStorageKey("user-a")).toBe("sublet-user-ui-v2:user-a");
     expect(getUserUiStorageKey("user-b")).not.toBe(getUserUiStorageKey("user-a"));
     expect(emptyUserUiState.favoriteListingIds).toEqual([]);
+  });
+
+  it("keeps guest favorites in their own device-local state", () => {
+    expect(getGuestUiStorageKey()).toBe("sublet-guest-ui-v2");
+    expect(getGuestUiStorageKey()).not.toBe(getUserUiStorageKey("guest"));
+  });
+
+  it("merges guest favorites into an account without duplicates", () => {
+    expect(
+      mergeFavoriteListingIds(["listing-a", "listing-b"], ["listing-b", "listing-c"])
+    ).toEqual(["listing-a", "listing-b", "listing-c"]);
   });
 
   it("does not migrate old workflow records into the new state", () => {

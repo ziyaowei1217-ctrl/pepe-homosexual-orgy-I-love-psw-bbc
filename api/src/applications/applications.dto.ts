@@ -1,6 +1,6 @@
 import { GuarantorStatus, RentalApplicationScope, RentalIncomeBand } from "@prisma/client";
 import { Transform } from "class-transformer";
-import { IsEnum, IsNotEmpty, IsOptional, IsString, Matches, MaxLength, ValidateIf } from "class-validator";
+import { IsEmail, IsEnum, IsNotEmpty, IsOptional, IsString, Matches, MaxLength, ValidateIf } from "class-validator";
 
 const isoDatePattern = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -24,6 +24,20 @@ export class CreateRentalApplicationDto {
   @IsNotEmpty()
   @MaxLength(191)
   teamId?: string;
+
+  @IsOptional()
+  @Trim()
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(140)
+  contactName?: string | null;
+
+  @IsOptional()
+  @Trim()
+  @IsString()
+  @IsEmail()
+  @MaxLength(254)
+  contactEmail?: string | null;
 
   @Trim()
   @IsString()

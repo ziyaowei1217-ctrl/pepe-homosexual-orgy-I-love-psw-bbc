@@ -17,6 +17,7 @@ import { AuthGuard, type AuthenticatedRequest } from "../auth/auth.guard";
 import { AdminGuard } from "../auth/admin.guard";
 import {
   InitializeListingMediaUploadDto,
+  ListingMediaUploadAttemptDto,
   ReorderListingMediaDto
 } from "./listing-media.dto";
 import { presentListingMedia } from "./listing-media.presentation";
@@ -34,6 +35,10 @@ const reorderMediaPipe = new ValidationPipe({
   forbidNonWhitelisted: true,
   transform: true,
   expectedType: ReorderListingMediaDto
+});
+
+const uploadAttemptPipe = new ValidationPipe({
+  whitelist: true, forbidNonWhitelisted: true, transform: true, expectedType: ListingMediaUploadAttemptDto
 });
 
 type BinaryResponse = {
@@ -59,25 +64,27 @@ export class ListingMediaController {
   @Get()
   async findOwned(@Req() request: AuthenticatedRequest, @Param("listingId") listingId: string) {
     const media = await this.media.findOwned(request.user.id, listingId);
-    return media.map(presentListingMedia);
+    return media.map((item) => ({ ...presentListingMedia(item), initializationCommandId: item.initializationReceipt?.commandId }));
   }
 
   @Post(":mediaId/finalize")
   async finalize(
     @Req() request: AuthenticatedRequest,
     @Param("listingId") listingId: string,
-    @Param("mediaId") mediaId: string
+    @Param("mediaId") mediaId: string,
+    @Body(uploadAttemptPipe) input: ListingMediaUploadAttemptDto
   ) {
-    return presentListingMedia(await this.media.finalize(request.user.id, listingId, mediaId));
+    return presentListingMedia(await this.media.finalize(request.user.id, listingId, mediaId, input.uploadAttemptId));
   }
 
   @Post(":mediaId/retry")
   async retry(
     @Req() request: AuthenticatedRequest,
     @Param("listingId") listingId: string,
-    @Param("mediaId") mediaId: string
+    @Param("mediaId") mediaId: string,
+    @Body(uploadAttemptPipe) input: ListingMediaUploadAttemptDto
   ) {
-    const result = await this.media.retry(request.user.id, listingId, mediaId);
+    const result = await this.media.retry(request.user.id, listingId, mediaId, input.uploadAttemptId);
     return { ...result, media: presentListingMedia(result.media) };
   }
 

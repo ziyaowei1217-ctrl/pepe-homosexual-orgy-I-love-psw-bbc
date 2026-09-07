@@ -1,8 +1,8 @@
 import type { UpdateProfileInput } from "./api";
 
-export type OnboardingProfileInput = Required<
-  Pick<UpdateProfileInput, "displayName" | "school" | "city" | "role">
->;
+export type OnboardingProfileInput = {
+  [Field in "displayName" | "school" | "city" | "role"]: NonNullable<UpdateProfileInput[Field]>;
+};
 
 export function buildOnboardingProfileInput(
   draft: OnboardingProfileInput
@@ -28,9 +28,10 @@ export function buildProfileUpdateInput(draft: UpdateProfileInput): UpdateProfil
   });
 }
 
-function optionalText(value?: string) {
+function optionalText(value?: string | null) {
+  if (value === undefined) return undefined;
   const trimmed = value?.trim();
-  return trimmed || undefined;
+  return trimmed || null;
 }
 
 function removeUndefined<T extends Record<string, unknown>>(input: T) {

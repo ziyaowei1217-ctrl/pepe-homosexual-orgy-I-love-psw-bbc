@@ -91,7 +91,7 @@ describe("RoommateTeamsService", () => {
     const invite = await service.invite("user-a", { roommateProfileId: "profile-b" });
     const team = await service.accept("user-b", invite.id);
 
-    await expect(service.leave("user-a")).resolves.toMatchObject({
+    await expect(service.leave("user-a", team.id)).resolves.toMatchObject({
       id: team.id,
       status: "DISSOLVED",
       dissolvedById: "user-a"
@@ -103,6 +103,18 @@ describe("RoommateTeamsService", () => {
     ).toBe(true);
     expect(prisma.dealRoom.rows[0]).toMatchObject({ id: "deal-room-1", status: "ARCHIVED" });
     await expect(service.current("user-a")).resolves.toBeNull();
+  });
+
+  it("rejects a stale team target without dissolving the current team", async () => {
+    const prisma = createPrismaMock();
+    const service = new RoommateTeamsService(prisma as never, createDealRoomsStub() as never);
+    const invite = await service.invite("user-a", { roommateProfileId: "profile-b" });
+    const team = await service.accept("user-b", invite.id);
+
+    await expect(service.leave("user-a", "previous-team")).rejects.toBeInstanceOf(ConflictException);
+
+    expect(await service.current("user-a")).toEqual(team);
+    expect(prisma.dealRoom.rows[0]).toMatchObject({ status: "ACTIVE" });
   });
 
   it("withdraws only submitted team applications when the team dissolves", async () => {
@@ -117,7 +129,7 @@ describe("RoommateTeamsService", () => {
       { id: "other-team-application", teamId: "team-other", status: "SUBMITTED", activeKey: "team:other", withdrawnAt: null, decisionReason: null }
     );
 
-    await service.leave("user-a");
+    await service.leave("user-a", team.id);
 
     expect(prisma.rentalApplication.rows.find((record: { id: string }) => record.id === "submitted-application"))
       .toMatchObject({ status: "WITHDRAWN", activeKey: null, withdrawnAt: expect.any(Date), decisionReason: "TEAM_DISSOLVED" });

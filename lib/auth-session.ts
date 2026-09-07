@@ -1,6 +1,7 @@
 const authSessionKey = "sublet_auth_session";
 const legacyTokenKey = "sublet_token";
 const authSessionVersion = 1;
+export const authSessionChangedEvent = "sublet-auth-session-changed";
 
 export type StoredAuthSession = {
   accessToken: string;
@@ -40,6 +41,7 @@ export function writeStoredAuthSession(accessToken: string) {
   };
   window.localStorage.setItem(authSessionKey, JSON.stringify(envelope));
   window.localStorage.removeItem(legacyTokenKey);
+  window.dispatchEvent?.(new Event(authSessionChangedEvent));
 }
 
 export function clearStoredAuthSession() {
@@ -47,4 +49,11 @@ export function clearStoredAuthSession() {
 
   window.localStorage.removeItem(authSessionKey);
   window.localStorage.removeItem(legacyTokenKey);
+  window.dispatchEvent?.(new Event(authSessionChangedEvent));
+}
+
+export function assertCurrentAuthSession(token: string | null): asserts token is string {
+  if (!token || readStoredAuthSession()?.accessToken !== token) {
+    throw new Error("登录状态已改变，请重新登录后继续。");
+  }
 }

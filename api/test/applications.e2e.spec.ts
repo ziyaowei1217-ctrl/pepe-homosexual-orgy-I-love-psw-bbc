@@ -2,13 +2,14 @@ import "reflect-metadata";
 import { INestApplication, ValidationPipe } from "@nestjs/common";
 import { JwtModule, JwtService } from "@nestjs/jwt";
 import { Test } from "@nestjs/testing";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ApplicationsController } from "../src/applications/applications.controller";
 import { ApplicationsService } from "../src/applications/applications.service";
 import { AuthGuard } from "../src/auth/auth.guard";
 import { AuthenticatedUserService } from "../src/auth/authenticated-user.service";
 import { DemoPaymentsService } from "../src/demo-payments/demo-payments.service";
+import { PAYMENT_COMMANDS } from "../src/payments/payment-commands";
 import { PrismaService } from "../src/prisma/prisma.service";
 import { createMarketplaceDemoPrismaMock } from "./support/marketplace-demo-prisma-mock";
 
@@ -19,6 +20,8 @@ describe("rental application HTTP API", () => {
   let tokens: Record<string, string>;
 
   beforeEach(async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-08-31T12:00:00.000Z"));
     const prisma = createMarketplaceDemoPrismaMock();
     const moduleRef = await Test.createTestingModule({
       imports: [JwtModule.register({ secret: "applications-http-secret" })],
@@ -28,6 +31,7 @@ describe("rental application HTTP API", () => {
         AuthenticatedUserService,
         ApplicationsService,
         DemoPaymentsService,
+        { provide: PAYMENT_COMMANDS, useExisting: DemoPaymentsService },
         { provide: PrismaService, useValue: prisma }
       ]
     }).compile();
@@ -41,7 +45,31 @@ describe("rental application HTTP API", () => {
     );
   });
 
-  afterEach(async () => app.close());
+  afterEach(async () => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+    await app.close();
+  });
+
+  it("stores entered contact details and exposes them after an authorized reload", async () => {
+    const http = request(app.getHttpServer());
+    const created = await http.post("/api/v1/applications")
+      .auth(tokens["renter-1"], { type: "bearer" }).set("Idempotency-Key", "create-contact-request")
+      .send({ ...applicationPayload(), contactName: "  Entered Contact  ", contactEmail: "  entered@example.com  " }).expect(201);
+    expect(created.body).toMatchObject({ contactName: "Entered Contact", contactEmail: "entered@example.com" });
+    const reloaded = await http.get(`/api/v1/applications/${created.body.id}`)
+      .auth(tokens["owner-1"], { type: "bearer" }).expect(200);
+    expect(reloaded.body).toMatchObject({ contactName: "Entered Contact", contactEmail: "entered@example.com" });
+  });
+
+  it.each([
+    { contactName: " " }, { contactName: "x".repeat(141) }, { contactName: 123 },
+    { contactEmail: "not-an-email" }, { contactEmail: "" }, { contactEmail: "x".repeat(245) + "@example.com" }, { contactEmail: 123 }
+  ])("rejects malformed contact information %j", async contact => {
+    await request(app.getHttpServer()).post("/api/v1/applications")
+      .auth(tokens["renter-1"], { type: "bearer" }).set("Idempotency-Key", "create-invalid-contact")
+      .send({ ...applicationPayload(), ...contact }).expect(400);
+  });
 
   it("persists renter create/submit state and exposes owner inbox decisions after refresh", async () => {
     const http = request(app.getHttpServer());

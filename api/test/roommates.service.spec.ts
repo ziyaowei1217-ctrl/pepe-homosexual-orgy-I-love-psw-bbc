@@ -72,6 +72,27 @@ describe("RoommatesService", () => {
     expect(result.dealRoom).toBeNull();
     expect(dealRooms.inputs[0]?.createDealRoom).toBe(false);
   });
+
+  it("returns real inbound, outbound, and mutual likes for the signed-in user", async () => {
+    const ownProfile = candidate({ id: "profile-self", ownerId: "user-1", name: "Me" });
+    const peerProfile = candidate({ id: "profile-peer", ownerId: "user-2", name: "Peer" });
+    const prisma = {
+      roommateProfile: { findUnique: async () => ownProfile },
+      roommateAction: {
+        findMany: async ({ where }: { where: { userId?: string; roommateProfileId?: string } }) =>
+          where.userId
+            ? [{ action: "LIKE", roommateProfile: peerProfile }]
+            : [{ action: "LIKE", user: { roommateProfile: peerProfile } }]
+      }
+    };
+    const service = new RoommatesService(prisma as never, createDealRoomsMock() as never, createRoommateMatchesMock() as never);
+
+    await expect(service.findActivity("user-1")).resolves.toMatchObject({
+      inbound: [{ profile: { id: "profile-peer" } }],
+      outbound: [{ profile: { id: "profile-peer" } }],
+      matchedProfileIds: ["profile-peer"]
+    });
+  });
 });
 
 function candidate(overrides: Record<string, unknown> = {}) {

@@ -1,4 +1,4 @@
-import { BadRequestException, Inject, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 
 import { AuditActor, AuditService } from "../audit/audit.service";
@@ -46,7 +46,7 @@ export class ListingsService {
   }
 
   async findOne(id: string) {
-    const record = await this.prisma.listing.findUnique({ where: { id }, include: listingMediaInclude });
+    const record = await this.prisma.listing.findUnique({ where: { id }, include: publicListingMediaInclude });
     if (record?.status === "APPROVED") return presentListingWithMedia(presentApprovedListing(record));
     if (record) throw new NotFoundException("Listing not found");
 
@@ -112,10 +112,7 @@ export class ListingsService {
       });
     }
 
-    return this.prisma.listing.update({
-      where: { id },
-      data
-    });
+    return this.updateSnapshot(listing, data);
   }
 
   async submit(ownerId: string, id: string) {
@@ -126,15 +123,12 @@ export class ListingsService {
     }
     await this.requirePublishCapableOwner(ownerId);
 
-    return this.prisma.listing.update({
-      where: { id },
-      data: {
-        status: "SUBMITTED",
-        submittedAt: new Date(),
-        reviewedAt: null,
-        reviewerId: null,
-        rejectionReason: null
-      }
+    return this.updateSnapshot(listing, {
+      status: "SUBMITTED",
+      submittedAt: new Date(),
+      reviewedAt: null,
+      reviewerId: null,
+      rejectionReason: null
     });
   }
 
@@ -147,10 +141,11 @@ export class ListingsService {
     return records.map(presentListingForReview);
   }
 
-  async approve(id: string, actor: AuditActor) {
+  async approve(id: string, actor: AuditActor, revision: number) {
+    requireReviewRevision(revision);
     return this.prisma.$transaction(async (transaction) => {
       const approvedAt = new Date();
-      const listing = await this.transitionSubmittedListing(transaction, id, {
+      const listing = await this.transitionSubmittedListing(transaction, id, revision, {
         status: "APPROVED",
         reviewedAt: approvedAt,
         reviewerId: actor.actorUserId,
@@ -170,18 +165,19 @@ export class ListingsService {
         targetType: "Listing",
         targetId: id,
         outcome: "SUCCESS",
-        metadata: { reason: "manual_review_approved" }
+        metadata: { reason: "manual_review_approved", reviewedRevision: revision }
       });
       return listing;
     });
   }
 
-  async reject(id: string, actor: AuditActor, reason: string) {
+  async reject(id: string, actor: AuditActor, reason: string, revision: number) {
+    requireReviewRevision(revision);
     const rejectionReason = reason.trim();
     if (!rejectionReason) throw new BadRequestException("Rejection reason is required");
 
     return this.prisma.$transaction(async (transaction) => {
-      const listing = await this.transitionSubmittedListing(transaction, id, {
+      const listing = await this.transitionSubmittedListing(transaction, id, revision, {
         status: "REJECTED",
         reviewedAt: new Date(),
         reviewerId: actor.actorUserId,
@@ -193,15 +189,32 @@ export class ListingsService {
         targetType: "Listing",
         targetId: id,
         outcome: "SUCCESS",
-        metadata: { reason: rejectionReason }
+        metadata: { reason: rejectionReason, reviewedRevision: revision }
       });
       return listing;
+    });
+  }
+
+  private async updateSnapshot(
+    listing: { id: string; ownerId: string; status: Prisma.ListingWhereInput["status"]; revision: number },
+    data: Prisma.ListingUpdateManyMutationInput
+  ) {
+    return this.prisma.$transaction(async (transaction) => {
+      const updated = await transaction.listing.updateMany({
+        where: { id: listing.id, ownerId: listing.ownerId, status: listing.status, revision: listing.revision },
+        data: { ...data, revision: { increment: 1 } }
+      });
+      if (updated.count !== 1) throw listingChanged();
+      const record = await transaction.listing.findUnique({ where: { id: listing.id } });
+      if (!record) throw new NotFoundException("Listing not found");
+      return record;
     });
   }
 
   private async transitionSubmittedListing(
     transaction: Pick<Prisma.TransactionClient, "listing">,
     id: string,
+    revision: number,
     data: {
       status: "APPROVED" | "REJECTED";
       reviewedAt: Date;
@@ -210,12 +223,12 @@ export class ListingsService {
     }
   ) {
     const transition = await transaction.listing.updateMany({
-      where: { id, status: "SUBMITTED" },
-      data
+      where: { id, status: "SUBMITTED", revision },
+      data: { ...data, revision: { increment: 1 } }
     });
     if (transition.count !== 1) {
       await this.requireSubmittedListing(id, transaction);
-      throw new BadRequestException("Listing review transition did not complete");
+      throw listingChanged();
     }
     const listing = await transaction.listing.findUnique({ where: { id } });
     if (!listing) throw new NotFoundException("Listing not found");
@@ -327,4 +340,14 @@ function presentListingForReview<
       reviewContentUrl: `/api/v1/admin/listings/${listing.id}/media/${media.id}/content`
     }))
   };
+}
+
+function requireReviewRevision(revision: number) {
+  if (!Number.isSafeInteger(revision) || revision < 0) {
+    throw new BadRequestException("The reviewed listing revision is required");
+  }
+}
+
+function listingChanged() {
+  return new ConflictException({ code: "LISTING_CHANGED", message: "房源已变化，请刷新并重新核对后再操作。" });
 }

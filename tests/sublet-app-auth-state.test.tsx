@@ -1,9 +1,11 @@
+// @vitest-environment jsdom
+
 import {
   act,
   create,
   type ReactTestInstance,
   type ReactTestRenderer
-} from "react-test-renderer";
+} from "./support/dom-test-renderer";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const navigationMock = vi.hoisted(() => ({
@@ -77,6 +79,11 @@ import {
   readStoredAuthSession,
   writeStoredAuthSession
 } from "../lib/auth-session";
+import {
+  getGuestUiStorageKey,
+  getUserUiStorageKey
+} from "../lib/user-ui-state";
+import type { AuthIntent } from "../lib/app-routes";
 
 (
   globalThis as typeof globalThis & {
@@ -114,28 +121,24 @@ class MemoryStorage implements Storage {
 
 const localStorage = new MemoryStorage();
 const sessionStorage = new MemoryStorage();
-const windowEventListeners = new Map<string, Set<() => void>>();
-Object.defineProperty(globalThis, "window", {
+Object.defineProperty(window, "localStorage", {
   configurable: true,
-  value: {
-    addEventListener: vi.fn((type: string, listener: () => void) => {
-      const listeners = windowEventListeners.get(type) ?? new Set<() => void>();
-      listeners.add(listener);
-      windowEventListeners.set(type, listeners);
-    }),
-    localStorage,
-    sessionStorage,
-    removeEventListener: vi.fn((type: string, listener: () => void) => {
-      windowEventListeners.get(type)?.delete(listener);
-    }),
-    requestAnimationFrame: (callback: FrameRequestCallback) => {
-      callback(0);
-      return 1;
-    },
-    setTimeout: globalThis.setTimeout,
-    clearTimeout: globalThis.clearTimeout,
-    scrollTo: vi.fn()
+  value: localStorage
+});
+Object.defineProperty(window, "sessionStorage", {
+  configurable: true,
+  value: sessionStorage
+});
+Object.defineProperty(window, "requestAnimationFrame", {
+  configurable: true,
+  value: (callback: FrameRequestCallback) => {
+    callback(0);
+    return 1;
   }
+});
+Object.defineProperty(window, "scrollTo", {
+  configurable: true,
+  value: vi.fn()
 });
 
 const user: SessionUser = {
@@ -167,6 +170,7 @@ const incompleteListerProfile: ApiProfile = {
 };
 
 const adminReviewListing = {
+  revision: 4,
   id: "admin-review-listing",
   title: "管理员刷新验收房源",
   area: "Westwood",
@@ -213,7 +217,6 @@ beforeEach(() => {
   vi.clearAllMocks();
   localStorage.clear();
   sessionStorage.clear();
-  windowEventListeners.clear();
   navigationMock.pathname = "/host/listings";
   authPanelCapture.current = null;
   adminStepUpPanelCapture.current = null;
@@ -230,6 +233,179 @@ beforeEach(() => {
 });
 
 describe("SubletApp auth state flow", () => {
+  it("shows explicit guest authentication actions and hides account-only reminders", async () => {
+    navigationMock.pathname = "/";
+    const renderer = await renderSubletApp("Discover");
+
+    expect(hasButton(renderer.root, "登录 / 注册")).toBe(true);
+    expect(renderer.root.findAllByProps({ "aria-label": "本机提醒" })).toHaveLength(0);
+
+    await act(async () => {
+      clickButton(renderer.root, "登录 / 注册");
+      await flushMicrotasks();
+    });
+    expect(navigationMock.push).toHaveBeenCalledWith(
+      "/account?returnTo=%2F&intent=account"
+    );
+    await unmount(renderer);
+  });
+
+  it("lets a guest save a listing locally without opening or leaving for account auth", async () => {
+    navigationMock.pathname = "/";
+    vi.mocked(api.apiGet).mockImplementation(async (path) =>
+      path === "/listings" ? [headerOffsetListing] : []
+    );
+    const renderer = await renderSubletApp("Discover", headerOffsetListing.id);
+
+    await act(async () => {
+      clickButton(renderer.root, "收藏房源");
+      await flushMicrotasks();
+    });
+
+    expect(hasAuthPanel(renderer.root)).toBe(false);
+    expect(navigationMock.push).not.toHaveBeenCalledWith("/account");
+    expect(
+      JSON.parse(localStorage.getItem(getGuestUiStorageKey()) ?? "null")
+        .favoriteListingIds
+    ).toEqual([headerOffsetListing.id]);
+    await unmount(renderer);
+  });
+
+  it("sends a protected listing action to standalone auth with its listing return path", async () => {
+    navigationMock.pathname = "/";
+    vi.mocked(api.apiGet).mockImplementation(async (path) =>
+      path === "/listings" ? [headerOffsetListing] : []
+    );
+    const renderer = await renderSubletApp("Discover", headerOffsetListing.id);
+
+    await act(async () => {
+      clickButton(renderer.root, "联系房东");
+      await flushMicrotasks();
+    });
+
+    expect(hasAuthPanel(renderer.root)).toBe(false);
+    expect(navigationMock.push).toHaveBeenCalledWith(
+      "/account?returnTo=%2Flisting%2Fheader-offset-listing&intent=message-host"
+    );
+    await unmount(renderer);
+  });
+
+  it("shows a focused guest gate in Messages instead of an empty inbox", async () => {
+    navigationMock.pathname = "/messages";
+    const renderer = await renderSubletApp("Messages");
+
+    expect(renderedText(renderer.root)).toContain("登录后查看消息");
+    expect(renderedText(renderer.root)).not.toContain("还没有联系人");
+    const action = renderer.root.findByProps({ "aria-label": "登录后查看消息" });
+    await act(async () => {
+      action.props.onClick();
+      await flushMicrotasks();
+    });
+    expect(hasAuthPanel(renderer.root)).toBe(false);
+    expect(navigationMock.push).toHaveBeenCalledWith(
+      "/account?returnTo=%2Finbox&intent=messages"
+    );
+    await unmount(renderer);
+  });
+
+  it("shows a focused guest gate in Trips instead of personal empty records", async () => {
+    navigationMock.pathname = "/trips";
+    const renderer = await renderSubletApp("Trips");
+
+    expect(renderedText(renderer.root)).toContain("登录后查看行程");
+    expect(renderedText(renderer.root)).not.toContain("请先登录查看个人看房记录");
+    const action = renderer.root.findByProps({ "aria-label": "登录后查看行程" });
+    await act(async () => {
+      action.props.onClick();
+      await flushMicrotasks();
+    });
+    expect(hasAuthPanel(renderer.root)).toBe(false);
+    expect(navigationMock.push).toHaveBeenCalledWith(
+      "/account?returnTo=%2Ftrips&intent=trips"
+    );
+    await unmount(renderer);
+  });
+
+  it("redirects a guest landlord workspace visit to standalone auth", async () => {
+    navigationMock.pathname = "/host/listings";
+    const renderer = await renderSubletApp("Publish");
+
+    expect(navigationMock.push).toHaveBeenCalledWith(
+      "/account?returnTo=%2Fhost%2Flistings&intent=publish"
+    );
+    expect(hasAuthPanel(renderer.root)).toBe(false);
+    await unmount(renderer);
+  });
+
+  it("renders account as a standalone authentication page without marketplace content", async () => {
+    navigationMock.pathname = "/account";
+    const renderer = await renderSubletApp("Discover", undefined, {
+      authReturnTo: "/messages",
+      authIntent: "messages"
+    });
+
+    expect(renderedText(renderer.root)).toContain("登录 Sublet Pipeline");
+    expect(renderedText(renderer.root)).toContain("登录后即可查看房东与室友消息");
+    expect(renderedText(renderer.root)).not.toContain("查找适合你的短租");
+    expect(renderedText(renderer.root)).not.toContain("房东发布");
+    expect(api.apiGet).not.toHaveBeenCalledWith(expect.stringMatching(/^\/listings/));
+    expect(api.apiGet).not.toHaveBeenCalledWith("/roommates");
+    await unmount(renderer);
+  });
+
+  it("returns a new user to the original page after profile completion", async () => {
+    navigationMock.pathname = "/account";
+    vi.mocked(api.updateMyProfile).mockResolvedValue(completeProfile);
+    const renderer = await renderSubletApp("Discover", undefined, {
+      authReturnTo: "/?listingId=header-offset-listing",
+      authIntent: "message-host"
+    });
+
+    await authenticate({ accessToken: "new-user-token", user, isNewUser: true });
+    expect(navigationMock.push).not.toHaveBeenCalledWith(
+      "/?listingId=header-offset-listing"
+    );
+
+    await act(async () => {
+      await capturedAuthPanel().onProfileSave({
+        displayName: "Maya Chen",
+        school: "UCLA",
+        city: "Los Angeles",
+        role: "lister"
+      });
+      await flushMicrotasks();
+    });
+
+    expect(navigationMock.push).toHaveBeenCalledWith(
+      "/?listingId=header-offset-listing"
+    );
+    await unmount(renderer);
+  });
+
+  it("merges device-local guest favorites into the authenticated account", async () => {
+    localStorage.setItem(
+      getGuestUiStorageKey(),
+      JSON.stringify({ version: 2, favoriteListingIds: ["guest-home", "shared-home"], notifications: [] })
+    );
+    localStorage.setItem(
+      getUserUiStorageKey(user.id),
+      JSON.stringify({ version: 2, favoriteListingIds: ["shared-home", "account-home"], notifications: [] })
+    );
+    writeStoredAuthSession("stored-user-token");
+
+    const renderer = await renderSubletApp("Discover");
+    await act(async () => {
+      await flushMicrotasks();
+    });
+
+    expect(
+      JSON.parse(localStorage.getItem(getUserUiStorageKey(user.id)) ?? "null")
+        .favoriteListingIds
+    ).toEqual(["guest-home", "shared-home", "account-home"]);
+    expect(localStorage.getItem(getGuestUiStorageKey())).toBeNull();
+    await unmount(renderer);
+  });
+
   it("shows two direct administrator tools and routes each one for an ADMIN session", async () => {
     navigationMock.pathname = "/";
     writeStoredAuthSession("stored-admin-token");
@@ -472,7 +648,7 @@ describe("SubletApp auth state flow", () => {
     expect(renderedText(renderer.root)).toContain("审核中");
 
     await act(async () => {
-      windowEventListeners.get("focus")?.forEach((listener) => listener());
+      window.dispatchEvent(new Event("focus"));
       await flushMicrotasks();
     });
 
@@ -506,14 +682,9 @@ describe("SubletApp auth state flow", () => {
     const getElementById = vi.fn((id: string) =>
       id === "publish-flow" ? { scrollIntoView } : null
     );
-    const documentDescriptor = Object.getOwnPropertyDescriptor(
-      globalThis,
-      "document"
-    );
-    Object.defineProperty(globalThis, "document", {
-      configurable: true,
-      value: { getElementById }
-    });
+    const getElementByIdSpy = vi
+      .spyOn(document, "getElementById")
+      .mockImplementation(getElementById as typeof document.getElementById);
     let renderer: ReactTestRenderer | null = null;
     try {
       renderer = await renderSubletApp("Publish");
@@ -542,11 +713,7 @@ describe("SubletApp auth state flow", () => {
       });
     } finally {
       if (renderer) await unmount(renderer);
-      if (documentDescriptor) {
-        Object.defineProperty(globalThis, "document", documentDescriptor);
-      } else {
-        Reflect.deleteProperty(globalThis, "document");
-      }
+      getElementByIdSpy.mockRestore();
     }
   });
 
@@ -559,14 +726,9 @@ describe("SubletApp auth state flow", () => {
     const getElementById = vi.fn((id: string) =>
       id === "publish-flow" ? { scrollIntoView } : null
     );
-    const documentDescriptor = Object.getOwnPropertyDescriptor(
-      globalThis,
-      "document"
-    );
-    Object.defineProperty(globalThis, "document", {
-      configurable: true,
-      value: { getElementById }
-    });
+    const getElementByIdSpy = vi
+      .spyOn(document, "getElementById")
+      .mockImplementation(getElementById as typeof document.getElementById);
     let renderer: ReactTestRenderer | null = null;
     try {
       renderer = await renderSubletApp("Publish");
@@ -600,11 +762,7 @@ describe("SubletApp auth state flow", () => {
       expect(scrollIntoView).not.toHaveBeenCalled();
     } finally {
       if (renderer) await unmount(renderer);
-      if (documentDescriptor) {
-        Object.defineProperty(globalThis, "document", documentDescriptor);
-      } else {
-        Reflect.deleteProperty(globalThis, "document");
-      }
+      getElementByIdSpy.mockRestore();
     }
   });
 
@@ -653,10 +811,14 @@ describe("SubletApp auth state flow", () => {
   });
 
   it("keeps a newly saved profile when the older profile request resolves later", async () => {
+    navigationMock.pathname = "/account";
     const oldProfileRequest = deferred<ApiProfile>();
     vi.mocked(api.getMyProfile).mockReturnValue(oldProfileRequest.promise);
     vi.mocked(api.updateMyProfile).mockResolvedValue(completeProfile);
-    const renderer = await renderSubletApp("Publish");
+    const renderer = await renderSubletApp("Discover", undefined, {
+      authReturnTo: "/host/listings",
+      authIntent: "publish"
+    });
 
     await authenticate({
       accessToken: "fresh-token",
@@ -675,23 +837,26 @@ describe("SubletApp auth state flow", () => {
     });
 
     expect(savedProfile).toBe(completeProfile);
-    expect(hasAuthPanel(renderer.root)).toBe(false);
-    expect(hasButton(renderer.root, "保存草稿")).toBe(true);
+    expect(capturedAuthPanel().profile).toBe(completeProfile);
+    expect(navigationMock.push).toHaveBeenCalledWith("/host/listings");
 
     await act(async () => {
       oldProfileRequest.resolve(incompleteListerProfile);
       await flushMicrotasks();
     });
 
-    expect(hasAuthPanel(renderer.root)).toBe(false);
-    expect(hasButton(renderer.root, "保存草稿")).toBe(true);
+    expect(capturedAuthPanel().profile).toBe(completeProfile);
     await unmount(renderer);
   });
 
   it("opens new-user onboarding from the real authenticated callback but not for an existing user", async () => {
+    navigationMock.pathname = "/account";
     const newUserProfileRequest = deferred<ApiProfile>();
     vi.mocked(api.getMyProfile).mockReturnValue(newUserProfileRequest.promise);
-    const newUserRenderer = await renderSubletApp("Publish");
+    const newUserRenderer = await renderSubletApp("Discover", undefined, {
+      authReturnTo: "/host/listings",
+      authIntent: "publish"
+    });
 
     await authenticate({
       accessToken: "new-user-token",
@@ -699,13 +864,18 @@ describe("SubletApp auth state flow", () => {
       isNewUser: true
     });
     expect(capturedAuthPanel().onboardingReason).toBe("new-user");
+    expect(navigationMock.push).not.toHaveBeenCalledWith("/host/listings");
     await unmount(newUserRenderer);
 
     localStorage.clear();
+    navigationMock.push.mockClear();
     authPanelCapture.current = null;
     const existingProfileRequest = deferred<ApiProfile>();
     vi.mocked(api.getMyProfile).mockReturnValue(existingProfileRequest.promise);
-    const existingUserRenderer = await renderSubletApp("Publish");
+    const existingUserRenderer = await renderSubletApp("Discover", undefined, {
+      authReturnTo: "/host/listings",
+      authIntent: "publish"
+    });
 
     await authenticate({
       accessToken: "existing-user-token",
@@ -713,6 +883,7 @@ describe("SubletApp auth state flow", () => {
       isNewUser: false
     });
     expect(capturedAuthPanel().onboardingReason).toBeNull();
+    expect(navigationMock.push).toHaveBeenCalledWith("/host/listings");
     await unmount(existingUserRenderer);
   });
 
@@ -843,7 +1014,7 @@ describe("SubletApp auth state flow", () => {
       await flushMicrotasks();
     });
 
-    expect(api.approveAdminListing).toHaveBeenCalledWith("enhanced-token", adminReviewListing.id);
+    expect(api.approveAdminListing).toHaveBeenCalledWith("enhanced-token", adminReviewListing.id, adminReviewListing.revision);
     await unmount(secondRenderer);
   });
 
@@ -916,8 +1087,9 @@ describe("SubletApp auth state flow", () => {
 });
 
 async function renderSubletApp(
-  initialSection: "Discover" | "Publish" | "Trips" | "Trust" | "AdminRoommates",
-  initialListingId?: string
+  initialSection: "Discover" | "Messages" | "Publish" | "Trips" | "Trust" | "AdminRoommates",
+  initialListingId?: string,
+  authOptions: { authReturnTo?: string | null; authIntent?: AuthIntent } = {}
 ): Promise<ReactTestRenderer> {
   let renderer: ReactTestRenderer | undefined;
   await act(async () => {
@@ -925,6 +1097,7 @@ async function renderSubletApp(
       <SubletApp
         initialSection={initialSection}
         initialListingId={initialListingId}
+        {...authOptions}
       />
     );
     await flushMicrotasks();

@@ -7,11 +7,13 @@ services:
     command: sh -lc "corepack enable && pnpm install --frozen-lockfile && pnpm dev --hostname 0.0.0.0"
     environment:
       NEXT_PUBLIC_API_BASE_URL: http://localhost:4000/api/v1
+      API_INTERNAL_BASE_URL: http://api:4000/api/v1
     ports:
       - "3000:3000"
     volumes:
       - .:/app
       - sublet_pipeline_node_modules:/app/node_modules
+      - sublet_pipeline_api_node_modules:/app/api/node_modules
     depends_on:
       api:
         condition: service_healthy
@@ -23,16 +25,17 @@ services:
     container_name: sublet-pipeline-api
     restart: unless-stopped
     working_dir: /app
-    command: sh -lc "corepack enable && pnpm install --frozen-lockfile && pnpm --dir api prisma generate && pnpm --dir api prisma db push && pnpm --dir api dev"
+    command: sh -lc "corepack enable && pnpm install --frozen-lockfile && pnpm --dir api prisma generate && pnpm --dir api prisma migrate deploy && pnpm --dir api dev"
     environment:
       NODE_ENV: development
       PORT: 4000
       DATABASE_URL: postgresql://sublet:sublet@db:5432/sublet_pipeline?schema=public
       JWT_SECRET: dev-only-change-me
       WEB_ORIGIN: http://localhost:3000
-      EMAIL_CODE_TTL_SECONDS: 600
-      EMAIL_CODE_MAX_ATTEMPTS: 5
-      EMAIL_CODE_RESEND_COOLDOWN_SECONDS: 60
+      EMAIL_SENDER: console
+      AUTH_CODE_TTL_SECONDS: 600
+      AUTH_CODE_MAX_ATTEMPTS: 5
+      AUTH_CODE_COOLDOWN_SECONDS: 60
       LISTING_MEDIA_STORAGE_ENDPOINT: http://minio:9000
       LISTING_MEDIA_UPLOAD_ENDPOINT: http://localhost:9000
       LISTING_MEDIA_STORAGE_REGION: us-east-1
@@ -45,6 +48,7 @@ services:
     volumes:
       - .:/app
       - sublet_pipeline_node_modules:/app/node_modules
+      - sublet_pipeline_api_node_modules:/app/api/node_modules
       - sublet_pipeline_api_dist:/app/api/dist
     depends_on:
       db:
@@ -52,7 +56,7 @@ services:
       minio-init:
         condition: service_completed_successfully
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:4000/api/v1/health >/dev/null 2>&1"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:4000/api/v1/ready >/dev/null 2>&1"]
       interval: 10s
       timeout: 5s
       retries: 12
@@ -151,6 +155,8 @@ networks:
 
 volumes:
   sublet_pipeline_node_modules:
+    driver: local
+  sublet_pipeline_api_node_modules:
     driver: local
   sublet_pipeline_api_dist:
     driver: local

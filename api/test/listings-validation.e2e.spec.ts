@@ -46,6 +46,14 @@ describe("listing HTTP validation", () => {
     await app.close();
   });
 
+  it("rejects explicit null for every non-null optional PATCH field", async () => {
+    const http = request(app.getHttpServer());
+    const created = await createListing(http, token);
+    for (const field of ["title", "area", "price", "originalPrice", "beds", "baths", "commute", "transit", "trust", "tags", "score", "availableFrom", "availableTo"]) {
+      await http.patch(`/api/v1/listings/${created.id}`).set("Authorization", `Bearer ${token}`).send({ [field]: null }).expect(400);
+    }
+  });
+
   it("rejects malformed listing create payloads", async () => {
     const http = request(app.getHttpServer());
 
@@ -176,15 +184,35 @@ describe("listing HTTP validation", () => {
       });
   });
 
-  it("validates and trims admin rejection reasons", async () => {
+  it.each(["approve", "reject"])("requires the reviewed revision for admin %s", async (decision) => {
     const http = request(app.getHttpServer());
     const created = await createListing(http, token);
     await http.post(`/api/v1/listings/${created.id}/submit`).set("Authorization", `Bearer ${token}`).expect(201);
+    const queue = await http.get("/api/v1/admin/listings/review-queue")
+      .set("Authorization", `Bearer ${adminToken}`).expect(200);
+    const reviewed = queue.body.find((item: { id: string }) => item.id === created.id);
+    for (const revision of [undefined, -1, 1.5, "0"]) {
+      await http.post(`/api/v1/admin/listings/${created.id}/${decision}`)
+        .set("Authorization", `Bearer ${adminToken}`)
+        .send({ revision, ...(decision === "reject" ? { reason: "Needs changes" } : {}) })
+        .expect(400);
+    }
+    await http.post(`/api/v1/admin/listings/${created.id}/${decision}`)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({ revision: reviewed.revision, ...(decision === "reject" ? { reason: "Needs changes" } : {}) })
+      .expect(201);
+  });
+
+  it("validates and trims admin rejection reasons", async () => {
+    const http = request(app.getHttpServer());
+    const created = await createListing(http, token);
+    const submitted = await http.post(`/api/v1/listings/${created.id}/submit`).set("Authorization", `Bearer ${token}`).expect(201);
 
     await http
       .post(`/api/v1/admin/listings/${created.id}/reject`)
       .set("Authorization", `Bearer ${adminToken}`)
       .send({
+        revision: submitted.body.revision,
         reason: "   "
       })
       .expect(400);
@@ -193,6 +221,7 @@ describe("listing HTTP validation", () => {
       .post(`/api/v1/admin/listings/${created.id}/reject`)
       .set("Authorization", `Bearer ${adminToken}`)
       .send({
+        revision: submitted.body.revision,
         reason: "  Needs clearer bedroom photos  "
       })
       .expect(201)

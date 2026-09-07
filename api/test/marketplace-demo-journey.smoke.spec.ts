@@ -1,6 +1,6 @@
 import "reflect-metadata";
 
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 
@@ -24,6 +24,13 @@ const runSmoke = process.env.RUN_DB_SMOKE === "1" && process.env.RUN_MARKETPLACE
 const runChild = process.env.RUN_MARKETPLACE_SMOKE_CHILD === "1";
 const describeSmoke = runSmoke ? describe : describe.skip;
 const CHILD_TIMEOUT_MS = 45_000;
+
+// Keep real time for S3 request signatures; the rental starts on today's LA date.
+const journeyMoveIn = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "America/Los_Angeles", year: "numeric", month: "2-digit", day: "2-digit"
+}).format(new Date());
+const journeyMoveOut = new Date(new Date(`${journeyMoveIn}T00:00:00Z`).getTime() + 30 * 86_400_000).toISOString().slice(0, 10);
+
 
 function defineMarketplaceJourney() {
   const originalEnvironment = {
@@ -135,7 +142,7 @@ function defineMarketplaceJourney() {
     const dissolutionListing = await createApprovedListing(http, "Dissolution");
 
     const publicResults = await http
-      .get("/api/v1/listings?moveIn=2020-01-02&moveOut=2020-02-01")
+      .get(`/api/v1/listings?moveIn=${journeyMoveIn}&moveOut=${journeyMoveOut}`)
       .expect(200);
     expect(publicResults.body.map((listing: { id: string }) => listing.id)).toEqual(
       expect.arrayContaining([primaryListing.id, dissolutionListing.id])
@@ -241,7 +248,7 @@ function defineMarketplaceJourney() {
     await http
       .post("/api/v1/roommate-teams/current/leave")
       .auth(tokens.renter, { type: "bearer" })
-      .send({})
+      .send({ teamId: team.body.id })
       .expect(201)
       .expect(({ body }: { body: Record<string, any> }) => expect(body.status).toBe("DISSOLVED"));
     await http
@@ -267,7 +274,8 @@ function defineMarketplaceJourney() {
       const upload = await httpClient
         .post(`/api/v1/listings/${listing.body.id}/media/uploads`)
         .auth(tokens.owner, { type: "bearer" })
-        .send({ kind: "室内", mimeType: "image/png", sizeBytes: imageBytes.length, checksumSha256: imageChecksum })
+        .send({
+          commandId: randomUUID(), kind: "室内", mimeType: "image/png", sizeBytes: imageBytes.length, checksumSha256: imageChecksum })
         .expect(201);
       expect(upload.body.media).not.toHaveProperty("originalKey");
       const uploadBody = imageBytes.buffer.slice(
@@ -283,10 +291,10 @@ function defineMarketplaceJourney() {
       const finalized = await httpClient
         .post(`/api/v1/listings/${listing.body.id}/media/${upload.body.media.id}/finalize`)
         .auth(tokens.owner, { type: "bearer" })
-        .send({})
+        .send({ uploadAttemptId: upload.body.uploadAttemptId })
         .expect(201);
       expect(finalized.body.storageStatus).toBe("READY");
-      await httpClient
+      const submitted = await httpClient
         .post(`/api/v1/listings/${listing.body.id}/submit`)
         .auth(tokens.owner, { type: "bearer" })
         .send({})
@@ -294,7 +302,7 @@ function defineMarketplaceJourney() {
       await httpClient
         .post(`/api/v1/admin/listings/${listing.body.id}/approve`)
         .auth(tokens.admin, { type: "bearer" })
-        .send({})
+        .send({ revision: submitted.body.revision })
         .expect(201);
       const publishedContent = await httpClient
         .get(`/api/v1/listing-media/${upload.body.media.id}/content`)
@@ -313,8 +321,8 @@ function defineMarketplaceJourney() {
           listingId,
           scope: "TEAM",
           teamId,
-          moveIn: "2020-01-02",
-          moveOut: "2020-02-01",
+          moveIn: journeyMoveIn,
+          moveOut: journeyMoveOut,
           schoolOrOccupation: "UCLA student",
           incomeBand: "TWO_TO_THREE_X",
           guarantorStatus: "AVAILABLE",
@@ -390,8 +398,8 @@ function listingPayload(title: string) {
   return {
     title,
     area: "Los Angeles · Westwood",
-    availableFrom: "2020-01-01",
-    availableTo: "2020-03-01",
+    availableFrom: journeyMoveIn,
+    availableTo: journeyMoveOut,
     price: 1850,
     originalPrice: 2050,
     beds: 2,

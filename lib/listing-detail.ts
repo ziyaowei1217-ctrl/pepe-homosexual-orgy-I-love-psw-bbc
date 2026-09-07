@@ -5,6 +5,7 @@ export type DetailListing = {
   title: string;
   area: string;
   image: string;
+  images?: string[];
   price: number;
   originalPrice: number;
   beds: number;
@@ -22,14 +23,8 @@ export type ListingFlowInputs = {
   tourRequestedIds: Set<string>;
 };
 
-const detailGalleryFallbacks = [
-  "https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?auto=format&fit=crop&w=1200&q=80",
-  "https://images.unsplash.com/photo-1484154218962-a197022b5858?auto=format&fit=crop&w=1200&q=80",
-  "https://images.unsplash.com/photo-1493809842364-78817add7ffb?auto=format&fit=crop&w=1200&q=80"
-];
-
-export function buildListingGallery(listing: Pick<DetailListing, "image">) {
-  return Array.from(new Set([listing.image, ...detailGalleryFallbacks].filter(Boolean)));
+export function buildListingGallery(listing: Pick<DetailListing, "image" | "images">) {
+  return Array.from(new Set((listing.images ?? [listing.image]).filter(Boolean)));
 }
 
 export function getGalleryIndex(currentIndex: number, direction: -1 | 1, galleryLength: number) {
@@ -62,7 +57,7 @@ export function buildListingDetail(listing: DetailListing, dateRange: DateRange)
       moveIn: [
         dateRange.checkIn ? `${formatDateRangeLabel(dateRange)} 已用于核对可租范围` : "选择日期可核对房源可租范围",
         "联系房东并预约看房",
-        "在线申请后由房东处理，接受后进入演示支付与资金状态"
+        "在线申请后由房东处理，接受后进入签约与付款流程"
       ]
     }
   };

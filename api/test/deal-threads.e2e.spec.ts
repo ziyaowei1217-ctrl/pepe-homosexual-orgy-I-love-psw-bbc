@@ -1,4 +1,5 @@
 import "reflect-metadata";
+import { randomUUID } from "node:crypto";
 import { INestApplication, ValidationPipe } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { Test } from "@nestjs/testing";
@@ -51,11 +52,27 @@ describe("two-sided deal thread HTTP API", () => {
       viewerRole: "renter"
     });
 
-    await http
+    const clientMessageId = randomUUID();
+    for (const body of [{ body: "Missing key" }, { body: "Invalid key", clientMessageId: "not-a-uuid" }, { body: "Null key", clientMessageId: null }]) {
+      await http.post(`/api/v1/deal-threads/${created.body.id}/messages`)
+        .set("Authorization", `Bearer ${renter.token}`).send(body).expect(400);
+    }
+    const firstMessage = await http
       .post(`/api/v1/deal-threads/${created.body.id}/messages`)
       .set("Authorization", `Bearer ${renter.token}`)
-      .send({ body: "Can I tour Friday?" })
+      .send({ body: "Can I tour Friday?", clientMessageId })
       .expect(201);
+    const replay = await http.post(`/api/v1/deal-threads/${created.body.id}/messages`)
+      .set("Authorization", `Bearer ${renter.token}`)
+      .send({ body: "  Can I tour Friday?  ", clientMessageId }).expect(201);
+    expect(replay.body.messages).toEqual(firstMessage.body.messages);
+    expect(replay.body.messages).toHaveLength(1);
+    await http.post(`/api/v1/deal-threads/${created.body.id}/messages`)
+      .set("Authorization", `Bearer ${renter.token}`)
+      .send({ body: "Changed after send", clientMessageId }).expect(409);
+    await http.post(`/api/v1/deal-threads/${created.body.id}/messages`)
+      .set("Authorization", `Bearer ${renter.token}`)
+      .send({ body: "Forged author", clientMessageId: randomUUID(), senderId: host.user.id }).expect(400);
 
     const hostInbox = await http
       .get("/api/v1/deal-threads")
@@ -68,7 +85,7 @@ describe("two-sided deal thread HTTP API", () => {
     const hostReply = await http
       .post(`/api/v1/deal-threads/${created.body.id}/messages`)
       .set("Authorization", `Bearer ${host.token}`)
-      .send({ body: "Friday works." })
+      .send({ body: "Friday works.", clientMessageId: randomUUID() })
       .expect(201);
     expect(hostReply.body.messages.at(-1)).toMatchObject({ body: "Friday works.", align: "right" });
 
@@ -84,16 +101,21 @@ describe("two-sided deal thread HTTP API", () => {
       .expect(201);
     const viewingId = viewing.body.viewingRequests[0].id;
 
+    for (const body of [{}, { expectedRevision: 0 }, { expectedRevision: "1" }, { expectedRevision: 1.5 }]) {
+      await http.post(`/api/v1/deal-threads/${created.body.id}/viewing-requests/${viewingId}/confirm`)
+        .set("Authorization", `Bearer ${host.token}`).send(body).expect(400);
+    }
     const confirmed = await http
       .post(`/api/v1/deal-threads/${created.body.id}/viewing-requests/${viewingId}/confirm`)
       .set("Authorization", `Bearer ${host.token}`)
+      .send({ expectedRevision: viewing.body.viewingRequests[0].revision })
       .expect(201);
     expect(confirmed.body.viewingRequests[0].status).toBe("CONFIRMED");
 
     await http
       .post(`/api/v1/deal-threads/${created.body.id}/messages`)
       .set("Authorization", `Bearer ${unrelated.token}`)
-      .send({ body: "Can I join?" })
+      .send({ body: "Can I join?", clientMessageId })
       .expect(404);
   });
 
@@ -164,7 +186,7 @@ async function createApprovedListing(http: any, host: any, admin: any) {
       tags: ["Furnished"]
     })
     .expect(201);
-  await http
+  const submitted = await http
     .post(`/api/v1/listings/${created.body.id}/submit`)
     .set("Authorization", `Bearer ${host.token}`)
     .expect(201);
@@ -172,6 +194,7 @@ async function createApprovedListing(http: any, host: any, admin: any) {
     await http
       .post(`/api/v1/admin/listings/${created.body.id}/approve`)
       .set("Authorization", `Bearer ${admin.token}`)
+      .send({ revision: submitted.body.revision })
       .expect(201)
   ).body;
 }

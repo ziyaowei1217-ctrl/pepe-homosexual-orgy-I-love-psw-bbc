@@ -48,6 +48,23 @@ const developmentJwtSecret = "dev-change-me";
 const developmentOtpHashSecret = "development-otp-hash-secret";
 const developmentIdentifierHashSecret = "development-identifier-hash-secret";
 
+export function assertProductionRuntimeConfig(environment: Record<string, string | undefined> = process.env) {
+  if (environment.NODE_ENV !== "production") return;
+
+  const databaseUrl = requiredUrl("DATABASE_URL", environment.DATABASE_URL, ["postgresql:", "postgres:"]);
+  if (databaseUrl.searchParams.get("sslmode") !== "require" && databaseUrl.searchParams.get("sslmode") !== "verify-full") {
+    throw new Error("DATABASE_URL must require TLS in production");
+  }
+  const webOrigin = requiredUrl("WEB_ORIGIN", environment.WEB_ORIGIN, ["https:"]);
+  if (webOrigin.pathname !== "/" || webOrigin.search || webOrigin.hash) {
+    throw new Error("WEB_ORIGIN must be an HTTPS origin without a path");
+  }
+  requiredUrl("VALKEY_URL", environment.VALKEY_URL, ["rediss:"]);
+  if (environment.LOCAL_ADMIN_EMAILS?.trim()) {
+    throw new Error("LOCAL_ADMIN_EMAILS must be empty in production");
+  }
+}
+
 export function getJwtSecret(input: JwtSecretInput = {}) {
   const nodeEnv = input.nodeEnv ?? process.env.NODE_ENV ?? "development";
   const jwtSecret = input.jwtSecret ?? process.env.JWT_SECRET;
@@ -220,4 +237,13 @@ function validateStorageEndpoint(name: string, value: string) {
   if (parsedEndpoint.protocol !== "http:" && parsedEndpoint.protocol !== "https:") {
     throw new Error(`${name} must use HTTP or HTTPS`);
   }
+}
+
+function requiredUrl(name: string, value: string | undefined, protocols: string[]) {
+  if (!value?.trim()) throw new Error(`${name} is required in production`);
+  let parsed: URL;
+  try { parsed = new URL(value); }
+  catch { throw new Error(`${name} must be a valid URL`); }
+  if (!protocols.includes(parsed.protocol)) throw new Error(`${name} must use ${protocols.join(" or ")}`);
+  return parsed;
 }

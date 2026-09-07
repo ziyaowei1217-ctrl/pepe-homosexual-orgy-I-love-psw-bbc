@@ -1,10 +1,12 @@
+// @vitest-environment jsdom
+
 import { renderToStaticMarkup } from "react-dom/server";
 import {
   act,
   create,
   type ReactTestInstance,
   type ReactTestRenderer
-} from "react-test-renderer";
+} from "./support/dom-test-renderer";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import * as api from "../lib/api";
@@ -50,6 +52,19 @@ describe("progressive email auth UI", () => {
     expect(html).toContain("发送验证码");
   });
 
+  it("explains why authentication opened without replacing the email flow", () => {
+    const html = renderToStaticMarkup(
+      <AuthFlowPanel
+        {...authPanelProps({
+          contextMessage: "登录后即可联系房东；登录完成后请再次确认发送。"
+        })}
+      />
+    );
+
+    expect(html).toContain("登录后即可联系房东；登录完成后请再次确认发送。");
+    expect(html).toContain("邮箱登录");
+  });
+
   it("renders the four required onboarding fields and skip action", () => {
     const html = renderToStaticMarkup(
       <ProfileOnboarding
@@ -67,6 +82,46 @@ describe("progressive email auth UI", () => {
     expect(html).toContain("学校");
     expect(html).toContain("城市");
     expect(html).toContain("稍后完善");
+  });
+
+  it("asks landlords for a school or company while keeping the renter label student-focused", () => {
+    const profile = {
+      id: "profile-1",
+      email: "host@example.com",
+      displayName: "Host",
+      avatarUrl: null,
+      school: null,
+      city: "Los Angeles",
+      role: "lister" as const,
+      eduEmailVerified: false,
+      phoneVerified: false,
+      wechat: null,
+      instagram: null,
+      bio: null
+    };
+    const landlordHtml = renderToStaticMarkup(
+      <ProfileOnboarding
+        reason="new-user"
+        profile={profile}
+        pending={false}
+        error={null}
+        onSave={vi.fn()}
+        onDismiss={vi.fn()}
+      />
+    );
+    const renterHtml = renderToStaticMarkup(
+      <ProfileOnboarding
+        reason="new-user"
+        profile={{ ...profile, role: "renter" }}
+        pending={false}
+        error={null}
+        onSave={vi.fn()}
+        onDismiss={vi.fn()}
+      />
+    );
+
+    expect(landlordHtml).toContain("学校或公司");
+    expect(renterHtml).not.toContain("学校或公司");
   });
 });
 
@@ -309,7 +364,7 @@ describe("AuthFlowPanel interactions", () => {
 
     expect(findInput(renderer.root, "code").props.value).toBe("");
     expect(renderedText(renderer.root)).toContain(
-      "如果该邮箱具备测试资格，请输入收到的验证码；否则请联系测试管理员。"
+      "若该邮箱已获邀请或已有账户，验证码将发送至 unknown@example.edu；未收到请联系管理员获取邀请。"
     );
     expect(renderedText(renderer.root)).not.toContain("验证码已发送至");
     expect(renderedText(renderer.root)).not.toContain("请在验证码过期前完成验证");
@@ -337,7 +392,7 @@ describe("AuthFlowPanel interactions", () => {
 
     expect(findInput(renderer.root, "code").props.value).toBe("123456");
     expect(renderedText(renderer.root)).toContain(
-      "验证码已发送至 invited@example.edu"
+      "若该邮箱已获邀请或已有账户，验证码将发送至 invited@example.edu；未收到请联系管理员获取邀请。"
     );
     expect(renderedText(renderer.root)).toContain("请在验证码过期前完成验证");
     expect(renderedText(renderer.root)).toContain("60 秒后重新发送");
@@ -362,7 +417,8 @@ describe("AuthFlowPanel interactions", () => {
     };
     vi.mocked(api.verifyEmailCode).mockResolvedValue(verificationResponse);
     const onAuthenticated = vi.fn();
-    const renderer = await renderAuthPanel({ onAuthenticated });
+    const onToast = vi.fn();
+    const renderer = await renderAuthPanel({ onAuthenticated, onToast });
 
     changeInput(renderer.root, "email", " Maya@Example.edu ");
     const emailForm = renderer.root.findByType("form");
@@ -388,8 +444,10 @@ describe("AuthFlowPanel interactions", () => {
 
     expect(renderer.root.findByProps({ name: "code" })).toBeDefined();
     expect(renderedText(renderer.root)).toContain(
-      "验证码已发送至 maya@example.edu"
+      "若该邮箱已获邀请或已有账户，验证码将发送至 maya@example.edu；未收到请联系管理员获取邀请。"
     );
+    expect(onToast).toHaveBeenCalledWith("请检查邮箱，未收到验证码请联系管理员获取邀请");
+    expect(onToast).not.toHaveBeenCalledWith("验证码已发送");
 
     changeInput(renderer.root, "code", "12a3456");
     const verifyButton = findButton(renderer.root, "验证并登录");

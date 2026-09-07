@@ -142,7 +142,7 @@ function sortCatalogListings<T extends CatalogListing>(listings: readonly T[], s
 function buildCatalogHeading(query: CatalogQuery) {
   const location = query.query.trim() || "全部地区";
   const amenity = query.amenity && query.amenity !== "全部" ? ` · ${query.amenity}` : "";
-  return `${location} 的可租房源${amenity}`;
+  return `${location}的可租房源${amenity}`;
 }
 
 function normalizeText(value: string) {

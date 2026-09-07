@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState, type ComponentProps } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,7 @@ import { toProductApiError } from "@/lib/product-errors";
 import type { ApiRoommateTeam } from "@/lib/roommate-teams";
 import {
   applicationScopeOptions,
+  applicationDraftScope,
   createAndSubmitRentalApplication,
   newIdempotencyKey,
   validateRentalApplicationDraft,
@@ -18,7 +19,11 @@ import {
   type RentalApplicationScope
 } from "@/lib/rental-applications";
 
-export function RentalApplicationPanel({
+export function RentalApplicationPanel(props: ComponentProps<typeof RentalApplicationSession>) {
+  return <RentalApplicationSession key={`${applicationDraftScope(props.token)}:${props.listing.id}`} {...props} />;
+}
+
+function RentalApplicationSession({
   listing,
   token,
   team,
@@ -34,7 +39,16 @@ export function RentalApplicationPanel({
   onSubmitted(application: ApiRentalApplication): void;
 }) {
   const [step, setStep] = useState(0);
-  const [draft, setDraft] = useState<RentalApplicationDraft>({
+  const storageKey = `sublet_legacy_application_draft:${applicationDraftScope(token)}:${listing.id}`;
+  const [draft, setDraft] = useState<RentalApplicationDraft>(() => {
+    const raw = typeof window !== "undefined" ? sessionStorage.getItem(storageKey) : null;
+    if (raw) {
+      try {
+        const saved = JSON.parse(raw);
+        if (saved && typeof saved.note === "string" && typeof saved.moveIn === "string" && typeof saved.schoolOrOccupation === "string") return saved;
+      } catch { /* Start from listing defaults if browser storage is invalid. */ }
+    }
+    return {
     scope: "SOLO",
     teamId: undefined,
     moveIn: listing.availableFrom?.slice(0, 10) ?? "",
@@ -43,7 +57,9 @@ export function RentalApplicationPanel({
     incomeBand: "TWO_TO_THREE_X",
     guarantorStatus: "AVAILABLE",
     note: ""
+    };
   });
+  useEffect(() => { sessionStorage.setItem(storageKey, JSON.stringify(draft)); }, [draft, storageKey]);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const keys = useRef({ create: newIdempotencyKey("application-create"), submit: newIdempotencyKey("application-submit") });
@@ -69,6 +85,7 @@ export function RentalApplicationPanel({
     setError(null);
     try {
       const application = await createAndSubmitRentalApplication(token, listing.id, draft, keys.current);
+      sessionStorage.removeItem(storageKey);
       onSubmitted(application);
     } catch (caught) {
       setError(toProductApiError(caught).message);

@@ -1,3 +1,5 @@
+import { findUSMarketByArea, getMarketNeighborhoodCoordinates } from "./us-market-catalog";
+
 export type MapPoint = {
   lat: number;
   lng: number;
@@ -13,6 +15,8 @@ export type MappableListing = {
   area: string;
   price: number;
   title?: string;
+  latitude?: number;
+  longitude?: number;
 };
 
 export type MapMarkerPosition = MappableListing &
@@ -65,19 +69,31 @@ const neighborhoodCoordinates: Record<string, MapPoint> = {
   "Los Feliz": { lat: 34.1086, lng: -118.2879 },
   "Brentwood": { lat: 34.0521, lng: -118.473 },
   "Arts District": { lat: 34.0415, lng: -118.2356 },
-  "El Segundo": { lat: 33.9192, lng: -118.4165 }
+  "El Segundo": { lat: 33.9192, lng: -118.4165 },
+  "Boston": { lat: 42.3601, lng: -71.0589 },
+  "Back Bay": { lat: 42.3503, lng: -71.081 },
+  "Fenway": { lat: 42.3467, lng: -71.0972 },
+  "Allston": { lat: 42.3555, lng: -71.1328 },
+  "Cambridge": { lat: 42.3736, lng: -71.1097 },
+  "Somerville": { lat: 42.3876, lng: -71.0995 },
+  "Seaport": { lat: 42.3519, lng: -71.0496 }
 };
 
 export function getListingCoordinates(area: string): MapPoint {
   const neighborhood = area.split("·").at(1)?.trim() ?? area.trim();
+  const knownNeighborhood = neighborhoodCoordinates[neighborhood];
+  if (knownNeighborhood) return knownNeighborhood;
 
-  return neighborhoodCoordinates[neighborhood] ?? laCenter;
+  const market = findUSMarketByArea(area);
+  if (market) return getMarketNeighborhoodCoordinates(market, neighborhood);
+
+  return laCenter;
 }
 
 export function getMapCenterForListings(listings: MappableListing[], fallback: MapPoint = laCenter): MapPoint {
   if (listings.length === 0) return fallback;
 
-  const points = listings.map((listing) => getListingCoordinates(listing.area));
+  const points = listings.map(getListingPoint);
   return {
     lat: average(points.map((point) => point.lat)),
     lng: average(points.map((point) => point.lng))
@@ -88,22 +104,38 @@ export function getMapMarkers(
   listings: MappableListing[],
   center: MapPoint,
   zoom: number,
-  size: MapSize
+  size: MapSize,
+  clampToViewport = true
 ): MapMarkerPosition[] {
   const centerPixel = lngLatToWorldPixel(center, zoom);
 
   return listings.map((listing) => {
-    const point = getListingCoordinates(listing.area);
+    const point = getListingPoint(listing);
     const markerPixel = lngLatToWorldPixel(point, zoom);
 
     return {
       ...listing,
       ...point,
       label: `$${listing.price.toLocaleString()}`,
-      x: Math.round(keepInsideViewport(markerPixel.x - centerPixel.x + size.width / 2, size.width, markerInset.x)),
-      y: Math.round(keepInsideViewport(markerPixel.y - centerPixel.y + size.height / 2, size.height, markerInset.y))
+      x: Math.round(clampToViewport ? keepInsideViewport(markerPixel.x - centerPixel.x + size.width / 2, size.width, markerInset.x) : markerPixel.x - centerPixel.x + size.width / 2),
+      y: Math.round(clampToViewport ? keepInsideViewport(markerPixel.y - centerPixel.y + size.height / 2, size.height, markerInset.y) : markerPixel.y - centerPixel.y + size.height / 2)
     };
   });
+}
+
+export function panMapCenter(center: MapPoint, zoom: number, dx: number, dy: number): MapPoint {
+  const pixel = lngLatToWorldPixel(center, zoom);
+  const scale = tileSize * 2 ** zoom;
+  const lng = (pixel.x - dx) / scale * 360 - 180;
+  const n = Math.PI - 2 * Math.PI * (pixel.y - dy) / scale;
+  return { lat: Math.max(-80, Math.min(80, 180 / Math.PI * Math.atan(Math.sinh(n)))), lng: Math.max(-179, Math.min(179, lng)) };
+}
+
+function getListingPoint(listing: MappableListing): MapPoint {
+  if (Number.isFinite(listing.latitude) && Number.isFinite(listing.longitude)) {
+    return { lat: listing.latitude as number, lng: listing.longitude as number };
+  }
+  return getListingCoordinates(listing.area);
 }
 
 export function getMapTiles(center: MapPoint, zoom: number, size: MapSize): MapTile[] {
@@ -116,11 +148,14 @@ export function getMapTiles(center: MapPoint, zoom: number, size: MapSize): MapT
 
   for (let xTile = startX; xTile <= endX; xTile += 1) {
     for (let yTile = startY; yTile <= endY; yTile += 1) {
+      const worldTileCount = 2 ** zoom;
+      if (yTile < 0 || yTile >= worldTileCount) continue;
+      const wrappedX = ((xTile % worldTileCount) + worldTileCount) % worldTileCount;
       tiles.push({
         id: `${zoom}-${xTile}-${yTile}`,
-        url: osmTileUrl(xTile, yTile, zoom),
-        x: xTile * tileSize - centerPixel.x + size.width / 2,
-        y: yTile * tileSize - centerPixel.y + size.height / 2,
+        url: mapTileUrl(wrappedX, yTile, zoom),
+        x: Math.round(xTile * tileSize - centerPixel.x + size.width / 2),
+        y: Math.round(yTile * tileSize - centerPixel.y + size.height / 2),
         xTile,
         yTile,
         zoom
@@ -149,8 +184,26 @@ export function getMapSummary(listings: MappableListing[]): MapSummary {
   };
 }
 
-export function osmTileUrl(xTile: number, yTile: number, zoom: number) {
-  return `https://tile.openstreetmap.org/${zoom}/${xTile}/${yTile}.png`;
+export const defaultMapAttribution = "© OpenStreetMap contributors";
+
+function defaultMapTileUrl(xTile: number, yTile: number, zoom: number) {
+  return `https://tile.openstreetmap.de/${zoom}/${xTile}/${yTile}.png`;
+}
+
+export function mapTileUrl(
+  xTile: number,
+  yTile: number,
+  zoom: number,
+  template = process.env.NEXT_PUBLIC_MAP_TILE_URL_TEMPLATE
+) {
+  if (!template) return defaultMapTileUrl(xTile, yTile, zoom);
+  if (!["{x}", "{y}", "{z}"].every((token) => template.includes(token))) {
+    throw new Error("NEXT_PUBLIC_MAP_TILE_URL_TEMPLATE must contain {z}, {x}, and {y}");
+  }
+  return template
+    .replaceAll("{z}", String(zoom))
+    .replaceAll("{x}", String(xTile))
+    .replaceAll("{y}", String(yTile));
 }
 
 function lngLatToWorldPixel(point: MapPoint, zoom: number) {

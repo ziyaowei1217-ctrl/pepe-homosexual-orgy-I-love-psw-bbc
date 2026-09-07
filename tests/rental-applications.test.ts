@@ -3,7 +3,9 @@ import { describe, expect, it } from "vitest";
 import {
   applicationScopeOptions,
   getRentalApplicationStatusCopy,
-  validateRentalApplicationDraft
+  mergeRentalApplicationUpdate,
+  validateRentalApplicationDraft,
+  type ApiRentalApplication
 } from "../lib/rental-applications";
 
 const listing = { availableFrom: "2026-09-01", availableTo: "2027-01-01" };
@@ -43,5 +45,30 @@ describe("rental application client contract", () => {
     expect(getRentalApplicationStatusCopy("SUBMITTED").label).toBe("等待房东处理");
     expect(getRentalApplicationStatusCopy("ACCEPTED").label).toBe("申请已接受");
     expect(getRentalApplicationStatusCopy("COMPLETED").label).toBe("入住已确认");
+  });
+
+  it("keeps the listing title when a payment update omits enriched listing data", () => {
+    const current: ApiRentalApplication = {
+      id: "application-1",
+      listingId: "listing-1",
+      listingTitle: "Downtown LA 高层 Loft",
+      listingOwnerId: "owner-1",
+      submitterId: "renter-1",
+      teamId: null,
+      scope: "SOLO",
+      status: "ACCEPTED",
+      memberSnapshots: [],
+      moveIn: "2026-09-04",
+      moveOut: "2027-08-01",
+      schoolOrOccupation: "UCLA student",
+      incomeBand: "TWO_TO_THREE_X",
+      guarantorStatus: "AVAILABLE",
+      note: "Quiet"
+    };
+
+    expect(mergeRentalApplicationUpdate(current, { ...current, listingTitle: undefined, status: "COMPLETED" })).toMatchObject({
+      listingTitle: "Downtown LA 高层 Loft",
+      status: "COMPLETED"
+    });
   });
 });

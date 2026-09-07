@@ -12,7 +12,8 @@ import {
   IsUrl,
   Max,
   MaxLength,
-  Min
+  Min,
+  ValidateIf
 } from "class-validator";
 
 const profileRoles = ["renter", "lister", "both"] as const;
@@ -41,30 +42,30 @@ export class UpdateProfileDto {
   @IsString()
   @IsNotEmpty()
   @MaxLength(maxShortTextLength)
-  displayName?: string;
+  displayName?: string | null;
 
   @IsOptional()
   @Trim()
   @IsString()
   @IsUrl()
   @MaxLength(500)
-  avatarUrl?: string;
+  avatarUrl?: string | null;
 
   @IsOptional()
   @Trim()
   @IsString()
   @IsNotEmpty()
   @MaxLength(maxShortTextLength)
-  school?: string;
+  school?: string | null;
 
   @IsOptional()
   @Trim()
   @IsString()
   @IsNotEmpty()
   @MaxLength(maxShortTextLength)
-  city?: string;
+  city?: string | null;
 
-  @IsOptional()
+  @ValidateIf((_object, value) => value !== undefined)
   @IsIn(profileRoles)
   role?: string;
 
@@ -73,21 +74,21 @@ export class UpdateProfileDto {
   @IsString()
   @IsNotEmpty()
   @MaxLength(maxShortTextLength)
-  wechat?: string;
+  wechat?: string | null;
 
   @IsOptional()
   @Trim()
   @IsString()
   @IsNotEmpty()
   @MaxLength(maxShortTextLength)
-  instagram?: string;
+  instagram?: string | null;
 
   @IsOptional()
   @Trim()
   @IsString()
   @IsNotEmpty()
   @MaxLength(maxLongTextLength)
-  bio?: string;
+  bio?: string | null;
 }
 
 class RoommateProfileFieldsDto {

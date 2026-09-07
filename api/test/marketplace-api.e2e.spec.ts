@@ -85,6 +85,17 @@ describe("marketplace database API", () => {
       });
   });
 
+  it("clears nullable private profile fields while preserving omitted fields", async () => {
+    const http = request(app.getHttpServer());
+    const path = "/api/v1/profiles/me";
+    await http.patch(path).set("Authorization", `Bearer ${token}`)
+      .send({ displayName: "Maya", school: "UCLA", city: "LA", bio: "Previous bio", wechat: "private", avatarUrl: "https://example.com/avatar.jpg" }).expect(200);
+    await http.patch(path).set("Authorization", `Bearer ${token}`)
+      .send({ bio: null, avatarUrl: null, city: null }).expect(200);
+    const result = await http.get(path).set("Authorization", `Bearer ${token}`).expect(200);
+    expect(result.body).toMatchObject({ bio: null, avatarUrl: null, city: null, displayName: "Maya", school: "UCLA", wechat: "private", role: "renter" });
+  });
+
   it("stores roommate profiles and keeps protected classes out of the API contract", async () => {
     const http = request(app.getHttpServer());
     const { age: _age, ...payloadWithoutAge } = roommateProfilePayload();
@@ -139,6 +150,11 @@ describe("marketplace database API", () => {
         expect(body[0]).not.toHaveProperty("religion");
       });
 
+    for (const patch of [{ budgetMin: 1900 }, { budgetMax: 1000 }]) {
+      await http.patch(`/api/v1/roommate-profiles/${createdResponse.body.id}`)
+        .set("Authorization", `Bearer ${token}`).send(patch).expect(400);
+    }
+
     await http
       .patch(`/api/v1/roommate-profiles/${createdResponse.body.id}`)
       .set("Authorization", `Bearer ${token}`)
@@ -148,6 +164,16 @@ describe("marketplace database API", () => {
 
     await http.get("/api/v1/roommates").expect(200).expect([]);
     await http.get("/api/v1/roommate-profiles?city=LA&school=USC").expect(200).expect([]);
+  });
+
+  it("rejects null for the non-nullable profile role without changing the saved role", async () => {
+    const http = request(app.getHttpServer());
+    await http.patch("/api/v1/profiles/me").set("Authorization", `Bearer ${token}`)
+      .send({ role: "both" }).expect(200);
+    await http.patch("/api/v1/profiles/me").set("Authorization", `Bearer ${token}`)
+      .send({ role: null }).expect(400);
+    const result = await http.get("/api/v1/profiles/me").set("Authorization", `Bearer ${token}`).expect(200);
+    expect(result.body.role).toBe("both");
   });
 
   it("retires every legacy housing-listing collection and item operation", async () => {

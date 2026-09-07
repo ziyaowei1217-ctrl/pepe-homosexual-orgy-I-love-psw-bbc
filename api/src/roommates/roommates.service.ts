@@ -42,6 +42,60 @@ export class RoommatesService {
     return buildRoommateDeck(eligibleProfiles, query);
   }
 
+  async findDeckCandidate(candidateId: string, userId?: string) {
+    const profiles = await this.findDiscoverableProfiles();
+    const excludedRoommateProfileIds = userId ? await this.findUserActionRoommateProfileIds(userId) : new Set<string>();
+    const eligibleProfiles = profiles.filter(
+      (profile) =>
+        (!userId || profile.ownerId !== userId) &&
+        (!profile.id || !excludedRoommateProfileIds.has(profile.id))
+    );
+    let cursor = 0;
+
+    while (true) {
+      const deck = buildRoommateDeck(eligibleProfiles, { cursor, limit: 80 });
+      const candidate = deck.items.find((item) => item.id === candidateId);
+      if (candidate) return candidate;
+      if (deck.pageInfo.nextCursor === null) break;
+      cursor = deck.pageInfo.nextCursor;
+    }
+
+    throw new NotFoundException("Roommate candidate not found");
+  }
+
+  async findActivity(userId: string) {
+    const ownProfile = await this.prisma.roommateProfile.findUnique({ where: { ownerId: userId } });
+    const [outboundActions, inboundActions] = await Promise.all([
+      this.prisma.roommateAction.findMany({
+        where: { userId, action: "LIKE" },
+        include: { roommateProfile: true },
+        orderBy: { updatedAt: "desc" }
+      }),
+      ownProfile
+        ? this.prisma.roommateAction.findMany({
+            where: { roommateProfileId: ownProfile.id, action: "LIKE" },
+            include: { user: { include: { roommateProfile: true } } },
+            orderBy: { updatedAt: "desc" }
+          })
+        : Promise.resolve([])
+    ]);
+
+    const outbound = outboundActions.map((item) => ({
+      action: item.action,
+      profile: toPublicRoommate(item.roommateProfile)
+    }));
+    const inbound = inboundActions.flatMap((item) => item.user.roommateProfile
+      ? [{ action: item.action, profile: toPublicRoommate(item.user.roommateProfile) }]
+      : []);
+    const inboundIds = new Set(inbound.map((item) => item.profile.id));
+
+    return {
+      inbound,
+      outbound,
+      matchedProfileIds: outbound.map((item) => item.profile.id).filter((id) => inboundIds.has(id))
+    };
+  }
+
   async findAdminProfiles() {
     const records = await this.prisma.roommateProfile.findMany({
       orderBy: [

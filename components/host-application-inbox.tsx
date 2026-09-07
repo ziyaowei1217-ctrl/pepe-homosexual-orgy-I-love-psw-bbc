@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-import { DemoPaymentPanel } from "@/components/demo-payment-panel";
+import { PaymentPanel } from "@/components/payment-panel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -99,12 +99,12 @@ export function HostApplicationInbox({
             const copy = getRentalApplicationStatusCopy(application.status);
             return (
               <article key={application.id} className="space-y-3 rounded-md border bg-white p-4">
-                <div className="flex items-start justify-between gap-3"><div><h3 className="font-extrabold">{application.listingTitle ?? "房源"}</h3><p className="text-sm text-muted-foreground">{application.memberSnapshots.map((member) => member.displayName).join("、")} · {application.moveIn.slice(0, 10)} 至 {application.moveOut.slice(0, 10)}</p></div><Badge variant={application.status === "ACCEPTED" || application.status === "COMPLETED" ? "success" : "trust"}>{copy.label}</Badge></div>
+                <div className="flex items-start justify-between gap-3"><div><h3 className="font-extrabold">{application.listingTitle ?? "房源"}</h3><p className="text-sm text-muted-foreground">{application.memberSnapshots.map((member) => member.displayName).join("、")} · {application.moveIn.slice(0, 10)} 至 {application.moveOut.slice(0, 10)}</p></div><Badge variant={application.status === "ACCEPTED" || application.status === "COMPLETED" || application.status === "CANCELLATION_PENDING" ? "success" : "trust"}>{copy.label}</Badge></div>
                 <p className="text-sm font-semibold">{application.schoolOrOccupation}</p>
                 {application.note ? <p className="rounded-md bg-secondary p-3 text-sm">{application.note}</p> : null}
                 {application.status === "SUBMITTED" ? <div className="flex gap-2"><Button variant="accept" disabled={pendingId === application.id} onClick={() => void decide(application, "accept")}>接受申请</Button><Button variant="outline" disabled={pendingId === application.id} onClick={() => void decide(application, "reject")}>拒绝申请</Button></div> : null}
                 {application.status === "ACCEPTED" ? <Button variant="outline" disabled={pendingId === application.id} onClick={() => void cancel(application)}>取消申请</Button> : null}
-                {application.status === "ACCEPTED" || application.status === "COMPLETED" ? <DemoPaymentPanel application={application} token={token} currentUserId={currentUserId} /> : null}
+                {application.status === "ACCEPTED" || application.status === "COMPLETED" || application.status === "CANCELLATION_PENDING" ? <PaymentPanel application={application} token={token} currentUserId={currentUserId} /> : null}
               </article>
             );
           })}

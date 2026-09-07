@@ -162,16 +162,19 @@ export class DealRoomsService {
 
     if (!room) throw new NotFoundException("Deal room not found");
 
-    return this.prisma.tourRequest.upsert({
-      where: {
-        dealRoomId
-      },
-      create: {
-        dealRoomId,
-        requesterId: userId,
-        status: "REQUESTED"
-      },
-      update: {}
+    return this.prisma.$transaction(async (transaction) => {
+      // Recheck after acquiring the room lock: dissolution may have archived it
+      // since the initial authorization read. Hold it through the tour insert.
+      const active = await transaction.dealRoom.updateMany({
+        where: { id: dealRoomId, ownerId: userId, status: "ACTIVE" },
+        data: { status: "ACTIVE" }
+      });
+      if (active.count !== 1) throw new NotFoundException("Deal room not found");
+      return transaction.tourRequest.upsert({
+        where: { dealRoomId },
+        create: { dealRoomId, requesterId: userId, status: "REQUESTED" },
+        update: {}
+      });
     });
   }
 

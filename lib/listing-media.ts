@@ -1,3 +1,4 @@
+import { assertCurrentAuthSession } from "./auth-session";
 import { apiDelete, apiGet, apiPatch, apiPost } from "./api";
 import type { ApiListing } from "./api";
 import { toProductApiError } from "./product-errors";
@@ -19,6 +20,8 @@ export type ListingMediaStorageStatus =
 export type ApiListingMedia = {
   id: string;
   listingId?: string;
+  uploadAttemptId?: string | null;
+  initializationCommandId?: string | null;
   kind: string;
   sortOrder: number;
   mimeType: ListingMediaMimeType | null;
@@ -37,8 +40,9 @@ export type ApiListingMedia = {
 
 export type InitializedListingMediaUpload = {
   media: ApiListingMedia;
-  uploadUrl: string;
-  expiresAt: string;
+  uploadUrl: string | null;
+  uploadAttemptId: string;
+  expiresAt: string | null;
 };
 
 export type ListingMediaSummary = {
@@ -55,14 +59,19 @@ export function getListingCoverUrl(
   listing: Pick<ApiListing, "image" | "media">,
   apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000/api/v1"
 ) {
-  const mediaUrl = [...(listing.media ?? [])]
-    .sort((left, right) => left.sortOrder - right.sortOrder)
-    .map((media) => media.contentUrl)
-    .find((value): value is string => Boolean(value?.trim()));
+  return getListingImageUrls(listing, apiBaseUrl)[0] ?? LISTING_IMAGE_FALLBACK;
+}
 
-  return resolveHttpUrl(mediaUrl, apiBaseUrl) ??
-    resolveHttpUrl(listing.image, apiBaseUrl) ??
-    LISTING_IMAGE_FALLBACK;
+export function getListingImageUrls(
+  listing: Pick<ApiListing, "image" | "media">,
+  apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000/api/v1"
+) {
+  const mediaUrls = [...(listing.media ?? [])]
+    .sort((left, right) => left.sortOrder - right.sortOrder)
+    .map((media) => resolveHttpUrl(media.contentUrl, apiBaseUrl))
+    .filter((url): url is string => Boolean(url));
+  const legacyImage = resolveHttpUrl(listing.image, apiBaseUrl);
+  return Array.from(new Set(mediaUrls.length ? mediaUrls : legacyImage ? [legacyImage] : []));
 }
 
 function resolveHttpUrl(value: string | null | undefined, baseUrl: string) {
@@ -136,32 +145,37 @@ export function getOwnedListingMedia(token: string, listingId: string) {
   return apiGet<ApiListingMedia[]>(`/listings/${encodeURIComponent(listingId)}/media`, token);
 }
 
-export async function initializeListingMedia(token: string, listingId: string, file: File, kind: string) {
+export async function initializeListingMedia(token: string, listingId: string, file: File, kind: string, commandId: string) {
+  assertCurrentAuthSession(token);
   const checksumSha256 = await sha256Hex(await file.arrayBuffer());
+  assertCurrentAuthSession(token);
   return apiPost<InitializedListingMediaUpload>(
     `/listings/${encodeURIComponent(listingId)}/media/uploads`,
-    { kind, mimeType: file.type, sizeBytes: file.size, checksumSha256 },
+    { commandId, kind, mimeType: file.type, sizeBytes: file.size, checksumSha256 },
     token
   );
 }
 
-export function finalizeListingMedia(token: string, listingId: string, mediaId: string) {
+export function finalizeListingMedia(token: string, listingId: string, mediaId: string, uploadAttemptId: string) {
+  assertCurrentAuthSession(token);
   return apiPost<ApiListingMedia>(
     `/listings/${encodeURIComponent(listingId)}/media/${encodeURIComponent(mediaId)}/finalize`,
-    {},
+    { uploadAttemptId },
     token
   );
 }
 
-export function retryListingMedia(token: string, listingId: string, mediaId: string) {
+export function retryListingMedia(token: string, listingId: string, mediaId: string, uploadAttemptId: string) {
+  assertCurrentAuthSession(token);
   return apiPost<InitializedListingMediaUpload>(
     `/listings/${encodeURIComponent(listingId)}/media/${encodeURIComponent(mediaId)}/retry`,
-    {},
+    { uploadAttemptId },
     token
   );
 }
 
 export function reorderListingMedia(token: string, listingId: string, mediaIds: string[]) {
+  assertCurrentAuthSession(token);
   return apiPatch<ApiListingMedia[]>(
     `/listings/${encodeURIComponent(listingId)}/media/order`,
     { mediaIds },
@@ -170,6 +184,7 @@ export function reorderListingMedia(token: string, listingId: string, mediaIds: 
 }
 
 export function removeListingMedia(token: string, listingId: string, mediaId: string) {
+  assertCurrentAuthSession(token);
   return apiDelete<{ removed: true }>(
     `/listings/${encodeURIComponent(listingId)}/media/${encodeURIComponent(mediaId)}`,
     token

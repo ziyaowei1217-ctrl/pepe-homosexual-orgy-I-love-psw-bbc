@@ -1,5 +1,5 @@
 import { ConflictException, NotFoundException } from "@nestjs/common";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DemoPaymentsService } from "../src/demo-payments/demo-payments.service";
 import { ApplicationsService } from "../src/applications/applications.service";
@@ -16,6 +16,10 @@ const applicationInput = {
   note: "Quiet and tidy."
 };
 
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date("2026-08-31T12:00:00.000Z"));
+});
 afterEach(() => vi.useRealTimers());
 
 describe("DemoPaymentsService", () => {

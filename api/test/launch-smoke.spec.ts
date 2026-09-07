@@ -162,7 +162,7 @@ describeSmoke("launch smoke against real PostgreSQL", () => {
 
     await http.get(`/api/v1/listings/${listingResponse.body.id}`).expect(404);
 
-    await http
+    const submitted = await http
       .post(`/api/v1/listings/${listingResponse.body.id}/submit`)
       .set("Authorization", `Bearer ${ownerToken}`)
       .expect(201)
@@ -173,6 +173,7 @@ describeSmoke("launch smoke against real PostgreSQL", () => {
     await http
       .post(`/api/v1/admin/listings/${listingResponse.body.id}/approve`)
       .set("Authorization", `Bearer ${adminToken}`)
+      .send({ revision: submitted.body.revision })
       .expect(201)
       .expect(({ body }: { body: Record<string, unknown> }) => {
         expect(body).toMatchObject({

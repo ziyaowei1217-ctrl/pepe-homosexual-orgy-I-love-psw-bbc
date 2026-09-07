@@ -8,6 +8,7 @@ import {
 } from "@prisma/client";
 
 import { requireIdempotencyKey } from "../applications/application-idempotency";
+import { applicationBusinessDate } from "../applications/application-business-date";
 import { PrismaService } from "../prisma/prisma.service";
 import { postDemoLedgerPair } from "./demo-ledger";
 import { presentDemoPaymentState } from "./demo-payments.presenter";
@@ -130,7 +131,7 @@ export class DemoPaymentsService {
 
   async confirmMoveIn(userId: string, heldFundId: string, rawKey: unknown) {
     const confirmationKey = requireIdempotencyKey(rawKey);
-    return this.prisma.$transaction(async (transaction) => {
+    return this.runTransaction(async (transaction) => {
       const heldFund = await transaction.demoHeldFund.findUnique({ where: { id: heldFundId } });
       if (!heldFund) throw new NotFoundException("Held fund not found");
       const payment = await transaction.demoPayment.findUnique({ where: { id: heldFund.paymentId } });
@@ -139,7 +140,7 @@ export class DemoPaymentsService {
       if (!application || (application.submitterId !== userId && application.listingOwnerId !== userId)) {
         throw new NotFoundException("Held fund not found");
       }
-      if (Date.now() < application.moveIn.getTime()) {
+      if (applicationBusinessDate() < application.moveIn.toISOString().slice(0, 10)) {
         throw new ConflictException({
           code: "DEMO_MOVE_IN_NOT_STARTED",
           message: "约定入住日期前不能确认入住"
@@ -187,7 +188,7 @@ export class DemoPaymentsService {
         }
       }
       return this.buildState(transaction, payment.id);
-    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    });
   }
 
   private async simulate(
@@ -197,7 +198,7 @@ export class DemoPaymentsService {
     outcome: DemoPaymentAttemptOutcome
   ) {
     const idempotencyKey = requireIdempotencyKey(rawKey);
-    return this.prisma.$transaction(async (transaction) => {
+    return this.runTransaction(async (transaction) => {
       const application = await transaction.rentalApplication.findUnique({ where: { id: applicationId } });
       if (!application || application.submitterId !== userId) throw new NotFoundException("Demo payment not found");
       const payment = await transaction.demoPayment.findUnique({ where: { applicationId } });
@@ -257,7 +258,20 @@ export class DemoPaymentsService {
         idempotencyKey
       });
       return this.buildState(transaction, payment.id);
-    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    });
+  }
+
+  private async runTransaction<T>(operation: (transaction: Prisma.TransactionClient) => Promise<T>): Promise<T> {
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        return await this.prisma.$transaction(operation, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+      } catch (error) {
+        if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2034") throw error;
+        // A serialization failure rolls back every payment/ledger write. Re-read all
+        // authorization and idempotency state before attempting the local command again.
+      }
+    }
+    throw new ConflictException("支付状态同时更新，请刷新后重试");
   }
 
   private async buildState(transaction: PaymentTransaction, paymentId: string) {

@@ -1,17 +1,40 @@
-import TestRenderer, { act } from "react-test-renderer";
+// @vitest-environment jsdom
+
+import TestRenderer, { act } from "./support/dom-test-renderer";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { RentalApplicationPanel } from "../components/rental-application-panel";
+import { writeStoredAuthSession } from "../lib/auth-session";
 
 const reactActEnvironment = globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean };
 reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true;
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => { localStorage.clear(); sessionStorage.clear(); vi.unstubAllGlobals(); });
 
 describe("RentalApplicationPanel", () => {
+  it("restores edited fields after closing and reopening without leaking them to another account", async () => {
+    const props = { listing: { id: "listing-1", title: "Room", price: 1000 }, team: null, onClose() {}, onSubmitted() {} };
+    let renderer!: TestRenderer.ReactTestRenderer;
+    await act(async () => { renderer = TestRenderer.create(<RentalApplicationPanel {...props} token="a" />); });
+    await click(renderer, "下一步");
+    const note = renderer.root.findAllByType("textarea")[0];
+    act(() => note.props.onChange({ target: { value: "Private edited note" } }));
+    renderer.unmount();
+    await act(async () => { renderer = TestRenderer.create(<RentalApplicationPanel {...props} token="a" />); });
+    await click(renderer, "下一步");
+    expect(renderer.root.findAllByType("textarea")[0].props.value).toBe("Private edited note");
+    renderer.unmount();
+    await act(async () => { renderer = TestRenderer.create(<RentalApplicationPanel {...props} token="b" />); });
+    await click(renderer, "下一步");
+    expect(renderer.root.findAllByType("textarea")[0].props.value).toBe("");
+  });
+
   it("completes the short flow and creates then submits with stable command keys", async () => {
+    writeStoredAuthSession("token-1");
     const submitted = vi.fn();
     const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ id: "renter-1" }))
+      .mockResolvedValueOnce(jsonResponse([]))
       .mockResolvedValueOnce(jsonResponse(application({ status: "DRAFT" })))
       .mockResolvedValueOnce(jsonResponse(application({ status: "SUBMITTED" })));
     vi.stubGlobal("fetch", fetchMock);
@@ -35,9 +58,9 @@ describe("RentalApplicationPanel", () => {
     await click(renderer, "确认资料");
     await click(renderer, "提交申请");
 
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-    const createHeaders = (fetchMock.mock.calls[0]![1] as RequestInit).headers as Record<string, string>;
-    const submitHeaders = (fetchMock.mock.calls[1]![1] as RequestInit).headers as Record<string, string>;
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+    const createHeaders = (fetchMock.mock.calls[2]![1] as RequestInit).headers as Record<string, string>;
+    const submitHeaders = (fetchMock.mock.calls[3]![1] as RequestInit).headers as Record<string, string>;
     expect(createHeaders["Idempotency-Key"]).toEqual(expect.any(String));
     expect(submitHeaders["Idempotency-Key"]).toEqual(expect.any(String));
     expect(createHeaders["Idempotency-Key"]).not.toBe(submitHeaders["Idempotency-Key"]);

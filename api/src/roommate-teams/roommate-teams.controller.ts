@@ -1,7 +1,7 @@
-import { Body, Controller, Get, Inject, Param, Post, Req, UseGuards, ValidationPipe } from "@nestjs/common";
+import { Body, Controller, Get, Inject, Param, Post, Req, Res, UseGuards, ValidationPipe } from "@nestjs/common";
 
 import { AuthGuard, type AuthenticatedRequest } from "../auth/auth.guard";
-import { CreateRoommateTeamInviteDto } from "./roommate-teams.dto";
+import { CreateRoommateTeamInviteDto, LeaveRoommateTeamDto } from "./roommate-teams.dto";
 import { RoommateTeamsService } from "./roommate-teams.service";
 
 const createInviteBodyPipe = new ValidationPipe({
@@ -11,14 +11,22 @@ const createInviteBodyPipe = new ValidationPipe({
   expectedType: CreateRoommateTeamInviteDto
 });
 
+const leaveBodyPipe = new ValidationPipe({
+  whitelist: true,
+  forbidNonWhitelisted: true,
+  transform: true,
+  expectedType: LeaveRoommateTeamDto
+});
+
 @UseGuards(AuthGuard)
 @Controller("roommate-teams")
 export class RoommateTeamsController {
   constructor(@Inject(RoommateTeamsService) private readonly teams: RoommateTeamsService) {}
 
   @Get("current")
-  current(@Req() request: AuthenticatedRequest) {
-    return this.teams.current(request.user.id);
+  async current(@Req() request: AuthenticatedRequest, @Res() response: { json: (body: unknown) => void }) {
+    // Nest otherwise sends an empty body for null, but clients expect a JSON team or null.
+    response.json(await this.teams.current(request.user.id));
   }
 
   @Get("invites")
@@ -47,7 +55,7 @@ export class RoommateTeamsController {
   }
 
   @Post("current/leave")
-  leave(@Req() request: AuthenticatedRequest) {
-    return this.teams.leave(request.user.id);
+  leave(@Req() request: AuthenticatedRequest, @Body(leaveBodyPipe) dto: LeaveRoommateTeamDto) {
+    return this.teams.leave(request.user.id, dto.teamId);
   }
 }

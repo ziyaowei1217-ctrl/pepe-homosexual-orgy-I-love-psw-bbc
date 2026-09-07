@@ -157,26 +157,7 @@ const dimensionWeights: Record<keyof RoommateCompatibilityDimensions, number> = 
   profile: 16
 };
 
-const cityLanes = [
-  "Westwood / Sawtelle",
-  "USC North / Koreatown",
-  "Santa Monica / Culver City",
-  "Pasadena / Glendale",
-  "DTLA / Arts District",
-  "Burbank / Hollywood",
-  "Brentwood / Westwood",
-  "Silver Lake / Los Feliz"
-];
-
 const schoolTracks = ["UCLA", "USC", "Caltech", "LMU", "ArtCenter", "Santa Monica College"];
-const lifestylePacks = [
-  ["早睡", "安静", "爱干净"],
-  ["健身", "周末社交", "AA 清楚"],
-  ["会做饭", "猫友好", "稳定"],
-  ["通勤优先", "预算稳定", "轻社交"],
-  ["学习友好", "少做饭", "无宠物"],
-  ["咖啡党", "接受访客", "整洁"]
-];
 const sparkLines = [
   "Great opener energy",
   "Easy co-living rhythm",
@@ -301,24 +282,10 @@ function buildVariantProfile(
     };
   }
 
-  const lifestylePack = lifestylePacks[(baseIndex + variantIndex) % lifestylePacks.length];
-  const school = schoolTracks[(baseIndex * 3 + variantIndex) % schoolTracks.length];
-  const commute = cityLanes[(baseIndex + variantIndex * 2) % cityLanes.length];
-  const firstName = profile.name.split(" ")[0] ?? profile.name;
-  const suffix = String.fromCharCode(65 + ((baseIndex + variantIndex) % 26));
-  const budget = getBudgetNumber(profile) + ((variantIndex % 7) - 3) * 70;
-  const match = clampScore(profile.match + ((variantIndex * 7 + baseIndex) % 13) - 5);
-
   return {
     ...profile,
-    id: undefined,
+    id: `deck-${profile.id ?? `profile-${baseIndex}`}-${variantIndex}`,
     actionTargetId: profile.id,
-    name: `${firstName} ${suffix}${variantIndex}`,
-    role: `${school} · ${variantIndex % 2 === 0 ? "Grad student" : "Intern"} · ${profile.role.split("·")[0].trim()}`,
-    match,
-    budget: `$${Math.max(950, budget).toLocaleString()}/月`,
-    commute,
-    tags: Array.from(new Set([...lifestylePack, ...profile.tags])).slice(0, 5),
     deckBatch: `explore-${variantIndex}`
   };
 }
@@ -722,22 +689,22 @@ function buildReasons(
   );
 
   if (budget >= preference.budgetMin && budget <= preference.budgetMax) {
-    reasons.push(`Budget fits at $${budget.toLocaleString()}`);
+    reasons.push(`预算匹配：$${budget.toLocaleString()}`);
   }
   if (matchedSchools.length > 0) {
-    reasons.push(`${matchedSchools.join(" / ")} track overlap`);
+    reasons.push(`学校或职业方向匹配：${matchedSchools.join(" / ")}`);
   }
   if (matchedHobbies.length > 0) {
-    reasons.push(`Shared ${matchedHobbies.slice(0, 2).join(" + ")} habit`);
+    reasons.push(`共同生活习惯：${matchedHobbies.slice(0, 2).join(" + ")}`);
   }
   if (profile.match >= 90) {
-    reasons.push("High baseline match signal");
+    reasons.push("基础匹配度较高");
   }
   if (profile.tags.some((tag) => tag.includes("安静") || tag.toLowerCase().includes("quiet"))) {
-    reasons.push("Quiet-home compatible");
+    reasons.push("偏好安静居住环境");
   }
 
-  return reasons.length > 0 ? reasons.slice(0, 4) : ["Enough overlap to compare"];
+  return reasons.length > 0 ? reasons.slice(0, 4) : ["资料有一定重合，建议进一步了解"];
 }
 
 function buildTradeoffs(

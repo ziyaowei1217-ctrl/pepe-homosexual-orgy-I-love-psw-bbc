@@ -83,6 +83,19 @@ describe("S3-compatible listing media storage", () => {
     expect(sign.mock.calls[0]?.[2]).toEqual({ expiresIn: 600 });
   });
 
+  it("writes the exact buffer with conditional creation on the server client", async () => {
+    const send = vi.fn(async (_command: unknown) => ({}));
+    const bytes = Buffer.from("validated");
+    const storage = createStorage(send);
+    await storage.write("frozen/key", bytes, "image/png");
+    expect(send.mock.calls[0]?.[0]).toBeInstanceOf(PutObjectCommand);
+    expect((send.mock.calls[0]?.[0] as PutObjectCommand).input).toEqual({
+      Bucket: "listing-media", Key: "frozen/key", Body: bytes,
+      ContentType: "image/png", ContentLength: bytes.length, IfNoneMatch: "*"
+    });
+    expect((send.mock.calls[0]?.[0] as PutObjectCommand).input.Body).toBe(bytes);
+  });
+
   it("returns the complete stored body as a Buffer", async () => {
     const bytes = Uint8Array.from([1, 2, 3, 4]);
     const send = vi.fn(async (command: unknown) => {

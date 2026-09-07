@@ -1,4 +1,6 @@
-import TestRenderer, { act } from "react-test-renderer";
+// @vitest-environment jsdom
+
+import TestRenderer, { act } from "./support/dom-test-renderer";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { HostApplicationInbox } from "../components/host-application-inbox";
@@ -14,6 +16,7 @@ describe("HostApplicationInbox", () => {
       .mockResolvedValueOnce(jsonResponse([application("SUBMITTED")]))
       .mockResolvedValueOnce(jsonResponse(application("ACCEPTED")))
       .mockResolvedValueOnce(jsonResponse([application("ACCEPTED")]))
+      .mockResolvedValueOnce(jsonResponse({ mode: "demo" }))
       .mockResolvedValueOnce(jsonResponse(paymentState()));
     vi.stubGlobal("fetch", fetchMock);
     const confirmDecision = vi.fn(() => true);
@@ -37,6 +40,7 @@ describe("HostApplicationInbox", () => {
   it("lets the owner cancel an accepted application through the server refund flow", async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(jsonResponse([application("ACCEPTED")]))
+      .mockResolvedValueOnce(jsonResponse({ mode: "demo" }))
       .mockResolvedValueOnce(jsonResponse(paymentState()))
       .mockResolvedValueOnce(jsonResponse(application("CANCELLED")))
       .mockResolvedValueOnce(jsonResponse([application("CANCELLED")]));

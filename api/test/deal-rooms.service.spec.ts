@@ -102,6 +102,15 @@ describe("DealRoomsService", () => {
     expect(prisma.tourRequest.createCalls).toHaveLength(1);
   });
 
+  it("rejects new tours on archived rooms", async () => {
+    const prisma = createPrismaMock();
+    const service = new DealRoomsService(prisma as never);
+    const room = await service.ensureForConfirmedTeam(prisma as never, "user-1", "user-2");
+    prisma.dealRoom.rows[0]!.status = "ARCHIVED";
+    await expect(service.requestGroupTour("user-1", room.id)).rejects.toBeInstanceOf(NotFoundException);
+    expect(prisma.tourRequest.createCalls).toHaveLength(0);
+  });
+
   it("rejects tour requests for deal rooms owned by another user", async () => {
     const prisma = createPrismaMock();
     const service = new DealRoomsService(prisma as never);
@@ -194,6 +203,7 @@ function createPrismaMock({ listings = [listingRecord()] }: { listings?: Listing
     }
   ];
   const mock = {
+    $transaction: async (operation: (transaction: any) => Promise<any>): Promise<any> => operation(mock),
     roommateProfile: {
       findUnique: async ({ where }: { where: { id: string } }) =>
         roommates.find((roommate) => roommate.id === where.id) ?? null,
@@ -247,6 +257,11 @@ function createPrismaMock({ listings = [listingRecord()] }: { listings?: Listing
       }
     },
     dealRoom: {
+      updateMany: async ({ where, data }: any) => {
+        const rooms = state.rooms.filter(room => Object.entries(where).every(([key, value]) => (room as any)[key] === value));
+        rooms.forEach(room => Object.assign(room, data));
+        return { count: rooms.length };
+      },
       rows: state.rooms,
       createCalls: [] as Array<{ data: { ownerId: string; roommateProfileId: string; status: "ACTIVE"; recommendedHomes: unknown; pipeline: unknown; trustChecklist: unknown } }>,
       findUnique: async ({ where }: { where: { ownerId_roommateProfileId?: { ownerId: string; roommateProfileId: string }; id?: string } }) => {

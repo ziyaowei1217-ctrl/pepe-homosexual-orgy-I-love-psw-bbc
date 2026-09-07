@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
@@ -5,7 +7,7 @@ import {
   create,
   type ReactTestInstance,
   type ReactTestRenderer
-} from "react-test-renderer";
+} from "./support/dom-test-renderer";
 import { describe, expect, it, vi } from "vitest";
 
 import { ProfileOnboarding } from "../components/profile-onboarding";

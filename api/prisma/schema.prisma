@@ -18,6 +18,7 @@ enum ListingStatus {
   APPROVED
   REJECTED
   SUSPENDED
+  LEASED
 }
 
 enum VerificationPurpose {
@@ -75,6 +76,8 @@ enum ViewingRequestStatus {
 }
 
 model User {
+  legacyLeaseApplications         LeaseApplication[] @relation("LegacyLeaseApplicant") @ignore
+  legacyOwnedLeaseApplications    LeaseApplication[] @relation("LegacyLeaseOwner") @ignore
   id                              String                       @id @default(cuid())
   email                           String                       @unique
   role                            UserRole                     @default(USER)
@@ -107,7 +110,7 @@ model User {
 }
 
 model Profile {
-  id               String                    @id @default(uuid()) @db.Uuid
+  id               String                    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   email            String                    @unique
   displayName      String?                   @map("display_name")
   avatarUrl        String?                   @map("avatar_url")
@@ -120,7 +123,7 @@ model Profile {
   instagram        String?
   bio              String?
   createdAt        DateTime                  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt        DateTime                  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  updatedAt        DateTime                  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
   roommateProfiles RoommateMatchingProfile[]
   housingListings  HousingListing[]
 
@@ -186,6 +189,7 @@ model AuditEvent {
 }
 
 model Listing {
+  initializationReceipts ListingMediaInitialization[]
   id                 String              @id @default(cuid())
   ownerId            String
   owner              User                @relation(fields: [ownerId], references: [id])
@@ -204,6 +208,7 @@ model Listing {
   tags               String[]
   score              Float               @default(4.8)
   status             ListingStatus       @default(DRAFT)
+  revision           Int                 @default(0)
   submittedAt        DateTime?
   reviewedAt         DateTime?
   reviewerId         String?
@@ -214,6 +219,7 @@ model Listing {
   media              ListingMedia[]
   dealThreads        DealThread[]
   rentalApplications RentalApplication[]
+  legacyLeaseApplications LeaseApplication[] @ignore
   createdAt          DateTime            @default(now())
   updatedAt          DateTime            @updatedAt
 
@@ -223,7 +229,7 @@ model Listing {
 }
 
 model HousingListing {
-  id                String    @id @default(uuid()) @db.Uuid
+  id                String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   ownerId           String    @map("owner_id") @db.Uuid
   owner             Profile   @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   title             String
@@ -253,7 +259,7 @@ model HousingListing {
   photoUrls         String[]  @default([]) @map("photo_urls")
   status            String    @default("draft")
   createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  updatedAt         DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   @@index([ownerId, status, updatedAt])
   @@index([city, neighborhood, priceMonthly])
@@ -261,8 +267,23 @@ model HousingListing {
   @@map("listings")
 }
 
+model ListingMediaInitialization {
+  ownerId     String
+  commandId   String
+  fingerprint String
+  listingId   String
+  listing     Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  mediaId     String? @unique
+  media       ListingMedia? @relation(fields: [mediaId], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+
+  @@id([ownerId, commandId])
+  @@index([listingId])
+}
+
 model ListingMedia {
   id                 String             @id @default(cuid())
+  initializationReceipt ListingMediaInitialization?
   listingId          String
   listing            Listing            @relation(fields: [listingId], references: [id], onDelete: Cascade)
   url                String?
@@ -284,7 +305,7 @@ model ListingMedia {
   finalizedAt        DateTime?
   publishedAt        DateTime?
   createdAt          DateTime           @default(now())
-  updatedAt          DateTime           @updatedAt
+  updatedAt          DateTime           @default(now()) @updatedAt
 
   @@index([listingId, storageStatus, sortOrder])
   @@index([listingId, reviewStatus, sortOrder])
@@ -345,6 +366,7 @@ enum RentalApplicationStatus {
   WITHDRAWN
   CANCELLED
   COMPLETED
+  CANCELLATION_PENDING
 }
 
 enum RentalIncomeBand {
@@ -434,6 +456,45 @@ model RoommateTeam {
   @@index([status, updatedAt])
 }
 
+// Retained for migration compatibility. Current application code uses RentalApplication.
+enum LeaseApplicationStatus {
+  SUBMITTED
+  ACCEPTED
+  REJECTED
+  WITHDRAWN
+}
+
+model LeaseApplication {
+  id                 String                 @id
+  listingId          String
+  threadId           String                 @unique
+  applicantId        String
+  listingOwnerId     String
+  moveInDate         DateTime               @db.Date
+  moveOutDate        DateTime               @db.Date
+  occupantCount      Int
+  introduction      String
+  profileSnapshot   Json
+  status             LeaseApplicationStatus @default(SUBMITTED)
+  decisionReason    String?
+  version            Int                    @default(1)
+  submittedAt       DateTime               @default(now())
+  decidedAt         DateTime?
+  withdrawnAt       DateTime?
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime
+  applicant         User                   @relation("LegacyLeaseApplicant", fields: [applicantId], references: [id], onDelete: Cascade)
+  owner             User                   @relation("LegacyLeaseOwner", fields: [listingOwnerId], references: [id], onDelete: Cascade)
+  listing           Listing                @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  thread            DealThread             @relation(fields: [threadId], references: [id], onDelete: Cascade)
+
+  @@unique([applicantId, listingId])
+  @@index([applicantId, status, submittedAt])
+  @@index([listingId, status, submittedAt])
+  @@index([listingOwnerId, status, submittedAt])
+  @@ignore
+}
+
 model RentalApplication {
   id                 String                  @id @default(cuid())
   listingId          String
@@ -445,6 +506,8 @@ model RentalApplication {
   activeKey          String?                 @unique
   acceptedListingKey String?                 @unique
   memberSnapshots    Json
+  contactName        String?
+  contactEmail       String?
   moveIn             DateTime                @db.Date
   moveOut            DateTime                @db.Date
   schoolOrOccupation String
@@ -465,6 +528,7 @@ model RentalApplication {
   cancelledById      String?
   cancellationReason String?
   demoPayment        DemoPayment?
+  paymentOperations  PaymentOperation[]
   listing            Listing                 @relation(fields: [listingId], references: [id], onDelete: Restrict)
   listingOwner       User                    @relation("RentalApplicationListingOwner", fields: [listingOwnerId], references: [id], onDelete: Restrict)
   submitter          User                    @relation("RentalApplicationSubmitter", fields: [submitterId], references: [id], onDelete: Restrict)
@@ -478,6 +542,38 @@ model RentalApplication {
   @@index([teamId, status, updatedAt])
   @@index([listingOwnerId, status, updatedAt])
   @@index([listingId, status, updatedAt])
+}
+
+enum PaymentOperationKind {
+  ACCEPT
+  CANCEL
+}
+
+enum PaymentOperationStatus {
+  PENDING
+  SUCCEEDED
+  BLOCKED
+}
+
+model PaymentOperation {
+  id             String                 @id
+  applicationId  String
+  kind           PaymentOperationKind
+  status         PaymentOperationStatus @default(PENDING)
+  actorId        String?
+  providerKey    String                 @unique
+  result         String?
+  attempts       Int                    @default(0)
+  nextAttemptAt  DateTime               @default(now())
+  lockedUntil    DateTime?
+  lockToken      String?
+  lastError      String?
+  application    RentalApplication      @relation(fields: [applicationId], references: [id], onDelete: Restrict)
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
+
+  @@unique([applicationId, kind])
+  @@index([status, nextAttemptAt])
 }
 
 model DemoPayment {
@@ -636,7 +732,7 @@ model RoommateMessage {
 }
 
 model RoommateMatchingProfile {
-  id                     String    @id @default(uuid()) @db.Uuid
+  id                     String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   userId                 String    @map("user_id") @db.Uuid
   user                   Profile   @relation(fields: [userId], references: [id], onDelete: Cascade)
   school                 String?
@@ -656,7 +752,7 @@ model RoommateMatchingProfile {
   lookingFor             String?   @map("looking_for")
   status                 String    @default("active")
   createdAt              DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt              DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  updatedAt              DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   @@index([userId, status])
   @@index([city, school, status])
@@ -723,7 +819,7 @@ model DealRoom {
   createdAt         DateTime         @default(now())
   updatedAt         DateTime         @updatedAt
 
-  @@unique([ownerId, roommateProfileId])
+  // Active-pair uniqueness is enforced by a partial index in the migration.
   @@index([ownerId, status, updatedAt])
   @@index([roommateProfileId])
 }
@@ -756,6 +852,7 @@ model TourRequest {
 }
 
 model DealThread {
+  legacyLeaseApplication LeaseApplication? @ignore
   id               String           @id @default(cuid())
   ownerId          String
   owner            User             @relation("RenterDealThreads", fields: [ownerId], references: [id], onDelete: Cascade)
@@ -787,6 +884,7 @@ model DealMessage {
   senderId   String?
   sender     User?      @relation(fields: [senderId], references: [id], onDelete: SetNull)
   senderName String
+  clientMessageId String?
   body       String
   align      String     @default("right")
   status     String     @default("sent")
@@ -794,6 +892,7 @@ model DealMessage {
 
   @@index([threadId, createdAt])
   @@index([senderId])
+  @@unique([senderId, clientMessageId])
 }
 
 model ViewingRequest {
@@ -810,6 +909,7 @@ model ViewingRequest {
   mode             ViewingMode
   participantNames String[]             @default([])
   status           ViewingRequestStatus @default(REQUESTED)
+  revision         Int                  @default(1)
   createdAt        DateTime             @default(now())
   updatedAt        DateTime             @updatedAt
 

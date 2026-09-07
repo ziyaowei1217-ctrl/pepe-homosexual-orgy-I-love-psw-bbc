@@ -60,10 +60,11 @@ describe("AdminListingsController", () => {
     const listings = createListingsServiceMock();
     const controller = new AdminListingsController(listings as never);
 
-    await expect(controller.approve(requestFor("admin-1", "ADMIN"), "listing-1")).resolves.toEqual({ id: "listing-1" });
+    await expect(controller.approve(requestFor("admin-1", "ADMIN"), "listing-1", { revision: 4 })).resolves.toEqual({ id: "listing-1" });
     expect(listings.approveCalls).toEqual([
       {
         id: "listing-1",
+        revision: 4,
         actor: {
           actorType: "USER",
           actorUserId: "admin-1",
@@ -79,11 +80,12 @@ describe("AdminListingsController", () => {
     const controller = new AdminListingsController(listings as never);
 
     await expect(
-      controller.reject(requestFor("admin-1", "ADMIN"), "listing-1", { reason: "Please add clearer bedroom photos" })
+      controller.reject(requestFor("admin-1", "ADMIN"), "listing-1", { reason: "Please add clearer bedroom photos", revision: 4 })
     ).resolves.toEqual({ id: "listing-1" });
     expect(listings.rejectCalls).toEqual([
       {
         id: "listing-1",
+        revision: 4,
         actor: {
           actorType: "USER",
           actorUserId: "admin-1",
@@ -118,8 +120,8 @@ function createListingsServiceMock() {
     findMineCalls: [] as string[],
     submitCalls: [] as Array<{ ownerId: string; id: string }>,
     findReviewQueueCalls: 0,
-    approveCalls: [] as Array<{ id: string; actor: AuditActor }>,
-    rejectCalls: [] as Array<{ id: string; actor: AuditActor; reason: string }>,
+    approveCalls: [] as Array<{ id: string; actor: AuditActor; revision: number }>,
+    rejectCalls: [] as Array<{ id: string; actor: AuditActor; reason: string; revision: number }>,
     findAll: async (query: { moveIn?: string; moveOut?: string }) => {
       service.findAllCalls.push(query);
       return [{ id: "listing-1" }];
@@ -136,12 +138,12 @@ function createListingsServiceMock() {
       service.findReviewQueueCalls += 1;
       return [{ id: "submitted-1" }];
     },
-    approve: async (id: string, actor: AuditActor) => {
-      service.approveCalls.push({ id, actor });
+    approve: async (id: string, actor: AuditActor, revision: number) => {
+      service.approveCalls.push({ id, actor, revision });
       return { id };
     },
-    reject: async (id: string, actor: AuditActor, reason: string) => {
-      service.rejectCalls.push({ id, actor, reason });
+    reject: async (id: string, actor: AuditActor, reason: string, revision: number) => {
+      service.rejectCalls.push({ id, actor, reason, revision });
       return { id };
     }
   };

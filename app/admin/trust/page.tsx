@@ -1,5 +1,6 @@
-import SubletApp from "@/components/sublet-app";
+import { AdminTrustExperience } from "@/components/marketplace/admin-experiences";
+import { AdminShell } from "@/components/marketplace/workspace-shells";
 
 export default function AdminTrustPage() {
-  return <SubletApp initialSection="Trust" />;
+  return <AdminShell active="trust"><AdminTrustExperience /></AdminShell>;
 }

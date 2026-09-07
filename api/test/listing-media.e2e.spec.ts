@@ -74,6 +74,8 @@ describe("listing media HTTP API", () => {
       .send(uploadPayload())
       .expect(201)
       .expect(({ body }: { body: { media: Record<string, unknown> } }) => {
+        expect(body.media).not.toHaveProperty("initializationReceipt");
+        expect(body.media).not.toHaveProperty("initializationFingerprint");
         expect(body.media).not.toHaveProperty("url");
         expect(body.media).not.toHaveProperty("originalKey");
         expect(body.media).not.toHaveProperty("processedKey");
@@ -83,6 +85,8 @@ describe("listing media HTTP API", () => {
   });
 
   it.each([
+    [{ ...uploadPayload(), commandId: undefined }, "missing command identity"],
+    [{ ...uploadPayload(), commandId: "not-a-uuid" }, "invalid command identity"],
     [{ ...uploadPayload(), mimeType: "image/gif" }, "unsupported type"],
     [{ ...uploadPayload(), sizeBytes: 10 * 1024 * 1024 + 1 }, "oversize file"],
     [{ ...uploadPayload(), checksumSha256: "unsafe" }, "invalid checksum"],
@@ -99,8 +103,8 @@ describe("listing media HTTP API", () => {
     const http = request(app.getHttpServer());
 
     await http.get("/api/v1/listings/listing-1/media").expect(200);
-    await http.post("/api/v1/listings/listing-1/media/media-1/finalize").expect(201);
-    await http.post("/api/v1/listings/listing-1/media/media-1/retry").expect(201);
+    await http.post("/api/v1/listings/listing-1/media/media-1/finalize").send({ uploadAttemptId: "a".repeat(64) }).expect(201);
+    await http.post("/api/v1/listings/listing-1/media/media-1/retry").send({ uploadAttemptId: "a".repeat(64) }).expect(201);
     await http
       .patch("/api/v1/listings/listing-1/media/order")
       .send({ mediaIds: ["media-2", "media-1"] })
@@ -108,12 +112,17 @@ describe("listing media HTTP API", () => {
     await http.delete("/api/v1/listings/listing-1/media/media-1").expect(200);
 
     expect(service.findOwned).toHaveBeenCalledWith("owner-1", "listing-1");
-    expect(service.finalize).toHaveBeenCalledWith("owner-1", "listing-1", "media-1");
-    expect(service.retry).toHaveBeenCalledWith("owner-1", "listing-1", "media-1");
+    expect(service.finalize).toHaveBeenCalledWith("owner-1", "listing-1", "media-1", "a".repeat(64));
+    expect(service.retry).toHaveBeenCalledWith("owner-1", "listing-1", "media-1", "a".repeat(64));
     expect(service.reorder).toHaveBeenCalledWith("owner-1", "listing-1", {
       mediaIds: ["media-2", "media-1"]
     });
     expect(service.remove).toHaveBeenCalledWith("owner-1", "listing-1", "media-1");
+  });
+
+  it.each(["finalize", "retry"] as const)("requires an upload attempt identity on %s commands", async (command) => {
+    await request(app.getHttpServer()).post(`/api/v1/listings/listing-1/media/media-1/${command}`).send({}).expect(400);
+    expect(service[command]).not.toHaveBeenCalled();
   });
 
   it("rejects duplicate or incomplete reorder input at the HTTP boundary", async () => {
@@ -207,6 +216,7 @@ describe("listing media HTTP API", () => {
 
 function uploadPayload() {
   return {
+    commandId: "fa4750e3-b777-44d6-8c5b-6933672f0051",
     kind: "  卧室  ",
     mimeType: "image/png",
     sizeBytes: 128,
@@ -254,6 +264,7 @@ function mediaResponse(id: string, storageStatus: string, sortOrder = 0) {
     sortOrder,
     storageStatus,
     url: "https://storage.example/listing-media/private.jpg",
+    initializationReceipt: { commandId: "private-command", ownerId: "owner-1", fingerprint: "private-fingerprint" },
     originalKey: "listing-media/listing-1/private",
     processedKey: "listing-media/listing-1/processed",
     publicMainKey: "listing-media/listing-1/public-main",

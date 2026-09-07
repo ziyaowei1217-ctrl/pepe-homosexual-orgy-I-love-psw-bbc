@@ -1,8 +1,11 @@
+import { getMarketNeighborhoodCoordinates, usMarkets } from "./us-market-catalog";
+
 export type PreviewListing = {
   id: string;
   title: string;
   area: string;
   image: string;
+  images?: string[];
   price: number;
   originalPrice: number;
   beds: number;
@@ -91,7 +94,7 @@ const tagSets = [
 ];
 
 export function createPreviewListings(): PreviewListing[] {
-  return neighborhoods.map((neighborhood, index) => {
+  const losAngelesListings = neighborhoods.map((neighborhood, index) => {
     const availableMonth = 8 + (index % 3);
     const availableDay = 1 + index;
     const endMonth = 11 + Math.floor(index / 12);
@@ -117,6 +120,65 @@ export function createPreviewListings(): PreviewListing[] {
       longitude: Number((-118.52 + index * 0.013).toFixed(4))
     };
   });
+
+  const bostonNeighborhoods = ["Back Bay", "Fenway", "Allston", "Cambridge", "Somerville", "Seaport"];
+  const bostonTitles = ["棕石公寓一居", "学生友好开间", "绿线旁合租主卧", "红线通勤两居", "安静采光次卧", "海港景观一居"];
+  const bostonCoordinates = [
+    { latitude: 42.3503, longitude: -71.081 },
+    { latitude: 42.3467, longitude: -71.0972 },
+    { latitude: 42.3555, longitude: -71.1328 },
+    { latitude: 42.3736, longitude: -71.1097 },
+    { latitude: 42.3876, longitude: -71.0995 },
+    { latitude: 42.3519, longitude: -71.0496 }
+  ];
+  const bostonListings = bostonNeighborhoods.map((neighborhood, index) => ({
+    id: `preview-${String(index + 25).padStart(2, "0")}`,
+    title: `${neighborhood} ${bostonTitles[index]}`,
+    area: `Boston · ${neighborhood}`,
+    image: images[(index + 2) % images.length],
+    price: [1895, 2075, 1465, 2345, 1785, 2195][index],
+    originalPrice: [2140, 2290, 1690, 2610, 2010, 2480][index],
+    beds: 1 + (index % 2),
+    baths: 1 + (index % 2),
+    commute: `${8 + index * 2} 分钟到主要通勤点`,
+    transit: index % 2 === 0 ? `近 MBTA · ${neighborhood}` : `公交直达 · ${neighborhood}`,
+    trust: "房源资料完整 · 演示房源",
+    tags: tagSets[(index + 2) % tagSets.length],
+    score: Number((4.72 + index * 0.03).toFixed(2)),
+    availableFrom: `2026-09-${String(25 + index).padStart(2, "0")}`,
+    availableTo: `2027-06-${String(10 + index).padStart(2, "0")}`,
+    ...bostonCoordinates[index]
+  }));
+
+  const nationwideListings = usMarkets
+    .filter((market) => market.id !== "los-angeles" && market.id !== "boston")
+    .flatMap((market, marketIndex) => market.neighborhoods.map((neighborhood, neighborhoodIndex) => {
+      const coordinates = getMarketNeighborhoodCoordinates(market, neighborhood);
+      const hub = market.highlights[neighborhoodIndex] ?? market.highlights[0];
+      const price = market.basePrice + marketIndex * 7 + neighborhoodIndex * 137;
+
+      return {
+        id: `preview-us-${market.id}-${neighborhoodIndex + 1}`,
+        title: `${market.label} ${neighborhood} ${["学生通勤主卧", "企业通勤一居", "带家具灵活租期"][neighborhoodIndex]}`,
+        area: `${market.label} · ${neighborhood}`,
+        image: images[(marketIndex + neighborhoodIndex) % images.length],
+        price,
+        originalPrice: price + 260 + neighborhoodIndex * 35,
+        beds: 1 + (neighborhoodIndex % 2),
+        baths: 1 + (neighborhoodIndex % 2),
+        commute: `${7 + neighborhoodIndex * 4} 分钟到 ${hub}`,
+        transit: `${market.region} 都会区公共交通可达`,
+        trust: "房源资料完整 · 全国演示房源",
+        tags: neighborhoodIndex === 0 ? ["Wi-Fi", "学生友好", "带家具"] : ["Wi-Fi", "企业通勤", "灵活租期"],
+        score: Number((4.71 + ((marketIndex + neighborhoodIndex) % 9) * 0.025).toFixed(2)),
+        availableFrom: `2026-${String(10 + (marketIndex % 3)).padStart(2, "0")}-${String(1 + neighborhoodIndex * 6).padStart(2, "0")}`,
+        availableTo: `2027-0${6 + (neighborhoodIndex % 3)}-${String(12 + (marketIndex % 12)).padStart(2, "0")}`,
+        latitude: coordinates.lat,
+        longitude: coordinates.lng
+      };
+    }));
+
+  return [...losAngelesListings, ...bostonListings, ...nationwideListings];
 }
 
 export function isPreviewDataEnabled(

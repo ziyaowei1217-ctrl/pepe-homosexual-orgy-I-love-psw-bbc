@@ -8,6 +8,7 @@ import {
   IsInt,
   IsNotEmpty,
   IsString,
+  IsUUID,
   Matches,
   Max,
   MaxLength,
@@ -28,6 +29,9 @@ function Trim() {
 }
 
 export class InitializeListingMediaUploadDto {
+  @IsUUID("4")
+  commandId!: string;
+
   @Trim()
   @IsString()
   @IsNotEmpty()
@@ -56,4 +60,10 @@ export class ReorderListingMediaDto {
   @IsString({ each: true })
   @IsNotEmpty({ each: true })
   mediaIds!: string[];
+}
+
+export class ListingMediaUploadAttemptDto {
+  @IsString()
+  @Matches(/^[a-f0-9]{64}$/)
+  uploadAttemptId!: string;
 }

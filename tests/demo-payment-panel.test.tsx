@@ -1,5 +1,8 @@
-import TestRenderer, { act } from "react-test-renderer";
-import { afterEach, describe, expect, it, vi } from "vitest";
+// @vitest-environment jsdom
+
+import TestRenderer, { act } from "./support/dom-test-renderer";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { writeStoredAuthSession } from "../lib/auth-session";
 
 import { DemoPaymentPanel } from "../components/demo-payment-panel";
 
@@ -7,11 +10,13 @@ const reactActEnvironment = globalThis as typeof globalThis & { IS_REACT_ACT_ENV
 reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true;
 
 afterEach(() => {
+  localStorage.clear();
   vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 
 describe("DemoPaymentPanel", () => {
+  beforeEach(() => writeStoredAuthSession("token-1"));
   it("always shows the disclaimer, offers explicit simulations, and never renders credential inputs", async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(jsonResponse(paymentState("AWAITING_ATTEMPT")))
@@ -71,6 +76,23 @@ describe("DemoPaymentPanel", () => {
     expect(rendered).toContain("租客清算账户");
     expect(rendered).toContain("托管资金账户");
     expect(rendered).toContain("$1,850.00");
+  });
+
+  it("notifies the surrounding application view when a command changes application status", async () => {
+    const completed = { ...application(), status: "COMPLETED" as const };
+    vi.stubGlobal("fetch", vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ ...paymentState("HELD"), heldFund: heldFund() }))
+      .mockResolvedValueOnce(jsonResponse({ ...paymentState("RELEASED"), application: completed, heldFund: { ...heldFund(), status: "RELEASED", renterConfirmedAt: "2026-09-03T10:00:00.000Z", ownerConfirmedAt: "2026-09-03T10:00:00.000Z" } })));
+    const onApplicationChange = vi.fn();
+    let renderer!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      renderer = TestRenderer.create(<DemoPaymentPanel application={application()} token="token-1" currentUserId="renter-1" onApplicationChange={onApplicationChange} />);
+    });
+
+    const confirm = renderer.root.findAllByType("button").find((node) => text(node).includes("确认已入住"))!;
+    await act(async () => confirm.props.onClick());
+
+    expect(onApplicationChange).toHaveBeenCalledWith(expect.objectContaining({ status: "COMPLETED" }));
   });
 });
 

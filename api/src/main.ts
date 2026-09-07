@@ -4,7 +4,7 @@ import { ConfigService } from "@nestjs/config";
 import { NestFactory } from "@nestjs/core";
 
 import { AppModule } from "./app.module";
-import { getAuthSecurityConfig } from "./config/env";
+import { assertProductionRuntimeConfig, getAuthSecurityConfig } from "./config/env";
 import { configureCors, getCorsOrigins } from "./config/cors";
 import { MessagingInfrastructureHealth } from "./health/messaging-infrastructure-health";
 import { requestIdMiddleware } from "./http/request-id";
@@ -15,6 +15,7 @@ type SecurityHeaderResponse = {
 };
 
 async function bootstrap() {
+  assertProductionRuntimeConfig();
   const app = await NestFactory.create(AppModule);
   const config = app.get(ConfigService);
   const messagingInfrastructure = app.get(MessagingInfrastructureHealth);

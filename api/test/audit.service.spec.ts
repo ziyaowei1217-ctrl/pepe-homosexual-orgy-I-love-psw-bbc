@@ -20,6 +20,30 @@ describe("AuditService", () => {
     expect(create).toHaveBeenCalledWith({ data: expect.objectContaining({ action: "LISTING_APPROVED" }) });
   });
 
+  it("preserves a nonnegative integer reviewed listing revision", async () => {
+    const audit = new AuditService();
+    const event = await audit.append({ auditEvent: {
+      create: async ({ data }: { data: Record<string, unknown> }) => data
+    } } as never, {
+      actorType: "SYSTEM", action: "LISTING_APPROVED", targetType: "Listing", outcome: "SUCCESS",
+      metadata: { reason: "manual_review_approved", reviewedRevision: 123456 }
+    });
+    expect(event.metadata).toEqual({ reason: "manual_review_approved", reviewedRevision: 123456 });
+  });
+
+  it.each([-1, 1.5, "123456", "private@example.com", Number.MAX_SAFE_INTEGER + 1])(
+    "drops invalid reviewedRevision metadata: %s", async (reviewedRevision) => {
+      const audit = new AuditService();
+      const event = await audit.append({ auditEvent: {
+        create: async ({ data }: { data: Record<string, unknown> }) => data
+      } } as never, {
+        actorType: "SYSTEM", action: "LISTING_APPROVED", targetType: "Listing", outcome: "SUCCESS",
+        metadata: { reviewedRevision } as never
+      });
+      expect(event.metadata).toEqual({});
+    }
+  );
+
   it("normalizes a valid actor email at the audit boundary", async () => {
     const create = vi.fn(async ({ data }) => ({ id: "audit-1", ...data }));
     const audit = new AuditService();

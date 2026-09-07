@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 
+import { assertCurrentAuthSession } from "@/lib/auth-session";
 import { Button } from "@/components/ui/button";
 import {
   type ApiListingMedia,
@@ -23,6 +24,8 @@ import { toProductApiError } from "@/lib/product-errors";
 type MediaRow = {
   key: string;
   media: ApiListingMedia;
+  remote: boolean;
+  commandId?: string;
   file?: File;
   previewUrl?: string;
   progress: number;
@@ -51,7 +54,7 @@ export function ListingMediaUploader({
     void getOwnedListingMedia(token, listingId)
       .then((media) => {
         if (!active) return;
-        setRows(media.map((item) => ({ key: item.id, media: item, progress: readyProgress(item) })));
+        setRows(media.map((item) => ({ key: item.id, media: item, remote: true, progress: readyProgress(item) })));
       })
       .catch((caught) => {
         if (active) setError(toProductApiError(caught).message);
@@ -72,7 +75,7 @@ export function ListingMediaUploader({
 
   async function selectFiles(filesLike: FileList | ArrayLike<File> | null) {
     const files = Array.from(filesLike ?? []);
-    if (files.length === 0 || disabled) return;
+    if (files.length === 0 || disabled || mutationPending) return;
     setError(null);
 
     for (const [index, file] of files.entries()) {
@@ -84,11 +87,14 @@ export function ListingMediaUploader({
     }
 
     const additions = files.map((file, index): MediaRow => {
-      const key = `local-${Date.now()}-${index}`;
+      const commandId = globalThis.crypto.randomUUID();
+      const key = `local-${commandId}`;
       const previewUrl = typeof URL.createObjectURL === "function" ? URL.createObjectURL(file) : undefined;
       if (previewUrl) previews.current.add(previewUrl);
       return {
         key,
+        remote: false,
+        commandId,
         file,
         previewUrl,
         progress: 0,
@@ -106,16 +112,24 @@ export function ListingMediaUploader({
     if (!row.file) return;
     let remoteMedia = row.media;
     try {
+      assertCurrentAuthSession(token);
       updateRow(row.key, { progress: 0, localError: undefined });
-      const initialized = await initializeListingMedia(token, listingId, row.file, row.media.kind);
-      remoteMedia = initialized.media;
-      updateRow(row.key, { media: remoteMedia, progress: 1 });
+      const initialized = await initializeListingMedia(token, listingId, row.file, row.media.kind, row.commandId!);
+      assertCurrentAuthSession(token);
+      remoteMedia = { ...initialized.media, uploadAttemptId: initialized.uploadAttemptId };
+      updateRow(row.key, { media: remoteMedia, remote: true, progress: 1 });
+      if (!initialized.uploadUrl) {
+        updateRow(row.key, { media: remoteMedia, progress: readyProgress(remoteMedia), localError: undefined });
+        return;
+      }
       await putPresignedFile(initialized.uploadUrl, row.file, (progress) => updateRow(row.key, { progress }));
+      assertCurrentAuthSession(token);
       updateRow(row.key, {
         media: { ...remoteMedia, storageStatus: "UPLOADED_PENDING_VALIDATION" },
         progress: 100
       });
-      const finalized = await finalizeListingMedia(token, listingId, remoteMedia.id);
+      const finalized = await finalizeListingMedia(token, listingId, remoteMedia.id, initialized.uploadAttemptId);
+      assertCurrentAuthSession(token);
       updateRow(row.key, { media: finalized, progress: 100, localError: undefined });
     } catch (caught) {
       updateRow(row.key, {
@@ -126,17 +140,37 @@ export function ListingMediaUploader({
   }
 
   async function retry(row: MediaRow) {
-    if (!row.file || disabled) return;
+    if (!row.file || disabled || mutationPending) return;
     setMutationPending(true);
     setError(null);
+    let remoteMedia = row.media;
     try {
-      const initialized = await retryListingMedia(token, listingId, row.media.id);
-      updateRow(row.key, { media: initialized.media, progress: 0, localError: undefined });
+      assertCurrentAuthSession(token);
+      if (!row.remote) {
+        await uploadRow(row);
+        return;
+      }
+      // A failed HTTP response does not tell us whether finalization committed.
+      const current = (await getOwnedListingMedia(token, listingId)).find((item) => item.id === row.media.id);
+      assertCurrentAuthSession(token);
+      if (current?.storageStatus === "READY" || current?.storageStatus === "PUBLISHED") {
+        updateRow(row.key, { media: current, progress: 100, localError: undefined });
+        return;
+      }
+      if (!current?.uploadAttemptId) throw new Error("图片上传状态已变化，请刷新后重试。");
+      remoteMedia = current;
+      const initialized = await retryListingMedia(token, listingId, row.media.id, current.uploadAttemptId);
+      assertCurrentAuthSession(token);
+      remoteMedia = { ...initialized.media, uploadAttemptId: initialized.uploadAttemptId };
+      updateRow(row.key, { media: remoteMedia, progress: 0, localError: undefined });
+      if (!initialized.uploadUrl) throw new Error("上传状态已变化，请刷新后重试。");
       await putPresignedFile(initialized.uploadUrl, row.file, (progress) => updateRow(row.key, { progress }));
-      const finalized = await finalizeListingMedia(token, listingId, row.media.id);
+      assertCurrentAuthSession(token);
+      const finalized = await finalizeListingMedia(token, listingId, remoteMedia.id, initialized.uploadAttemptId);
+      assertCurrentAuthSession(token);
       updateRow(row.key, { media: finalized, progress: 100, localError: undefined });
     } catch (caught) {
-      setError(toProductApiError(caught).message);
+      updateRow(row.key, { media: { ...remoteMedia, storageStatus: "FAILED" }, localError: toProductApiError(caught).message });
     } finally {
       setMutationPending(false);
     }
@@ -151,7 +185,9 @@ export function ListingMediaUploader({
     setRows(next);
     setMutationPending(true);
     try {
+      assertCurrentAuthSession(token);
       const ordered = await reorderListingMedia(token, listingId, next.map((row) => row.media.id));
+      assertCurrentAuthSession(token);
       const byId = new Map(next.map((row) => [row.media.id, row]));
       setRows(ordered.map((media) => ({ ...byId.get(media.id)!, media })));
     } catch (caught) {
@@ -167,7 +203,16 @@ export function ListingMediaUploader({
     if (typeof window !== "undefined" && !window.confirm("删除这张图片？")) return;
     setMutationPending(true);
     try {
-      await removeListingMedia(token, listingId, row.media.id);
+      assertCurrentAuthSession(token);
+      let remoteId = row.remote ? row.media.id : undefined;
+      if (!remoteId && row.commandId) {
+        // Initialization may have committed even though its response was lost.
+        const owned = await getOwnedListingMedia(token, listingId);
+        assertCurrentAuthSession(token);
+        remoteId = owned.find((item) => item.initializationCommandId === row.commandId)?.id;
+      }
+      if (remoteId) await removeListingMedia(token, listingId, remoteId);
+      assertCurrentAuthSession(token);
       if (row.previewUrl) {
         URL.revokeObjectURL?.(row.previewUrl);
         previews.current.delete(row.previewUrl);

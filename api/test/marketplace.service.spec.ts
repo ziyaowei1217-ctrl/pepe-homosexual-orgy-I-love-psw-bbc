@@ -85,6 +85,7 @@ function createTransactionalDatabase({ withExistingMatchingProfile = false } = {
       transactions += 1;
       const pendingProfiles = matchingProfiles.map((matchingProfile) => ({ ...matchingProfile }));
       const transaction = {
+        $queryRaw: async () => [],
         profile: prisma.profile,
         roommateMatchingProfile: {
           create: async ({ data }: { data: Record<string, unknown> }) => {

@@ -90,8 +90,10 @@ import {
   type CreateViewingRequestInput
 } from "@/lib/api";
 import { getListingCoverUrl } from "@/lib/listing-media";
+import { sendDealMessage } from "@/lib/deal-message-commands";
 import { useWindowFocusRefresh } from "@/lib/use-window-focus-refresh";
 import {
+  assertCurrentAuthSession,
   clearStoredAuthSession,
   readStoredAuthSession,
   writeStoredAuthSession
@@ -117,11 +119,13 @@ import {
   type PublishAccessResult
 } from "@/lib/auth-flow";
 import {
+  authRoute,
   discoverRouteForIntent,
   dmRouteForTarget,
   listingDetailRoute,
   routeForSection,
   sectionForRoute,
+  type AuthIntent,
   type RoutedAppSection
 } from "@/lib/app-routes";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -168,9 +172,11 @@ import { getListingStatusMeta, sortOwnerListings, type ListingStatus } from "@/l
 import {
   addLocalReminder,
   clearLegacyProductStorage,
+  getGuestUiStorageKey,
   getUserUiStorageKey,
   markAllNotificationsRead,
   markNotificationRead,
+  mergeFavoriteListingIds,
   normalizeUserUiState,
   type LocalReminder
 } from "@/lib/user-ui-state";
@@ -714,7 +720,9 @@ export default function HomePage({
   initialListingId,
   initialGroupTourSelecting = false,
   initialGroupTourDealRoomId = null,
-  initialAuthPanelOpen = false
+  initialAuthPanelOpen = false,
+  authReturnTo = null,
+  authIntent = "account"
 }: {
   initialSection?: AppSection;
   initialMessageListingId?: string | null;
@@ -724,9 +732,12 @@ export default function HomePage({
   initialGroupTourSelecting?: boolean;
   initialGroupTourDealRoomId?: string | null;
   initialAuthPanelOpen?: boolean;
+  authReturnTo?: string | null;
+  authIntent?: AuthIntent;
 } = {}) {
   const pathname = usePathname();
   const router = useRouter();
+  const standaloneAuthPage = pathname.startsWith("/account");
   const startingSection = initialListingId
     ? sectionForRoute(pathname, { listingId: initialListingId })
     : initialSection ?? sectionForRoute(pathname);
@@ -790,6 +801,7 @@ export default function HomePage({
   const [apiOnline, setApiOnline] = useState(false);
   const [pendingActions, setPendingActions] = useState<Set<string>>(new Set());
   const [token, setToken] = useState<string | null>(null);
+  const [authSessionHydrated, setAuthSessionHydrated] = useState(false);
   const [user, setUser] = useState<SessionUser | null>(null);
   const [resolvedUserToken, setResolvedUserToken] = useState<string | null>(null);
   const [adminStepUpSession, setAdminStepUpSession] = useState<AdminStepUpSession | null>(null);
@@ -865,6 +877,7 @@ export default function HomePage({
     const storedSession = readStoredAuthSession();
     if (storedSession) setToken(storedSession.accessToken);
     clearLegacyProductStorage(window.localStorage);
+    setAuthSessionHydrated(true);
   }, []);
 
   useEffect(() => {
@@ -877,24 +890,40 @@ export default function HomePage({
   }, []);
 
   useEffect(() => {
-    if (!user) {
-      setFavoriteIds(new Set());
-      setNotifications([]);
-      setUserUiHydratedFor(null);
-      return;
-    }
-
+    const storageKey = user ? getUserUiStorageKey(user.id) : getGuestUiStorageKey();
     setUserUiHydratedFor(null);
     try {
-      const raw = window.localStorage.getItem(getUserUiStorageKey(user.id));
+      const raw = window.localStorage.getItem(storageKey);
       const stored = normalizeUserUiState(raw ? JSON.parse(raw) : null);
-      setFavoriteIds(new Set(stored.favoriteListingIds));
-      setNotifications(stored.notifications);
+      if (user) {
+        const guestRaw = window.localStorage.getItem(getGuestUiStorageKey());
+        const guestState = normalizeUserUiState(guestRaw ? JSON.parse(guestRaw) : null);
+        const mergedFavorites = mergeFavoriteListingIds(
+          guestState.favoriteListingIds,
+          stored.favoriteListingIds
+        );
+        setFavoriteIds(new Set(mergedFavorites));
+        setNotifications(stored.notifications);
+        if (guestState.favoriteListingIds.length > 0) {
+          window.localStorage.setItem(
+            storageKey,
+            JSON.stringify({
+              version: 2,
+              favoriteListingIds: mergedFavorites,
+              notifications: stored.notifications
+            })
+          );
+          window.localStorage.removeItem(getGuestUiStorageKey());
+        }
+      } else {
+        setFavoriteIds(new Set(stored.favoriteListingIds));
+        setNotifications([]);
+      }
     } catch {
       setFavoriteIds(new Set());
       setNotifications([]);
     }
-    setUserUiHydratedFor(user.id);
+    setUserUiHydratedFor(storageKey);
   }, [user]);
 
   useEffect(() => {
@@ -923,16 +952,18 @@ export default function HomePage({
   }, [activeSection]);
 
   useEffect(() => {
-    if (!user || userUiHydratedFor !== user.id) return;
+    const storageKey = user ? getUserUiStorageKey(user.id) : getGuestUiStorageKey();
+    if (userUiHydratedFor !== storageKey) return;
     const state = {
       version: 2 as const,
       favoriteListingIds: Array.from(favoriteIds),
-      notifications
+      notifications: user ? notifications : []
     };
-    window.localStorage.setItem(getUserUiStorageKey(user.id), JSON.stringify(state));
+    window.localStorage.setItem(storageKey, JSON.stringify(state));
   }, [favoriteIds, notifications, user, userUiHydratedFor]);
 
   useEffect(() => {
+    if (standaloneAuthPage) return;
     let cancelled = false;
     const listingsPath = buildPublicListingsPath({
       checkIn: filters.checkIn,
@@ -979,9 +1010,10 @@ export default function HomePage({
     return () => {
       cancelled = true;
     };
-  }, [filters.checkIn, filters.checkOut, initialListingId]);
+  }, [filters.checkIn, filters.checkOut, initialListingId, standaloneAuthPage]);
 
   useEffect(() => {
+    if (standaloneAuthPage) return;
     let cancelled = false;
 
     async function loadRoommates() {
@@ -997,7 +1029,7 @@ export default function HomePage({
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [standaloneAuthPage]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1309,8 +1341,16 @@ export default function HomePage({
     if (activeSection !== "Publish") return;
 
     if (publishAccess.status === "needs-auth") {
-      setAuthPanelOpen(true);
       setOnboardingReason(null);
+      if (!authSessionHydrated) return;
+      if (token) {
+        setAuthPanelOpen(true);
+        return;
+      }
+      setAuthPanelOpen(false);
+      router.push(
+        authRoute({ returnTo: routeForSection("Publish"), intent: "publish" })
+      );
       return;
     }
 
@@ -1328,7 +1368,7 @@ export default function HomePage({
         current === "publish-required" ? null : current
       );
     }
-  }, [activeSection, publishAccess.status]);
+  }, [activeSection, authSessionHydrated, publishAccess.status, router, token]);
 
   useEffect(() => {
     setMyListings([]);
@@ -1870,11 +1910,32 @@ export default function HomePage({
 
     if (result.status === "allowed") return true;
     if (result.status === "requires-auth") {
-      setAuthPanelOpen(true);
-      if (capability !== "publish-listing") router.push("/account");
+      const authIntents: Partial<Record<ProductCapability, AuthIntent>> = {
+        "message-host": "message-host",
+        "request-viewing": "request-viewing",
+        "roommate-action": "roommate-action",
+        "roommate-message": "roommate-message",
+        "publish-listing": "publish"
+      };
+      openStandaloneAuth(authIntents[capability] ?? "account", result.message);
     }
     setToast(result.message);
     return false;
+  }
+
+  function getCurrentReturnPath() {
+    if (activeSectionRef.current === "ListingDetail") {
+      return listingDetailRoute(selectedListing.id);
+    }
+    if (typeof window !== "undefined" && window.location.pathname === pathname) {
+      return `${window.location.pathname}${window.location.search}`;
+    }
+    return routeForSection(activeSectionRef.current);
+  }
+
+  function openStandaloneAuth(intent: AuthIntent, toastMessage = "请先登录后继续。") {
+    router.push(authRoute({ returnTo: getCurrentReturnPath(), intent }));
+    setToast(toastMessage);
   }
 
   function setActionPending(key: string, pending: boolean) {
@@ -1892,7 +1953,6 @@ export default function HomePage({
   }
 
   function handleFavorite(listingId: string) {
-    if (!requireCapability("favorite-listing")) return;
     setFavoriteIds((current) => {
       const next = new Set(current);
       if (next.has(listingId)) {
@@ -2032,13 +2092,12 @@ export default function HomePage({
     setActionPending(pendingKey, true);
 
     try {
+      assertCurrentAuthSession(token);
       const apiThread = await ensureRemoteDealThread(listing, { syncLocal: false });
       if (!apiThread) return false;
-      const updatedThread = await apiPost<ApiDealThread>(
-        `/deal-threads/${apiThread.id}/messages`,
-        { body: body.trim() },
-        token
-      );
+      assertCurrentAuthSession(token);
+      const updatedThread = await sendDealMessage(token, apiThread.id, body);
+      assertCurrentAuthSession(token);
       const fallbackThread = dealThreads[listing.id] ?? buildThreadForListing(listing, groupMembers);
       setSelectedListing(listing);
       setActiveMessageListingId(listing.id);
@@ -2187,8 +2246,8 @@ export default function HomePage({
 
   function handleStartApplication(listing: Listing) {
     if (!token || !user) {
-      setAuthPanelOpen(true);
-      setToast("请先登录再提交租房申请。");
+      setSelectedListing(listing);
+      openStandaloneAuth("application", "请先登录再提交租房申请。");
       return;
     }
     setSelectedListing(listing);
@@ -2276,13 +2335,13 @@ export default function HomePage({
   }
 
   function handleLeaveRoommateTeam() {
-    if (!token) return Promise.resolve(false);
+    if (!token || !roommateTeam) return Promise.resolve(false);
     const confirmed =
       typeof window.confirm !== "function" ||
       window.confirm("退出后小组将立即解散；未接受的小组申请会自动撤回，历史消息仍会保留。确定退出吗？");
     if (!confirmed) return Promise.resolve(false);
     return runRoommateTeamCommand(
-      () => leaveRoommateTeam(token),
+      () => leaveRoommateTeam(token, roommateTeam.id),
       "两人小组已解散，历史消息仍然保留。"
     );
   }
@@ -2482,21 +2541,24 @@ export default function HomePage({
   }
 
   function handleAuthenticated(response: VerifyEmailResponse) {
+    const shouldOpenOnboarding = shouldOpenNewUserOnboarding({
+      isNewUser: response.isNewUser,
+      profile
+    });
+    const shouldReturnFromAuthPage =
+      pathname.startsWith("/account") && Boolean(authReturnTo) && !shouldOpenOnboarding;
     writeStoredAuthSession(response.accessToken);
     clearStoredAdminStepUpSession(window.sessionStorage);
     setAdminStepUpSession(null);
     setAdminStepUpOpen(false);
     setToken(response.accessToken);
     setUser(response.user);
-    setAuthPanelOpen(true);
-    setOnboardingReason(
-      shouldOpenNewUserOnboarding({
-        isNewUser: response.isNewUser,
-        profile
-      })
-        ? "new-user"
-        : null
-    );
+    setAuthPanelOpen(!shouldReturnFromAuthPage);
+    setOnboardingReason(shouldOpenOnboarding ? "new-user" : null);
+    if (shouldReturnFromAuthPage && authReturnTo) {
+      router.push(authReturnTo);
+      setToast("登录成功，请继续刚才的操作。");
+    }
   }
 
   function handleLogout() {
@@ -2553,10 +2615,16 @@ export default function HomePage({
       const shouldContinuePublishing =
         activeSectionRef.current === "Publish" &&
         nextPublishAccess.status === "allowed";
+      const shouldReturnFromAuthPage =
+        pathname.startsWith("/account") && Boolean(authReturnTo);
 
       if (isProfileComplete(updatedProfile)) setOnboardingReason(null);
 
-      if (shouldContinuePublishing) {
+      if (shouldReturnFromAuthPage && authReturnTo) {
+        setAuthPanelOpen(false);
+        setToast("资料已保存，请继续刚才的操作。");
+        router.push(authReturnTo);
+      } else if (shouldContinuePublishing) {
         setAuthPanelOpen(false);
         setToast("身份已保存，可以开始填写房源");
         if (typeof window !== "undefined") {
@@ -2579,10 +2647,35 @@ export default function HomePage({
   }
 
   const showAuthStrip =
-    pathname.startsWith("/account") ||
+    !standaloneAuthPage &&
     (activeSection === "Publish"
-      ? publishAccess.status !== "allowed"
+      ? (publishAccess.status === "needs-auth" && Boolean(token)) ||
+        publishAccess.status === "needs-profile" ||
+        publishAccess.status === "needs-role"
       : authPanelOpen);
+
+  if (standaloneAuthPage) {
+    return (
+      <StandaloneAuthScreen
+        token={token}
+        user={user}
+        profile={profile}
+        apiError={apiError}
+        onboardingReason={onboardingReason}
+        contextMessage={getAuthIntentMessage(authIntent)}
+        onAuthenticated={handleAuthenticated}
+        onProfileSave={handleSaveProfile}
+        onOnboardingDismiss={() => {
+          setOnboardingReason(null);
+          if (authReturnTo) router.push(authReturnTo);
+        }}
+        onLogout={handleLogout}
+        onClose={() => router.push(authReturnTo ?? "/")}
+        onToast={setToast}
+        toast={toast}
+      />
+    );
+  }
 
   return (
     <main
@@ -2602,7 +2695,6 @@ export default function HomePage({
         activeSection={activeSection}
         onSectionChange={navigateToSection}
         onSavedHomes={() => {
-          if (!requireCapability("favorite-listing")) return;
           setSavedOnly((current) => !current);
           setActiveSectionAndTrack("Discover");
           router.push("/");
@@ -2619,8 +2711,7 @@ export default function HomePage({
         user={user}
         profile={profile}
         onAuthOpen={() => {
-          setAuthPanelOpen(true);
-          if (!pathname.startsWith("/account")) router.push("/account");
+          openStandaloneAuth("account");
         }}
         onLogout={handleLogout}
       />
@@ -2636,7 +2727,9 @@ export default function HomePage({
           onProfileSave={handleSaveProfile}
           onOnboardingDismiss={() => setOnboardingReason(null)}
           onLogout={handleLogout}
-          onClose={() => setAuthPanelOpen(false)}
+          onClose={() => {
+            setAuthPanelOpen(false);
+          }}
           onToast={setToast}
         />
       ) : null}
@@ -2779,6 +2872,7 @@ export default function HomePage({
       ) : null}
       {activeSection === "Messages" ? (
         <MessagesScreen
+          guest={!token || !user}
           contacts={inboxContacts}
           activeContact={activeInboxContact}
           selectedListing={activeMessageListing}
@@ -2816,6 +2910,7 @@ export default function HomePage({
           onOpenListing={(listing) => {
             openListingDetail(listing);
           }}
+          onLogin={() => openStandaloneAuth("messages")}
         />
       ) : null}
       {activeSection === "Publish" ? (
@@ -2836,6 +2931,7 @@ export default function HomePage({
           token={token}
           user={user}
           onOpenDealRoom={() => navigateToSection("Messages")}
+          onLogin={() => openStandaloneAuth("trips")}
         />
       ) : null}
       {activeSection === "AdminRoommates" ? (
@@ -2877,6 +2973,100 @@ export default function HomePage({
           }}
         />
       ) : null}
+      <StatusToast message={toast} />
+    </main>
+  );
+}
+
+function getAuthIntentMessage(intent: AuthIntent) {
+  const messages: Record<AuthIntent, string> = {
+    account: "登录后可同步收藏、消息、行程与账户资料。",
+    "message-host": "登录后即可联系房东；返回房源后请再次确认发送。",
+    "request-viewing": "登录后即可选择看房时间；返回房源后请再次确认。",
+    "roommate-action": "登录后即可继续室友操作；返回后请再次确认。",
+    "roommate-message": "登录后即可与室友聊天；返回后请再次确认。",
+    application: "登录后即可填写租房申请；返回房源后请再次确认提交。",
+    messages: "登录后即可查看房东与室友消息。",
+    trips: "登录后即可查看租房申请、看房安排与资金状态。",
+    publish: "登录后即可进入房东发布工作台。"
+  };
+  return messages[intent];
+}
+
+function StandaloneAuthScreen({
+  token,
+  user,
+  profile,
+  apiError,
+  onboardingReason,
+  contextMessage,
+  onAuthenticated,
+  onProfileSave,
+  onOnboardingDismiss,
+  onLogout,
+  onClose,
+  onToast,
+  toast
+}: {
+  token: string | null;
+  user: SessionUser | null;
+  profile: ApiProfile | null;
+  apiError: string | null;
+  onboardingReason: OnboardingReason | null;
+  contextMessage: string;
+  onAuthenticated: (response: VerifyEmailResponse) => void;
+  onProfileSave: (draft: UpdateProfileInput) => Promise<ApiProfile | null>;
+  onOnboardingDismiss: () => void;
+  onLogout: () => void;
+  onClose: () => void;
+  onToast: (message: string) => void;
+  toast: string;
+}) {
+  return (
+    <main className="min-h-screen bg-[radial-gradient(circle_at_top_left,rgba(0,106,255,0.12),transparent_34%),linear-gradient(180deg,#f8fbff_0%,#ffffff_58%)]">
+      <header className="app-shell flex items-center justify-between gap-4 py-5 md:py-7">
+        <div className="flex items-center gap-3">
+          <div className="flex size-11 items-center justify-center rounded-[22px] bg-[linear-gradient(135deg,#006AFF,#0D4599)] text-white shadow-[0_16px_40px_rgba(0,106,255,0.28)]">
+            <Home className="size-5" aria-hidden="true" />
+          </div>
+          <div>
+            <div className="text-lg font-black text-primary">Sublet Pipeline</div>
+            <div className="text-xs font-bold text-[#006AFF]">可信赖的短租与室友平台</div>
+          </div>
+        </div>
+        <Button type="button" variant="ghost" size="sm" onClick={onClose}>
+          <ArrowLeft data-icon="inline-start" />
+          返回
+        </Button>
+      </header>
+      <section className="app-shell pb-10 pt-4 md:pb-16 md:pt-10">
+        <div className="mx-auto max-w-2xl text-center">
+          <span className="editorial-kicker">账户与安全</span>
+          <h1 className="mt-3 text-3xl font-black tracking-[-0.035em] text-primary md:text-5xl">
+            登录 Sublet Pipeline
+          </h1>
+          <p className="mx-auto mt-3 max-w-xl text-sm font-semibold leading-6 text-muted-foreground md:text-base">
+            {contextMessage}
+          </p>
+        </div>
+        <div className="mx-auto mt-6 max-w-3xl overflow-hidden rounded-[28px] border border-blue-100 bg-white shadow-panel md:mt-8">
+          <AuthFlowPanel
+            token={token}
+            user={user}
+            profile={profile}
+            apiError={apiError}
+            onboardingReason={onboardingReason}
+            isPinnedToPublish={false}
+            contextMessage={null}
+            onAuthenticated={onAuthenticated}
+            onProfileSave={onProfileSave}
+            onOnboardingDismiss={onOnboardingDismiss}
+            onLogout={onLogout}
+            onClose={onClose}
+            onToast={onToast}
+          />
+        </div>
+      </section>
       <StatusToast message={toast} />
     </main>
   );
@@ -2967,10 +3157,12 @@ function AppHeader({
           <Button variant={savedOnly ? "secondary" : "ghost"} size="icon" className="hidden rounded-full sm:inline-flex" aria-label="本机收藏" aria-pressed={savedOnly} onClick={onSavedHomes}>
             <Bookmark className={favoriteCount > 0 ? "fill-current text-primary" : undefined} />
           </Button>
-          <Button variant={notificationsOpen ? "secondary" : "ghost"} size="icon" className="relative hidden rounded-full sm:inline-flex" aria-label="本机提醒" aria-expanded={notificationsOpen} onClick={onNotifications}>
-            <Bell />
-            {unreadCount > 0 ? <span className="absolute right-0 top-0 flex size-4 items-center justify-center rounded-full bg-[#006AFF] text-[10px] font-black text-white">{unreadCount}</span> : null}
-          </Button>
+          {user ? (
+            <Button variant={notificationsOpen ? "secondary" : "ghost"} size="icon" className="relative hidden rounded-full sm:inline-flex" aria-label="本机提醒" aria-expanded={notificationsOpen} onClick={onNotifications}>
+              <Bell />
+              {unreadCount > 0 ? <span className="absolute right-0 top-0 flex size-4 items-center justify-center rounded-full bg-[#006AFF] text-[10px] font-black text-white">{unreadCount}</span> : null}
+            </Button>
+          ) : null}
           <button
             type="button"
             className="hidden min-w-0 items-center gap-2 rounded-full border border-blue-100 bg-white px-3 py-2 text-sm font-bold text-primary shadow-sm transition-colors hover:bg-blue-50 lg:flex"
@@ -2978,7 +3170,7 @@ function AppHeader({
           >
             <ShieldCheck className="size-4 text-trust-green" aria-hidden="true" />
             <span className="max-w-[180px] truncate">
-              {user ? profile?.displayName ?? user.email : "登录"}
+              {user ? profile?.displayName ?? user.email : "登录 / 注册"}
             </span>
           </button>
           {user ? (
@@ -2986,9 +3178,16 @@ function AppHeader({
               退出
             </Button>
           ) : null}
-          <Button variant="outline" size="icon" className="rounded-full md:hidden" onClick={onAuthOpen} aria-label="账户">
-            <ShieldCheck />
-          </Button>
+          {user ? (
+            <Button variant="outline" size="icon" className="rounded-full md:hidden" onClick={onAuthOpen} aria-label="账户">
+              <ShieldCheck />
+            </Button>
+          ) : (
+            <Button variant="outline" size="sm" className="rounded-full px-3 font-bold md:hidden" onClick={onAuthOpen}>
+              <ShieldCheck data-icon="inline-start" />
+              登录 / 注册
+            </Button>
+          )}
           <Button
             variant="outline"
             size="sm"
@@ -3026,7 +3225,7 @@ function AppHeader({
           </nav>
         </div>
       ) : null}
-      {notificationsOpen ? (
+      {user && notificationsOpen ? (
         <div className="absolute right-4 top-[68px] z-50 w-[min(360px,calc(100vw-2rem))] rounded-[24px] border border-blue-100 bg-white p-4 shadow-panel">
           <div className="flex items-center justify-between gap-3">
             <div>
@@ -3085,9 +3284,11 @@ function AppHeader({
           <Button variant={savedOnly ? "secondary" : "ghost"} size="sm" className="shrink-0" onClick={onSavedHomes}>
             <Bookmark className="size-3.5" aria-hidden="true" /> 收藏
           </Button>
-          <Button variant={notificationsOpen ? "secondary" : "ghost"} size="sm" className="shrink-0" onClick={onNotifications}>
-            <Bell className="size-3.5" aria-hidden="true" /> 提醒
-          </Button>
+          {user ? (
+            <Button variant={notificationsOpen ? "secondary" : "ghost"} size="sm" className="shrink-0" onClick={onNotifications}>
+              <Bell className="size-3.5" aria-hidden="true" /> 提醒
+            </Button>
+          ) : null}
         </div>
       </div> : null}
     </header>
@@ -4762,6 +4963,7 @@ function DateRangePicker({
 }
 
 function MessagesScreen({
+  guest,
   contacts,
   activeContact,
   selectedListing,
@@ -4784,8 +4986,10 @@ function MessagesScreen({
   onViewingDecision,
   onSelectContact,
   onBackToContacts,
-  onOpenListing
+  onOpenListing,
+  onLogin
 }: {
+  guest: boolean;
   contacts: InboxContact[];
   activeContact: InboxContact | null;
   selectedListing: Listing | null;
@@ -4813,7 +5017,20 @@ function MessagesScreen({
   onSelectContact: (contact: InboxContact) => void;
   onBackToContacts: () => void;
   onOpenListing: (listing: Listing) => void;
+  onLogin: () => void;
 }) {
+  if (guest) {
+    return (
+      <GuestAccessGate
+        kicker="01 / 消息"
+        title="登录后查看消息"
+        description="登录后统一查看房东与室友会话，并继续保留在服务端的沟通记录。"
+        actionAriaLabel="登录后查看消息"
+        onLogin={onLogin}
+      />
+    );
+  }
+
   return (
     <section className="app-shell app-grid min-h-[calc(100vh-76px)] w-full py-4 md:py-5">
       <aside className={cn("col-span-full min-w-0 lg:col-span-3 xl:col-span-3", narrowPane === "conversation" && "hidden lg:block")}>
@@ -4958,6 +5175,48 @@ function MessagesScreen({
           </Card>
         )}
       </div>
+    </section>
+  );
+}
+
+function GuestAccessGate({
+  kicker,
+  title,
+  description,
+  actionAriaLabel,
+  onLogin
+}: {
+  kicker: string;
+  title: string;
+  description: string;
+  actionAriaLabel: string;
+  onLogin: () => void;
+}) {
+  return (
+    <section className="app-shell py-8 md:py-12">
+      <Card className="mx-auto max-w-2xl overflow-hidden border-blue-100 shadow-panel">
+        <CardContent className="grid gap-6 p-6 md:grid-cols-[minmax(0,1fr)_auto] md:items-center md:p-8">
+          <div>
+            <span className="editorial-kicker">{kicker}</span>
+            <h1 className="mt-3 text-3xl font-black tracking-[-0.035em] text-primary">
+              {title}
+            </h1>
+            <p className="mt-3 max-w-xl text-sm font-semibold leading-6 text-muted-foreground">
+              {description}
+            </p>
+          </div>
+          <Button
+            type="button"
+            variant="trust"
+            className="w-full md:w-auto"
+            aria-label={actionAriaLabel}
+            onClick={onLogin}
+          >
+            <ShieldCheck data-icon="inline-start" />
+            登录 / 注册
+          </Button>
+        </CardContent>
+      </Card>
     </section>
   );
 }
@@ -5215,7 +5474,7 @@ export function PublishScreen({
           <Card className="border-dashed shadow-card">
             <CardHeader>
               <CardTitle>请先完善身份资料</CardTitle>
-              <CardDescription>填写显示名称、学校和城市后，系统会继续检查房东身份。</CardDescription>
+              <CardDescription>填写显示名称、学校或公司和城市后，系统会继续检查房东身份。</CardDescription>
             </CardHeader>
           </Card>
         ) : publishAccess.status === "needs-role" ? (
@@ -5350,13 +5609,27 @@ function TripsScreen({
   viewingRequests,
   token,
   user,
-  onOpenDealRoom
+  onOpenDealRoom,
+  onLogin
 }: {
   viewingRequests: ViewingRequest[];
   token: string | null;
   user: SessionUser | null;
   onOpenDealRoom: () => void;
+  onLogin: () => void;
 }) {
+  if (!token || !user) {
+    return (
+      <GuestAccessGate
+        kicker="01 / 看房"
+        title="登录后查看行程"
+        description="登录后查看租房申请、看房安排、演示支付与资金状态。"
+        actionAriaLabel="登录后查看行程"
+        onLogin={onLogin}
+      />
+    );
+  }
+
   return (
     <section className="app-shell app-grid w-full items-start py-5 md:py-6">
       <div className="app-section editorial-toolbar">
@@ -5366,16 +5639,7 @@ function TripsScreen({
         </div>
       </div>
       <aside className="col-span-full min-w-0 lg:col-span-4">
-        {token && user ? (
-          <ApplicationStatusPanel token={token} currentUserId={user.id} />
-        ) : (
-          <Card className="shadow-panel">
-            <CardHeader>
-              <CardTitle>租房申请行程</CardTitle>
-              <CardDescription>登录后查看申请、演示支付与资金状态。</CardDescription>
-            </CardHeader>
-          </Card>
-        )}
+        <ApplicationStatusPanel token={token} currentUserId={user.id} />
       </aside>
       <div className="col-span-full min-w-0 lg:col-span-4 xl:col-span-8">
         <Card className="shadow-panel">
@@ -5384,7 +5648,7 @@ function TripsScreen({
             <div>
               <CardTitle>看房安排</CardTitle>
               <CardDescription>
-                {user ? `登录账户的 ${viewingRequests.length} 条服务端记录` : "登录后显示你的看房记录"}
+                {`登录账户的 ${viewingRequests.length} 条服务端记录`}
               </CardDescription>
             </div>
             <Button variant="outline" size="sm" onClick={onOpenDealRoom}>
@@ -5419,7 +5683,7 @@ function TripsScreen({
                 ))
               ) : (
                 <div className="rounded-[22px] border border-dashed border-blue-200 bg-white p-4 text-sm font-semibold text-muted-foreground">
-                  {user ? "还没有看房安排。回到房源详情或消息中选择时间。" : "请先登录查看个人看房记录。"}
+                  还没有看房安排。回到房源详情或消息中选择时间。
                 </div>
               )}
             </div>
@@ -6412,7 +6676,7 @@ function createEmptyPublishDraft(): PublishDraft {
   };
 }
 
-function PublishingFlow({
+export function PublishingFlow({
   initialDraft,
   isPublishing,
   token,
@@ -6427,7 +6691,7 @@ function PublishingFlow({
     { key: "basic", code: "01", title: "基础信息", detail: "标题、区域、可租期、房型与交通" },
     { key: "pricing", code: "02", title: "价格与设施", detail: "月租、原价、设施与声明" },
     { key: "media", code: "03", title: "图片与分类", detail: "文件上传、排序与封面" },
-    { key: "review", code: "04", title: "预览与提交", detail: "确认服务端将保存的内容" }
+    { key: "review", code: "04", title: "预览与提交", detail: "检查信息、照片与发布须知" }
   ];
   const [stepIndex, setStepIndex] = useState(0);
   const [draft, setDraft] = useState<PublishDraft>(
@@ -6443,13 +6707,25 @@ function PublishingFlow({
   const [errors, setErrors] = useState<string[]>([]);
   const [confirmSubmit, setConfirmSubmit] = useState(false);
   const [submittedResult, setSubmittedResult] = useState<PublishSaveResult | null>(null);
+  const formRef = useRef<HTMLDivElement>(null);
   const step = steps[stepIndex];
+
+  function updateDraft(patch: Partial<PublishDraft>) {
+    setDraft((current) => ({ ...current, ...patch }));
+    if (errors.length) setErrors([]);
+  }
+
+  function showPublishErrors(nextErrors: string[]) {
+    setErrors(nextErrors);
+    const fieldName = getPublishErrorFieldName(nextErrors[0]);
+    if (fieldName) formRef.current?.querySelector<HTMLElement>(`[name="${fieldName}"]`)?.focus();
+  }
 
   async function goToStep(nextIndex: number) {
     if (nextIndex > stepIndex) {
       const nextErrors = getPublishStepErrors(draft, step.key, mediaSummary);
       if (nextErrors.length > 0) {
-        setErrors(nextErrors);
+        showPublishErrors(nextErrors);
         return;
       }
       if (step.key === "pricing" && !draft.remoteListingId) {
@@ -6471,7 +6747,7 @@ function PublishingFlow({
           ...getPublishStepErrors(draft, "pricing", mediaSummary)
         ];
     if (nextErrors.length > 0) {
-      setErrors(nextErrors);
+      showPublishErrors(nextErrors);
       return;
     }
     if (shouldSubmit && !confirmSubmit) {
@@ -6494,12 +6770,11 @@ function PublishingFlow({
   }
 
   function toggleTag(tag: string) {
-    setDraft((current) => ({
-      ...current,
-      tags: current.tags.includes(tag)
-        ? current.tags.filter((item) => item !== tag)
-        : [...current.tags, tag]
-    }));
+    updateDraft({
+      tags: draft.tags.includes(tag)
+        ? draft.tags.filter((item) => item !== tag)
+        : [...draft.tags, tag]
+    });
   }
 
   if (submittedResult) {
@@ -6546,10 +6821,9 @@ function PublishingFlow({
       <CardHeader>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <CardTitle>发布房源流程</CardTitle>
+            <CardTitle>房源资料</CardTitle>
             <CardDescription>
-              房源资料与图片分别持久化；提交审核后图片将锁定。
-              {draft.remoteListingId ? ` 远程草稿：${draft.remoteListingId}` : ""}
+              填写房源信息并添加照片。提交审核后，照片将暂时锁定。
             </CardDescription>
           </div>
           <Button variant="outline" size="sm" onClick={() => void save(false)} disabled={isPublishing}>
@@ -6577,17 +6851,17 @@ function PublishingFlow({
             </button>
           ))}
         </div>
-        <div className="mt-4 rounded-md border bg-white p-4">
+        <div ref={formRef} className="mt-4 rounded-md border bg-white p-4">
           {step.key === "basic" ? (
             <div className="grid gap-3 md:grid-cols-2">
-              <PublishField label="房源标题" value={draft.title} onChange={(value) => setDraft({ ...draft, title: value })} />
-              <PublishField label="区域" value={draft.area} onChange={(value) => setDraft({ ...draft, area: value })} />
-              <PublishField type="date" label="可入住日期" value={draft.availableFrom} onChange={(value) => setDraft({ ...draft, availableFrom: value })} />
-              <PublishField type="date" label="最晚退租日期" value={draft.availableTo} onChange={(value) => setDraft({ ...draft, availableTo: value })} />
-              <PublishNumberField label="卧室" value={draft.beds} min={0} onChange={(value) => setDraft({ ...draft, beds: value })} />
-              <PublishNumberField label="卫浴" value={draft.baths} min={0} onChange={(value) => setDraft({ ...draft, baths: value })} />
-              <PublishField label="通勤说明" value={draft.commute} onChange={(value) => setDraft({ ...draft, commute: value })} />
-              <PublishField label="交通说明" value={draft.transit} onChange={(value) => setDraft({ ...draft, transit: value })} />
+              <PublishField name="title" label="房源标题" value={draft.title} onChange={(value) => updateDraft({ title: value })} />
+              <PublishField name="area" label="区域" value={draft.area} onChange={(value) => updateDraft({ area: value })} />
+              <PublishField name="availableFrom" type="date" label="可入住日期" value={draft.availableFrom} onChange={(value) => updateDraft({ availableFrom: value })} />
+              <PublishField name="availableTo" type="date" label="最晚退租日期" value={draft.availableTo} onChange={(value) => updateDraft({ availableTo: value })} />
+              <PublishNumberField name="beds" label="卧室" value={draft.beds} min={0} onChange={(value) => updateDraft({ beds: value })} />
+              <PublishNumberField name="baths" label="卫浴" value={draft.baths} min={0} onChange={(value) => updateDraft({ baths: value })} />
+              <PublishField name="commute" label="通勤说明" value={draft.commute} onChange={(value) => updateDraft({ commute: value })} />
+              <PublishField name="transit" label="交通说明" value={draft.transit} onChange={(value) => updateDraft({ transit: value })} />
             </div>
           ) : null}
 
@@ -6609,19 +6883,19 @@ function PublishingFlow({
           {step.key === "pricing" ? (
             <div className="grid gap-4">
               <div className="grid gap-3 md:grid-cols-2">
-                <PublishNumberField label="月租" value={draft.price} min={1} onChange={(value) => setDraft({ ...draft, price: value })} />
-                <PublishNumberField label="原价" value={draft.originalPrice} min={1} onChange={(value) => setDraft({ ...draft, originalPrice: value })} />
+                <PublishNumberField name="price" label="月租" value={draft.price} min={1} onChange={(value) => updateDraft({ price: value })} />
+                <PublishNumberField name="originalPrice" label="原价" value={draft.originalPrice} min={1} onChange={(value) => updateDraft({ originalPrice: value })} />
               </div>
               <fieldset>
                 <legend className="text-sm font-semibold">设施</legend>
                 <div className="mt-2 flex flex-wrap gap-2">
                   {["Wi-Fi", "带家具", "独卫", "近地铁", "宠物友好", "洗烘"].map((tag) => (
-                    <Button key={tag} variant={draft.tags.includes(tag) ? "secondary" : "outline"} aria-pressed={draft.tags.includes(tag)} onClick={() => toggleTag(tag)}>{tag}</Button>
+                    <Button key={tag} name={tag === "Wi-Fi" ? "tags" : undefined} variant={draft.tags.includes(tag) ? "secondary" : "outline"} aria-pressed={draft.tags.includes(tag)} onClick={() => toggleTag(tag)}>{tag}</Button>
                   ))}
                 </div>
               </fieldset>
               <label className="flex items-start gap-3 rounded-md border bg-secondary p-3 text-sm font-semibold">
-                <input type="checkbox" className="mt-1" checked={draft.landlordAware} onChange={(event) => setDraft({ ...draft, landlordAware: event.target.checked })} />
+                <input name="landlordAware" type="checkbox" className="mt-1" checked={draft.landlordAware} onChange={(event) => updateDraft({ landlordAware: event.target.checked })} />
                 <span>我声明房东已知情。此信息仅为用户声明，发布后统一显示“待平台审核”。</span>
               </label>
             </div>
@@ -6671,12 +6945,14 @@ function PublishingFlow({
 }
 
 function PublishField({
+  name,
   label,
   value,
   type = "text",
   disabled = false,
   onChange
 }: {
+  name: string;
   label: string;
   value: string;
   type?: "text" | "date";
@@ -6686,17 +6962,19 @@ function PublishField({
   return (
     <label className="grid gap-2 text-sm font-semibold">
       {label}
-      <Input type={type} value={value} disabled={disabled} onChange={(event) => onChange(event.target.value)} />
+      <Input name={name} type={type} value={value} disabled={disabled} onChange={(event) => onChange(event.target.value)} />
     </label>
   );
 }
 
 function PublishNumberField({
+  name,
   label,
   value,
   min,
   onChange
 }: {
+  name: string;
   label: string;
   value: number;
   min: number;
@@ -6705,9 +6983,27 @@ function PublishNumberField({
   return (
     <label className="grid gap-2 text-sm font-semibold">
       {label}
-      <Input type="number" min={min} value={value} onChange={(event) => onChange(Number(event.target.value))} />
+      <Input name={name} type="number" min={min} value={value} onChange={(event) => onChange(Number(event.target.value))} />
     </label>
   );
+}
+
+function getPublishErrorFieldName(error?: string) {
+  return {
+    "请填写房源标题。": "title",
+    "请填写房源区域。": "area",
+    "请选择可入住日期。": "availableFrom",
+    "请选择最晚退租日期。": "availableTo",
+    "最晚退租日期必须晚于可入住日期。": "availableTo",
+    "请填写有效卧室数。": "beds",
+    "请填写有效卫浴数。": "baths",
+    "请填写通勤说明。": "commute",
+    "请填写交通说明。": "transit",
+    "请填写有效月租。": "price",
+    "请填写有效原价。": "originalPrice",
+    "请至少选择一项设施。": "tags",
+    "请确认房东知情声明。": "landlordAware"
+  }[error ?? ""];
 }
 
 function PublishReviewItem({ label, value }: { label: string; value: string }) {

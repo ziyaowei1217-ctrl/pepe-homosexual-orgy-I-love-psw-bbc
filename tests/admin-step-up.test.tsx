@@ -1,9 +1,11 @@
+// @vitest-environment jsdom
+
 import {
   act,
   create,
   type ReactTestInstance,
   type ReactTestRenderer
-} from "react-test-renderer";
+} from "./support/dom-test-renderer";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import * as api from "../lib/api";

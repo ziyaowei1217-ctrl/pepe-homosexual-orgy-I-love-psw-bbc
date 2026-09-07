@@ -1,4 +1,6 @@
-import TestRenderer, { act } from "react-test-renderer";
+// @vitest-environment jsdom
+
+import TestRenderer, { act } from "./support/dom-test-renderer";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ApplicationStatusPanel } from "../components/application-status-panel";
@@ -18,6 +20,7 @@ describe("ApplicationStatusPanel", () => {
     };
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(jsonResponse([application]))
+      .mockResolvedValueOnce(jsonResponse({ mode: "demo" }))
       .mockResolvedValueOnce(jsonResponse({
         disclaimer: "演示模式，不会真实扣款",
         payment: { id: "payment-1", applicationId: "application-1", amountCents: 185000, currency: "USD", status: "HELD" },

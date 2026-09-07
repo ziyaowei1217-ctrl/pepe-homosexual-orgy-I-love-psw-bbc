@@ -23,7 +23,8 @@ describe("rental application Prisma contract", () => {
       "REJECTED",
       "WITHDRAWN",
       "CANCELLED",
-      "COMPLETED"
+      "COMPLETED",
+      "CANCELLATION_PENDING"
     ]);
     expect(enums.get("RentalApplicationScope")).toEqual(["SOLO", "TEAM"]);
     expect(enums.get("RentalIncomeBand")).toEqual([
@@ -77,7 +78,7 @@ describeDatabase("rental application PostgreSQL constraints", () => {
 
   it("persists exact status order and accepts a valid team application", () => {
     expect(query(`SELECT array_to_string(enum_range(NULL::"RentalApplicationStatus"), ',')`)).toBe(
-      "DRAFT,SUBMITTED,ACCEPTED,REJECTED,WITHDRAWN,CANCELLED,COMPLETED"
+      "DRAFT,SUBMITTED,ACCEPTED,REJECTED,WITHDRAWN,CANCELLED,COMPLETED,CANCELLATION_PENDING"
     );
     execute(insertApplication({ id: "application-valid", scope: "TEAM", teamId: "team-1" }));
     expect(query(`SELECT "status"::text FROM "RentalApplication" WHERE "id" = 'application-valid'`)).toBe("DRAFT");

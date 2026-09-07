@@ -31,12 +31,12 @@ describe("listing detail", () => {
     });
 
     expect(detail.stayLabel).toBe("8月20日 - 9月19日 · 30 天");
-    expect(detail.gallery).toHaveLength(4);
+    expect(detail.gallery).toHaveLength(1);
     expect(detail.gallery[0]).toBe(listing.image);
     expect(detail.monthlySavings).toBe(300);
     expect(detail.sections.highlights).toContain("步行 8 分钟到 UCLA");
     expect(detail.sections.houseRules).toContain("房东知情为用户声明，待平台审核");
-    expect(detail.sections.moveIn).toContain("在线申请后由房东处理，接受后进入演示支付与资金状态");
+    expect(detail.sections.moveIn).toContain("在线申请后由房东处理，接受后进入签约与付款流程");
     expect(detail.sections.moveIn.join(" ")).not.toContain("暂未开放");
   });
 
@@ -55,9 +55,9 @@ describe("listing detail", () => {
   });
 
   it("builds a reusable listing gallery for search cards and detail pages", () => {
-    const gallery = buildListingGallery(listing);
+    const gallery = buildListingGallery({ ...listing, images: [listing.image, "https://images.example/kitchen.jpg", listing.image] });
 
-    expect(gallery).toHaveLength(4);
+    expect(gallery).toEqual([listing.image, "https://images.example/kitchen.jpg"]);
     expect(gallery[0]).toBe(listing.image);
     expect(new Set(gallery).size).toBe(gallery.length);
   });
@@ -65,7 +65,7 @@ describe("listing detail", () => {
   it("does not put an empty image URL into the detail gallery", () => {
     const gallery = buildListingGallery({ image: "" });
 
-    expect(gallery).toHaveLength(3);
+    expect(gallery).toHaveLength(0);
     expect(gallery).not.toContain("");
   });
 

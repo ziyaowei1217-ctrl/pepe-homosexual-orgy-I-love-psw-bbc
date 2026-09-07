@@ -1,0 +1,370 @@
+[
+  {
+    "id": "page-home",
+    "kind": "page",
+    "category": "公共浏览",
+    "title": "找房首页",
+    "description": "房源目录、搜索筛选与地图浏览的完整桌面界面。",
+    "image": "screenshots/page-home.png"
+  },
+  {
+    "id": "page-listing-detail",
+    "kind": "page",
+    "category": "公共浏览",
+    "title": "房源详情",
+    "description": "房源图片、价格、设施、房东信息与行动入口的完整视图。",
+    "image": "screenshots/page-listing-detail.png"
+  },
+  {
+    "id": "page-login",
+    "kind": "page",
+    "category": "账户",
+    "title": "邮箱登录",
+    "description": "通过邮箱验证码进入产品的登录界面。",
+    "image": "screenshots/page-login.png"
+  },
+  {
+    "id": "page-account-onboarding",
+    "kind": "page",
+    "category": "账户",
+    "title": "新用户引导",
+    "description": "登录后的个人资料补全与首次使用引导。",
+    "image": "screenshots/page-account-onboarding.png"
+  },
+  {
+    "id": "page-account",
+    "kind": "page",
+    "category": "账户",
+    "title": "账户中心",
+    "description": "个人资料、身份状态与账户相关设置。",
+    "image": "screenshots/page-account.png"
+  },
+  {
+    "id": "page-roommates",
+    "kind": "page",
+    "category": "室友",
+    "title": "室友发现",
+    "description": "基于生活方式与预算偏好的室友卡片推荐界面。",
+    "image": "screenshots/page-roommates.png"
+  },
+  {
+    "id": "page-roommate-likes",
+    "kind": "page",
+    "category": "室友",
+    "title": "室友意向队列",
+    "description": "集中查看已喜欢、互相匹配与待处理的室友关系。",
+    "image": "screenshots/page-roommate-likes.png"
+  },
+  {
+    "id": "page-messages",
+    "kind": "page",
+    "category": "消息",
+    "title": "统一消息中心",
+    "description": "在同一收件箱处理房东沟通与室友会话。",
+    "image": "screenshots/page-messages.png"
+  },
+  {
+    "id": "page-trips",
+    "kind": "page",
+    "category": "租客",
+    "title": "行程与申请",
+    "description": "查看租房申请、支付状态和入住确认的完整旅程。",
+    "image": "screenshots/page-trips.png"
+  },
+  {
+    "id": "page-host-listings",
+    "kind": "page",
+    "category": "房东",
+    "title": "房东发布中心",
+    "description": "创建房源、管理图片并处理现有房源与申请。",
+    "image": "screenshots/page-host-listings.png"
+  },
+  {
+    "id": "page-admin-trust",
+    "kind": "page",
+    "category": "管理员",
+    "title": "信任与审核后台",
+    "description": "管理员审核房源并执行受保护的审核操作。",
+    "image": "screenshots/page-admin-trust.png"
+  },
+  {
+    "id": "page-admin-roommates",
+    "kind": "page",
+    "category": "管理员",
+    "title": "室友资料后台",
+    "description": "创建、编辑与归档室友发现卡片。",
+    "image": "screenshots/page-admin-roommates.png"
+  },
+  {
+    "id": "panel-search-filters",
+    "kind": "panel",
+    "category": "公共浏览",
+    "title": "搜索筛选",
+    "description": "按日期、价格与居住条件缩小房源范围。",
+    "image": "screenshots/panel-search-filters.png"
+  },
+  {
+    "id": "panel-date-picker",
+    "kind": "panel",
+    "category": "公共浏览",
+    "title": "入住日期选择",
+    "description": "选择精确入住区间或灵活日期。",
+    "image": "screenshots/panel-date-picker.png"
+  },
+  {
+    "id": "panel-map",
+    "kind": "panel",
+    "category": "公共浏览",
+    "title": "房源地图",
+    "description": "通过地图标记和价格快速理解房源分布。",
+    "image": "screenshots/panel-map.png"
+  },
+  {
+    "id": "panel-listing-card",
+    "kind": "panel",
+    "category": "公共浏览",
+    "title": "房源卡片",
+    "description": "价格、信任信息、通勤与收藏入口的紧凑摘要。",
+    "image": "screenshots/panel-listing-card.png"
+  },
+  {
+    "id": "panel-local-favorites",
+    "kind": "panel",
+    "category": "公共浏览",
+    "title": "本地收藏",
+    "description": "集中浏览访客在本机保存的房源。",
+    "image": "screenshots/panel-local-favorites.png"
+  },
+  {
+    "id": "panel-listing-detail",
+    "kind": "panel",
+    "category": "租客",
+    "title": "房源决策面板",
+    "description": "将房源信息、可信度和关键行动收拢在一个决策视图中。",
+    "image": "screenshots/panel-listing-detail.png"
+  },
+  {
+    "id": "panel-dynamic-match",
+    "kind": "panel",
+    "category": "租客",
+    "title": "动态匹配提示",
+    "description": "根据当前筛选条件解释房源匹配程度。",
+    "image": "screenshots/panel-dynamic-match.png"
+  },
+  {
+    "id": "panel-viewing-schedule",
+    "kind": "panel",
+    "category": "租客",
+    "title": "看房预约",
+    "description": "选择可用时间并向房东提交看房请求。",
+    "image": "screenshots/panel-viewing-schedule.png"
+  },
+  {
+    "id": "panel-rental-application",
+    "kind": "panel",
+    "category": "租客",
+    "title": "租房申请",
+    "description": "支持个人或双人室友团队提交正式申请。",
+    "image": "screenshots/panel-rental-application.png"
+  },
+  {
+    "id": "panel-application-status",
+    "kind": "panel",
+    "category": "租客",
+    "title": "申请状态",
+    "description": "展示申请审核、支付和入住确认的当前阶段。",
+    "image": "screenshots/panel-application-status.png"
+  },
+  {
+    "id": "panel-demo-payment",
+    "kind": "panel",
+    "category": "租客",
+    "title": "演示支付",
+    "description": "明确标注演示模式的付款、资金持有与流水状态。",
+    "image": "screenshots/panel-demo-payment.png"
+  },
+  {
+    "id": "panel-next-actions",
+    "kind": "panel",
+    "category": "租客",
+    "title": "下一步行动",
+    "description": "根据当前旅程阶段给出清晰的后续操作。",
+    "image": "screenshots/panel-next-actions.png"
+  },
+  {
+    "id": "panel-roommate-preferences",
+    "kind": "panel",
+    "category": "室友",
+    "title": "室友偏好",
+    "description": "设置预算、学校、生活习惯与合租性别偏好。",
+    "image": "screenshots/panel-roommate-preferences.png"
+  },
+  {
+    "id": "panel-roommate-discovery",
+    "kind": "panel",
+    "category": "室友",
+    "title": "室友推荐卡",
+    "description": "呈现匹配分数、共同点、注意事项和破冰建议。",
+    "image": "screenshots/panel-roommate-discovery.png"
+  },
+  {
+    "id": "panel-like-actions",
+    "kind": "panel",
+    "category": "室友",
+    "title": "室友意向操作",
+    "description": "对推荐对象执行跳过、喜欢与后续匹配操作。",
+    "image": "screenshots/panel-like-actions.png"
+  },
+  {
+    "id": "panel-like-list",
+    "kind": "panel",
+    "category": "室友",
+    "title": "室友意向列表",
+    "description": "查看已表达意向和已经互相匹配的对象。",
+    "image": "screenshots/panel-like-list.png"
+  },
+  {
+    "id": "panel-two-person-team",
+    "kind": "panel",
+    "category": "室友",
+    "title": "双人室友团队",
+    "description": "处理邀请、确认与解散双人申请团队。",
+    "image": "screenshots/panel-two-person-team.png"
+  },
+  {
+    "id": "panel-unified-inbox",
+    "kind": "panel",
+    "category": "消息",
+    "title": "统一收件箱",
+    "description": "将房东与室友会话按未读状态集中排列。",
+    "image": "screenshots/panel-unified-inbox.png"
+  },
+  {
+    "id": "panel-landlord-messages",
+    "kind": "panel",
+    "category": "消息",
+    "title": "房东会话",
+    "description": "围绕房源咨询、看房和后续决策与房东沟通。",
+    "image": "screenshots/panel-landlord-messages.png"
+  },
+  {
+    "id": "panel-roommate-chat",
+    "kind": "panel",
+    "category": "消息",
+    "title": "室友聊天",
+    "description": "匹配成功后的持久化一对一室友会话。",
+    "image": "screenshots/panel-roommate-chat.png"
+  },
+  {
+    "id": "panel-notifications",
+    "kind": "panel",
+    "category": "消息",
+    "title": "通知中心",
+    "description": "汇总申请、消息和旅程中的重要提醒。",
+    "image": "screenshots/panel-notifications.png"
+  },
+  {
+    "id": "panel-listing-form",
+    "kind": "panel",
+    "category": "房东",
+    "title": "房源发布表单",
+    "description": "录入位置、租期、价格、设施与房源说明。",
+    "image": "screenshots/panel-listing-form.png"
+  },
+  {
+    "id": "panel-media-uploader-empty",
+    "kind": "panel",
+    "category": "房东",
+    "title": "图片上传起始状态",
+    "description": "尚未上传图片时的文件要求和操作入口。",
+    "image": "screenshots/panel-media-uploader-empty.png"
+  },
+  {
+    "id": "panel-media-uploader",
+    "kind": "panel",
+    "category": "房东",
+    "title": "房源图片管理",
+    "description": "上传、排序并选择房源封面图片。",
+    "image": "screenshots/panel-media-uploader.png"
+  },
+  {
+    "id": "panel-listing-submit",
+    "kind": "panel",
+    "category": "房东",
+    "title": "提交审核",
+    "description": "完成校验后保存草稿或提交管理员审核。",
+    "image": "screenshots/panel-listing-submit.png"
+  },
+  {
+    "id": "panel-my-listings",
+    "kind": "panel",
+    "category": "房东",
+    "title": "我的房源",
+    "description": "查看房东名下房源及其审核与发布状态。",
+    "image": "screenshots/panel-my-listings.png"
+  },
+  {
+    "id": "panel-host-application-inbox",
+    "kind": "panel",
+    "category": "房东",
+    "title": "申请收件箱",
+    "description": "查看租客资料并接受或拒绝租房申请。",
+    "image": "screenshots/panel-host-application-inbox.png"
+  },
+  {
+    "id": "panel-email-login",
+    "kind": "panel",
+    "category": "账户",
+    "title": "邮箱登录面板",
+    "description": "输入受邀邮箱并请求一次性验证码。",
+    "image": "screenshots/panel-email-login.png"
+  },
+  {
+    "id": "panel-verification-code",
+    "kind": "panel",
+    "category": "账户",
+    "title": "验证码确认",
+    "description": "输入邮件验证码并继续返回原始产品流程。",
+    "image": "screenshots/panel-verification-code.png"
+  },
+  {
+    "id": "panel-profile-onboarding",
+    "kind": "panel",
+    "category": "账户",
+    "title": "个人资料引导",
+    "description": "为首次登录用户补全昵称、学校与个人介绍。",
+    "image": "screenshots/panel-profile-onboarding.png"
+  },
+  {
+    "id": "panel-account-profile",
+    "kind": "panel",
+    "category": "账户",
+    "title": "账户资料",
+    "description": "编辑已登录用户的公开身份与租住偏好。",
+    "image": "screenshots/panel-account-profile.png"
+  },
+  {
+    "id": "panel-admin-step-up",
+    "kind": "panel",
+    "category": "管理员",
+    "title": "管理员二次验证",
+    "description": "执行审核写操作前要求短时有效的安全验证。",
+    "image": "screenshots/panel-admin-step-up.png"
+  },
+  {
+    "id": "panel-trust-review",
+    "kind": "panel",
+    "category": "管理员",
+    "title": "房源信任审核",
+    "description": "查看待审房源并记录管理员审核决定。",
+    "image": "screenshots/panel-trust-review.png"
+  },
+  {
+    "id": "panel-roommate-management",
+    "kind": "panel",
+    "category": "管理员",
+    "title": "室友资料管理",
+    "description": "维护室友推荐资料、标签、匹配信号与归档状态。",
+    "image": "screenshots/panel-roommate-management.png"
+  }
+]

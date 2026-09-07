@@ -1,4 +1,5 @@
 import { apiGet, apiPostIdempotent } from "./api";
+import { localDate } from "./listing-stay";
 import type { ApiRentalApplication } from "./rental-applications";
 
 export const DEMO_PAYMENT_DISCLAIMER = "演示模式，不会真实扣款";
@@ -64,8 +65,10 @@ export function demoPaymentStatusLabel(status: ApiDemoPaymentState["payment"]["s
 }
 
 export function canConfirmDemoMoveIn(moveIn: string, now = Date.now()) {
-  const moveInAt = Date.parse(moveIn);
-  return Number.isFinite(moveInAt) && now >= moveInAt;
+  const day = moveIn.slice(0, 10);
+  const moveInAt = Date.parse(`${day}T00:00:00Z`);
+  return /^\d{4}-\d{2}-\d{2}$/.test(day) && Number.isFinite(moveInAt) && Number.isFinite(now) &&
+    new Date(moveInAt).toISOString().slice(0, 10) === day && localDate(new Date(now)) >= day;
 }
 
 export function demoLedgerAccountLabel(account: string) {

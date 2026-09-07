@@ -49,6 +49,7 @@ type ListingRecord = {
   tags: string[];
   score: number;
   status: ListingStatus;
+  revision: number;
   submittedAt: Date | null;
   reviewedAt: Date | null;
   reviewerId: string | null;
@@ -147,6 +148,7 @@ type DealMessageRecord = {
   threadId: string;
   senderId: string | null;
   senderName: string;
+  clientMessageId?: string | null;
   body: string;
   align: string;
   status: string;
@@ -154,6 +156,7 @@ type DealMessageRecord = {
 };
 
 type ViewingRequestRecord = {
+  revision: number;
   id: string;
   threadId: string;
   requesterId: string;
@@ -282,6 +285,7 @@ type ListingWhere = {
   id?: string;
   ownerId?: string;
   status?: ListingStatus;
+  revision?: number;
   availableFrom?: { lte: Date };
   availableTo?: { gte: Date };
 };
@@ -661,6 +665,7 @@ export function createLaunchPrismaMock() {
           tags: data.tags ?? [],
           score: data.score ?? 4.8,
           status: data.status ?? "DRAFT",
+          revision: data.revision ?? 0,
           submittedAt: data.submittedAt ?? null,
           reviewedAt: data.reviewedAt ?? null,
           reviewerId: data.reviewerId ?? null,
@@ -678,10 +683,11 @@ export function createLaunchPrismaMock() {
         Object.assign(listing, definedData(data), { updatedAt: new Date() });
         return listing;
       },
-      updateMany: async ({ where, data }: { where: ListingWhere; data: Partial<ListingRecord> }) => {
+      updateMany: async ({ where, data }: { where: ListingWhere; data: Omit<Partial<ListingRecord>, "revision"> & { revision?: number | { increment: number } } }) => {
         const matches = state.listings.filter((listing) => matchesListing(listing, where));
         for (const listing of matches) {
-          Object.assign(listing, definedData(data), { updatedAt: new Date() });
+          const revision = typeof data.revision === "object" ? listing.revision + data.revision.increment : data.revision ?? listing.revision;
+          Object.assign(listing, definedData(data), { revision, updatedAt: new Date() });
         }
         return { count: matches.length };
       }
@@ -819,6 +825,11 @@ export function createLaunchPrismaMock() {
       }
     },
     dealRoom: {
+      updateMany: async ({ where, data }: { where: { id: string; ownerId: string; status: DealRoomStatus }; data: { status: DealRoomStatus } }) => {
+        const rows = state.rooms.filter(room => room.id === where.id && room.ownerId === where.ownerId && room.status === where.status);
+        rows.forEach(room => Object.assign(room, data, { updatedAt: new Date() }));
+        return { count: rows.length };
+      },
       findUnique: async ({
         where
       }: {
@@ -1013,6 +1024,9 @@ export function createLaunchPrismaMock() {
       }
     },
     dealMessage: {
+      findUnique: async ({ where }: { where: { senderId_clientMessageId: { senderId: string; clientMessageId: string } } }) =>
+        state.dealMessages.find(message => message.senderId === where.senderId_clientMessageId.senderId
+          && message.clientMessageId === where.senderId_clientMessageId.clientMessageId) ?? null,
       create: async ({
         data
       }: {
@@ -1033,6 +1047,12 @@ export function createLaunchPrismaMock() {
       }
     },
     viewingRequest: {
+      updateMany: async ({ where, data }: any) => {
+        const record = state.viewingRequests.find(item => Object.entries(where).every(([key, value]) => (item as any)[key] === value));
+        if (!record) return { count: 0 };
+        Object.assign(record, data, { revision: record.revision + data.revision.increment });
+        return { count: 1 };
+      },
       findUnique: async ({ where }: { where: { id: string } }) =>
         state.viewingRequests.find((request) => request.id === where.id) ?? null,
       findFirst: async ({
@@ -1056,10 +1076,11 @@ export function createLaunchPrismaMock() {
       create: async ({
         data
       }: {
-        data: Omit<ViewingRequestRecord, "id" | "createdAt" | "updatedAt">;
+        data: Omit<ViewingRequestRecord, "id" | "createdAt" | "updatedAt" | "revision">;
       }) => {
         const created: ViewingRequestRecord = {
           id: `viewing-request-${state.viewingRequests.length + 1}`,
+          revision: 1,
           ...data,
           createdAt: new Date(),
           updatedAt: new Date()
@@ -1074,12 +1095,12 @@ export function createLaunchPrismaMock() {
         data
       }: {
         where: { id: string };
-        data: Partial<Omit<ViewingRequestRecord, "id" | "createdAt" | "updatedAt">>;
+        data: Partial<Omit<ViewingRequestRecord, "id" | "createdAt" | "updatedAt" | "revision">> & { revision?: { increment: number } };
       }) => {
         const request = state.viewingRequests.find((record) => record.id === where.id);
         if (!request) throw new Error(`Missing viewing request ${where.id}`);
 
-        Object.assign(request, definedData(data), { updatedAt: new Date() });
+        Object.assign(request, definedData(data), { revision: request.revision + (data.revision?.increment ?? 0), updatedAt: new Date() });
         const thread = state.dealThreads.find((record) => record.id === request.threadId);
         if (thread) thread.updatedAt = new Date();
         return request;
@@ -1116,6 +1137,7 @@ function matchesListing(listing: ListingRecord, where: ListingWhere = {}) {
   if (where.id && listing.id !== where.id) return false;
   if (where.ownerId && listing.ownerId !== where.ownerId) return false;
   if (where.status && listing.status !== where.status) return false;
+  if (where.revision !== undefined && listing.revision !== where.revision) return false;
   if (where.availableFrom?.lte && listing.availableFrom > where.availableFrom.lte) return false;
   if (where.availableTo?.gte && listing.availableTo < where.availableTo.gte) return false;
   return true;

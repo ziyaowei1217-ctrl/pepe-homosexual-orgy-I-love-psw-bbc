@@ -126,6 +126,55 @@ describe("roommate matching deck", () => {
     expect(response.items[0].recommendation.action).toBe("like");
   });
 
+  it("returns Chinese match reasons for the Chinese roommate experience", () => {
+    const response = buildRoommateDeck([{
+      id: "roommate-1",
+      name: "Mia Chen",
+      age: 22,
+      role: "UCLA MSBA",
+      image: "https://example.com/mia.jpg",
+      match: 94,
+      budget: "$1,650/月",
+      commute: "Westwood",
+      tags: ["早睡", "安静"]
+    }], { limit: 1, budgetMin: 1200, budgetMax: 1800, school: "UCLA", hobby: "早睡" });
+
+    expect(response.items[0].reasons).toEqual(expect.arrayContaining([
+      "学校或职业方向匹配：UCLA",
+      "共同生活习惯：早睡"
+    ]));
+    expect(response.items[0].reasons[0]).toMatch(/^预算匹配：\$[\d,]+$/);
+    expect(response.items[0].reasons.join(" ")).not.toMatch(/Budget|Shared|track overlap|High baseline|Quiet-home/);
+  });
+
+  it("never fabricates identity or profile facts for expanded ranking samples", () => {
+    const source = {
+      id: "roommate-identity",
+      name: "Ivy Huang",
+      age: 22,
+      role: "USC Marshall · Fall",
+      image: "https://example.com/ivy.jpg",
+      match: 92,
+      budget: "$1,560/月",
+      commute: "USC / Koreatown",
+      tags: ["早睡", "安静"]
+    };
+    const response = buildRoommateDeck([source], { limit: 24 });
+    const expanded = response.items.find((item) => item.id !== source.id);
+
+    expect(expanded).toBeDefined();
+    expect(expanded).toMatchObject({
+      actionTargetId: source.id,
+      name: source.name,
+      age: source.age,
+      role: source.role,
+      image: source.image,
+      budget: source.budget,
+      commute: source.commute,
+      tags: source.tags
+    });
+  });
+
   it("supports a discovery strategy with controlled exploration metadata", () => {
     const response = buildRoommateDeck([
       {
@@ -268,6 +317,45 @@ describe("roommate deck HTTP endpoint", () => {
           })
         });
         expect(body.items).toEqual([]);
+      });
+  });
+
+  it("opens the exact expanded candidate shown in the roommate deck", async () => {
+    const prisma = app.get(PrismaService);
+    await prisma.roommateProfile.create({
+      data: {
+        id: "roommate-detail-source",
+        name: "Ivy Huang",
+        age: 22,
+        role: "USC Marshall · Fall",
+        image: "https://example.com/ivy.jpg",
+        match: 92,
+        budget: "$1,560/月",
+        commute: "USC / Koreatown",
+        tags: ["早睡", "安静"]
+      }
+    });
+    const deckResponse = await request(app.getHttpServer())
+      .get("/api/v1/roommates/deck?limit=24")
+      .expect(200);
+    const expandedCandidate = deckResponse.body.items.find((item: { id?: string; actionTargetId?: string }) =>
+      item.id && item.actionTargetId && item.id !== item.actionTargetId
+    );
+
+    expect(expandedCandidate).toBeDefined();
+
+    await request(app.getHttpServer())
+      .get(`/api/v1/roommates/deck/${encodeURIComponent(expandedCandidate.id)}`)
+      .expect(200)
+      .expect(({ body }: { body: Record<string, unknown> }) => {
+        expect(body).toMatchObject({
+          id: expandedCandidate.id,
+          actionTargetId: expandedCandidate.actionTargetId,
+          name: expandedCandidate.name,
+          role: expandedCandidate.role,
+          budget: expandedCandidate.budget,
+          commute: expandedCandidate.commute
+        });
       });
   });
 });

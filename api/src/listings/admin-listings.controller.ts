@@ -5,8 +5,15 @@ import { AdminGuard } from "../auth/admin.guard";
 import { AdminStepUpGuard } from "../auth/admin-step-up.guard";
 import { AuthGuard, AuthenticatedRequest } from "../auth/auth.guard";
 import { RequestWithId } from "../http/request-id";
-import { RejectListingDto } from "./dto";
+import { RejectListingDto, ReviewListingDto } from "./dto";
 import { ListingsService } from "./listings.service";
+
+const reviewListingBodyPipe = new ValidationPipe({
+  whitelist: true,
+  forbidNonWhitelisted: true,
+  transform: true,
+  expectedType: ReviewListingDto
+});
 
 const rejectListingBodyPipe = new ValidationPipe({
   whitelist: true,
@@ -27,8 +34,12 @@ export class AdminListingsController {
 
   @Post(":id/approve")
   @UseGuards(AdminStepUpGuard)
-  approve(@Req() request: AuthenticatedRequest & RequestWithId, @Param("id") id: string) {
-    return this.listings.approve(id, requestAuditActor(request));
+  approve(
+    @Req() request: AuthenticatedRequest & RequestWithId,
+    @Param("id") id: string,
+    @Body(reviewListingBodyPipe) dto: ReviewListingDto
+  ) {
+    return this.listings.approve(id, requestAuditActor(request), dto.revision);
   }
 
   @Post(":id/reject")
@@ -38,7 +49,7 @@ export class AdminListingsController {
     @Param("id") id: string,
     @Body(rejectListingBodyPipe) dto: RejectListingDto
   ) {
-    return this.listings.reject(id, requestAuditActor(request), dto.reason);
+    return this.listings.reject(id, requestAuditActor(request), dto.reason, dto.revision);
   }
 }
 

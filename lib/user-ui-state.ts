@@ -29,6 +29,14 @@ export function getUserUiStorageKey(userId: string) {
   return `sublet-user-ui-v2:${userId}`;
 }
 
+export function getGuestUiStorageKey() {
+  return "sublet-guest-ui-v2";
+}
+
+export function mergeFavoriteListingIds(...favoriteGroups: string[][]) {
+  return Array.from(new Set(favoriteGroups.flat()));
+}
+
 export function normalizeUserUiState(value: unknown): UserUiState {
   if (!isRecord(value) || value.version !== 2) return cloneEmptyState();
 
