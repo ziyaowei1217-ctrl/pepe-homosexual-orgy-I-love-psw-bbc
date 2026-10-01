@@ -133,19 +133,23 @@ export function RoommateLikesExperience() {
 function RoommateLikesSessionExperience({ token }: { token: string | null }) {
   const [tab, setTab] = useState<"inbound" | "outbound" | "matched">("inbound");
   const [activity, setActivity] = useState<ApiRoommateActivity | null>(null);
-  const [authenticated, setAuthenticated] = useState(false);
+  const authenticated = Boolean(token);
+  const [loading, setLoading] = useState(Boolean(token));
+  const [loadAttempt, setLoadAttempt] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!token) return;
-    setAuthenticated(true);
+    setLoading(true);
+    setError(null);
     let cancelled = false;
     const isCurrent = () => !cancelled && readStoredAuthSession()?.accessToken === token;
     apiGet<ApiRoommateActivity>("/roommates/activity", token)
       .then((next) => { if (isCurrent()) setActivity(next); })
-      .catch((caught) => { if (isCurrent()) setError(caught instanceof Error ? caught.message : "喜欢列表暂时无法加载。"); });
+      .catch((caught) => { if (isCurrent()) setError(caught instanceof Error ? caught.message : "喜欢列表暂时无法加载。"); })
+      .finally(() => { if (isCurrent()) setLoading(false); });
     return () => { cancelled = true; };
-  }, [token]);
+  }, [token, loadAttempt]);
 
   const items = useMemo(() => {
     if (!activity) return [];
@@ -154,8 +158,8 @@ function RoommateLikesSessionExperience({ token }: { token: string | null }) {
     return activity.outbound.map((item) => item.profile).filter((profile) => profile.id && activity.matchedProfileIds.includes(profile.id));
   }, [activity, tab]);
 
-  return <main className="min-h-[calc(100dvh-72px)] bg-[#f7f8fb]"><div className="mx-auto max-w-[1220px] px-4 py-10 sm:px-6 lg:px-8"><header className="border-b border-slate-200 pb-7"><Link href="/roommates" className="flex items-center gap-1 text-xs font-black text-slate-500"><ArrowLeft className="size-3.5" />返回匹配</Link><h1 className="mt-4 text-4xl font-black tracking-[-0.055em] sm:text-6xl">喜欢与匹配</h1><p className="mt-3 text-sm text-slate-500">单向兴趣和双方匹配分别展示。</p><Link href="/roommates/teams" className="secondary-action mt-5"><UsersRound className="size-4" />合租小组</Link></header><div className="mt-7 flex gap-2">{[["inbound","喜欢我的"],["outbound","我喜欢的"],["matched","已匹配"]].map(([value,label]) => <button key={value} onClick={() => setTab(value as typeof tab)} className={cn("rounded-full border px-4 py-2.5 text-sm font-black", tab === value ? "border-slate-950 bg-slate-950 text-white" : "border-slate-200 bg-white")}>{label}</button>)}</div>{!authenticated ? <div className="mt-7"><StatusCard text="登录后查看真实喜欢与匹配" /><Link href={authRoute({ returnTo: "/roommates/likes" })} className="primary-action mx-auto mt-4 w-fit">登录</Link></div> : null}{error ? <StatusCard text={error} error /> : null}{authenticated && activity && items.length === 0 ? <StatusCard text="这里还没有记录。" /> : null}<div className="mt-7 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">{items.map((profile) => <ProfileCard key={profile.id ?? profile.name} profile={profile} matched={Boolean(profile.id && activity?.matchedProfileIds.includes(profile.id))} />)}</div></div></main>;
+  return <main className="min-h-[calc(100dvh-72px)] bg-[#f7f8fb]"><div className="mx-auto max-w-[1220px] px-4 py-10 sm:px-6 lg:px-8"><header className="border-b border-slate-200 pb-7"><Link href="/roommates" className="flex items-center gap-1 text-xs font-black text-slate-500"><ArrowLeft className="size-3.5" />返回匹配</Link><h1 className="mt-4 text-4xl font-black tracking-[-0.055em] sm:text-6xl">喜欢与匹配</h1><p className="mt-3 text-sm text-slate-500">单向兴趣和双方匹配分别展示。</p><Link href="/roommates/teams" className="secondary-action mt-5"><UsersRound className="size-4" />合租小组</Link></header><div className="mt-7 flex gap-2">{[["inbound","喜欢我的"],["outbound","我喜欢的"],["matched","已匹配"]].map(([value,label]) => <button key={value} onClick={() => setTab(value as typeof tab)} className={cn("rounded-full border px-4 py-2.5 text-sm font-black", tab === value ? "border-slate-950 bg-slate-950 text-white" : "border-slate-200 bg-white")}>{label}</button>)}</div>{!authenticated ? <div className="mt-7"><StatusCard text="登录后查看真实喜欢与匹配" /><Link href={authRoute({ returnTo: "/roommates/likes" })} className="primary-action mx-auto mt-4 w-fit">登录</Link></div> : null}{loading ? <StatusCard text="正在加载喜欢与匹配…" loading /> : null}{error ? <><StatusCard text={error} error /><button type="button" onClick={() => setLoadAttempt((attempt) => attempt + 1)} className="primary-action mt-4">重新加载喜欢与匹配</button></> : null}{authenticated && !loading && !error && activity && items.length === 0 ? <StatusCard text="这里还没有记录。" /> : null}<div className="mt-7 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">{items.map((profile) => <ProfileCard key={profile.id ?? profile.name} profile={profile} matched={Boolean(profile.id && activity?.matchedProfileIds.includes(profile.id))} />)}</div></div></main>;
 }
 
 function ProfileCard({ profile, matched }: { profile: ApiRoommate; matched: boolean }) { return <article className="overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-sm"><Link href={`/roommates/${encodeURIComponent(profile.id ?? "")}`} className="relative block aspect-[4/3] bg-slate-100"><Image src={profile.image} alt={profile.name} fill sizes="(max-width:768px) 100vw, 33vw" className="object-cover" /></Link><div className="p-5"><h2 className="text-lg font-black">{profile.name}, {profile.age}</h2><p className="mt-1 text-xs text-slate-500">{profile.role}</p><div className="mt-4 flex gap-2">{matched ? <Link href={`/inbox?roommateId=${encodeURIComponent(profile.id ?? "")}`} className="primary-action"><MessageCircle className="size-4" />开始聊天</Link> : <span className="rounded-full bg-blue-50 px-3 py-2 text-xs font-black text-blue-700">等待回应</span>}</div></div></article>; }
-function StatusCard({ text, error = false }: { text: string; error?: boolean }) { return <div role={error ? "alert" : undefined} className={cn("mt-6 rounded-[24px] border border-dashed bg-white p-10 text-center text-sm font-bold", error ? "border-red-200 text-red-700" : "border-slate-300 text-slate-500")}>{text}</div>; }
+function StatusCard({ text, error = false, loading = false }: { text: string; error?: boolean; loading?: boolean }) { return <div role={error ? "alert" : loading ? "status" : undefined} className={cn("mt-6 rounded-[24px] border border-dashed bg-white p-10 text-center text-sm font-bold", error ? "border-red-200 text-red-700" : "border-slate-300 text-slate-500")}>{text}</div>; }

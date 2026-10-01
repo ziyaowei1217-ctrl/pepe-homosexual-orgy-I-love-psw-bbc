@@ -21,6 +21,7 @@ import { useSavedListings } from "@/components/marketplace/saved-listings-provid
 import { useModalFocus } from "@/components/marketplace/use-modal-focus";
 import { defaultMapAttribution, getMapCenterForListings, getMapMarkers, getMapTiles } from "@/lib/listing-map";
 import { DEFAULT_SAVED_COLLECTION_ID, getSavedListingIds } from "@/lib/saved-collections";
+import { clusterSearchMarkers } from "@/lib/search-map-clusters";
 import type { PreviewListing } from "@/lib/preview-data";
 import { cn } from "@/lib/utils";
 
@@ -64,7 +65,7 @@ export function SavedPageExperience({ listings }: { listings: PreviewListing[] }
               <p className="col-span-2 row-start-2 max-w-2xl text-sm leading-6 text-slate-500 sm:mt-4 sm:text-base">把喜欢的房放在一起比较。清单、备注与排序都只保存在当前设备。</p>
               <div className="col-span-2 row-start-3 inline-flex w-fit items-center gap-2 rounded-full bg-amber-50 px-3 py-1.5 text-xs font-bold text-amber-800 sm:mt-4"><Info className="size-3.5 shrink-0" />{accountLabel}，暂不跨设备同步</div>
             </div>
-            <button type="button" onClick={() => { setCollectionError(null); setCreateOpen(true); }} className="col-start-2 row-start-1 flex min-h-11 shrink-0 items-center justify-center gap-1.5 rounded-full bg-slate-950 px-4 py-2.5 text-sm font-black text-white shadow-lg transition-transform hover:-translate-y-0.5 sm:gap-2 sm:px-5 sm:py-3"><Plus className="size-4" />新建清单</button>
+            <button type="button" onClick={(event) => { event.currentTarget.focus(); setCollectionError(null); setCreateOpen(true); }} className="col-start-2 row-start-1 flex min-h-11 shrink-0 items-center justify-center gap-1.5 rounded-full bg-slate-950 px-4 py-2.5 text-sm font-black text-white shadow-lg transition-transform hover:-translate-y-0.5 sm:gap-2 sm:px-5 sm:py-3"><Plus className="size-4" />新建清单</button>
           </div>
         </div>
       </section>
@@ -165,9 +166,12 @@ function NewCollectionDialog({ name, error, onNameChange, onSubmit, onClose }: {
 export function SavedMap({ listings }: { listings: PreviewListing[] }) {
   const canvas = useRef<HTMLElement>(null);
   const [mapSize, setMapSize] = useState({ width: 720, height: 620 });
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const center = getMapCenterForListings(listings);
   const tiles = getMapTiles(center, 11, mapSize);
   const markers = getMapMarkers(listings, center, 11, mapSize);
+  const clusters = clusterSearchMarkers(markers);
+  const selectedListings = listings.filter((listing) => selectedIds.includes(listing.id));
   const attribution = process.env.NEXT_PUBLIC_MAP_ATTRIBUTION ?? defaultMapAttribution;
 
   useEffect(() => {
@@ -186,9 +190,28 @@ export function SavedMap({ listings }: { listings: PreviewListing[] }) {
       <div className="absolute inset-0" aria-hidden="true">
         {tiles.map((tile) => <div key={tile.id} className="absolute size-64 select-none bg-cover bg-center" style={{ backgroundImage: `url(${tile.url})`, left: tile.x, top: tile.y }} />)}
       </div>
-      {markers.map((marker) => <Link key={marker.id} href={`/listing/${encodeURIComponent(marker.id)}`} style={{ left: marker.x, top: marker.y }} className="absolute z-20 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-slate-950 px-3 py-2 text-xs font-black text-white shadow-xl">{marker.label}</Link>)}
+      {clusters.map((cluster) => {
+        const marker = cluster.items[0];
+        const position = { left: cluster.x, top: cluster.y };
+        const className = "absolute z-20 flex min-h-11 -translate-x-1/2 -translate-y-1/2 items-center rounded-full border-2 border-white bg-slate-950 px-3 py-2 text-xs font-black text-white shadow-xl";
+        return cluster.items.length > 1
+          ? <button key={cluster.items.map((item) => item.id).join(",")} type="button" style={position} className={className} aria-label={`查看此区域 ${cluster.items.length} 套收藏房源`} aria-haspopup="dialog" onClick={(event) => { event.currentTarget.focus(); setSelectedIds(cluster.items.map((item) => item.id)); }}>{cluster.items.length} 套收藏房源</button>
+          : <Link key={marker.id} href={`/listing/${encodeURIComponent(marker.id)}`} style={position} className={className} aria-label={`查看 ${marker.title ?? marker.area} ${marker.label} / 月`}>{marker.label}</Link>;
+      })}
       <div className="absolute left-4 top-4 z-30 rounded-full bg-white/94 px-4 py-2 text-xs font-black shadow-lg">{listings.length} 个收藏位置</div>
       <span className="absolute bottom-2 right-3 z-30 rounded bg-white/85 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600">{attribution}</span>
+      {selectedListings.length ? <SavedMapClusterDialog listings={selectedListings} onClose={() => setSelectedIds([])} /> : null}
     </aside>
   );
+}
+
+function SavedMapClusterDialog({ listings, onClose }: { listings: PreviewListing[]; onClose: () => void }) {
+  const dialog = useRef<HTMLElement>(null);
+  useModalFocus(dialog, onClose);
+  return <div className="marketplace-modal-backdrop fixed inset-0 z-[80] grid place-items-center bg-slate-950/35 p-4 backdrop-blur-sm" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+    <section ref={dialog} role="dialog" aria-modal="true" aria-labelledby="saved-map-cluster-title" className="marketplace-modal-panel max-h-[calc(100dvh-32px)] w-full max-w-md overflow-y-auto rounded-[24px] bg-white p-5 shadow-2xl">
+      <header className="flex items-center justify-between gap-3"><h2 id="saved-map-cluster-title" className="min-w-0 text-base font-bold">此区域的 {listings.length} 套收藏房源</h2><button type="button" onClick={onClose} aria-label="关闭区域收藏房源" className="grid size-11 shrink-0 place-items-center rounded-full hover:bg-slate-100"><X className="size-5" /></button></header>
+      <div className="mt-3 space-y-2">{listings.map((listing) => <Link key={listing.id} href={`/listing/${encodeURIComponent(listing.id)}`} className="flex min-h-11 items-center justify-between gap-3 rounded-xl border border-slate-200 px-3 py-3 text-sm hover:bg-blue-50"><span className="min-w-0 break-words">{listing.title}</span><strong className="shrink-0 text-xs">${listing.price.toLocaleString()}/月</strong></Link>)}</div>
+    </section>
+  </div>;
 }
