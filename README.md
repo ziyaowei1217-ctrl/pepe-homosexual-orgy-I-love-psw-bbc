@@ -31,14 +31,14 @@ Earlier files under `output/handoff` are historical review artifacts, not the cu
 The easiest beginner-friendly path is:
 
 ```bash
-docker compose up
+docker compose up --build
 ```
 
 Then open:
 
 - Web app: `http://localhost:3000`
 - API: `http://localhost:4000/api/v1`
-- Database UI: `http://localhost:8080`
+- Optional database UI: enable with `docker compose --profile admin up -d adminer`, then visit `http://localhost:8080`
 
 The Compose stack starts PostgreSQL and private MinIO, applies checked-in database migrations,
 starts the NestJS backend, and then starts the Next.js frontend. To add sample listings after the
@@ -225,7 +225,7 @@ To prove the complete marketplace demo against PostgreSQL 16 and private MinIO s
 two external services and run the isolated journey:
 
 ```bash
-docker compose up -d db minio minio-init
+docker compose up -d --build db minio minio-init
 pnpm -C api launch:smoke:marketplace
 ```
 

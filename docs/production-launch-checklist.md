@@ -63,7 +63,7 @@ production database.
 Start the local PostgreSQL and MinIO services, then run the complete gate from the repository root:
 
 ```bash
-docker compose up -d db minio minio-init
+docker compose up -d --build db minio minio-init
 pnpm release:check
 ```
 

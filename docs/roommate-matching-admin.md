@@ -7,7 +7,7 @@ This is the beginner-friendly path for adding or editing people in the Tinder-st
 Start the full stack:
 
 ```bash
-docker compose up
+docker compose up --build
 ```
 
 The matching deck reads from:

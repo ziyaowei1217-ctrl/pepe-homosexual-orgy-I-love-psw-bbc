@@ -31,7 +31,7 @@ pnpm dev:local
 ## 仅用 Docker 运行本地开发环境
 
 ```bash
-docker compose up -d
+docker compose up -d --build
 ```
 
 首次安装依赖需要一些时间。待 API 准备就绪后：
