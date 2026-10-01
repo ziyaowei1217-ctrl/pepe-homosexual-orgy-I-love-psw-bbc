@@ -64,7 +64,7 @@ describe.skipIf(process.env.RUN_DB_SMOKE !== "1")("actual PostgreSQL driver quer
     const url = new URL(database.databaseUrl); url.searchParams.set("schema", name);
     vi.stubEnv("DATABASE_URL", url.href);
     const scoped = new PrismaService();
-    try { await expect(scoped.$queryRaw`SELECT current_schema() AS value`).resolves.toEqual([{ value: name }]); }
+    try { await expect(scoped.$queryRaw`SELECT current_schema()::text AS value`).resolves.toEqual([{ value: name }]); }
     finally { await scoped.$disconnect(); vi.stubEnv("DATABASE_URL", database.databaseUrl); }
   });
 });
