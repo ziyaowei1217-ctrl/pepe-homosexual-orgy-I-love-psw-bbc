@@ -25,6 +25,8 @@ validated in Linux CI; the Docker development stack is also available on Windows
 
 Open `http://localhost:3000`. Local setup waits up to 120 seconds for PostgreSQL and MinIO,
 creates the private upload bucket, applies migrations and seeds the demo. Existing data is retained.
+The first run also compiles the demo storage server/client and can take several minutes before
+the health-check wait begins; later runs reuse Docker's build cache.
 It refuses a non-loopback `DATABASE_URL` or production mode before starting services, so inherited
 production configuration cannot accidentally receive demo seed data. Use the dedicated production
 deployment process for remote databases.
@@ -32,10 +34,37 @@ Close the development processes with Ctrl+C and stop external services with `doc
 `docker compose down --volumes` deletes the database and uploaded images; use it only for an
 intentionally disposable environment.
 
-Alternatively, run `docker compose up -d`, then `docker compose exec api pnpm -C api seed:marketplace`.
-These development services bind to loopback by default. PostgreSQL, Valkey, the MinIO console and
+Alternatively, run `docker compose up -d --build`, then `docker compose exec api pnpm -C api seed:marketplace`.
+These development services bind to loopback by default. PostgreSQL, Valkey, MinIO and
 the optional database UI remain accessible only from the host. To open the database UI explicitly,
 run `docker compose --profile admin up -d adminer` and visit `http://localhost:8080`.
+
+### Demo storage maintenance limit
+
+The official [MinIO community repository](https://github.com/minio/minio) is archived and describes
+a source-only distribution; its former Docker Hub and Quay images were not publicly pullable during
+the review. `Dockerfile.demo-storage` builds the official server's
+[October 2025 security release](https://github.com/minio/minio/releases/tag/RELEASE.2025-10-15T17-29-55Z)
+and the official [August 2025 client](https://github.com/minio/mc/releases/tag/RELEASE.2025-08-13T08-35-41Z)
+from exact release commits, using a pinned supported Go compiler and image digests. Go verifies
+module dependencies through its checksum database. The build requires internet access to the
+official module proxy and Alpine package repositories; the resulting binary is built locally.
+
+This preserves existing development data volumes and S3 contracts, but does not restore upstream
+maintenance or certify every archived dependency. All final community releases have known high
+severity vulnerabilities, including authentication bypasses. The local server and its console are
+unconditionally bound to `127.0.0.1`, even when application LAN access is enabled. Use only controlled
+synthetic data and stop the demo services afterward. Do not expose port 9000 through a tunnel, proxy,
+port forwarding or a Compose override. Public or production deployments must use a maintained
+private S3-compatible provider with TLS, restricted CORS and least-privilege credentials;
+production Compose contains no demo storage server.
+
+The four outstanding high severity official advisories are
+[unsigned-trailer authentication bypass, CVE-2026-41145](https://github.com/minio/minio/security/advisories/GHSA-hv4r-mvr4-25vw),
+[Snowball extraction authentication bypass, CVE-2026-40344](https://github.com/minio/minio/security/advisories/GHSA-9c4q-hq6p-c237),
+[S3 Select memory exhaustion, CVE-2026-39414](https://github.com/minio/minio/security/advisories/GHSA-h749-fxx7-pwpg),
+and [replication encryption-metadata injection, CVE-2026-34204](https://github.com/minio/minio/security/advisories/GHSA-3rh2-v3gr-35p9).
+The October source pin fixes an earlier service-account/STS issue, but does not fix these 2026 issues.
 
 ## A phone on the same private network
 
@@ -45,16 +74,23 @@ following values in a temporary, uncommitted `.env.mobile` file, replacing the e
 ```dotenv
 APP_BIND_HOST=0.0.0.0
 NEXT_PUBLIC_API_BASE_URL=http://192.168.1.20:4000/api/v1
-NEXT_PUBLIC_MEDIA_UPLOAD_ORIGIN=http://192.168.1.20:9000
-LISTING_MEDIA_UPLOAD_ENDPOINT=http://192.168.1.20:9000
 WEB_ORIGIN=http://192.168.1.20:3000
 ```
 
-Start with `docker compose --env-file .env.mobile up -d` and open
-`http://192.168.1.20:3000` on the phone. Permit ports 3000, 4000 and 9000 only on that private
+Start with `docker compose --env-file .env.mobile up -d --build` and open
+`http://192.168.1.20:3000` on the phone. Permit ports 3000 and 4000 only on that private
 network in the host firewall. Changing these URLs requires restarting the development containers.
-This opt-in exposes the web app, API and browser upload endpoint; infrastructure management ports
-keep their loopback bindings. Stop the stack when the demonstration ends. A shared or public demo
+This opt-in exposes the web app and API; all storage/database/cache/management ports remain on
+loopback. The phone can browse listings and read existing images served through the API. Direct
+uploads to the archived local storage server work only from the computer hosting the demo.
+For the complete upload journey on a phone, configure a maintained private S3-compatible service:
+set its HTTPS `LISTING_MEDIA_STORAGE_ENDPOINT`, browser-reachable `LISTING_MEDIA_UPLOAD_ENDPOINT`,
+region/bucket/least-privilege credentials in the API environment, set
+`NEXT_PUBLIC_MEDIA_UPLOAD_ORIGIN` to the upload endpoint's exact origin, and restrict the storage
+service's CORS policy to the demonstrated `WEB_ORIGIN`. Use a reviewed development Compose override
+for these existing API storage settings; rebuild/restart the web and API to apply them. Do not
+publish the archived server's port 9000 to make phone uploads work.
+Stop the stack when the demonstration ends. A shared or public demo
 must use HTTPS ingress and production credentials as described in the production checklist.
 
 ## Production release, recovery and monitoring

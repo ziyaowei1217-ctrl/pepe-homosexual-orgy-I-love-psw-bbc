@@ -20,6 +20,7 @@ pnpm dev:local
 随后打开 http://localhost:3000 。API 地址为 http://localhost:4000/api/v1 。
 
 - `local:setup` 启动 PostgreSQL 和 MinIO，创建私有图片桶、应用数据库迁移并写入示例房源。
+- 首次运行会从固定的官方源码编译 MinIO，可能需要几分钟。上游社区版本已归档且存在已知高危漏洞；本地存储仅限本机回环地址和受控示例数据。手机可在私有局域网浏览，完整图片上传或公开部署需配置仍受维护的私有 S3 兼容服务，详见操作文档。
 - `dev:local` 同时运行前后端；保持终端开启，按 Ctrl+C 停止。
 - 本地配置自动使用默认值；需要改前端地址时，将根目录 `.env.example` 复制为 `.env.local`。API 配置由 setup 在首次运行时从 `api/.env.example` 创建。
 - 本地登录验证码显示在登录面板中。首次登录后按页面提示完善资料。

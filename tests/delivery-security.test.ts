@@ -16,7 +16,7 @@ describe("delivery security boundaries", () => {
     for (const name of ["db", "valkey", "adminer"]) {
       expect(services[name].ports.every((port: string) => port.startsWith("127.0.0.1:"))).toBe(true);
     }
-    expect(services.minio.ports).toContain("127.0.0.1:9001:9001");
+    expect(services.minio.ports).toEqual(["127.0.0.1:9000:9000", "127.0.0.1:9001:9001"]);
     expect(services.adminer.profiles).toEqual(["admin"]);
     for (const name of ["web", "api"]) {
       expect(services[name].ports[0]).toMatch(/^\$\{APP_BIND_HOST:-127\.0\.0\.1\}/);

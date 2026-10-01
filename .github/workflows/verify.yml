@@ -63,8 +63,8 @@ jobs:
       - run: pnpm exec playwright install --with-deps chromium firefox webkit
       - name: Prepare disposable local services
         run: |
-          docker compose --profile realtime up -d --wait --wait-timeout 120 db minio valkey
-          docker compose run --rm minio-init
+          docker compose --profile realtime up -d --build --wait --wait-timeout 120 db minio valkey
+          docker compose run --rm --build minio-init
       - run: pnpm release:check
       - run: pnpm -C api launch:smoke:roommate
       - run: pnpm -C api launch:smoke:valkey

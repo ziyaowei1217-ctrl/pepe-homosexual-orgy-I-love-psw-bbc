@@ -1,8 +1,12 @@
 # Production launch checklist
 
-The repository can verify the application and its PostgreSQL/MinIO journey locally. A public
+The repository can verify the application and its PostgreSQL/MinIO journey locally. Public
 deployment still requires operator-owned infrastructure and credentials. Never commit a populated
 `.env` file.
+
+Public deployment must use a maintained private S3-compatible service. The archived source-built local
+MinIO server has known high severity upstream advisories and is restricted to loopback synthetic
+demos; it is not a production storage option. See [the storage maintenance limit](demo-and-operations.md#demo-storage-maintenance-limit).
 
 ## 1. Complete the four integrations
 

@@ -1,0 +1,31 @@
+# Local synthetic demos only. Official community images are no longer publicly
+# pullable; build verified release commits through Go's checksum-verified modules.
+# MinIO is archived upstream: production must use maintained private S3 storage.
+FROM golang:1.26.8-alpine3.24@sha256:8ac98ca534ac3f51e1f420a1dd2c15e74c75cfa0f23f3ad27eb5d7236c349a0c AS build
+ENV CGO_ENABLED=0 GOTOOLCHAIN=local GOGC=50
+
+FROM build AS server-build
+# RELEASE.2025-10-15T17-29-55Z includes the service-account/STS security fix.
+# https://github.com/minio/minio/commit/9e49d5e7a648f00e26f2246f4dc28e6b07f8c84a
+RUN go install -p 2 -trimpath -ldflags="-s -w" github.com/minio/minio@9e49d5e7a648f00e26f2246f4dc28e6b07f8c84a
+
+FROM build AS client-build
+# RELEASE.2025-08-13T08-35-41Z, peeled official release commit.
+# https://github.com/minio/mc/commit/7394ce0dd2a80935aded936b09fa12cbb3cb8096
+RUN go install -p 2 -trimpath -ldflags="-s -w" github.com/minio/mc@7394ce0dd2a80935aded936b09fa12cbb3cb8096
+
+FROM alpine:3.24@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6 AS runtime
+RUN apk add --no-cache ca-certificates curl
+
+FROM runtime AS server
+COPY --from=server-build /go/bin/minio /usr/local/bin/minio
+ENV MINIO_UPDATE=off
+EXPOSE 9000 9001
+# Preserve the existing development volume's ownership; this image is excluded
+# from production Compose and all management ports remain bound to loopback.
+ENTRYPOINT ["minio"]
+CMD ["server", "/data", "--console-address", ":9001"]
+
+FROM runtime AS client
+COPY --from=client-build /go/bin/mc /usr/local/bin/mc
+ENTRYPOINT ["mc"]

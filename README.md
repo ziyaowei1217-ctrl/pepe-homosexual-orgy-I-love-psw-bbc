@@ -8,6 +8,8 @@ Frontend + backend MVP for a high-trust sublet marketplace and co-living matchin
 The September 30 hardening handoff includes the [security review](docs/security-review-2026-09-30.md),
 [validation record](docs/handoff-validation-2026-09-30.md) and [threat model](docs/sublet-pipeline-threat-model.md).
 Start with [demo and operations](docs/demo-and-operations.md) for setup and phone/LAN testing.
+Local MinIO is a source-built, archived dependency for loopback-only synthetic demos; phone uploads
+and public deployments require a maintained private S3-compatible service.
 Earlier files under `output/handoff` are historical review artifacts, not the current release source.
 
 ## Stack

@@ -20,7 +20,7 @@ Node 22 on macOS/Windows, and disposable service/container integrations on Linux
 | `pnpm check` | Passed: lint, type generation/TypeScript, 109 suites / 681 tests, production build | Final source, custom API base `http://localhost:4499/api/v1`; does not connect to a real production API |
 | `RUN_CLI_BUILD_SMOKE=1 pnpm -C api launch:check` | Passed: 82 suites / 696 tests; 25 service-gated suites / 110 cases skipped | API regressions include TLS/authentication, ownership, headers, image parsing/privacy/budgets, sockets, throttling and compiled operator CLIs |
 | `pnpm -C api test:cli-build` | Passed: build and 2 compiled CLI tests | Actual compiled artifacts execute with development dependencies blocked |
-| Dependency audit | 0 critical, 0 high, 1 moderate; high-severity production gate passed | Remaining Nest SSE advisory and applicability are documented in the security report; not suppressed |
+| JavaScript dependency audit | 0 critical, 0 high, 1 moderate; high-severity production gate passed | Remaining Nest SSE advisory is visible. This pnpm result excludes the archived demo storage service's high advisories; see SEC-011 in the security report |
 | Secret/history scan | Gitleaks 8.30.1 scanned 224 commits; 16 candidates classified | Four test-placeholder occurrences and twelve historical generated Next keys; active provider-key reuse was not established |
 | Current source secret scan | Five candidates classified | Four existing test placeholders and one false positive in conditional-provider prose; no live provider credential was confirmed |
 | `git diff --check` | Passed | Patch whitespace/integrity check |
@@ -60,6 +60,12 @@ committed CI uses disposable services for `pnpm release:check`, roommate and dis
 smokes, builds both application images, checks read-only/nonroot execution and writable image cache,
 and runs browser checks against the production-mode web image. Inspect the review's check status;
 workflow configuration alone is not a successful execution.
+
+The first remote run passed Linux Node 22/24 and macOS Node 22 checks, but disposable service startup
+failed because the historical MinIO image could not be pulled. Local demo storage was changed to
+pinned official source builds with mandatory loopback-only ports, and the integration gate is rerun.
+This repairs startup availability; it does not patch known 2026 MinIO CE vulnerabilities. Real records,
+direct phone upload, shared/public storage and production require a maintained patched S3 provider.
 
 Before any shared public deployment, complete the [production launch checklist](production-launch-checklist.md):
 HTTPS ingress and trusted headers, real provider acceptance and storage CORS, secret custody,

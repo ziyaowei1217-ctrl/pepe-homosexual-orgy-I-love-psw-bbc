@@ -22,8 +22,8 @@ if (process.env.NODE_ENV === "production" || !["postgresql:", "postgres:"].inclu
 }
 
 // Compose waits for each service's existing health check, with a bounded timeout.
-requireSuccess(compose("up", "-d", "--wait", "--wait-timeout", "120", "db", "minio"), "Docker Compose must be installed and running; PostgreSQL and MinIO must become healthy.");
-requireSuccess(compose("run", "--rm", "minio-init"), "Private media bucket initialization failed.");
+requireSuccess(compose("up", "-d", "--build", "--wait", "--wait-timeout", "120", "db", "minio"), "Docker Compose must be installed and running; PostgreSQL and MinIO must become healthy.");
+requireSuccess(compose("run", "--rm", "--build", "minio-init"), "Private media bucket initialization failed.");
 
 const apiEnvironmentPath = fileURLToPath(new URL("../api/.env", import.meta.url));
 if (!existsSync(apiEnvironmentPath)) {

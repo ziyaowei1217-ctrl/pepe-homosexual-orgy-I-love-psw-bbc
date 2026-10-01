@@ -22,6 +22,10 @@ of the reviewed source, not production certification or proof that every abuse p
 - **Conditional integrations:** real email, hosted payment adapter, managed PostgreSQL/Valkey,
   S3-compatible storage and HTTPS ingress require operator configuration and acceptance tests.
   Their actual policies, accounts, quotas, logging and backups were not inspected.
+- **Local storage restriction:** the archived MinIO CE source build has known high-severity 2026
+  advisories and is restricted to synthetic localhost use, with both ports forced to loopback.
+  Phone LAN browsing reads images through the API; direct phone uploads and shared/public storage
+  require a maintained patched S3 provider. TLS alone does not repair these upstream defects.
 - **Out of scope:** signed native/mobile packages, WeChat identity binding, store approval, real
   payment-provider internals, infrastructure penetration testing and a compromised user's OS/browser.
   No native or miniapp implementation is asserted (`docs/platform-delivery.md`).
@@ -85,6 +89,10 @@ conditions rather than assumptions of completed deployment. Validation results b
   validated, metadata-stripped derivatives enter a separate immutable key namespace. Published
   reads recheck listing approval and byte integrity. Anchors: `listing-media-storage.ts`,
   `listing-media-validation.ts`, `listing-media.service.ts` under `api/src/listing-media/`.
+  The archived demo CE backend cannot be trusted against untrusted direct clients: disclosed access
+  keys can reach known signature bypasses. Its mandatory loopback boundary and synthetic-only usage
+  are compensating isolation, not an upstream patch (`Dockerfile.demo-storage`, `docker-compose.yml`,
+  SEC-011 in `docs/security-review-2026-09-30.md`).
 - **B06 API → Valkey:** hashed authentication identifiers, limiter counters and private event fan-out.
   Production requires `rediss`. Authentication limiter-store errors fail closed in production;
   messaging can fall back to local limiting/fan-out and reports degraded readiness. Anchors:
@@ -202,7 +210,10 @@ prevent a direct API attacker. Provider/host compromise is conditional, not esta
    This needs provider/configuration compromise; ordinary clients cannot choose those server URLs.
 7. **TM-007 — Exploit deployment degradation:** publicly expose development infrastructure, weaken
    TLS/proxy trust, or operate multiple instances during Valkey failure → leak data, bypass globally
-   shared accounting, or lose availability. Missing restore capability can turn disruption into loss.
+   shared accounting, or lose availability. Exposing archived demo storage additionally enables its
+   known high authentication/integrity/DoS defects; HTTPS does not fix them. Mandatory loopback
+   reduces remote reachability; a maintained storage provider is required for shared uploads.
+   Missing restore capability can turn disruption into loss.
 8. **TM-008 — Compromise delivery or reuse old keys:** execute a malicious dependency/release change
    on a privileged host, or discover a historically committed key that remains active → obtain
    credentials or alter released code. Historical generated/test-key presence alone does not prove
@@ -230,7 +241,8 @@ can raise priority before public launch; they are not confirmed vulnerabilities 
   access; a systemic authorization bypass across real users; arbitrary execution on a privileged
   release host with production secrets. None is certified as an existing exploitable path here.
 - **high:** a stolen real administrator session that satisfies step-up; real GPS/message disclosure
-  across accounts; forged real payment/refund state accepted from a compromised adapter.
+  across accounts; forged real payment/refund state accepted from a compromised adapter; direct
+  access to archived CE storage with real data, including its known unsigned-upload bypasses.
 - **medium:** authorized image processing/cost abuse that disrupts a shared demo; multi-instance
   messaging fallback losing global accounting; metadata-bearing old objects pending inventory.
 - **low:** enumeration of already-public approved listing IDs; rejected unsupported upload formats

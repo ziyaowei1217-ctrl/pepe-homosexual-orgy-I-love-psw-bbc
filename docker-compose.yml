@@ -101,7 +101,11 @@ services:
       - sublet_pipeline
 
   minio:
-    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
+    image: sublet-demo-minio:2025-10-15
+    build:
+      context: .
+      dockerfile: Dockerfile.demo-storage
+      target: server
     container_name: sublet-pipeline-minio
     restart: unless-stopped
     command: server /data --console-address ":9001"
@@ -110,7 +114,7 @@ services:
       MINIO_ROOT_PASSWORD: minio-development
       MINIO_API_CORS_ALLOW_ORIGIN: ${WEB_ORIGIN:-http://localhost:3000}
     ports:
-      - "${APP_BIND_HOST:-127.0.0.1}:9000:9000"
+      - "127.0.0.1:9000:9000"
       - "127.0.0.1:9001:9001"
     volumes:
       - sublet_pipeline_minio:/data
@@ -123,7 +127,11 @@ services:
       - sublet_pipeline
 
   minio-init:
-    image: minio/mc:RELEASE.2025-08-13T08-35-41Z
+    image: sublet-demo-mc:2025-08-13
+    build:
+      context: .
+      dockerfile: Dockerfile.demo-storage
+      target: client
     container_name: sublet-pipeline-minio-init
     restart: "no"
     entrypoint: ["/bin/sh", "-c"]
