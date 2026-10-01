@@ -8,6 +8,8 @@ import { afterEach, describe, expect, it } from "vitest";
 
 // @ts-expect-error JavaScript release utility is executed directly by Node.
 import { validateProductionConfig } from "../tools/production-config.mjs";
+// @ts-expect-error JavaScript utility is executed directly by Node.
+import { mergeEnvironment } from "../tools/process-runner.mjs";
 
 const scriptPath = fileURLToPath(new URL("../tools/production-config.mjs", import.meta.url));
 const temporaryDirectories: string[] = [];
@@ -49,7 +51,8 @@ function runCli(arguments_: string[], environment: Record<string, string> = {}) 
   return spawnSync(process.execPath, ["--", scriptPath, ...arguments_], {
     cwd: process.cwd(),
     encoding: "utf8",
-    env: environment as NodeJS.ProcessEnv
+    env: mergeEnvironment(environment) as NodeJS.ProcessEnv,
+    timeout: 10_000
   });
 }
 
@@ -92,7 +95,7 @@ function installFakeDocker(directory: string, output: string, exitCode = 0) {
     argumentsPath,
     environment: {
       PATH: directory,
-      ...(windows ? { NODE_OPTIONS: `--require "${scriptPath}"` } : {}),
+      ...(windows ? { NODE_OPTIONS: `--require=${JSON.stringify(scriptPath)}` } : {}),
       FAKE_DOCKER_ARGUMENTS_PATH: argumentsPath,
       FAKE_DOCKER_OUTPUT_PATH: outputPath,
       FAKE_DOCKER_EXIT_CODE: String(exitCode)

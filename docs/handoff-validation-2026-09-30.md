@@ -17,7 +17,7 @@ Node 22 on macOS/Windows, and disposable service/container integrations on Linux
 
 | Check | Result | Practical scope |
 | --- | --- | --- |
-| `pnpm check` | Passed: lint, type generation/TypeScript, 109 suites / 681 tests, production build | Final source, custom API base `http://localhost:4499/api/v1`; does not connect to a real production API |
+| Web lint/types/build and final `pnpm test` | Passed: 109 suites / 682 tests | Production application checks used custom API base `http://localhost:4499/api/v1`; final operations-only changes have full test/lint/types coverage. Does not connect to a real production API |
 | `RUN_CLI_BUILD_SMOKE=1 pnpm -C api launch:check` | Passed: 82 suites / 696 tests; 25 service-gated suites / 110 cases skipped | API regressions include TLS/authentication, ownership, headers, image parsing/privacy/budgets, sockets, throttling and compiled operator CLIs |
 | `pnpm -C api test:cli-build` | Passed: build and 2 compiled CLI tests | Actual compiled artifacts execute with development dependencies blocked |
 | JavaScript dependency audit | 0 critical, 0 high, 1 moderate; high-severity production gate passed | Remaining Nest SSE advisory is visible. This pnpm result excludes the archived demo storage service's high advisories; see SEC-011 in the security report |
@@ -27,8 +27,14 @@ Node 22 on macOS/Windows, and disposable service/container integrations on Linux
 
 The overlapping-chat-history regression initially depended on timer scheduling. It now explicitly
 commits the newer deferred response before releasing the stale one; 20 consecutive focused runs
-(320 test executions) passed, followed by the complete 681-test web run.
+(320 test executions) passed, followed by the complete web suite.
 This verifies the intended race instead of relying on elapsed wall-clock time.
+
+Windows CI exposed case-insensitive environment collisions in subprocess fixtures and backslash
+escaping in preload paths. The task runner now normalizes Windows environment names before
+overrides, tests quote preload paths through JSON, and synchronous fixture processes have deadlines.
+The final 682-test run includes a regression for uppercase installed `NPM_EXECPATH` overridden by a
+lowercase fixture key; the actual Windows acceptance run remains visible in the PR checks.
 
 The production build reports 102 kB shared first-load JavaScript, with static scripts/styles cached
 normally. Per-request nonce HTML is dynamic and private. This is a security/performance tradeoff;

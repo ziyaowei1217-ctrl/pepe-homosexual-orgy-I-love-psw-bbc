@@ -3,6 +3,8 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { afterEach, describe, expect, it } from "vitest";
+// @ts-expect-error JavaScript utility is executed directly by Node.
+import { mergeEnvironment } from "../tools/process-runner.mjs";
 
 const temporaryDirectories: string[] = [];
 
@@ -30,12 +32,12 @@ function runReleaseCheck(failingCommand?: string) {
   const result = spawnSync(process.execPath, ["tools/release-check.mjs"], {
     cwd: process.cwd(),
     encoding: "utf8",
-    env: {
-      ...process.env,
+    env: mergeEnvironment(process.env, {
       npm_execpath: pnpmPath,
       RELEASE_TEST_LOG: logPath,
       RELEASE_TEST_FAIL_COMMAND: failingCommand ?? ""
-    }
+    }),
+    timeout: 10_000
   });
 
   return {

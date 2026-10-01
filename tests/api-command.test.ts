@@ -3,6 +3,8 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "no
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+// @ts-expect-error JavaScript utility is executed directly by Node.
+import { mergeEnvironment } from "../tools/process-runner.mjs";
 
 const temporaryDirectories: string[] = [];
 afterEach(() => {
@@ -21,7 +23,8 @@ if (args.join(" ") === process.env.COMMAND_TEST_FAIL) process.exit(17);
 `);
   const result = spawnSync(process.execPath, ["tools/api-command.mjs", name], {
     cwd: process.cwd(), encoding: "utf8",
-    env: { ...process.env, npm_execpath: entryPoint, COMMAND_TEST_LOG: logPath, ...environment }
+    env: mergeEnvironment(process.env, { npm_execpath: entryPoint, COMMAND_TEST_LOG: logPath, ...environment }),
+    timeout: 10_000
   });
   return { ...result, commands: existsSync(logPath) ? readFileSync(logPath, "utf8").trim().split("\n").map((line) => JSON.parse(line)) : [] };
 }
