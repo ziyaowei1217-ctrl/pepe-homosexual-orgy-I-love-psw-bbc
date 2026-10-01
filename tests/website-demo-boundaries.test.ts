@@ -24,6 +24,7 @@ describe("opt-in website demo boundaries", () => {
     vi.stubEnv("NODE_ENV", environment);
     const result = middleware(new NextRequest("https://demo.example/account?email=example@example.invalid"));
     expect(result.headers.get("x-middleware-rewrite")).toBe("https://demo.example/demo");
+    expect(result.headers.get("X-Robots-Tag")).toBe("noindex, nofollow, noarchive");
     if (environment === "production") {
       expect(result.headers.get("Content-Security-Policy")).toContain("connect-src 'self';");
       expect(result.headers.get("Cache-Control")).toBe("private, no-store");
@@ -34,6 +35,7 @@ describe("opt-in website demo boundaries", () => {
     vi.stubEnv("NEXT_PUBLIC_WEBSITE_DEMO", "true");
     const result = middleware(new NextRequest("https://demo.example/account", { method }));
     expect(result.status).toBe(403);
+    expect(result.headers.get("X-Robots-Tag")).toBe("noindex, nofollow, noarchive");
     expect(await result.json()).toEqual({ code: "WEBSITE_DEMO_READ_ONLY" });
   });
 
@@ -42,8 +44,12 @@ describe("opt-in website demo boundaries", () => {
     vi.stubEnv("NODE_ENV", "production");
     vi.stubEnv("NEXT_PUBLIC_API_BASE_URL", "https://real-api.example/api/v1");
     vi.stubEnv("NEXT_PUBLIC_MEDIA_UPLOAD_ORIGIN", "https://real-uploads.example");
-    expect(middleware(new NextRequest("https://demo.example/api/v1/auth/me")).status).toBe(403);
-    expect(middleware(new NextRequest("https://demo.example/api/health")).headers.get("x-middleware-next")).toBe("1");
+    const denied = middleware(new NextRequest("https://demo.example/api/v1/auth/me"));
+    expect(denied.status).toBe(403);
+    expect(denied.headers.get("X-Robots-Tag")).toBe("noindex, nofollow, noarchive");
+    const health = middleware(new NextRequest("https://demo.example/api/health"));
+    expect(health.headers.get("x-middleware-next")).toBe("1");
+    expect(health.headers.get("X-Robots-Tag")).toBe("noindex, nofollow, noarchive");
     const csp = middleware(new NextRequest("https://demo.example/")).headers.get("Content-Security-Policy")!;
     expect(csp).toContain("connect-src 'self';");
     expect(csp).not.toContain("real-api.example");
@@ -58,6 +64,10 @@ describe("opt-in website demo boundaries", () => {
     const result = middleware(new NextRequest("https://web.example/account"));
     expect(result.headers.get("x-middleware-rewrite")).toBeNull();
     expect(result.headers.get("x-middleware-next")).toBe("1");
+    expect(result.headers.get("X-Robots-Tag")).toBeNull();
+    const api = middleware(new NextRequest("https://web.example/api/health"));
+    expect(api.headers.get("x-middleware-next")).toBe("1");
+    expect(api.headers.get("X-Robots-Tag")).toBeNull();
   });
 
   it("never sends API credentials or writes to the network in a demo build", async () => {

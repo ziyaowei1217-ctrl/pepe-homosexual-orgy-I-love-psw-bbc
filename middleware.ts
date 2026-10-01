@@ -5,21 +5,23 @@ import { canBrowseWebsiteDemo, isWebsiteDemo } from "./lib/website-demo";
 
 export function middleware(request: NextRequest) {
   const demo = isWebsiteDemo();
+  // Netlify's static header rules do not cover SSR or middleware responses.
+  const demoHeaders: Record<string, string> = demo ? { "X-Robots-Tag": "noindex, nofollow, noarchive" } : {};
   if (demo && !["GET", "HEAD"].includes(request.method)) {
-    return NextResponse.json({ code: "WEBSITE_DEMO_READ_ONLY" }, { status: 403, headers: { "Cache-Control": "no-store" } });
+    return NextResponse.json({ code: "WEBSITE_DEMO_READ_ONLY" }, { status: 403, headers: { ...demoHeaders, "Cache-Control": "no-store" } });
   }
   if (request.nextUrl.pathname.startsWith("/api/")) {
     if (demo && request.nextUrl.pathname !== "/api/health") {
-      return NextResponse.json({ code: "WEBSITE_DEMO_READ_ONLY" }, { status: 403, headers: { "Cache-Control": "no-store" } });
+      return NextResponse.json({ code: "WEBSITE_DEMO_READ_ONLY" }, { status: 403, headers: { ...demoHeaders, "Cache-Control": "no-store" } });
     }
-    return NextResponse.next();
+    return NextResponse.next({ headers: demoHeaders });
   }
   const unavailable = demo && !canBrowseWebsiteDemo(request.nextUrl.pathname);
   const destination = request.nextUrl.clone();
   destination.pathname = "/demo";
   destination.search = "";
   if (process.env.NODE_ENV !== "production") {
-    return unavailable ? NextResponse.rewrite(destination) : NextResponse.next();
+    return unavailable ? NextResponse.rewrite(destination, { headers: demoHeaders }) : NextResponse.next({ headers: demoHeaders });
   }
 
   const nonce = btoa(crypto.randomUUID());
@@ -43,6 +45,7 @@ export function middleware(request: NextRequest) {
   response.headers.set("Content-Security-Policy", policy);
   // A cached document cannot safely reuse its per-request script nonce.
   response.headers.set("Cache-Control", "private, no-store");
+  if (demo) response.headers.set("X-Robots-Tag", demoHeaders["X-Robots-Tag"]);
   return response;
 }
 

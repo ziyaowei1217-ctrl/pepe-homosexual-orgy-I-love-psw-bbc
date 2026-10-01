@@ -29,11 +29,29 @@ Netlify's maintained OpenNext adapter is needed for App Router server rendering 
 nonce middleware. Deploy the Next project, not `.next/standalone` as a static upload.
 No secrets belong in the configuration or source archive.
 
+Run the build and upload in one Netlify CLI operation from the repository root:
+
+```sh
+npx --yes netlify-cli@27.10.2 deploy --build --context production --site "$NETLIFY_DEMO_SITE_ID" --message "Reviewed demo $(git rev-parse HEAD)" --json
+```
+
+Set `NETLIFY_DEMO_SITE_ID` to the existing demonstration project's ID. This creates an
+unpublished preview; test its returned URL before publishing that exact deploy in Netlify.
+The OpenNext adapter temporarily swaps `.next` to its prepared static tree during upload,
+then restores the raw Next output. A standalone `netlify build` followed by
+`netlify deploy --no-build` therefore uploads the wrong tree and breaks CSS/JavaScript paths.
+Do not work around it by changing the publish directory or uploading only static files;
+the adapter also coordinates server/edge functions, image rules and route-cache blobs.
+The demo middleware supplies crawl-prevention headers for rendered pages, health and denied
+requests. `netlify.toml` covers static files; Netlify's custom static header rules alone do not
+cover SSR or edge responses.
+
 1. Use the reviewed source branch `hardening-release-2026-09-30`, not the older `main`.
 2. Run the normal `pnpm check` with the demo flag unset and the focused demo boundary tests.
 3. Build a separate demo with the exact public values in `netlify.toml`. Run it in production
    mode locally, then verify public/private paths, no upstream transports and browser journeys.
-4. Deploy only the committed revision. Keep the Netlify site ID in untracked `.netlify/state.json`
+4. Deploy only the committed revision with the single build-and-upload operation above.
+   Keep the Netlify site ID in untracked `.netlify/state.json`
    and record the deployed source revision and URL in the handoff outside the source tree.
 5. Confirm the actual Netlify deployment preserves CSP nonce/hydration, `private, no-store`
    HTML, security headers, blocked writes, the demo warning and mobile layout. A successful
