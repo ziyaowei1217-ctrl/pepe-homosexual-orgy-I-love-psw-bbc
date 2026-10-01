@@ -354,6 +354,7 @@ export type ApiDealThread = {
   contactName: string;
   participantNames: string[];
   messages: ApiDealMessage[];
+  messagePageInfo?: { nextCursor: string | null; hasMore: boolean };
   viewingRequests: ApiViewingRequest[];
   createdAt: string;
   updatedAt: string;
@@ -498,6 +499,11 @@ export function getRoommateMessages(token: string, conversationId: string, curso
   const encodedConversationId = encodeURIComponent(conversationId);
   const query = cursor === undefined ? "" : `?cursor=${encodeURIComponent(cursor)}`;
   return apiGet<ApiRoommateMessagePage>(`/roommate-conversations/${encodedConversationId}/messages${query}`, token);
+}
+
+export function getDealMessages(token: string, conversationId: string, cursor?: string) {
+  const query = cursor === undefined ? "" : `?cursor=${encodeURIComponent(cursor)}`;
+  return apiGet<{ messages: ApiDealMessage[]; nextCursor: string | null }>(`/deal-threads/${encodeURIComponent(conversationId)}/messages${query}`, token);
 }
 
 export function sendRoommateMessage(

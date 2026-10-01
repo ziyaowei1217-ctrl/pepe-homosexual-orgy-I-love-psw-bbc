@@ -20,7 +20,7 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useSavedListings } from "@/components/marketplace/saved-listings-provider";
 import { useModalFocus } from "@/components/marketplace/use-modal-focus";
 import { defaultMapAttribution, getMapCenterForListings, getMapMarkers, getMapTiles } from "@/lib/listing-map";
-import { DEFAULT_SAVED_COLLECTION_ID } from "@/lib/saved-collections";
+import { DEFAULT_SAVED_COLLECTION_ID, getSavedListingIds } from "@/lib/saved-collections";
 import type { PreviewListing } from "@/lib/preview-data";
 import { cn } from "@/lib/utils";
 
@@ -30,6 +30,7 @@ export function SavedPageExperience({ listings }: { listings: PreviewListing[] }
   const [mapView, setMapView] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [newCollectionName, setNewCollectionName] = useState("");
+  const [collectionError, setCollectionError] = useState<string | null>(null);
   const [sort, setSort] = useState<"recent" | "price-low" | "price-high">("recent");
   const activeCollection = state.collections.find((collection) => collection.id === activeCollectionId) ?? state.collections[0];
   const savedListings = useMemo(() => {
@@ -39,14 +40,15 @@ export function SavedPageExperience({ listings }: { listings: PreviewListing[] }
     const items = listings.filter((listing) => activeIds.has(listing.id));
     if (sort === "price-low") return [...items].sort((left, right) => left.price - right.price);
     if (sort === "price-high") return [...items].sort((left, right) => right.price - left.price);
-    return items;
-  }, [activeCollection?.listingIds, activeCollectionId, listings, savedIds, sort]);
+    const positions = new globalThis.Map(getSavedListingIds(state).map((id, index) => [id, index]));
+    return [...items].sort((left, right) => (positions.get(right.id) ?? -1) - (positions.get(left.id) ?? -1));
+  }, [activeCollection?.listingIds, activeCollectionId, listings, savedIds, sort, state]);
 
   function handleCreate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const name = newCollectionName.trim();
-    if (!name) return;
-    createCollection(name);
+    const error = createCollection(name);
+    if (error) { setCollectionError(error); return; }
     setNewCollectionName("");
     setCreateOpen(false);
   }
@@ -62,7 +64,7 @@ export function SavedPageExperience({ listings }: { listings: PreviewListing[] }
               <p className="col-span-2 row-start-2 max-w-2xl text-sm leading-6 text-slate-500 sm:mt-4 sm:text-base">把喜欢的房放在一起比较。清单、备注与排序都只保存在当前设备。</p>
               <div className="col-span-2 row-start-3 inline-flex w-fit items-center gap-2 rounded-full bg-amber-50 px-3 py-1.5 text-xs font-bold text-amber-800 sm:mt-4"><Info className="size-3.5 shrink-0" />{accountLabel}，暂不跨设备同步</div>
             </div>
-            <button type="button" onClick={() => setCreateOpen(true)} className="col-start-2 row-start-1 flex min-h-11 shrink-0 items-center justify-center gap-1.5 rounded-full bg-slate-950 px-4 py-2.5 text-sm font-black text-white shadow-lg transition-transform hover:-translate-y-0.5 sm:gap-2 sm:px-5 sm:py-3"><Plus className="size-4" />新建清单</button>
+            <button type="button" onClick={() => { setCollectionError(null); setCreateOpen(true); }} className="col-start-2 row-start-1 flex min-h-11 shrink-0 items-center justify-center gap-1.5 rounded-full bg-slate-950 px-4 py-2.5 text-sm font-black text-white shadow-lg transition-transform hover:-translate-y-0.5 sm:gap-2 sm:px-5 sm:py-3"><Plus className="size-4" />新建清单</button>
           </div>
         </div>
       </section>
@@ -100,7 +102,7 @@ export function SavedPageExperience({ listings }: { listings: PreviewListing[] }
                     <button type="button" onClick={() => toggleSaved(listing.id)} className="absolute right-3 top-3 grid size-9 place-items-center rounded-full border border-slate-200 bg-white text-[#0668e1]" aria-label={`取消收藏 ${listing.title}`}><Heart className="size-4 fill-current" /></button>
                     <Link href={`/listing/${encodeURIComponent(listing.id)}`} className="block pr-10"><h3 className="line-clamp-2 text-base font-black leading-snug text-slate-950 group-hover:text-[#0668e1]">{listing.title}</h3><p className="mt-1 flex items-center gap-1 truncate text-xs text-slate-500"><MapPin className="size-3.5" />{listing.area}</p></Link>
                     <div className="mt-3 flex items-end justify-between"><p className="text-lg font-black">${listing.price.toLocaleString()} <span className="text-xs font-medium text-slate-400">/ 月</span></p><span className="flex items-center gap-1 text-xs font-bold"><Star className="size-3.5 fill-amber-400 text-amber-400" />{listing.score}</span></div>
-                    <textarea defaultValue={state.notes[listing.id] ?? ""} onBlur={(event) => setNote(listing.id, event.target.value)} aria-label={`${listing.title} 的收藏备注`} placeholder="添加仅自己可见的备注…" className="mt-4 min-h-16 w-full resize-none rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2 text-xs leading-5 outline-none focus:border-blue-300 focus:bg-white" />
+                    <SavedListingNote value={state.notes[listing.id] ?? ""} onSave={(note) => setNote(listing.id, note)} label={`${listing.title} 的收藏备注`} />
                     {state.collections.length > 1 ? <label className="mt-3 flex items-center justify-between text-xs font-bold text-slate-500">加入清单<select aria-label={`${listing.title} 所属清单`} className="max-w-[150px] rounded-full border border-slate-200 bg-white px-2 py-1.5 text-slate-700" value="" onChange={(event) => { if (event.target.value) toggleInCollection(listing.id, event.target.value); }}><option value="">选择清单</option>{state.collections.filter((collection) => collection.id !== DEFAULT_SAVED_COLLECTION_ID).map((collection) => <option key={collection.id} value={collection.id}>{collection.listingIds.includes(listing.id) ? "✓ " : ""}{collection.name}</option>)}</select></label> : null}
                   </div>
                 </article>
@@ -121,14 +123,26 @@ export function SavedPageExperience({ listings }: { listings: PreviewListing[] }
       </div>
 
       {createOpen ? (
-        <NewCollectionDialog name={newCollectionName} onNameChange={setNewCollectionName} onSubmit={handleCreate} onClose={() => setCreateOpen(false)} />
+        <NewCollectionDialog name={newCollectionName} error={collectionError} onNameChange={(name) => { setNewCollectionName(name); setCollectionError(null); }} onSubmit={handleCreate} onClose={() => setCreateOpen(false)} />
       ) : null}
     </main>
   );
 }
 
-function NewCollectionDialog({ name, onNameChange, onSubmit, onClose }: {
+function SavedListingNote({ value, onSave, label }: { value: string; onSave: (note: string) => void; label: string }) {
+  const [draft, setDraft] = useState(value);
+  const edited = useRef(false);
+  useEffect(() => { if (!edited.current) setDraft(value); }, [value]);
+  return <textarea value={draft} onChange={(event) => { edited.current = true; setDraft(event.target.value); }} onBlur={() => {
+    if (!edited.current) return;
+    edited.current = false;
+    onSave(draft);
+  }} aria-label={label} placeholder="添加仅自己可见的备注…" className="mt-4 min-h-16 w-full resize-none rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2 text-xs leading-5 outline-none focus:border-blue-300 focus:bg-white" />;
+}
+
+function NewCollectionDialog({ name, error, onNameChange, onSubmit, onClose }: {
   name: string;
+  error: string | null;
   onNameChange: (name: string) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onClose: () => void;
@@ -140,7 +154,8 @@ function NewCollectionDialog({ name, onNameChange, onSubmit, onClose }: {
     <div className="marketplace-modal-backdrop fixed inset-0 z-[80] grid place-items-center bg-slate-950/35 p-4 backdrop-blur-sm" role="presentation" onMouseDown={() => onClose()}>
       <form ref={dialog} onSubmit={onSubmit} onMouseDown={(event) => event.stopPropagation()} className="marketplace-modal-panel max-h-[calc(100dvh-32px)] w-full max-w-md overflow-y-auto rounded-[28px] bg-white p-6 shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="create-list-title">
         <div className="flex items-center justify-between"><div><p className="text-xs font-black uppercase tracking-[0.14em] text-[#0668e1]">整理收藏</p><h2 id="create-list-title" className="mt-1 text-2xl font-black">新建清单</h2></div><button type="button" onClick={onClose} className="grid size-10 place-items-center rounded-full border border-slate-200" aria-label="关闭"><X className="size-4" /></button></div>
-        <label className="mt-6 block text-sm font-black">清单名称<input value={name} onChange={(event) => onNameChange(event.target.value)} placeholder="例如：九月入住" className="mt-2 h-12 w-full rounded-[16px] border border-slate-200 px-4 text-sm outline-none focus:border-blue-400" /></label>
+        <label className="mt-6 block text-sm font-black">清单名称<input aria-invalid={Boolean(error)} aria-describedby={error ? "collection-name-error" : undefined} value={name} onChange={(event) => onNameChange(event.target.value)} placeholder="例如：九月入住" className="mt-2 h-12 w-full rounded-[16px] border border-slate-200 px-4 text-sm outline-none focus:border-blue-400" /></label>
+        {error ? <p id="collection-name-error" role="alert" className="mt-3 text-sm font-bold text-red-700">{error}</p> : null}
         <button type="submit" className="mt-6 w-full rounded-full bg-slate-950 px-5 py-3 text-sm font-black text-white">创建清单</button>
       </form>
     </div>

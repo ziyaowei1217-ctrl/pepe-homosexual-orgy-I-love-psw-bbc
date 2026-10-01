@@ -3,7 +3,7 @@
 import { ArrowLeft, Check, Heart, MessageCircle, Settings2, Sparkles, UsersRound, X } from "lucide-react";
 import Image from "@/components/ui/app-image";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { apiGet, apiPost } from "@/lib/api";
 import type { ApiRoommate, ApiRoommateActionResponse, ApiRoommateActivity, ApiRoommateDeckResponse } from "@/lib/api";
@@ -25,36 +25,89 @@ function RoommatesSessionExperience({ token }: { token: string | null }) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const active = roommates[index] ?? null;
-
+  const [nextCursor, setNextCursor] = useState<number | null>(null);
+  const [loadAttempt, setLoadAttempt] = useState(0);
+  const actedTargets = useRef(new Set<string>());
+  const actionBusy = useRef(false);
+  const mounted = useRef(true);
+  const loadVersion = useRef(0);
+  const [deckFilters] = useState(() => {
+    const params = new URLSearchParams(typeof window === "undefined" ? "" : window.location.search);
+    const filters = new URLSearchParams();
+    for (const key of ["budgetMin", "budgetMax", "school", "schools", "hobby", "hobbies", "city", "gender", "strategy"]) {
+      const value = params.get(key);
+      if (value) filters.set(key, value);
+    }
+    return filters.toString();
+  });
   useEffect(() => {
-    let cancelled = false;
-    const isCurrent = () => !cancelled && (readStoredAuthSession()?.accessToken ?? null) === token;
-    apiGet<ApiRoommateDeckResponse>("/roommates/deck?limit=24", token ?? undefined)
-      .then((deck) => { if (isCurrent()) setRoommates(deck.items); })
-      .catch((caught) => { if (isCurrent()) setError(caught instanceof Error ? caught.message : "室友推荐暂时无法加载。"); })
-      .finally(() => { if (isCurrent()) setLoading(false); });
-    return () => { cancelled = true; };
-  }, [token]);
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
+  const loadDeck = useCallback(async () => {
+    const version = ++loadVersion.current;
+    const isCurrent = () => mounted.current && version === loadVersion.current && (readStoredAuthSession()?.accessToken ?? null) === token;
+    setLoading(true);
+    setError(null);
+    try {
+      // Actions remove profiles server-side, so offsets shift. Start with the
+      // first eligible page and use its cursor only when deduplication empties it.
+      let cursor = 0;
+      const visited = new Set<number>();
+      while (!visited.has(cursor)) {
+        visited.add(cursor);
+        const params = new URLSearchParams(deckFilters);
+        params.set("limit", "24");
+        if (cursor) params.set("cursor", String(cursor));
+        const deck = await apiGet<ApiRoommateDeckResponse>(`/roommates/deck?${params}`, token ?? undefined);
+        if (!isCurrent()) return;
+        const targets = new Set<string>();
+        const items = deck.items.filter((item) => {
+          const id = getRoommateActionTargetId(item) ?? item.id ?? item.name;
+          if (actedTargets.current.has(id) || targets.has(id)) return false;
+          targets.add(id);
+          return true;
+        });
+        const next = typeof deck.pageInfo?.nextCursor === "number" ? deck.pageInfo.nextCursor : null;
+        if (items.length || next === null || visited.has(next)) {
+          setRoommates(items); setIndex(0); setNextCursor(next);
+          break;
+        }
+        cursor = next;
+      }
+    } catch (caught) {
+      if (isCurrent()) setError(caught instanceof Error ? caught.message : "室友推荐暂时无法加载。");
+    } finally {
+      if (isCurrent()) setLoading(false);
+    }
+  }, [deckFilters, token]);
+
+  useEffect(() => { void loadDeck(); }, [loadDeck, loadAttempt]);
 
   async function decide(action: "LIKE" | "PASS") {
     const actionTargetId = active ? getRoommateActionTargetId(active) : undefined;
-    if (!actionTargetId || pending) return;
+    if (!actionTargetId || actionBusy.current || loading) return;
     if (!token) {
-      window.location.assign(authRoute({ returnTo: "/roommates", intent: "roommate-action" }));
+      window.location.assign(authRoute({ returnTo: deckFilters ? `/roommates?${deckFilters}` : "/roommates", intent: "roommate-action" }));
       return;
     }
+    actionBusy.current = true;
     setPending(true);
     setError(null);
     try {
       assertCurrentAuthSession(token);
       const result = await apiPost<ApiRoommateActionResponse>(`/roommates/${encodeURIComponent(actionTargetId)}/actions`, { action }, token);
       assertCurrentAuthSession(token);
-      setRoommates((current) => current.filter((item) => getRoommateActionTargetId(item) !== actionTargetId));
+      if (!mounted.current) return;
+      actedTargets.current.add(actionTargetId);
+      const remaining = roommates.filter((item) => getRoommateActionTargetId(item) !== actionTargetId);
+      setRoommates(remaining);
       setIndex(0);
       if (result.conversation) window.location.assign(`/inbox/${encodeURIComponent(result.conversation.id)}`);
+      else if (!remaining.length && nextCursor !== null) await loadDeck();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "操作失败，请重试。");
-    } finally { setPending(false); }
+    } finally { actionBusy.current = false; if (mounted.current) setPending(false); }
   }
 
   return <main className="min-h-[calc(100dvh-72px)] bg-[#f7f8fb]">
@@ -64,7 +117,7 @@ function RoommatesSessionExperience({ token }: { token: string | null }) {
       <section className="min-w-0">
         <p className="sr-only">为什么适合你</p>
         {loading ? <StatusCard text="正在加载室友推荐…" /> : null}
-        {error ? <StatusCard text={error} error /> : null}
+        {error ? <><StatusCard text={error} error />{!active ? <button type="button" onClick={() => setLoadAttempt((attempt) => attempt + 1)} className="primary-action mt-4">重新加载推荐</button> : null}</> : null}
         {!loading && !error && !active ? <StatusCard text="当前没有新的推荐，稍后再来看看。" /> : null}
         {active ? <article className="overflow-hidden rounded-[30px] border border-slate-200 bg-white shadow-xl"><div className="relative h-[240px] bg-slate-100 sm:h-[420px] lg:h-[560px]"><Image src={active.image} alt={active.name} fill priority sizes="(max-width:1024px) 100vw, 65vw" className="object-cover object-[50%_20%]" /><div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-transparent to-transparent" /><div className="absolute left-5 top-5 rounded-full bg-white px-3 py-1.5 text-xs font-black text-[#0668e1]">{active.compatibilityScore ?? active.match}% 匹配</div><div className="absolute inset-x-6 bottom-6 text-white"><h2 className="text-4xl font-black">{active.name}, {active.age}</h2><p className="mt-2 text-sm text-slate-200">{active.role}</p></div></div><div className="grid gap-4 p-4 sm:gap-6 sm:p-6 md:grid-cols-2"><div><p className="text-xs font-black text-slate-400">预算与地点</p><p className="mt-2 text-sm font-black">{active.budget} · {active.commute}</p><div className="mt-4 flex flex-wrap gap-2">{active.tags.map((tag) => <span key={tag} className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-600">{tag}</span>)}</div></div><div className="hidden rounded-[20px] bg-blue-50 p-5 md:block"><h3 className="flex items-center gap-2 text-sm font-black"><Sparkles className="size-4 text-[#0668e1]" />为什么适合你</h3><ul className="mt-4 space-y-2">{(active.reasons ?? active.recommendation?.primarySignals ?? []).map((reason) => <li key={reason} className="flex gap-2 text-xs text-blue-900"><Check className="size-3.5 shrink-0" />{reason}</li>)}</ul></div><details className="rounded-2xl bg-blue-50 p-4 md:hidden"><summary className="cursor-pointer text-sm font-bold text-blue-900">为什么适合你</summary><ul className="mt-3 space-y-2">{(active.reasons ?? active.recommendation?.primarySignals ?? []).map((reason) => <li key={reason} className="flex gap-2 text-xs leading-5 text-blue-900"><Check className="mt-0.5 size-3.5 shrink-0" />{reason}</li>)}</ul></details></div><div className="flex justify-center gap-2 border-t border-slate-200 p-4 sm:gap-4 sm:p-5"><button disabled={pending} onClick={() => void decide("PASS")} className="grid size-14 place-items-center rounded-full border border-slate-200" aria-label={`跳过 ${active.name}`}><X className="size-5" /></button><button disabled={pending} onClick={() => void decide("LIKE")} className="primary-action px-4 sm:px-8"><Heart className="size-5" />感兴趣</button>{active.id ? <Link href={`/roommates/${encodeURIComponent(active.id)}`} className="secondary-action">查看资料</Link> : null}</div></article> : null}
       </section>
