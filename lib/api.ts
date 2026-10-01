@@ -1,6 +1,7 @@
 import { productErrorForStatus, toProductApiError } from "./product-errors";
 import { getBrowserDeviceId } from "./device-id";
 import { normalizeRoommateMessageBody } from "./roommate-conversations";
+import { isWebsiteDemo, websiteDemoUnavailableError } from "./website-demo";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000/api/v1";
 
@@ -455,6 +456,7 @@ export function getAdminListingReviewQueue(token: string) {
 }
 
 export async function getAdminListingMediaContent(token: string, path: string) {
+  if (isWebsiteDemo()) throw websiteDemoUnavailableError();
   if (!/^\/api\/v1\/admin\/listings\/[^/]+\/media\/[^/]+\/content$/.test(path)) {
     throw productErrorForStatus(400);
   }
@@ -531,6 +533,11 @@ export function archiveAdminRoommate(token: string, id: string) {
 }
 
 async function apiRequest<T>(path: string, init: RequestInit, token?: string): Promise<T> {
+  if (isWebsiteDemo()) {
+    if (init.method !== "GET") throw websiteDemoUnavailableError();
+    const { getWebsiteDemoData } = await import("./website-demo-data");
+    return getWebsiteDemoData(path) as T;
+  }
   const deviceId = getBrowserDeviceId();
   return boundedApiResponse(`${apiBaseUrl()}${path}`, {
       ...init,
@@ -551,6 +558,9 @@ async function apiRequest<T>(path: string, init: RequestInit, token?: string): P
 }
 
 async function boundedApiResponse<T>(url: string, init: RequestInit, read: (response: Response) => Promise<T>) {
+  // Include non-JSON transports, such as moderator media downloads. A demo
+  // build must never contact a configured real backend, even with a stale token.
+  if (isWebsiteDemo()) throw websiteDemoUnavailableError();
   const controller = new AbortController();
   // Include response-body reads in the deadline. Never automatically replay
   // writes: a timed-out request may already have committed on the server.

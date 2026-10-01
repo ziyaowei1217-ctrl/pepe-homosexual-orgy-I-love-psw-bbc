@@ -1,6 +1,7 @@
 import { io, type ManagerOptions, type SocketOptions } from "socket.io-client";
 
 import type { ApiRoommateConversationReadState, ApiRoommateMessage } from "./api";
+import { isWebsiteDemo } from "./website-demo";
 
 export type RoommateRealtimeEvent =
   | {
@@ -47,6 +48,7 @@ export function createRoommateRealtimeClient(options: CreateRoommateRealtimeClie
 
   return {
     connect() {
+      if (isWebsiteDemo()) return;
       if (socket) {
         if (socket.connected === false) socket.connect();
         return;

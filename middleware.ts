@@ -1,16 +1,33 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { buildContentSecurityPolicy, isHttpLoopbackRequest } from "./lib/content-security-policy";
+import { canBrowseWebsiteDemo, isWebsiteDemo } from "./lib/website-demo";
 
 export function middleware(request: NextRequest) {
-  if (process.env.NODE_ENV !== "production") return NextResponse.next();
+  const demo = isWebsiteDemo();
+  if (demo && !["GET", "HEAD"].includes(request.method)) {
+    return NextResponse.json({ code: "WEBSITE_DEMO_READ_ONLY" }, { status: 403, headers: { "Cache-Control": "no-store" } });
+  }
+  if (request.nextUrl.pathname.startsWith("/api/")) {
+    if (demo && request.nextUrl.pathname !== "/api/health") {
+      return NextResponse.json({ code: "WEBSITE_DEMO_READ_ONLY" }, { status: 403, headers: { "Cache-Control": "no-store" } });
+    }
+    return NextResponse.next();
+  }
+  const unavailable = demo && !canBrowseWebsiteDemo(request.nextUrl.pathname);
+  const destination = request.nextUrl.clone();
+  destination.pathname = "/demo";
+  destination.search = "";
+  if (process.env.NODE_ENV !== "production") {
+    return unavailable ? NextResponse.rewrite(destination) : NextResponse.next();
+  }
 
   const nonce = btoa(crypto.randomUUID());
   const loopback = isHttpLoopbackRequest(request.nextUrl.protocol, request.headers.get("host"));
   const policy = buildContentSecurityPolicy(
     nonce,
-    process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000/api/v1",
-    process.env.NEXT_PUBLIC_MEDIA_UPLOAD_ORIGIN,
+    demo ? "" : process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000/api/v1",
+    demo ? undefined : process.env.NEXT_PUBLIC_MEDIA_UPLOAD_ORIGIN,
     // WebKit upgrades even HTTP loopback assets, which breaks local standalone
     // previews. Public hosts and all HTTPS requests retain HTTPS upgrading.
     !loopback
@@ -20,7 +37,9 @@ export function middleware(request: NextRequest) {
   // and applies it to framework and hydration scripts during rendering.
   requestHeaders.set("x-nonce", nonce);
   requestHeaders.set("Content-Security-Policy", policy);
-  const response = NextResponse.next({ request: { headers: requestHeaders } });
+  const response = unavailable
+    ? NextResponse.rewrite(destination, { request: { headers: requestHeaders } })
+    : NextResponse.next({ request: { headers: requestHeaders } });
   response.headers.set("Content-Security-Policy", policy);
   // A cached document cannot safely reuse its per-request script nonce.
   response.headers.set("Cache-Control", "private, no-store");
@@ -28,5 +47,5 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!api/|_next/static|_next/image|favicon.ico|icon.svg|apple-icon.png).*)"]
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|icon.svg|apple-icon.png).*)"]
 };

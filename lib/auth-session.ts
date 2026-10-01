@@ -1,3 +1,5 @@
+import { isWebsiteDemo } from "./website-demo";
+
 const authSessionKey = "sublet_auth_session";
 const legacyTokenKey = "sublet_token";
 const authSessionVersion = 1;
@@ -15,6 +17,7 @@ type StoredAuthSessionEnvelope = StoredAuthSession & {
 };
 
 export function readStoredAuthSession(): StoredAuthSession | null {
+  if (isWebsiteDemo()) return null;
   if (typeof window === "undefined") return null;
 
   if (volatileSession !== undefined) return volatileSession;
@@ -37,6 +40,7 @@ export function readStoredAuthSession(): StoredAuthSession | null {
 }
 
 export function writeStoredAuthSession(accessToken: string) {
+  if (isWebsiteDemo()) return;
   if (typeof window === "undefined") return;
 
   const envelope: StoredAuthSessionEnvelope = {

@@ -42,6 +42,10 @@ function validEnvironment() {
 }
 
 describe("production database driver settings", () => {
+  it("refuses the separate public demonstration flag in a full marketplace deployment", () => {
+    expect(validateProductionConfig({ ...validEnvironment(), NEXT_PUBLIC_WEBSITE_DEMO: "true" })).toContain("NEXT_PUBLIC_WEBSITE_DEMO must be unset or false for the full marketplace deployment");
+    expect(validateProductionConfig({ ...validEnvironment(), NEXT_PUBLIC_WEBSITE_DEMO: "false" })).toEqual([]);
+  });
   it.each(["ssl=0", "ssl=no-verify", "sslcert=path", "sslkey=path", "sslrootcert=path", "sslnegotiation=direct", "uselibpqcompat=true", "options=-c%20statement_timeout=0", "connection_limit=0", "connection_limit=11", "schema=", "schema=%24user", "schema=pg_temp", "socket_timeout=0"])("rejects unsafe setting %s", setting => {
     const env = validEnvironment(); env.DATABASE_URL += `&${setting}`;
     const errors = validateProductionConfig(env);

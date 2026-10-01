@@ -2,6 +2,7 @@ import { assertCurrentAuthSession } from "./auth-session";
 import { apiDelete, apiGet, apiPatch, apiPost } from "./api";
 import type { ApiListing } from "./api";
 import { toProductApiError } from "./product-errors";
+import { isWebsiteDemo, websiteDemoUnavailableError } from "./website-demo";
 
 export const MAX_LISTING_MEDIA_BYTES = 10 * 1024 * 1024;
 export const MAX_LISTING_MEDIA_COUNT = 12;
@@ -201,6 +202,7 @@ export function putPresignedFile(
   file: File,
   onProgress: (progress: number) => void
 ): Promise<void> {
+  if (isWebsiteDemo()) return Promise.reject(websiteDemoUnavailableError());
   return new Promise((resolve, reject) => {
     const request = new XMLHttpRequest();
     request.open("PUT", uploadUrl);

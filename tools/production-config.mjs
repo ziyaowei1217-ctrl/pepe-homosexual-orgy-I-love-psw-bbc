@@ -40,6 +40,9 @@ export function validateProductionConfig(environment) {
     .map((name) => `${name} is required`);
 
   if (environment.NODE_ENV && environment.NODE_ENV !== "production") errors.push("NODE_ENV must be production");
+  if (environment.NEXT_PUBLIC_WEBSITE_DEMO && environment.NEXT_PUBLIC_WEBSITE_DEMO !== "false") {
+    errors.push("NEXT_PUBLIC_WEBSITE_DEMO must be unset or false for the full marketplace deployment");
+  }
   if (environment.NODE_TLS_REJECT_UNAUTHORIZED === "0") {
     errors.push("NODE_TLS_REJECT_UNAUTHORIZED must not disable TLS verification");
   }

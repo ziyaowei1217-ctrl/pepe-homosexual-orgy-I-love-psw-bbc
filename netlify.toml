@@ -1,0 +1,20 @@
+# Dedicated, read-only demonstration. Normal Render production builds do not
+# consume this configuration and keep NEXT_PUBLIC_WEBSITE_DEMO unset.
+[build]
+  command = "npx --yes pnpm@9.15.4 build"
+  publish = ".next"
+
+[build.environment]
+  NODE_VERSION = "22"
+  PNPM_VERSION = "9.15.4"
+  NEXT_TELEMETRY_DISABLED = "1"
+  NEXT_PUBLIC_WEBSITE_DEMO = "true"
+  NEXT_PUBLIC_API_BASE_URL = "https://demo.invalid/api/v1"
+  NEXT_PUBLIC_MEDIA_UPLOAD_ORIGIN = ""
+  NEXT_PUBLIC_MAP_TILE_URL_TEMPLATE = ""
+  NEXT_PUBLIC_MAP_ATTRIBUTION = "© OpenStreetMap contributors"
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Robots-Tag = "noindex, nofollow, noarchive"

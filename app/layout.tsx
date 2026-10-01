@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 
 import { SavedListingsProvider } from "@/components/marketplace/saved-listings-provider";
+import { isWebsiteDemo } from "@/lib/website-demo";
 
 import "./globals.css";
 
@@ -14,6 +15,7 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
+  ...(isWebsiteDemo() ? { robots: { index: false, follow: false } } : {}),
   title: {
     default: "Sublet Pipeline｜全美学生与职场租房及室友匹配",
     template: "%s｜Sublet Pipeline"
@@ -28,7 +30,12 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="zh-CN" data-scroll-behavior="smooth">
-      <body><SavedListingsProvider>{children}</SavedListingsProvider></body>
+      <body>
+        {isWebsiteDemo() ? <aside aria-label="演示版说明" className="border-b border-blue-200 bg-blue-50 px-4 py-3 text-center text-xs font-semibold leading-5 text-blue-950 sm:text-sm">
+          DEMO 演示版 · 房源、室友与匹配分数均为虚构示例。可搜索、查看和本机收藏；不提供登录、聊天、申请或付款。
+        </aside> : null}
+        <SavedListingsProvider>{children}</SavedListingsProvider>
+      </body>
     </html>
   );
 }
