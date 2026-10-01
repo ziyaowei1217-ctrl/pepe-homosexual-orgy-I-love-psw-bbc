@@ -1,7 +1,7 @@
 "use client";
 
 import { ArrowLeft, CalendarDays, FileText, Search, Send, UsersRound } from "lucide-react";
-import Image from "next/image";
+import Image from "@/components/ui/app-image";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 

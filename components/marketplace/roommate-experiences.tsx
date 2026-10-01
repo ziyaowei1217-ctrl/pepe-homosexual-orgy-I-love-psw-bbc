@@ -1,7 +1,7 @@
 "use client";
 
 import { ArrowLeft, Check, Heart, MessageCircle, Settings2, Sparkles, UsersRound, X } from "lucide-react";
-import Image from "next/image";
+import Image from "@/components/ui/app-image";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 

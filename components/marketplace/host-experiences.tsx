@@ -1,7 +1,7 @@
 "use client";
 
 import { Building2, CalendarDays, ClipboardCheck, Eye, MapPin, MessageCircle, Pencil, Plus } from "lucide-react";
-import Image from "next/image";
+import Image from "@/components/ui/app-image";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 

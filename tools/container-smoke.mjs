@@ -46,6 +46,10 @@ try {
   console.log("Hardened container health, homepage and image-cache permissions passed.");
 } catch (error) {
   console.error(error instanceof Error ? error.message : "Container verification failed.");
+  // Disposable CI services contain no production credentials or user data.
+  // Capture bounded server output before removing the failed containers.
+  docker(["logs", "--tail", "60", webName], true);
+  docker(["logs", "--tail", "60", apiName], true);
   process.exitCode = 1;
 } finally {
   docker(["rm", "-f", webName, apiName], true);

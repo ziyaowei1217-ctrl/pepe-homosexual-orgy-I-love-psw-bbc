@@ -8,20 +8,52 @@ if (!["http:", "https:"].includes(target.protocol) || target.username || target.
   throw new Error("A browser demo HTTP(S) URL without credentials is required.");
 }
 const routes = ["/", "/search", "/saved", "/account", "/inbox", "/host/listings", "/admin"];
+const apiOrigin = new URL(process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000/api/v1").origin;
+const mediaPath = "/api/v1/listing-media/00000000-0000-4000-8000-000000000001/content";
 const viewports = [
   { width: 1440, height: 900 },
   { width: 360, height: 800 },
   { width: 844, height: 390 }
 ];
 let checked = 0;
+let optimizerDenials = 0;
+
+function diagnosticUrl(value) {
+  try {
+    const url = new URL(value);
+    return ["http:", "https:"].includes(url.protocol) ? `${url.origin}${url.pathname}` : url.protocol;
+  } catch {
+    return "unavailable";
+  }
+}
+
 for (const [name, engine] of Object.entries({ chromium, firefox, webkit })) {
   const browser = await engine.launch();
   try {
+    const context = await browser.newContext();
+    try {
+      for (const source of [mediaPath, new URL(mediaPath, apiOrigin).href]) {
+        const url = new URL("/_next/image", target);
+        url.search = new URLSearchParams({ url: source, w: "640", q: "75" }).toString();
+        const response = await context.request.get(url.href);
+        assert.equal(response.status(), 400, `${name} API photo optimizer denial`);
+        optimizerDenials += 1;
+      }
+    } finally {
+      await context.close();
+    }
     for (const viewport of viewports) {
       const context = await browser.newContext({ viewport, hasTouch: viewport.width < 900 });
       const page = await context.newPage();
       const errors = [];
+      const failedRequests = [];
+      let activeRoute = "browser setup";
+      let policy = "";
       page.on("pageerror", (error) => errors.push(error.message));
+      page.on("requestfailed", (request) => {
+        failedRequests.push({ url: diagnosticUrl(request.url()), error: request.failure()?.errorText ?? "request failed" });
+        if (failedRequests.length > 10) failedRequests.shift();
+      });
       await page.addInitScript(() => {
         window.__browserSmokePolicyViolations = [];
         document.addEventListener("securitypolicyviolation", (event) => {
@@ -30,8 +62,11 @@ for (const [name, engine] of Object.entries({ chromium, firefox, webkit })) {
       });
       try {
         for (const route of routes) {
+          activeRoute = route;
+          policy = "";
           const response = await page.goto(new URL(route, target).href, { waitUntil: "networkidle", timeout: 30_000 });
           assert.equal(response?.status(), 200, `${name} ${route} response`);
+          policy = response.headers()["content-security-policy"] ?? "";
           // An HTTP loopback upgrade can silently prevent CSS loading in WebKit;
           // merely checking document status and overflow does not catch that.
           await page.waitForFunction(() => Array.from(document.styleSheets).some((sheet) => {
@@ -45,7 +80,6 @@ for (const [name, engine] of Object.entries({ chromium, firefox, webkit })) {
           }));
           assert.ok(state.textLength > 20, `${name} ${route} content`);
           assert.ok(state.scrollWidth <= state.viewport + 1, `${name} ${viewport.width} ${route} horizontal overflow`);
-          const policy = response.headers()["content-security-policy"] ?? "";
           const nonce = /nonce-([^']+)/.exec(policy)?.[1];
           assert.ok(nonce, `${name} ${route} production CSP nonce`);
           assert.ok(state.inlineNonces.length > 0, `${name} ${route} hydration scripts`);
@@ -63,6 +97,17 @@ for (const [name, engine] of Object.entries({ chromium, firefox, webkit })) {
           assert.deepEqual(errors, [], `${name} ${route} interaction errors`);
           checked += 1;
         }
+      } catch (error) {
+        const sheets = await page.evaluate(() => Array.from(document.styleSheets, (sheet) => sheet.href)).catch(() => []);
+        // Omit query strings, fragments and URL credentials from CI diagnostics.
+        console.error(JSON.stringify({
+          browserCheck: `${name} ${viewport.width}x${viewport.height} ${activeRoute}`,
+          failedRequests,
+          stylesheets: sheets.filter(Boolean).map(diagnosticUrl),
+          upgradeInsecureRequests: policy.includes("upgrade-insecure-requests"),
+          pageErrors: errors
+        }));
+        throw error;
       } finally {
         await context.close();
       }
@@ -71,4 +116,4 @@ for (const [name, engine] of Object.entries({ chromium, firefox, webkit })) {
     await browser.close();
   }
 }
-console.log(`${checked} production browser checks passed across Chromium, Firefox and WebKit.`);
+console.log(`${checked} production browser checks and ${optimizerDenials} API photo cache denials passed across Chromium, Firefox and WebKit.`);

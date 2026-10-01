@@ -17,7 +17,7 @@ describe("listing image byte validation", () => {
     await expect(prepareListingImage(bytes, expected(bytes, "image/png")))
       .rejects.toMatchObject({ code: "IMAGE_VALIDATION_FAILED" });
   });
-  it.each(["jpeg", "png", "webp"] as const)("publishes a decoded %s with private metadata removed and phone orientation corrected", async (format) => {
+  it.each(["jpeg", "png", "webp"] as const)("publishes a small %s without enlargement, removes private metadata and corrects phone orientation", async (format) => {
     const bytes = await sharp({ create: { width: 2, height: 3, channels: 3, background: "red" } })
       .withMetadata({ orientation: 6 })
       .withExifMerge({ IFD0: { Artist: "private photographer" } })
@@ -34,6 +34,34 @@ describe("listing image byte validation", () => {
     expect(published.orientation).toBeUndefined();
     expect(prepared).toMatchObject({ mimeType, width: 3, height: 2, sizeBytes: prepared.bytes.length, checksumSha256: sha256(prepared.bytes) });
     expect(prepared.checksumSha256).not.toBe(sha256(bytes));
+  });
+  it.each(["jpeg", "png", "webp"] as const)("bounds a large phone %s to a 2560-pixel edge after correcting portrait orientation", async (format) => {
+    const bytes = await sharp({ create: { width: 4_032, height: 3_024, channels: 3, background: "red" } })
+      .withMetadata({ orientation: 6 })
+      .withExifMerge({ IFD0: { Artist: "private photographer" } })
+      .toFormat(format).toBuffer();
+    const mimeType = `image/${format}` as SupportedListingMediaMimeType;
+    const prepared = await prepareListingImage(bytes, expected(bytes, mimeType));
+    const published = await sharp(prepared.bytes).metadata();
+
+    expect(published).toMatchObject({ format, width: 1_920, height: 2_560 });
+    expect(published.exif).toBeUndefined();
+    expect(published.orientation).toBeUndefined();
+    expect(prepared).toMatchObject({
+      mimeType,
+      width: 1_920,
+      height: 2_560,
+      sizeBytes: prepared.bytes.length,
+      checksumSha256: sha256(prepared.bytes)
+    });
+    expect(prepared.bytes.length).toBeLessThan(bytes.length);
+  }, 15_000);
+  it("preserves an oversized landscape photo's aspect ratio without cropping", async () => {
+    const bytes = await imageBytes("jpeg", 3_840, 2_160);
+    const prepared = await prepareListingImage(bytes, expected(bytes, "image/jpeg"));
+
+    expect(prepared).toMatchObject({ width: 2_560, height: 1_440 });
+    expect(await sharp(prepared.bytes).metadata()).toMatchObject({ width: 2_560, height: 1_440 });
   });
   it.each([
     ["jpeg", "image/jpeg"],

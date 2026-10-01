@@ -1,7 +1,7 @@
 "use client";
 
 import { ArrowLeft, ArrowRight, Bath, BedDouble, CalendarDays, Check, ChevronDown, Heart, LayoutGrid, List, Map, MapPin, Search, SlidersHorizontal, Star, TrainFront, X } from "lucide-react";
-import Image from "next/image";
+import Image from "@/components/ui/app-image";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 

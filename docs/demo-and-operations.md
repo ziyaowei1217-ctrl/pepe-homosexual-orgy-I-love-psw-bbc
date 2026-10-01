@@ -119,8 +119,9 @@ including any non-default port. It is embedded in the web build and permits brow
 Content Security Policy. Restrict the storage provider's CORS policy to `WEB_ORIGIN`; keep the bucket
 private and use a least-privilege object-storage account rather than a root management credential.
 
-Newly finalized images are normalized before publication to remove EXIF/IPTC/XMP metadata and
-preserve visible orientation. Existing uploaded objects are not rewritten. Before a public release,
+Newly finalized images are normalized before publication to remove EXIF/IPTC/XMP metadata,
+preserve visible orientation and bound the longest edge to 2560 pixels without upscaling.
+Existing uploaded objects are not rewritten and do not receive the new size bound. Before a public release,
 inventory existing images, re-upload and review them, retire the old media IDs/object keys, and
 invalidate downstream image/CDN caches. Verify the newly served bytes contain no such metadata.
 Previously downloaded or immutable browser-cached originals cannot be remotely erased; review

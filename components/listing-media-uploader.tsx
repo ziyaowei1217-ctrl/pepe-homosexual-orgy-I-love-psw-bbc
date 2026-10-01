@@ -3,7 +3,7 @@
 import { newBrowserCommandId } from "@/lib/browser-id";
 
 import { useEffect, useRef, useState } from "react";
-import Image from "next/image";
+import Image from "@/components/ui/app-image";
 
 import { assertCurrentAuthSession } from "@/lib/auth-session";
 import { Button } from "@/components/ui/button";

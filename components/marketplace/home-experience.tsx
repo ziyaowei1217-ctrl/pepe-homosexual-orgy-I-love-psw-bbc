@@ -1,5 +1,5 @@
 import { ArrowRight, CalendarDays, ChevronRight, KeyRound, MapPin, Search, Sofa, Star, TrainFront, UsersRound } from "lucide-react";
-import Image from "next/image";
+import Image from "@/components/ui/app-image";
 import Link from "next/link";
 
 import { LocationAutocomplete } from "@/components/marketplace/location-autocomplete";

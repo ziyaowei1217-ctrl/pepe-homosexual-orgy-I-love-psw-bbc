@@ -11,7 +11,7 @@ import {
   MessageCircle,
   ShieldCheck
 } from "lucide-react";
-import Image from "next/image";
+import Image from "@/components/ui/app-image";
 import Link from "next/link";
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 

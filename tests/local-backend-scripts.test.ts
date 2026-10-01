@@ -39,8 +39,10 @@ describe("local backend scripts", () => {
       const invocation = pnpmInvocation(environment);
       const result = spawnSync(invocation.command, [...invocation.prefix, "dev:local"], { cwd: directory, encoding: "utf8", timeout: 20_000, shell: invocation.shell, env: environment });
       expect(result.status, result.stderr).toBe(0);
-      expect(result.stdout).toMatch(/^\. dev: WEB_STARTED$/m);
-      expect(result.stdout).toMatch(/^api dev: API_STARTED$/m);
+      // pnpm uses workspace-relative prefixes on POSIX and absolute/truncated
+      // directory prefixes on Windows; the distinct process markers are stable.
+      expect(result.stdout).toMatch(/ dev: WEB_STARTED\r?$/m);
+      expect(result.stdout).toMatch(/ dev: API_STARTED\r?$/m);
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }

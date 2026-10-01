@@ -1,7 +1,7 @@
 "use client";
 
 import { ArrowRight, LocateFixed, MapPin, Minus, Plus, X, ChevronLeft, ChevronRight } from "lucide-react";
-import Image from "next/image";
+import Image from "@/components/ui/app-image";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 

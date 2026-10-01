@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildContentSecurityPolicy } from "../lib/content-security-policy";
+import { buildContentSecurityPolicy, isHttpLoopbackRequest } from "../lib/content-security-policy";
 
 describe("document CSP", () => {
   it("restricts scripts to the request nonce and explicitly allows API, sockets, uploads", () => {
@@ -23,5 +23,19 @@ describe("document CSP", () => {
     expect(local).not.toContain("upgrade-insecure-requests");
     expect(local).toContain("script-src 'self' 'nonce-nonce' 'strict-dynamic'");
     expect(buildContentSecurityPolicy("nonce", "https://api.example.org")).toContain("upgrade-insecure-requests");
+  });
+  it.each(["localhost", "LOCALHOST:4301", "127.0.0.1:3000", "[::1]", "[::1]:4301"])(
+    "recognizes the browser's loopback authority %s independently of the server bind address",
+    (authority) => expect(isHttpLoopbackRequest("http:", authority)).toBe(true)
+  );
+  it.each([
+    null, "0.0.0.0:4301", "example.org", "localhost.example.org", "192.168.1.10:4301",
+    "localhost@evil.example", "localhost/", "localhost?x=1", "localhost#x", "localhost\\evil.example",
+    " localhost", "localhost:65536", "localhost:", "127.1", "localhost:80,example.org"
+  ])("retains HTTPS upgrading for public or invalid authorities %s", (authority) => {
+    expect(isHttpLoopbackRequest("http:", authority)).toBe(false);
+  });
+  it("retains HTTPS upgrading for HTTPS loopback requests", () => {
+    expect(isHttpLoopbackRequest("https:", "localhost:4301")).toBe(false);
   });
 });

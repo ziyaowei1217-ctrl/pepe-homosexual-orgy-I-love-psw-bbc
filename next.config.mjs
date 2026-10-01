@@ -22,13 +22,12 @@ const nextConfig = {
   poweredByHeader: false,
   images: {
     // In local Docker the browser's localhost API is outside the web container.
-    // Let the browser request development images directly; production optimizes them.
+    // Let the browser request development images directly. Production optimizes
+    // Unsplash only: revocable API photos must bypass Next's stale-on-error cache.
     unoptimized: !production,
     minimumCacheTTL: 0,
-    remotePatterns: [
-      { protocol: "https", hostname: "images.unsplash.com" },
-      ...remotePatternFor(apiBaseUrl)
-    ]
+    localPatterns: [],
+    remotePatterns: [{ protocol: "https", hostname: "images.unsplash.com" }]
   },
   async headers() {
     const headers = [
@@ -47,14 +46,6 @@ const nextConfig = {
 
 function safeOrigin(value) {
   try { return new URL(value).origin; } catch { return ""; }
-}
-
-function remotePatternFor(value) {
-  try {
-    const url = new URL(value);
-    if (url.protocol !== "http:" && url.protocol !== "https:") return [];
-    return [{ protocol: url.protocol.slice(0, -1), hostname: url.hostname, port: url.port || undefined, pathname: "/api/v1/listing-media/*/content" }];
-  } catch { return []; }
 }
 
 export default nextConfig;

@@ -41,7 +41,8 @@ conditions rather than assumptions of completed deployment. Validation results b
 ### Primary components
 
 - **Browser/Next client and server:** responsive React UI, client bearer API calls, server-side API
-  reads and constrained image optimization. Production middleware generates per-request script
+  reads and stock-image optimization; first-party media bypasses the optimizer to enforce revocation.
+  Production middleware generates per-request script
   nonces and prevents document caching (`middleware.ts`, `lib/content-security-policy.ts`,
   `next.config.mjs`). Normal access tokens persist in `localStorage`; administrator step-up tokens
   use tab `sessionStorage` through the administrator UI (`lib/auth-session.ts`, `lib/admin-step-up.ts`).
@@ -65,8 +66,8 @@ conditions rather than assumptions of completed deployment. Validation results b
 
 ### Data flows and trust boundaries
 
-- **B01 Browser → Next:** HTML, scripts, navigation and image requests over local HTTP or conditional
-  public HTTPS. Nonce CSP, framing restrictions and narrow API image paths constrain active content;
+- **B01 Browser → Next:** HTML, scripts, navigation and stock-image requests over local HTTP or conditional
+  public HTTPS. Nonce CSP, framing restrictions and optimizer denial of API image paths constrain active content;
   browser storage remains readable by executed same-origin JavaScript. Anchors: `middleware.ts`,
   `next.config.mjs`, `lib/auth-session.ts`.
 - **B02 Browser/Next → API:** JSON fields, bearer tokens and Socket.IO handshake authentication.
@@ -86,7 +87,8 @@ conditions rather than assumptions of completed deployment. Validation results b
 - **B05 API → Object storage:** credentials and object bytes over production HTTPS; private-bucket
   policy remains an operator control. Streaming reads stop at 10 MiB and 15 seconds; decoder input
   is capped at 40 million pixels. Three finalizations per process are admitted before buffering;
-  validated, metadata-stripped derivatives enter a separate immutable key namespace. Published
+  validated, metadata-stripped derivatives fit a 2560 px longest edge without enlargement and enter
+  a separate immutable key namespace. Published
   reads recheck listing approval and byte integrity. Anchors: `listing-media-storage.ts`,
   `listing-media-validation.ts`, `listing-media.service.ts` under `api/src/listing-media/`.
   The archived demo CE backend cannot be trusted against untrusted direct clients: disclosed access

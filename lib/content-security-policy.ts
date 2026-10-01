@@ -7,6 +7,19 @@ function httpOrigin(value: string | undefined) {
   }
 }
 
+export function isHttpLoopbackRequest(protocol: string, authority: string | null) {
+  if (protocol !== "http:" || !authority) return false;
+  // The incoming Host represents the browser origin. Next may instead expose
+  // the server's wildcard bind address in nextUrl when running standalone.
+  // Accept only exact loopback authorities, with an optional valid port.
+  if (!/^(?:localhost|127\.0\.0\.1|\[::1\])(?::[0-9]{1,5})?$/i.test(authority)) return false;
+  try {
+    return ["localhost", "127.0.0.1", "[::1]"].includes(new URL(`http://${authority}`).hostname);
+  } catch {
+    return false;
+  }
+}
+
 export function buildContentSecurityPolicy(nonce: string, apiUrl: string, uploadOrigin?: string, upgradeRequests = true) {
   const apiOrigin = httpOrigin(apiUrl);
   const upload = httpOrigin(uploadOrigin);
