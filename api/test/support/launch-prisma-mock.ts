@@ -355,10 +355,14 @@ export function createLaunchPrismaMock() {
         const school = query.values?.[2];
         return state.roommateMatchingProfiles.filter(matching => {
           if (matching.status !== "active" || (city !== null && matching.city !== city) || (school !== null && matching.school !== school)) return false;
+          if (state.roommateMatchingProfiles.some(newer => newer.userId === matching.userId &&
+            (newer.createdAt.getTime() > matching.createdAt.getTime() ||
+              (newer.createdAt.getTime() === matching.createdAt.getTime() && newer.id > matching.id)))) return false;
           const profile = state.profiles.find(profile => profile.id === matching.userId);
           const account = state.users.find(user => user.email === profile?.email);
           return state.roommates.some(owned => owned.ownerId === account?.id && owned.status === "active" && owned.archivedAt === null);
-        }).sort((left, right) => right.updatedAt.getTime() - left.updatedAt.getTime() || right.id.localeCompare(left.id));
+        }).sort((left, right) => right.updatedAt.getTime() - left.updatedAt.getTime() || right.id.localeCompare(left.id))
+          .slice(0, Number(query.values?.at(-1)));
       }
       return [{ ok: 1 }];
     },
@@ -571,16 +575,26 @@ export function createLaunchPrismaMock() {
           intro: data.intro ?? null,
           lookingFor: data.lookingFor ?? null,
           status: data.status ?? "active",
-          createdAt: new Date(),
-          updatedAt: new Date()
+          createdAt: data.createdAt ?? new Date(),
+          updatedAt: data.updatedAt ?? new Date()
         };
         state.roommateMatchingProfiles.push(created);
         return created;
       },
       findMany: async ({ where }: { where?: Partial<RoommateMatchingProfileRecord> } = {}) =>
         state.roommateMatchingProfiles.filter((profile) => matchesPartial(profile, where)),
-      findFirst: async ({ where }: { where: Partial<RoommateMatchingProfileRecord> }) =>
-        state.roommateMatchingProfiles.find((profile) => matchesPartial(profile, where)) ?? null,
+      findFirst: async ({ where, orderBy }: { where: Partial<RoommateMatchingProfileRecord>; orderBy?: unknown }) => {
+        const profiles = state.roommateMatchingProfiles.filter((profile) => matchesPartial(profile, where));
+        if (orderBy) profiles.sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime() || right.id.localeCompare(left.id));
+        return profiles[0] ?? null;
+      },
+      updateMany: async ({ where, data }: {
+        where: { userId: string; id: { not: string }; status: string }; data: Partial<RoommateMatchingProfileRecord>
+      }) => {
+        const profiles = state.roommateMatchingProfiles.filter(profile => profile.userId === where.userId && profile.id !== where.id.not && profile.status === where.status);
+        for (const profile of profiles) Object.assign(profile, data, { updatedAt: new Date() });
+        return { count: profiles.length };
+      },
       update: async ({ where, data }: { where: { id: string }; data: Partial<RoommateMatchingProfileRecord> }) => {
         const profile = state.roommateMatchingProfiles.find((record) => record.id === where.id);
         if (!profile) throw new Error(`Missing roommate matching profile ${where.id}`);
@@ -747,15 +761,16 @@ export function createLaunchPrismaMock() {
       }
     },
     roommateProfile: {
-      findMany: async ({ where }: { where?: { status?: string; archivedAt?: null } } = {}) =>
+      findMany: async ({ where, take }: { where?: { status?: string; archivedAt?: null }; take?: number } = {}) =>
         state.roommates.length > 0
           ? [...state.roommates]
               .filter((roommate) => !where?.status || (roommate.status ?? "active") === where.status)
               .filter(roommate => where?.archivedAt !== null || roommate.archivedAt === null)
-              .sort((a, b) => b.match - a.match)
+              .sort((a, b) => b.match - a.match || a.id.localeCompare(b.id))
+              .slice(0, take)
           : [],
       findUnique: async ({ where }: { where: { id?: string; ownerId?: string } }) =>
-        state.roommates.find((roommate) => roommate.id === where.id || roommate.ownerId === where.ownerId) ?? null,
+        state.roommates.find((roommate) => where.id !== undefined ? roommate.id === where.id : where.ownerId !== undefined && roommate.ownerId === where.ownerId) ?? null,
       upsert: async ({
         where,
         create,

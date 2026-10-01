@@ -179,6 +179,23 @@ describe("marketplace database API", () => {
     expect(result.body.role).toBe("both");
   });
 
+  it("reuses the authenticated owner's profile ID on repeat POST and cannot republish a hidden singleton", async () => {
+    const http = request(app.getHttpServer());
+    const first = await http.post("/api/v1/roommate-profiles").set("Authorization", `Bearer ${token}`)
+      .send({ ...roommateProfilePayload(), intro: "Previous facts" }).expect(201);
+    const updated = await http.post("/api/v1/roommate-profiles").set("Authorization", `Bearer ${token}`)
+      .send({ ...roommateProfilePayload(), city: "SF", intro: "Current facts" }).expect(201);
+    expect(updated.body.id).toBe(first.body.id);
+    await http.get("/api/v1/roommate-profiles").expect(200)
+      .expect((response: any) => expect(response.body).toEqual([expect.objectContaining({ id: first.body.id, city: "SF", intro: "Current facts" })]));
+    await http.patch(`/api/v1/roommate-profiles/${first.body.id}`).set("Authorization", `Bearer ${token}`)
+      .send({ status: "hidden" }).expect(200);
+    await http.post("/api/v1/roommate-profiles").set("Authorization", `Bearer ${token}`)
+      .send(roommateProfilePayload()).expect(409);
+    await http.get("/api/v1/roommate-profiles").expect(200).expect([]);
+    await http.get("/api/v1/roommates").expect(200).expect([]);
+  });
+
   it("keeps archived roommate preferences private on both public endpoints even for inconsistent historical rows", async () => {
     const http = request(app.getHttpServer());
     const created = await http.post("/api/v1/roommate-profiles").set("Authorization", `Bearer ${token}`)

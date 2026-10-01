@@ -1,4 +1,4 @@
-import { BadRequestException, HttpException, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ConflictException, HttpException, NotFoundException } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { randomUUID } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -130,6 +130,32 @@ describe("RoommateConversationsService", () => {
 
     expect(result).toMatchObject({ id: "message-race-winner", body: "One durable message" });
     expect(database.messages).toHaveLength(1);
+  });
+
+  it("rejects changed-body retries and replays the same trimmed body without extra quota, writes or events", async () => {
+    const database = createConversationDatabase();
+    const consume = vi.fn(async () => undefined);
+    const publish = vi.fn(async () => undefined);
+    const service = createService(database, { publish }, { consume });
+    const command = { clientMessageId: randomUUID(), body: "  Original body  " };
+    const sent = await service.sendMessage("user-a", "conversation-a-b", command);
+    await expect(service.sendMessage("user-a", "conversation-a-b", { ...command, body: "Changed body" }))
+      .rejects.toBeInstanceOf(ConflictException);
+    await expect(service.sendMessage("user-c", "conversation-a-b", command)).rejects.toBeInstanceOf(NotFoundException);
+    expect(await service.sendMessage("user-a", "conversation-a-b", { ...command, body: "Original body" })).toEqual(sent);
+    expect(database.messages).toHaveLength(1);
+    expect(consume).toHaveBeenCalledTimes(1);
+    expect(publish).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects a changed-body duplicate insertion against the durable race winner", async () => {
+    const database = createConversationDatabase({ loseNextMessageRace: true, winningBody: "Winning body" });
+    const publish = vi.fn(async () => undefined);
+    await expect(createService(database, { publish }).sendMessage("user-a", "conversation-a-b", {
+      clientMessageId: randomUUID(), body: "Losing body"
+    })).rejects.toBeInstanceOf(ConflictException);
+    expect(database.messages).toEqual([expect.objectContaining({ body: "Winning body" })]);
+    expect(publish).not.toHaveBeenCalled();
   });
 
   it("rejects empty, over-2000-character, and closed-match sends", async () => {
@@ -333,7 +359,7 @@ type Message = {
   createdAt: Date;
 };
 
-function createConversationDatabase(options: { loseNextMessageRace?: boolean; closeBeforeTransaction?: boolean } = {}) {
+function createConversationDatabase(options: { loseNextMessageRace?: boolean; closeBeforeTransaction?: boolean; winningBody?: string } = {}) {
   const match: Match = { id: "match-a-b", status: "ACTIVE" };
   const conversation: Conversation = {
     id: "conversation-a-b",
@@ -377,7 +403,8 @@ function createConversationDatabase(options: { loseNextMessageRace?: boolean; cl
           const winning = {
             id: "message-race-winner",
             createdAt: at(10),
-            ...data
+            ...data,
+            body: options.winningBody ?? data.body
           };
           messages.push(winning);
           throw new Prisma.PrismaClientKnownRequestError("Unique constraint", {

@@ -176,7 +176,7 @@ export function buildRoommateDeck(
   const limit = clampInteger(query.limit, defaultLimit, 1, maxLimit);
   const cursor = clampInteger(query.cursor, 0, 0, Number.MAX_SAFE_INTEGER);
   const preference = buildPreference(query);
-  const ranked = buildRankedRoommateCandidates(baseProfiles, query);
+  const ranked = rankRoommateCandidates(baseProfiles, preference);
   const page = ranked.slice(cursor, cursor + limit);
   const nextCursor = cursor + page.length < ranked.length ? cursor + page.length : null;
   const topScore = ranked[0]?.compatibilityScore ?? 0;
@@ -207,7 +207,10 @@ export function buildRoommateDeck(
 }
 
 export function buildRankedRoommateCandidates(baseProfiles: RoommateDeckBaseProfile[], query: RoommateDeckQuery = {}) {
-  const preference = buildPreference(query);
+  return rankRoommateCandidates(baseProfiles, buildPreference(query));
+}
+
+function rankRoommateCandidates(baseProfiles: RoommateDeckBaseProfile[], preference: RoommateDeckPreference) {
   const realProfiles = baseProfiles.filter((profile) => "ownerId" in profile && Boolean(profile.ownerId));
   const developmentProfiles = baseProfiles.filter((profile) => !("ownerId" in profile) || !profile.ownerId);
   const catalog = [

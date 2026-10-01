@@ -1,10 +1,12 @@
-import { BadRequestException } from "@nestjs/common";
+import { BadRequestException, NotFoundException } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { RoommateMatchService, normalizeUserPair } from "../src/roommates/roommate-match.service";
+import { RoommatesService } from "../src/roommates/roommates.service";
 
 describe("RoommateMatchService", () => {
+  afterEach(() => vi.unstubAllEnvs());
   it("creates one match and two members after the second reciprocal LIKE", async () => {
     const database = createDatabase();
     const service = new RoommateMatchService(database.prisma as never);
@@ -62,6 +64,7 @@ describe("RoommateMatchService", () => {
   });
 
   it("never creates real chat for an ownerless development candidate", async () => {
+    vi.stubEnv("NODE_ENV", "development");
     const database = createDatabase();
     const service = new RoommateMatchService(database.prisma as never);
 
@@ -70,6 +73,34 @@ describe("RoommateMatchService", () => {
     expect(result).toMatchObject({ match: null, conversation: null });
     expect(database.actions).toHaveLength(1);
     expect(database.conversations).toHaveLength(0);
+  });
+
+  it.each(["LIKE", "PASS", "LATER"] as const)("rejects production ownerless targets before %s persistence or private-name feedback", async action => {
+    vi.stubEnv("NODE_ENV", "production");
+    const database = createDatabase();
+    const matches = new RoommateMatchService(database.prisma as never);
+    const legacyAction = vi.fn();
+    const routePrisma = {
+      roommateProfile: { findUnique: async ({ where }: { where: { id: string } }) =>
+        database.profiles.find(profile => profile.id === where.id) ?? null }
+    };
+    const service = new RoommatesService(routePrisma as never, { recordRoommateAction: legacyAction } as never, matches);
+    const rejection = await service.recordAction("user-a", "demo-profile", action).catch(error => error);
+    expect(rejection).toBeInstanceOf(NotFoundException);
+    expect(rejection.getResponse()).toEqual(new NotFoundException("Roommate profile not found").getResponse());
+    expect(database.actions).toHaveLength(0);
+    expect(database.matches).toHaveLength(0);
+    expect(database.conversations).toHaveLength(0);
+    expect(legacyAction).not.toHaveBeenCalled();
+  });
+
+  it("retains production matching for eligible owned targets", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    const database = createDatabase();
+    const matches = new RoommateMatchService(database.prisma as never);
+    await matches.recordAction("user-a", "profile-b", "LIKE");
+    expect(await matches.recordAction("user-b", "profile-a", "LIKE"))
+      .toMatchObject({ match: { firstUserId: "user-a", secondUserId: "user-b" }, conversation: expect.any(Object) });
   });
 
   it("normalizes pair order during concurrent opposite-direction likes", async () => {
@@ -104,6 +135,64 @@ describe("RoommateMatchService", () => {
     await expect(service.recordAction("user-a", "profile-b", "LIKE")).rejects.toThrow("database unavailable");
     expect(database.transactionAttempts).toBe(1);
   });
+
+  it.each(["40001", "40P01"])("retries a PostgreSQL row-lock transaction conflict surfaced as P2010/%s", async code => {
+    const database = createDatabase({ transactionFailures: [new Prisma.PrismaClientKnownRequestError("Row lock conflict", {
+      code: "P2010", clientVersion: "test", meta: { code }
+    })] });
+    expect(await new RoommateMatchService(database.prisma as never).recordAction("user-a", "profile-b", "LIKE"))
+      .toMatchObject({ action: { action: "LIKE" } });
+    expect(database.transactionAttempts).toBe(2);
+  });
+
+  it("does not retry unrelated raw query failures", async () => {
+    const failure = new Prisma.PrismaClientKnownRequestError("Invalid raw query", {
+      code: "P2010", clientVersion: "test", meta: { code: "42601" }
+    });
+    const database = createDatabase({ transactionFailures: [failure] });
+    await expect(new RoommateMatchService(database.prisma as never).recordAction("user-a", "profile-b", "LIKE"))
+      .rejects.toBe(failure);
+    expect(database.transactionAttempts).toBe(1);
+  });
+
+  it.each([
+    { status: "hidden", archivedAt: new Date() },
+    { status: "matched", archivedAt: new Date() },
+    { status: "active", archivedAt: new Date() }
+  ])("rejects new actions against unavailable targets before persisting anything: %o", async (visibility) => {
+    for (const action of ["LIKE", "PASS", "LATER"] as const) {
+      const database = createDatabase();
+      Object.assign(database.profiles[1], visibility);
+      const service = new RoommateMatchService(database.prisma as never);
+      await expect(service.recordAction("user-a", "profile-b", action)).rejects.toBeInstanceOf(NotFoundException);
+      expect(database.actions).toHaveLength(0);
+      expect(database.matches).toHaveLength(0);
+      expect(database.conversations).toHaveLength(0);
+      expect(database.conversationMembers).toHaveLength(0);
+    }
+  });
+
+  it.each(["hidden", "matched"])("cannot publish inbound activity or a conversation when the actor is %s", async (status) => {
+    const database = createDatabase();
+    const service = new RoommateMatchService(database.prisma as never);
+    await service.recordAction("user-b", "profile-a", "LIKE");
+    Object.assign(database.profiles[0], { status, archivedAt: new Date() });
+    await expect(service.recordAction("user-a", "profile-b", "LIKE")).rejects.toBeInstanceOf(BadRequestException);
+    expect(database.actions).toHaveLength(1);
+    expect(database.actions[0].userId).toBe("user-b");
+    expect(database.matches).toHaveLength(0);
+    expect(database.conversations).toHaveLength(0);
+  });
+
+  it("rechecks visibility in the retried transaction after an archive wins a race", async () => {
+    const database = createDatabase({ transactionFailures: [transactionConflict()] });
+    Object.assign(database.profiles[1], { status: "hidden", archivedAt: new Date() });
+    await expect(new RoommateMatchService(database.prisma as never)
+      .recordAction("user-a", "profile-b", "LIKE")).rejects.toBeInstanceOf(NotFoundException);
+    expect(database.transactionAttempts).toBe(2);
+    expect(database.actions).toHaveLength(0);
+    expect(database.matches).toHaveLength(0);
+  });
 });
 
 type Action = { id: string; userId: string; roommateProfileId: string; action: "LIKE" | "PASS" | "LATER" };
@@ -132,6 +221,7 @@ function createDatabase(options: { transactionFailures?: Error[] } = {}) {
     }
   };
   const transaction = {
+    $queryRaw: async () => profiles.map(({ id }) => ({ id })),
     roommateProfile: {
       findUnique: async ({ where }: { where: { id?: string; ownerId?: string } }) =>
         profiles.find((item) => item.id === where.id || item.ownerId === where.ownerId) ?? null
@@ -208,6 +298,7 @@ function createDatabase(options: { transactionFailures?: Error[] } = {}) {
 
   return {
     prisma,
+    profiles,
     actions,
     matches,
     conversations,
@@ -229,6 +320,8 @@ function profile(id: string, ownerId: string | null) {
   return {
     id,
     ownerId,
+    status: "active",
+    archivedAt: null as Date | null,
     name: id,
     age: 22,
     role: "Student",

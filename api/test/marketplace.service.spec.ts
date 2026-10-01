@@ -58,6 +58,7 @@ function createTransactionalDatabase({ withExistingMatchingProfile = false } = {
   };
   const prisma = {
     profile: {
+      findUnique: async () => profile,
       upsert: async () => profile
     },
     roommateMatchingProfile: {
@@ -76,7 +77,7 @@ function createTransactionalDatabase({ withExistingMatchingProfile = false } = {
       }
     },
     roommateProfile: {
-      findUnique: async () => (withExistingMatchingProfile ? { ownerId: "user-1", age: 26 } : null),
+      findUnique: async () => (withExistingMatchingProfile ? { ownerId: "user-1", age: 26, status: "active", archivedAt: null } : null),
       upsert: async () => {
         throw new Error("public-card write failed");
       }
@@ -97,8 +98,9 @@ function createTransactionalDatabase({ withExistingMatchingProfile = false } = {
             pendingProfiles.push(created);
             return created;
           },
-          findFirst: async ({ where }: { where: { id: string; userId: string } }) =>
-            pendingProfiles.find((item) => item.id === where.id && item.userId === where.userId) ?? null,
+          findFirst: async ({ where }: { where: { id?: string; userId: string } }) =>
+            pendingProfiles.find((item) => (!where.id || item.id === where.id) && item.userId === where.userId) ?? null,
+          updateMany: async () => ({ count: 0 }),
           update: async ({ where, data }: { where: { id: string }; data: Record<string, unknown> }) => {
             const matchingProfile = pendingProfiles.find((item) => item.id === where.id);
             if (!matchingProfile) throw new Error("matching profile not found");

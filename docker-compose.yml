@@ -30,7 +30,7 @@ services:
     environment:
       NODE_ENV: development
       PORT: 4000
-      DATABASE_URL: postgresql://sublet:sublet@db:5432/sublet_pipeline?schema=public
+      DATABASE_URL: postgresql://sublet:sublet@db:5432/sublet_pipeline?schema=public&sslmode=disable
       JWT_SECRET: dev-only-change-me
       WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:3000}
       EMAIL_SENDER: console

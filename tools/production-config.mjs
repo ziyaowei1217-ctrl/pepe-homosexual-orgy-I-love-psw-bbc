@@ -73,6 +73,25 @@ export function validateProductionConfig(environment) {
     if (url.searchParams.get("sslaccept") !== "strict" || url.searchParams.getAll("sslaccept").length !== 1) {
       errors.push("DATABASE_URL must use one sslaccept=strict setting for certificate verification");
     }
+    for (const [name, seconds] of Object.entries({ connect_timeout: 2, pool_timeout: 2, socket_timeout: 3 })) {
+      if (url.searchParams.getAll(name).length !== 1 || url.searchParams.get(name) !== String(seconds)) {
+        errors.push(`DATABASE_URL must use one ${name}=${seconds} setting`);
+      }
+    }
+    const supported = new Set(["schema", "connection_limit", "sslmode", "sslaccept", "connect_timeout", "pool_timeout", "socket_timeout"]);
+    for (const name of url.searchParams.keys()) {
+      if (!supported.has(name)) errors.push("DATABASE_URL contains an unsupported driver setting");
+      if (url.searchParams.getAll(name).length !== 1) errors.push("DATABASE_URL contains an ambiguous driver setting");
+    }
+    const maximum = url.searchParams.get("connection_limit");
+    if (maximum !== null && (!/^[1-9]\d*$/.test(maximum) || Number(maximum) > 10)) {
+      errors.push("DATABASE_URL connection_limit must be an integer from 1 to 10");
+    }
+    const schema = url.searchParams.get("schema") ?? "public";
+    if (!schema || ["$user", "pg_temp"].includes(schema) || schema.includes("\0") || Buffer.byteLength(schema) > 63) {
+      errors.push("DATABASE_URL schema must be a non-empty literal PostgreSQL identifier of at most 63 bytes");
+    }
+    if (url.hash) errors.push("DATABASE_URL must not include a fragment");
   });
 
   const paymentServiceUrl = requireUrl(environment, "PAYMENT_SERVICE_URL", ["https:"], errors);

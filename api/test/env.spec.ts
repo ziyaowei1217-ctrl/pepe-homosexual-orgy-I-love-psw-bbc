@@ -8,7 +8,7 @@ describe("environment config", () => {
     expect(() => assertProductionRuntimeConfig({ NODE_ENV: "production" })).toThrow("DATABASE_URL");
     expect(() => assertProductionRuntimeConfig({
       NODE_ENV: "production",
-      DATABASE_URL: "postgresql://db.example.com/app?sslmode=require&sslaccept=strict",
+      DATABASE_URL: "postgresql://db.example.com/app?sslmode=require&sslaccept=strict&connect_timeout=2&pool_timeout=2&socket_timeout=3",
       WEB_ORIGIN: "https://app.example.com",
       VALKEY_URL: "rediss://cache.example.com:6379"
     })).not.toThrow();
@@ -17,10 +17,21 @@ describe("environment config", () => {
   it.each(["/not-a-db", "/-1", "/1/extra", "/9007199254740992", "/0?database=1", "/0#fragment"])("rejects unsupported Redis database syntax %s in production", suffix => {
     expect(() => assertProductionRuntimeConfig({
       NODE_ENV: "production",
-      DATABASE_URL: "postgresql://db.example.com/app?sslmode=require&sslaccept=strict",
+      DATABASE_URL: "postgresql://db.example.com/app?sslmode=require&sslaccept=strict&connect_timeout=2&pool_timeout=2&socket_timeout=3",
       WEB_ORIGIN: "https://app.example.com",
       VALKEY_URL: `rediss://cache.example.com:6379${suffix}`
     })).toThrow("VALKEY_URL");
+  });
+
+  it.each(["connect_timeout", "pool_timeout", "socket_timeout"])("requires a single exact production %s deadline", name => {
+    const url = new URL("postgresql://credentials:secret@db.example.com/app?sslmode=require&sslaccept=strict&connect_timeout=2&pool_timeout=2&socket_timeout=3");
+    for (const change of ["missing", "zero", "duplicate"] as const) {
+      const changed = new URL(url);
+      if (change === "missing") changed.searchParams.delete(name);
+      else if (change === "zero") changed.searchParams.set(name, "0");
+      else changed.searchParams.append(name, "100");
+      expect(() => assertProductionRuntimeConfig({ NODE_ENV: "production", DATABASE_URL: changed.href, WEB_ORIGIN: "https://app.example.com", VALKEY_URL: "rediss://cache.example.com" })).toThrow(name);
+    }
   });
 
   it("uses the development fallback outside production", () => {
@@ -44,13 +55,13 @@ describe("environment config", () => {
   it("rejects disabled certificate verification and origin credentials in production", () => {
     const environment = {
       NODE_ENV: "production",
-      DATABASE_URL: "postgresql://db.example.com/app?sslmode=require&sslaccept=strict",
+      DATABASE_URL: "postgresql://db.example.com/app?sslmode=require&sslaccept=strict&connect_timeout=2&pool_timeout=2&socket_timeout=3",
       WEB_ORIGIN: "https://app.example.com",
       VALKEY_URL: "rediss://cache.example.com:6379"
     };
     expect(() => assertProductionRuntimeConfig({ ...environment, NODE_TLS_REJECT_UNAUTHORIZED: "0" }))
       .toThrow("NODE_TLS_REJECT_UNAUTHORIZED");
-    for (const parameters of ["sslmode=require", "sslmode=require&sslaccept=accept_invalid_certs", "sslmode=require&sslaccept=strict&sslaccept=accept_invalid_certs"]) {
+    for (const parameters of ["sslmode=require", "sslmode=require&sslaccept=accept_invalid_certs", "sslmode=require&sslaccept=strict&connect_timeout=2&pool_timeout=2&socket_timeout=3&sslaccept=accept_invalid_certs"]) {
       expect(() => assertProductionRuntimeConfig({ ...environment, DATABASE_URL: `postgresql://db.example.com/app?${parameters}` }))
         .toThrow("DATABASE_URL must use sslaccept=strict");
     }

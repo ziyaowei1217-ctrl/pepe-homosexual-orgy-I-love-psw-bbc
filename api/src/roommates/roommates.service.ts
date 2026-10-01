@@ -12,6 +12,9 @@ import {
 import { buildRankedRoommateCandidates, buildRoommateDeck, getActionFeedback, toPublicRoommate } from "./matching";
 import { RoommateMatchService } from "./roommate-match.service";
 
+import { assertRoommateDiscoveryCapacity, MAX_DISCOVERABLE_ROOMMATE_PROFILES } from "./discovery-capacity";
+export { MAX_DISCOVERABLE_ROOMMATE_PROFILES } from "./discovery-capacity";
+
 @Injectable()
 export class RoommatesService {
   constructor(
@@ -28,7 +31,7 @@ export class RoommatesService {
 
   async findDeck(query: RoommateDeckQueryDto, userId?: string) {
     const profiles = await this.findDiscoverableProfiles();
-    const excludedRoommateProfileIds = userId ? await this.findUserActionRoommateProfileIds(userId) : new Set<string>();
+    const excludedRoommateProfileIds = userId ? await this.findUserActionRoommateProfileIds(userId, profiles.map(profile => profile.id)) : new Set<string>();
     const eligibleProfiles = profiles.filter(
       (profile) =>
         (!userId || profile.ownerId !== userId) &&
@@ -43,8 +46,19 @@ export class RoommatesService {
   }
 
   async findDeckCandidate(candidateId: string, userId?: string) {
+    // Development cards may be synthetic variants of an existing seed profile.
+    // Production has only owned, direct profile IDs.
+    const sourceId = process.env.NODE_ENV !== "production"
+      ? /^deck-(.+)-[1-9][0-9]*$/.exec(candidateId)?.[1] ?? candidateId : candidateId;
+    const source = await this.prisma.roommateProfile.findUnique({ where: { id: sourceId } });
+    if (!source || source.status !== "active" || source.archivedAt ||
+        (process.env.NODE_ENV === "production" && !source.ownerId) ||
+        (userId && source.ownerId === userId)) throw new NotFoundException("Roommate candidate not found");
+    if (userId && await this.prisma.roommateAction.findUnique({
+      where: { userId_roommateProfileId: { userId, roommateProfileId: sourceId } }, select: { id: true }
+    })) throw new NotFoundException("Roommate candidate not found");
     const profiles = await this.findDiscoverableProfiles();
-    const excludedRoommateProfileIds = userId ? await this.findUserActionRoommateProfileIds(userId) : new Set<string>();
+    const excludedRoommateProfileIds = userId ? await this.findUserActionRoommateProfileIds(userId, profiles.map(profile => profile.id)) : new Set<string>();
     const eligibleProfiles = profiles.filter(
       (profile) =>
         (!userId || profile.ownerId !== userId) &&
@@ -160,26 +174,28 @@ export class RoommatesService {
     };
   }
 
-  private async findUserActionRoommateProfileIds(userId: string) {
+  private async findUserActionRoommateProfileIds(userId: string, profileIds: string[]) {
     const actions = await this.prisma.roommateAction.findMany({
-      where: { userId },
-      select: { roommateProfileId: true }
+      where: { userId, roommateProfileId: { in: profileIds } },
+      select: { roommateProfileId: true },
+      take: MAX_DISCOVERABLE_ROOMMATE_PROFILES + 1
     });
 
     return new Set(actions.map((action) => action.roommateProfileId));
   }
 
-  private findDiscoverableProfiles() {
-    return this.prisma.roommateProfile.findMany({
+  private async findDiscoverableProfiles() {
+    const profiles = await this.prisma.roommateProfile.findMany({
       where: {
         status: "active",
         archivedAt: null,
         ...(process.env.NODE_ENV === "production" ? { ownerId: { not: null } } : {})
       },
-      orderBy: {
-        match: "desc"
-      }
+      orderBy: [{ match: "desc" }, { id: "asc" }],
+      take: MAX_DISCOVERABLE_ROOMMATE_PROFILES + 1
     });
+    assertRoommateDiscoveryCapacity(profiles.length);
+    return profiles;
   }
 }
 

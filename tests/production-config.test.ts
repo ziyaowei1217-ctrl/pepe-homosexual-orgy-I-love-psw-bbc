@@ -21,7 +21,7 @@ function validEnvironment() {
     NEXT_PUBLIC_MEDIA_UPLOAD_ORIGIN: "https://uploads.example.com",
     NEXT_PUBLIC_MAP_TILE_URL_TEMPLATE: "https://maps.example.com/{z}/{x}/{y}.png?key=public-map-key",
     NEXT_PUBLIC_MAP_ATTRIBUTION: "Example Maps",
-    DATABASE_URL: "postgresql://app:database-password@db.example.com/app?sslmode=require&sslaccept=strict",
+    DATABASE_URL: "postgresql://app:database-password@db.example.com/app?sslmode=require&sslaccept=strict&connect_timeout=2&pool_timeout=2&socket_timeout=3",
     WEB_ORIGIN: "https://app.example.com",
     JWT_SECRET: "jwt-production-secret-with-more-than-32-bytes",
     OTP_HASH_SECRET: "otp-production-secret-with-more-than-32-bytes",
@@ -40,6 +40,15 @@ function validEnvironment() {
     LISTING_MEDIA_STORAGE_SECRET_ACCESS_KEY: "storage-secret-key"
   };
 }
+
+describe("production database driver settings", () => {
+  it.each(["ssl=0", "ssl=no-verify", "sslcert=path", "sslkey=path", "sslrootcert=path", "sslnegotiation=direct", "uselibpqcompat=true", "options=-c%20statement_timeout=0", "connection_limit=0", "connection_limit=11", "schema=", "schema=%24user", "schema=pg_temp", "socket_timeout=0"])("rejects unsafe setting %s", setting => {
+    const env = validEnvironment(); env.DATABASE_URL += `&${setting}`;
+    const errors = validateProductionConfig(env);
+    expect(errors.some((error: string) => error.startsWith("DATABASE_URL"))).toBe(true);
+    expect(errors.join(" ")).not.toContain("database-password");
+  });
+});
 
 function writeEnvironmentFile(directory: string, name: string, environment: Record<string, string>) {
   const path = join(directory, name);
@@ -131,10 +140,10 @@ describe("production configuration gate", () => {
     ["web URL query", "WEB_ORIGIN", "https://app.example.com/?preview=true"],
     ["database without TLS", "DATABASE_URL", "postgresql://db.example.com/app?sslmode=disable"],
     ["database without explicit certificate verification", "DATABASE_URL", "postgresql://db.example.com/app?sslmode=require"],
-    ["unsupported Prisma TLS mode", "DATABASE_URL", "postgresql://db.example.com/app?sslmode=verify-full&sslaccept=strict"],
+    ["unsupported Prisma TLS mode", "DATABASE_URL", "postgresql://db.example.com/app?sslmode=verify-full&sslaccept=strict&connect_timeout=2&pool_timeout=2&socket_timeout=3"],
     ["database with disabled certificate verification", "DATABASE_URL", "postgresql://db.example.com/app?sslmode=require&sslaccept=accept_invalid_certs"],
     ["database with ambiguous TLS", "DATABASE_URL", "postgresql://db.example.com/app?sslmode=require&sslmode=disable"],
-    ["database with ambiguous certificate verification", "DATABASE_URL", "postgresql://db.example.com/app?sslmode=require&sslaccept=strict&sslaccept=accept_invalid_certs"],
+    ["database with ambiguous certificate verification", "DATABASE_URL", "postgresql://db.example.com/app?sslmode=require&sslaccept=strict&connect_timeout=2&pool_timeout=2&socket_timeout=3&sslaccept=accept_invalid_certs"],
     ["disabled Node TLS verification", "NODE_TLS_REJECT_UNAUTHORIZED", "0"],
     ["placeholder map key", "NEXT_PUBLIC_MAP_TILE_URL_TEMPLATE", "https://maps.example.com/{z}/{x}/{y}.png?key=replace-me"],
     ["placeholder secret", "PAYMENT_SERVICE_API_KEY", "replace-me"],

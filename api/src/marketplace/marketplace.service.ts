@@ -1,7 +1,8 @@
-import { BadRequestException, Inject, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import { Prisma, type RoommateMatchingProfile } from "@prisma/client";
 
 import { PrismaService } from "../prisma/prisma.service";
+import { assertRoommateDiscoveryCapacity, MAX_DISCOVERABLE_ROOMMATE_PROFILES } from "../roommates/discovery-capacity";
 import { CreateRoommateProfileDto, UpdateProfileDto, UpdateRoommateProfileDto } from "./dto";
 
 @Injectable()
@@ -36,18 +37,28 @@ export class MarketplaceService {
     const profile = await this.ensureProfile(email);
 
     return this.prisma.$transaction(async (transaction) => {
-      const matchingProfile = await transaction.roommateMatchingProfile.create({
-        data: roommateProfileData(profile.id, dto)
-      });
-      await this.projectOwnedRoommateProfile(transaction, ownerId, profile, matchingProfile, dto.age);
+      const currentProfile = await this.lockOwnerProfile(transaction, profile.id);
+      await this.lockOwnedRoommateProfile(transaction, ownerId);
+      const existing = await this.findCanonicalRoommateProfile(transaction, profile.id);
+      const owned = await transaction.roommateProfile.findUnique({ where: { ownerId } });
+      if ((existing && existing.status !== "active") || (owned && (owned.status !== "active" || owned.archivedAt))) {
+        throw new ConflictException("A hidden or archived roommate profile cannot be republished by creating another profile");
+      }
+      if (existing) this.assertMergedRanges(existing, dto);
+      const data = roommateProfileData(profile.id, dto);
+      const matchingProfile = existing
+        ? await transaction.roommateMatchingProfile.update({ where: { id: existing.id }, data })
+        : await transaction.roommateMatchingProfile.create({ data });
+      await this.retireHistoricalRoommateProfiles(transaction, profile.id, matchingProfile.id);
+      await this.projectOwnedRoommateProfile(transaction, ownerId, currentProfile, matchingProfile, dto.age);
       return matchingProfile;
     });
   }
 
-  findRoommateProfiles(query: { city?: string; school?: string }) {
+  async findRoommateProfiles(query: { city?: string; school?: string }) {
     // Profile and User use different IDs. Check the owned public projection in
     // the same database read so archived historical matching rows stay private.
-    return this.prisma.$queryRaw<RoommateMatchingProfile[]>(Prisma.sql`
+    const profiles = await this.prisma.$queryRaw<RoommateMatchingProfile[]>(Prisma.sql`
       SELECT matching.id, matching.user_id AS "userId", matching.school, matching.city,
         matching.budget_min AS "budgetMin", matching.budget_max AS "budgetMax",
         matching.move_in_date AS "moveInDate", matching.move_out_date AS "moveOutDate",
@@ -59,6 +70,12 @@ export class MarketplaceService {
       WHERE matching.status = 'active'
         AND (${query.city ?? null}::text IS NULL OR matching.city = ${query.city ?? null})
         AND (${query.school ?? null}::text IS NULL OR matching.school = ${query.school ?? null})
+        AND NOT EXISTS (
+          SELECT 1 FROM roommate_profiles AS newer
+          WHERE newer.user_id = matching.user_id
+            AND (newer.created_at > matching.created_at
+              OR (newer.created_at = matching.created_at AND newer.id > matching.id))
+        )
         AND EXISTS (
           SELECT 1 FROM profiles AS profile
           JOIN "User" AS account ON account.email = profile.email
@@ -66,16 +83,18 @@ export class MarketplaceService {
           WHERE profile.id = matching.user_id AND owned.status = 'active' AND owned."archivedAt" IS NULL
         )
       ORDER BY matching.updated_at DESC, matching.id DESC
+      LIMIT ${MAX_DISCOVERABLE_ROOMMATE_PROFILES + 1}
     `);
+    assertRoommateDiscoveryCapacity(profiles.length);
+    return profiles;
   }
 
   async updateRoommateProfile(ownerId: string, email: string, id: string, dto: UpdateRoommateProfileDto) {
     const profile = await this.ensureProfile(email);
     return this.prisma.$transaction(async (transaction) => {
-      // Serialize partial updates before reading the bounds they will merge with.
-      // Non-key row locking remains compatible with foreign-key readers.
-      await transaction.$queryRaw`SELECT "id" FROM "roommate_profiles"
-        WHERE "id" = ${id}::uuid AND "user_id" = ${profile.id}::uuid FOR NO KEY UPDATE`;
+      // A shared owner lock serializes creation and updates of every historical row.
+      const currentProfile = await this.lockOwnerProfile(transaction, profile.id);
+      await this.lockOwnedRoommateProfile(transaction, ownerId);
       const existing = await transaction.roommateMatchingProfile.findFirst({
         where: {
           id,
@@ -83,19 +102,57 @@ export class MarketplaceService {
         }
       });
       if (!existing) throw new NotFoundException("Roommate profile not found");
-      this.assertBudgetRange(
-        dto.budgetMin !== undefined ? dto.budgetMin : existing.budgetMin,
-        dto.budgetMax !== undefined ? dto.budgetMax : existing.budgetMax
-      );
-      this.assertDateRange(dateValue(dto.moveInDate) ?? existing.moveInDate, dateValue(dto.moveOutDate) ?? existing.moveOutDate);
+      const canonical = await this.findCanonicalRoommateProfile(transaction, profile.id);
+      if (canonical?.id !== id) {
+        throw new ConflictException("This historical roommate profile has been replaced by the current profile");
+      }
+      this.assertMergedRanges(existing, dto);
 
       const matchingProfile = await transaction.roommateMatchingProfile.update({
         where: { id },
         data: roommateProfileUpdateData(dto)
       });
-      await this.projectOwnedRoommateProfile(transaction, ownerId, profile, matchingProfile, dto.age);
+      await this.retireHistoricalRoommateProfiles(transaction, profile.id, matchingProfile.id);
+      await this.projectOwnedRoommateProfile(transaction, ownerId, currentProfile, matchingProfile, dto.age);
       return matchingProfile;
     });
+  }
+
+  private async lockOwnerProfile(transaction: Prisma.TransactionClient, profileId: string) {
+    await transaction.$queryRaw`SELECT "id" FROM "profiles"
+      WHERE "id" = ${profileId}::uuid FOR NO KEY UPDATE`;
+    const profile = await transaction.profile.findUnique({ where: { id: profileId } });
+    if (!profile) throw new NotFoundException("Profile not found");
+    return profile;
+  }
+
+  private findCanonicalRoommateProfile(transaction: Prisma.TransactionClient, profileId: string) {
+    return transaction.roommateMatchingProfile.findFirst({
+      where: { userId: profileId },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }]
+    });
+  }
+
+  private async lockOwnedRoommateProfile(transaction: Prisma.TransactionClient, ownerId: string) {
+    // Moderator archive and matching both lock this row. Hold it before reading
+    // visibility so a repeated POST cannot overwrite an archive that won first.
+    await transaction.$queryRaw`SELECT "id" FROM "RoommateProfile"
+      WHERE "ownerId" = ${ownerId} FOR NO KEY UPDATE`;
+  }
+
+  private retireHistoricalRoommateProfiles(transaction: Prisma.TransactionClient, profileId: string, canonicalId: string) {
+    return transaction.roommateMatchingProfile.updateMany({
+      where: { userId: profileId, id: { not: canonicalId }, status: "active" },
+      data: { status: "hidden" }
+    });
+  }
+
+  private assertMergedRanges(existing: RoommateMatchingProfile, dto: UpdateRoommateProfileDto | CreateRoommateProfileDto) {
+    this.assertBudgetRange(
+      dto.budgetMin !== undefined ? dto.budgetMin : existing.budgetMin,
+      dto.budgetMax !== undefined ? dto.budgetMax : existing.budgetMax
+    );
+    this.assertDateRange(dateValue(dto.moveInDate) ?? existing.moveInDate, dateValue(dto.moveOutDate) ?? existing.moveOutDate);
   }
 
   private async ensureProfile(email: string) {

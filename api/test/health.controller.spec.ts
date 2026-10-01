@@ -6,7 +6,7 @@ import { HealthController } from "../src/health/health.controller";
 import { MessagingInfrastructureHealth } from "../src/health/messaging-infrastructure-health";
 import { HealthService } from "../src/health/health.service";
 
-afterEach(() => vi.unstubAllEnvs());
+afterEach(() => { vi.unstubAllEnvs(); vi.useRealTimers(); });
 
 describe("HealthService", () => {
   it("returns process liveness without checking dependencies", () => {
@@ -86,6 +86,25 @@ describe("HealthService", () => {
     infrastructure.markDistributed("realtime");
     infrastructure.markDistributed("messageRateLimit");
     await expect(new HealthService({ $queryRaw: async () => [] } as never, infrastructure).ready()).rejects.toMatchObject({ status: 503 });
+  });
+
+  it("responds at 3.5 seconds without accumulating readiness queries, then recovers", async () => {
+    vi.useFakeTimers();
+    let release!: () => void;
+    const query = vi.fn(() => new Promise<void>(resolve => { release = resolve; }));
+    const service = new HealthService({ $queryRaw: query } as never, new MessagingInfrastructureHealth());
+    const first = service.ready().catch(error => error.getStatus());
+    const second = service.ready().catch(error => error.getStatus());
+    await vi.advanceTimersByTimeAsync(3_499);
+    expect(query).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(await first).toBe(503); expect(await second).toBe(503);
+    const next = service.ready();
+    expect(query).toHaveBeenCalledTimes(1);
+    release(); await expect(next).resolves.toMatchObject({ status: "ok" });
+    query.mockResolvedValueOnce(undefined);
+    await expect(service.ready()).resolves.toMatchObject({ status: "ok" });
+    expect(query).toHaveBeenCalledTimes(2);
   });
 
   it("returns service unavailable when the database query fails", async () => {
