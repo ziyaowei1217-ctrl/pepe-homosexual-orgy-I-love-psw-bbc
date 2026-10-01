@@ -34,6 +34,22 @@ not a measured capacity guarantee:
 | Payments | Independently hosted HTTPS adapter using a provider sandbox | Existing payment contract with durable fake-money state |
 | Maps | Production-authorized HTTPS XYZ tile provider | Tiles and required attribution |
 
+Illustrative Render compute prices checked on **2026-10-01**:
+
+| Resource | Monthly compute price |
+| --- | ---: |
+| API `1c-2g` | $25 |
+| Web `0.5c-512mb` | $7 |
+| Postgres `0.5c-1g` | $19 |
+| Key Value `256mb` | $10 |
+| Hobby workspace | $0 |
+| **Baseline compute total** | **$61** |
+
+These are [published Render prices](https://render.com/pricing), not an approved spending ceiling
+or a complete quote. Storage, bandwidth, build/pipeline usage, provider charges, domains, adapter
+hosting, monitoring, restore instances, taxes, and any workspace upgrade are additional. No card is on file, no monthly spending ceiling has been supplied, and no paid resources or public
+deployment have been created.
+
 The app services are versioned in the Blueprint. Datastores are intentionally prepared separately:
 their default Blueprint connection references use internal URLs that do not satisfy this
 application's verified TLS requirements. Record their identifiers, plans, network rules, backup
@@ -51,8 +67,11 @@ setup. Upgrade sizes only after reviewing CPU, memory, connection usage, latency
 
 1. **Postgres:** use the full **external** Render hostname and credentials. Add exactly one
    `sslmode=require` and one `sslaccept=strict` query setting; preserve needed existing query
-   settings with the correct `?`/`&` separator. Start with `connection_limit=10` and `pool_timeout=10`,
-   then measure pool pressure and account for migrations and deploy overlap. Test the actual
+   settings with the correct `?`/`&` separator. Only `schema`, `connection_limit`, these TLS settings,
+   and the three deadline parameters below are supported; duplicate or unknown settings (including
+   SSL alias/certificate/options overrides) fail the gate. Use exactly one `connect_timeout=2`, `pool_timeout=2`, and `socket_timeout=3`;
+   the configuration gate rejects missing, duplicated, or different values. Start with
+   `connection_limit=10`, then measure pool pressure and account for migrations and deploy overlap. Test the actual
    Prisma client in the API image against this endpoint before opening access. The internal
    endpoint uses optional TLS with a self-signed certificate; this deployment has no configured
    trust path for that certificate. Do not change to `sslaccept=accept_invalid_certs` or disable
@@ -123,6 +142,15 @@ that chain; do not guess a universal Render value or trust arbitrary forwarded a
 of zero can group all clients under a proxy IP; an excessive count can let clients forge their
 quota identity. Remove diagnostic logging after validation and never log auth codes or credentials.
 
+The demo supports at most **5,000 active, unarchived, owned roommate profiles**. Discovery reads
+at most 5,001 rows and returns `503 DISCOVERY_CAPACITY_EXCEEDED` above that capacity; it does not
+publish partial results or drop eligible profiles. Below the limit, ranking and paging cover the
+complete eligible catalog. The public raw profile route has the same explicit capacity guard and
+one canonical publication per account. Keep the curated demo below the limit and monitor this
+error. Anonymous discovery still performs bounded ranking work per request: configure a verified
+public ingress request-rate/concurrency limit and test latency and event-loop load on the selected
+API size before opening access. An account quota does not bound anonymous traffic.
+
 The four `NEXT_PUBLIC_*` settings are browser-visible Docker build arguments in `Dockerfile.web`;
 changing them requires a web rebuild. Provider secrets belong only to the API. Render supplies
 environment values as Docker build arguments and runtime variables, so keep secrets out of
@@ -167,6 +195,14 @@ unplanned costs. Validate with the current
    gate is an operator release step, not a fictitious runtime pre-deploy command.
    [Render pre-deploy documentation](https://render.com/docs/deploys#pre-deploy-command)
 
+   Migration commands use Prisma's native schema engine, not the application's bounded pg driver.
+   Retain the validated URL settings; do not weaken runtime deadlines for a long migration. For a
+   reviewed slow migration, configure a separate operator session with a finite server
+   `statement_timeout`, lock timeout, and process deadline, and monitor/cancel it deliberately.
+   The checked-in native `socket_timeout=3` setting alone is not proof that accepted network-blackhole
+   work settles: the installed native query engine did not settle that adversarial fixture. Confirm
+   migration success and schema compatibility explicitly before allowing the replacement to start.
+
 4. The API must return 200 from public `GET /api/v1/ready` with PostgreSQL, auth quotas, messaging
    quotas, and realtime infrastructure healthy in distributed mode. Render's API health path is
    this readiness endpoint. The web's `GET /api/health` checks its process; it does not certify API,
@@ -174,6 +210,17 @@ unplanned costs. Validate with the current
    Render drains services after sustained HTTP health failures and can restart them; recovery
    therefore needs working dependency probes rather than customer requests alone.
    [Render health check documentation](https://render.com/docs/health-checks)
+
+   The API uses the maintained Prisma 6 PostgreSQL driver adapter with a two-second connection/pool
+   acquisition timeout and a three-second actual query deadline. A query deadline closes its active
+   PostgreSQL socket, settles the query, and retires the connection; readiness shares one query among
+   callers and has a 3.5-second total response deadline, below Render's five-second check budget.
+   Strict TLS verifies both the certificate chain and the exact external hostname. Driver URL query
+   settings are reconstructed explicitly; custom schemas use a quoted startup `search_path` for raw
+   SQL as well as Prisma's schema option. Socket-close timeouts leave the commit outcome uncertain;
+   existing idempotency/fencing and reconciliation remain necessary before retrying a payment mutation.
+   [Prisma 6 driver documentation](https://www.prisma.io/docs/orm/v6/overview/databases/database-drivers),
+   [PostgreSQL driver client documentation](https://node-postgres.com/apis/client)
 
 5. Curate and approve synthetic listings, accounts, photographs, and locations before importing
    data once into the dedicated demo database. Do not run the broad existing seed script blindly:
@@ -206,6 +253,20 @@ resolve failures with documented ingress affinity or an approved transport chang
 horizontal readiness from the presence of the Redis adapter. The 30-second shutdown grace uses
 the existing Nest shutdown hooks; durable PostgreSQL message history and payment operation claims
 must recover after forced termination. No persistent disk is attached to app services.
+
+Readiness uses an active, bounded publisher-to-subscriber nonce round trip; connected sockets or
+`PING` alone do not certify realtime delivery. A lost Pub/Sub delivery or stuck publication closes
+the failing adapter clients and keeps production readiness at 503. Restore Key Value first, then
+let Render restart the unhealthy process (or perform a controlled restart); a fresh adapter must
+pass the round trip before it enters rotation. The running process does not swap its Socket.IO
+adapter, because doing so would discard existing room memberships. Browser reconnect and durable
+history reads are part of the required recovery acceptance run.
+
+Normal failed query/transaction operations retire the transport and permit later work on a fresh
+connection. Treat process shutdown as terminal: disconnecting during an active interactive
+transaction can take about five seconds, and reusing that Prisma instance after terminal shutdown
+is unsupported. The configured 30-second Render grace covers this bounded shutdown path; verify
+forced termination recovery through durable records in the real deployment.
 
 Alert on public readiness failures, unexpected restarts, error rates, event-loop/CPU pressure,
 memory/OOM, database connections/storage, Valkey memory/write errors, storage failures, email

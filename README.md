@@ -194,20 +194,28 @@ The four provider connection points are documented in
 realtime messages. Run `pnpm production:check-config` with production variables loaded before
 building deployment images.
 
-`GET /api/v1/health` is a process-liveness check and does not query PostgreSQL. `GET /api/v1/ready`
-queries PostgreSQL and reports the sanitized roommate-messaging infrastructure state. A database
-failure makes readiness fail; messaging fallback leaves the database-backed API available with
-`status: "degraded"`. Health responses and operational logs must never contain credentials, raw
-configuration values, message bodies, or caught-error text.
+`GET /api/v1/health` checks process liveness. `GET /api/v1/ready` shares one underlying dependency
+check across callers and responds within 3.5 seconds. In production, database failure, missing
+distributed quotas, or failed realtime delivery returns 503. Local development can report
+`status: "degraded"` while database-backed routes remain available. Health responses and logs
+must never contain credentials, raw configuration values, message bodies, or caught-error text.
 
-The `realtime` and `messageRateLimit` readiness components each report one of these modes:
+The `realtime` and `messageRateLimit` components report `single-instance` for local development,
+`distributed` after a successful active probe, or `local-fallback` after a failure. Production
+requires `distributed`. Realtime verifies an actual publisher-to-subscriber round trip. A failed
+adapter stays unhealthy until the process restarts and a fresh adapter passes its probe; reconnect
+uses durable PostgreSQL message history. See the [Render recovery runbook](docs/render-deployment.md).
 
-- `single-instance`: `VALKEY_URL` is empty; Socket.IO fan-out and message rate limiting are local to
-  one API process. This is a supported local and single-instance deployment mode.
-- `distributed`: `VALKEY_URL` is configured and that component is using Valkey successfully.
-- `local-fallback`: Valkey was configured but a connection, timeout, protocol, or runtime failure
-  caused a component to fall back to local behavior. The API remains usable, but cross-instance
-  realtime delivery or globally shared rate-limit accounting is degraded until recovery.
+The API uses the official PostgreSQL driver adapter, with Prisma client, CLI, and adapter pinned to
+6.19.3. Actual query deadlines close stalled sockets; subsequent queries use fresh connections.
+Local loopback development/test uses plaintext; the checked-in Compose `db` hostname requires an
+explicit non-production `sslmode=disable`. Production and other remote connections verify TLS.
+The migration CLI runs a separate native engine and needs a reviewed finite operational timeout;
+see the [Render deployment runbook](docs/render-deployment.md).
+
+Public roommate discovery supports up to 5,000 active owned profiles. An oversized catalog returns
+`503 DISCOVERY_CAPACITY_EXCEEDED`; results are complete below the cap. Configure public ingress
+rate/concurrency limits and measure the selected API size before opening anonymous traffic.
 
 Run the always-on release checks and real PostgreSQL 16 smoke tests from the repository root:
 

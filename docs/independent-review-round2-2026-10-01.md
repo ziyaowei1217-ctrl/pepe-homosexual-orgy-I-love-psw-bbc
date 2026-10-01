@@ -49,6 +49,15 @@ focus and map overflow/keyboard use. Source-import adversarial probes used synth
 the stalled connection probe used the actual Redis client against a local silent TCP server.
 
 Consolidated API results and actual service CI evidence are recorded in the final release review.
+All five jobs passed for the corrected round-two commit
+`6e79733dbad38adb6800e462b62e18f3e6da7704` in
+[release run 36818022078](https://github.com/ziyaowei1217-ctrl/pepe-homosexual-orgy-I-love-psw-bbc/actions/runs/36818022078).
+This includes four portable jobs (Linux Node 22/24, macOS Node 22, Windows Node 22),
+736 portable API tests, two compiled operator CLI tests, 90 database/media integration tests,
+three roommate service smoke tests, seven Valkey integration tests, and the container checks with
+63 production browser checks plus six API image-cache denials. These groups can overlap; they are
+not an additive unique-test count. This verifies the round-two source, not subsequent round-three
+changes or a public deployment.
 Local Docker/Postgres/Valkey are unavailable. New PostgreSQL and Valkey regressions are therefore
 gated locally. The release workflow now explicitly runs every database integration suite serially
 against disposable PostgreSQL/MinIO and includes the actor-quota suite in its real Valkey gate.

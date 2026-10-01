@@ -1,0 +1,159 @@
+{
+  "node": "v25.8.0",
+  "platform": "darwin",
+  "arch": "arm64",
+  "results": [
+    {
+      "size": 1000,
+      "status": 200,
+      "result": {
+        "items": [],
+        "pageInfo": {
+          "cursor": 100000,
+          "nextCursor": null,
+          "limit": 1,
+          "returned": 0,
+          "totalCandidates": 1000
+        },
+        "discovery": {
+          "headline": "Scanned 1000 roommate profiles and surfaced the strongest 0.",
+          "sampleSize": 1000,
+          "topScore": 82,
+          "filters": {
+            "budgetMin": 1200,
+            "budgetMax": 1900,
+            "school": "UCLA",
+            "schools": [
+              "UCLA"
+            ],
+            "hobby": "早睡",
+            "hobbies": [
+              "早睡"
+            ],
+            "city": "Los Angeles",
+            "gender": "Open",
+            "strategy": "precision"
+          },
+          "weights": {
+            "budget": 26,
+            "lifestyle": 22,
+            "school": 18,
+            "area": 10,
+            "reliability": 8,
+            "profile": 16
+          },
+          "rankingWeights": {
+            "compatibility": 0.78,
+            "confidence": 0.12,
+            "profileQuality": 0.08,
+            "diversity": 0.015,
+            "exploration": 0.005
+          },
+          "tips": [
+            "Like high-confidence cards; use Later when one dimension needs a question.",
+            "The engine blends fit quality, profile confidence, and controlled exploration so large decks stay useful.",
+            "Broad school or hobby filters increase discovery; narrow filters produce precision-ranked top picks."
+          ]
+        }
+      },
+      "readBudget": 1000,
+      "take": 5001,
+      "elapsedMs": 9.559750000000008,
+      "eventLoopLagMs": 9.669999999999959,
+      "cpuUserMs": 16.053,
+      "heapDeltaBytes": 3701424,
+      "rssBytes": 219414528
+    },
+    {
+      "size": 5000,
+      "status": 200,
+      "result": {
+        "items": [],
+        "pageInfo": {
+          "cursor": 100000,
+          "nextCursor": null,
+          "limit": 1,
+          "returned": 0,
+          "totalCandidates": 5000
+        },
+        "discovery": {
+          "headline": "Scanned 5000 roommate profiles and surfaced the strongest 0.",
+          "sampleSize": 5000,
+          "topScore": 82,
+          "filters": {
+            "budgetMin": 1200,
+            "budgetMax": 1900,
+            "school": "UCLA",
+            "schools": [
+              "UCLA"
+            ],
+            "hobby": "早睡",
+            "hobbies": [
+              "早睡"
+            ],
+            "city": "Los Angeles",
+            "gender": "Open",
+            "strategy": "precision"
+          },
+          "weights": {
+            "budget": 26,
+            "lifestyle": 22,
+            "school": 18,
+            "area": 10,
+            "reliability": 8,
+            "profile": 16
+          },
+          "rankingWeights": {
+            "compatibility": 0.78,
+            "confidence": 0.12,
+            "profileQuality": 0.08,
+            "diversity": 0.015,
+            "exploration": 0.005
+          },
+          "tips": [
+            "Like high-confidence cards; use Later when one dimension needs a question.",
+            "The engine blends fit quality, profile confidence, and controlled exploration so large decks stay useful.",
+            "Broad school or hobby filters increase discovery; narrow filters produce precision-ranked top picks."
+          ]
+        }
+      },
+      "readBudget": 5000,
+      "take": 5001,
+      "elapsedMs": 27.799959,
+      "eventLoopLagMs": 27.823458999999957,
+      "cpuUserMs": 35.029,
+      "heapDeltaBytes": 13873072,
+      "rssBytes": 263667712
+    },
+    {
+      "size": 5001,
+      "status": 503,
+      "result": {
+        "code": "DISCOVERY_CAPACITY_EXCEEDED",
+        "message": "Roommate discovery is temporarily unavailable because the supported catalog capacity was exceeded"
+      },
+      "readBudget": 0,
+      "take": 5001,
+      "elapsedMs": 0.14108299999998053,
+      "eventLoopLagMs": 0.16241700000000492,
+      "cpuUserMs": 0.154,
+      "heapDeltaBytes": 73704,
+      "rssBytes": 263782400
+    },
+    {
+      "size": 50000,
+      "status": 503,
+      "result": {
+        "code": "DISCOVERY_CAPACITY_EXCEEDED",
+        "message": "Roommate discovery is temporarily unavailable because the supported catalog capacity was exceeded"
+      },
+      "readBudget": 0,
+      "take": 5001,
+      "elapsedMs": 0.05333300000000918,
+      "eventLoopLagMs": 0.21691700000002356,
+      "cpuUserMs": 0.214,
+      "heapDeltaBytes": 44640,
+      "rssBytes": 296796160
+    }
+  ]
+}

@@ -1,0 +1,99 @@
+{
+  "type": "root_final_local_gate_record",
+  "date": "2026-10-01",
+  "baseline": "6e79733dbad38adb6800e462b62e18f3e6da7704",
+  "source_hashes": {
+    "api/package.json": "5ff3c887f26973b048d24e29b77166d7fade7023d6e86904d2b1826b7513bf60",
+    "api/prisma/schema.prisma": "bb0edb4425ed38e0aa0e9200e0a5e5036d4fe1b49b0531b0dcbee343ab078da1",
+    "api/src/config/env.ts": "0b48bf309368ffb7e1b58035575caa4a5520149b9d0d19dfb5da7fe2ef986273",
+    "api/src/health/health.service.ts": "b47d34b893f803059f0cd55d6eda76602875cbbc5fdbc62ede8003b3dd833fd7",
+    "api/src/marketplace/marketplace.service.ts": "b6c923bf1a3c2d22f06394b28ca323eae02c9f1b58333f3c2349666302dcecb5",
+    "api/src/prisma/prisma.service.ts": "04a608c00efbf09e4690ee73b62e5acd87becb4b6985693cb60fc047cb5ee58d",
+    "api/src/roommate-conversations/roommate-conversations.service.ts": "93c14a9416220513769f7bc2f934304477f42d3b3813c4bfa196b763b2777920",
+    "api/src/roommate-conversations/socket-adapter.ts": "8b64d8607ef7e35a0b4b0bc9ce3a13e9716463a8ac7c53160020897efff92822",
+    "api/src/roommates/matching.ts": "05333f85e66b63f1524c51cc7d7f956b3fed7a44af7a1cc29249d1808ce73409",
+    "api/src/roommates/roommate-match.service.ts": "eb48c75650dbcf5602b08bae70063f1b6e313022b731430ad0258e06737147aa",
+    "api/src/roommates/roommates.service.ts": "3613d49b4ceecda07c3d766ef3a15b1cb8bea4056ef6d82c4aee7034448a0f3b",
+    "api/test/auth.module.spec.ts": "6ce9abf5dad650493d128cf66681cb2eb463a99210a13bede88c9451eea7add4",
+    "api/test/env.spec.ts": "86943a8a78d98cee3b16329d0782cf99a58dce6531495130cd310547c99d22d1",
+    "api/test/health.controller.spec.ts": "aa65eff915be7867db552e20a819898811d6b23bbf43d636bf537beecd51f143",
+    "api/test/marketplace-api.e2e.spec.ts": "91d70bcf0ccaf1d38d7e7fa55f1395d6dbbc6f657ef533bcc84d2c308e0c229f",
+    "api/test/marketplace.service.spec.ts": "b1ef20cb6bbc3adca767be55b67d000c6f3fbefc171c2efde6e631a46036eb06",
+    "api/test/production-no-valkey-startup.spec.ts": "13d4a045ac2a915bb40cdac66da3dcce1603318e598f1d966b0198ce2ec3a925",
+    "api/test/roommate-conversations.service.spec.ts": "82fca4af6fc3fdf09435a2beef449c6765d161c241d9658a8531905b5f6e91ce",
+    "api/test/roommate-matches.service.spec.ts": "8a0b5d76479ab1b0145531816c7389e7f2f2e69d5c51de5dab87221e612ac249",
+    "api/test/roommates.service.spec.ts": "4496587349d9f480869a53e4ae6b5fbf2581711610607d26f0b070da7982ebf6",
+    "api/test/socket-adapter.spec.ts": "de15e42d3640be8343822c94014f561acb4127a3ff47e98f2ca106b0375453b9",
+    "api/test/support/launch-prisma-mock.ts": "fa51a656389e8608318bb19f23a3dd98f5e363afbcdf98441167b689e553414a",
+    "components/marketplace/account-experience.tsx": "8b211679c881dc10fb16e569eef44a7e38e9e065d2a0a3562dc5fa06b9dc57ef",
+    "components/marketplace/inbox-experience.tsx": "49fa38e92c12b6ea04333bf1a228beea847b6d851a2f510a4383d3533afbb53f",
+    "components/marketplace/roommate-experiences.tsx": "52a04b82294ccb523603cace4a548d513b3baa8e01da20d1b16cb0f5180f26a7",
+    "components/marketplace/saved-page-experience.tsx": "0ab9ea53b98aa174d67a53134f95d5f48b351c7ebb7d026a7ef463a8d1466b24",
+    "components/marketplace/search-experience.tsx": "402f3410747321b3eacc475faa5f42403431292a6212a2b73b9b92cf4f2eeabd",
+    "docker-compose.yml": "27dbb94fe00b57f8ff9b2f715864ee561c1785957217595215901d1a81ebd103",
+    "pnpm-lock.yaml": "fc9983f28d6cb3b25564c03faf0088e7324fadfd654f7f934938ff03002eff55",
+    "tests/production-config.test.ts": "0d8ce7ff1e24b0d42b7269098b63c9544cb1e821ab3e04c2334a401354f0b3bd",
+    "tests/saved-page.test.tsx": "d372c77a735d4d421328dc48f62c758222f4125d00b7eb9d61ceb35e39e4acd2",
+    "tools/production-config.mjs": "383b1d1bbfd67db200da8016ae75e75cd21d3d56b8d40bbacf2b4d418451d4ea",
+    "api/src/prisma/bounded-postgres.ts": "ad632c16c3e7c308738ed0cd295f9345e2758b955ec65e739ef4ef00dd1de446",
+    "api/src/roommates/discovery-capacity.ts": "b8653f3be7db8feb50f01750e2ab59953748f1b82de18da11ef2a8f055264cdc"
+  },
+  "web": {
+    "command": "pnpm check",
+    "tests_passed": 753,
+    "files_passed": 114,
+    "lint": "passed",
+    "typecheck": "passed",
+    "production_build": "passed"
+  },
+  "api": {
+    "command": "pnpm -C api launch:check",
+    "tests_passed": 799,
+    "tests_skipped": 134,
+    "test_files_passed": 87,
+    "test_files_skipped": 30,
+    "typecheck": "passed",
+    "build": "passed",
+    "prisma_validate": "passed"
+  },
+  "cli": {
+    "command": "pnpm -C api test:cli-build",
+    "compiled_cli_tests_passed": 2
+  },
+  "changed_api_source_eslint": "passed, with --no-ignore; final bounded helper and auth DI test additionally checked",
+  "dependency_audit": {
+    "command": "pnpm audit --prod --audit-level high",
+    "gate": "passed",
+    "high": 0,
+    "critical": 0,
+    "moderate": 1,
+    "advisory": "GHSA-36xv-jgw5-4q75",
+    "limit": "JavaScript production packages only; local archived MinIO risks remain separately recorded."
+  },
+  "browser": {
+    "root_final_production_smoke_assertions_passed": 63,
+    "optimizer_denials_passed": 6,
+    "engines": [
+      "Chromium",
+      "Firefox",
+      "WebKit"
+    ],
+    "fixture": "Synthetic HTTP API; separate reviewer private/multi-engine journeys preserved. This smoke preceded only API/operations changes; frontend frozen unchanged."
+  },
+  "first_combined_attempt": {
+    "web": "passed",
+    "api_tests": {
+      "passed": 796,
+      "failed": 2,
+      "skipped": 134
+    },
+    "failure": "Compile-only AuthModule tests constructed PrismaService without DATABASE_URL. Tests now explicitly mock that external dependency; startup validation unchanged. Subsequent full API gate passed."
+  },
+  "service_tests": {
+    "local_marketplace_gate": "Attempt failed because Docker/psql services are unavailable locally; no marketplace success claimed.",
+    "new_postgres_cases_skipped_locally": 15,
+    "final_real_services": "Must execute in GitHub CI before handoff; no result inferred from authored tests."
+  },
+  "runtime": "macOS ARM64, local Node25.8.0; supported Node22/24 and actual Linux/macOS/Windows execution require final CI",
+  "publication": "Not deployed. Render billing, approved spending ceiling, actual provider configuration and sandbox payment adapter acceptance remain outstanding."
+}

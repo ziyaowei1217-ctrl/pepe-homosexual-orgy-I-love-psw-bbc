@@ -1,0 +1,3 @@
+{"sameClientQueue":{"elapsedMs":3007,"executions":2,"closedConnections":1,"poolTotal":0,"waiting":0}}
+{"prismaReconnect":{"elapsedMs":6044,"postDisposalStalledMs":3006,"executions":4,"connections":4,"closedConnections":3}}
+{"prismaQueueShutdown":{"elapsedMs":3012,"rejections":["timeout exceeded when trying to connect","Connection terminated"],"executions":1,"closedConnections":1,"poolTotal":0,"waiting":0}}

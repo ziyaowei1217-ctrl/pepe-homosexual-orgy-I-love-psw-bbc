@@ -1,0 +1,67 @@
+{
+  "map": {
+    "rect": {
+      "x": 16,
+      "y": 433,
+      "width": 343,
+      "height": 487.1875,
+      "top": 433,
+      "right": 359,
+      "bottom": 920.1875,
+      "left": 16
+    },
+    "links": [
+      {
+        "href": "/listing/independent-round2-3",
+        "text": "$1,600",
+        "rect": {
+          "x": 151.7109375,
+          "y": 659,
+          "width": 72.578125,
+          "height": 36,
+          "top": 659,
+          "right": 224.2890625,
+          "bottom": 695,
+          "left": 151.7109375
+        },
+        "topElement": "/listing/independent-round2-1"
+      },
+      {
+        "href": "/listing/independent-round2-1",
+        "text": "$850",
+        "rect": {
+          "x": 156.9296875,
+          "y": 659,
+          "width": 62.140625,
+          "height": 36,
+          "top": 659,
+          "right": 219.0703125,
+          "bottom": 695,
+          "left": 156.9296875
+        },
+        "topElement": "/listing/independent-round2-1"
+      }
+    ]
+  },
+  "filtered": {
+    "url": "http://127.0.0.1:4411/search?priceMin=1500&priceMax=2200&view=list",
+    "articles": 2
+  },
+  "back": {
+    "url": "http://127.0.0.1:4411/search?priceMin=1500&priceMax=2200&view=list",
+    "sort": "recommended",
+    "articles": 2
+  },
+  "likesLoading": {
+    "body": "跳到主要内容\n返回匹配\n喜欢与匹配\n\n单向兴趣和双方匹配分别展示。\n\n合租小组\n喜欢我的\n我喜欢的\n已匹配\n找房\n室友\n收藏\n消息\n我的",
+    "statuses": 0
+  },
+  "likesFailure": {
+    "body": "跳到主要内容\n返回匹配\n喜欢与匹配\n\n单向兴趣和双方匹配分别展示。\n\n合租小组\n喜欢我的\n我喜欢的\n已匹配\n服务暂时不可用，请稍后重试。\n找房\n室友\n收藏\n消息\n我的",
+    "buttons": [
+      "喜欢我的",
+      "我喜欢的",
+      "已匹配"
+    ]
+  }
+}

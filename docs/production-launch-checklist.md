@@ -38,11 +38,15 @@ deployment provider's secret manager rather than writing a populated file into t
 production:
 
 - set `NODE_ENV=production`;
-- use a dedicated PostgreSQL database with TLS and backups. Prisma 6 requires
-  `sslmode=require&sslaccept=strict` in `DATABASE_URL` for encrypted connections with certificate
-  verification; configure the provider CA certificate as required. `sslmode=require` alone leaves
-  Prisma's default acceptance of invalid certificates enabled. Do not use PostgreSQL CLI-only
-  `verify-full` as a substitute in this Prisma 6 connection string;
+- use a dedicated PostgreSQL database with verified TLS and backups. Set exactly one each of
+  `sslmode=require`, `sslaccept=strict`, `connect_timeout=2`, `pool_timeout=2`, and `socket_timeout=3`
+  in `DATABASE_URL`. Optional supported keys are `schema` (a literal nonempty identifier) and
+  `connection_limit` (1–10). Unknown/duplicate settings, SSL aliases/certificate overrides, and
+  arbitrary `options` fail the gate. The API uses the official Prisma 6 PostgreSQL adapter with
+  two-second connection/acquisition and three-second actual socket-close query deadlines, strict
+  platform CA-chain verification, and exact URL-host identity. The provider certificate must chain
+  to the platform trust store; private CA/client-certificate support requires a reviewed extension.
+  Native `socket_timeout` alone is not proof of accepted query cancellation;
 - generate distinct high-entropy values for `JWT_SECRET`, `OTP_HASH_SECRET`, and
   `SECURITY_IDENTIFIER_HASH_SECRET`;
 - set `EMAIL_SENDER=resend`, a verified `EMAIL_FROM`, and a valid `RESEND_API_KEY`;
@@ -56,7 +60,9 @@ production:
   and rate limiting work across instances.
 
 Apply checked-in migrations with `pnpm -C api prisma migrate deploy`; do not use `db push` against a
-production database.
+production database. The migration CLI uses a separate native schema engine rather than the
+application's bounded driver. Configure reviewed finite server statement/lock and process deadlines,
+monitor cancellation, and confirm migration success; do not weaken app deadlines for a long migration.
 
 ## 4. Release gates
 

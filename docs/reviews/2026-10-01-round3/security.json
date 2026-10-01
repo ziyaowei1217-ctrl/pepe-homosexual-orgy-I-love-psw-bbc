@@ -1,0 +1,201 @@
+{
+  "reviewer": "round3_security_final",
+  "phase": "independent security source review and assigned repairs complete; service CI and final combined validation pending",
+  "reviewed_head": "6e79733dbad38adb6800e462b62e18f3e6da7704",
+  "recorded_at": "2026-10-01T05:06:00.608058+00:00",
+  "independence": {
+    "prior_reports_read": false,
+    "prior_reviewers_contacted_before_record": false,
+    "source_mutations_before_record": false,
+    "evidence_dir": "/tmp/sublet-round3-probes"
+  },
+  "findings": [
+    {
+      "id": "R3-SEC-001",
+      "severity": "Medium",
+      "title": "Hidden or archived roommate profiles still accept new likes and can create private conversations",
+      "locations": [
+        {
+          "file": "api/src/roommates/roommate-match.service.ts",
+          "lines": "28-30,32-88"
+        },
+        {
+          "file": "api/src/roommates/roommates.service.ts",
+          "lines": "134-146,172-177"
+        }
+      ],
+      "preconditions": "Authenticated beta user knows a previously public target profile ID. New conversation additionally requires a prior reverse LIKE from target. Target is now hidden, matched, or archived.",
+      "evidence": "Independent service probe passed for hidden+archived, matched+archived, and active+archived targets: POST action path recorded action and created RoommateMatch, RoommateConversation, and both memberships. The transaction checks existence and self matching but neither target nor actor visibility. Discovery excludes those same targets.",
+      "reproduction": "cd api && npx --yes pnpm@9.15.4 exec vitest run --config /tmp/sublet-round3-probes/vitest.config.mts; initial 5/5 checks pass, 3 explicitly assert observed vulnerable behavior.",
+      "impact": "Users or moderators can remove a profile from discovery, but a previously observed ID still enables a new match and new message channel after opting out or archive. This bypasses the visibility boundary and enables unwanted contact.",
+      "recommended_fix": "Enforce active and archivedAt=null on action targets and both owned profiles before establishing a new match; preserve historical authorized conversations separately. Enforce in the serialized matching transaction to cover concurrent hiding.",
+      "additional_evidence": "The hidden/matched actor initially persisted a LIKE before the match-only guard. RoommatesService.findActivity builds inbound data from item.user.roommateProfile, so that new action exposes the hidden actor to the target even when no conversation is created. The final fix must reject unavailable owned actors before persisting actions, not merely skip match creation.",
+      "disposition": "repaired in current source; focused local tests pass; real PostgreSQL regressions authored but not executed locally",
+      "repair": {
+        "locations": [
+          "api/src/roommates/roommate-match.service.ts:28-40",
+          "api/src/roommates/roommate-match.service.ts:117-129"
+        ],
+        "behavior": "Lock actor/target owned rows in stable ID order inside the serializable transaction, re-read and require active/unarchived target before action; reject unavailable owned actor before inbound activity can be published. Bounded retry handles model P2034 and raw PostgreSQL P2010 SQLSTATE 40001/40P01 only. Existing authorized conversation/history reads remain available. Production targets must also have an owner, matching the discovery/detail visibility policy; ownerless development seed behavior is preserved.",
+        "tests": [
+          "api/test/roommate-matches.service.spec.ts",
+          "api/test/roommate-action-visibility.integration.spec.ts"
+        ],
+        "database_cases": "Three hidden/matched/archived target combinations with LIKE/PASS/LATER; actor and target archive-first row-lock races; authorized history retained after hiding both profiles (6 cases)."
+      },
+      "production_ownerless_extension": {
+        "recorded_before_repair": true,
+        "severity_for_extension": "Low",
+        "preconditions": "Authenticated actor knows an active/unarchived ownerless target ID excluded by production discovery/detail.",
+        "evidence": "New independent ownerless-final.spec.ts: 3/3 LIKE/PASS/LATER probes at pre-extension guard persist an action and expose the production-excluded target name through feedback. No conversation is possible without an owner.",
+        "location": "api/src/roommates/roommate-match.service.ts:33-34; api/src/roommates/roommates.service.ts:150-166",
+        "policy": "Production findDiscoverableProfiles/findDeckCandidate require an owned profile, but matching originally enforced only status/archive; action response bypasses that visibility policy.",
+        "recommended_fix": "Reject ownerless production targets with the same404 as unavailable targets before writes/feedback; preserve development seed actions.",
+        "disposition": "Confirmed Low visibility/feedback leak; repaired with production-only owner requirement in the authoritative matching transaction before any action or feedback.",
+        "repair_location": "api/src/roommates/roommate-match.service.ts:33-36",
+        "regression": "api/test/roommate-matches.service.spec.ts: production LIKE/PASS/LATER through RoommatesService all return opaque404 and persist no actions/matches/conversations or legacy-seed writes; eligible owned production matching and ownerless development behavior remain valid."
+      }
+    },
+    {
+      "id": "R3-OBS-001",
+      "severity": "Low",
+      "type": "integrity hardening",
+      "location": "api/src/roommate-conversations/roommate-conversations.service.ts:176-181,214-220",
+      "evidence": "Independent recovery.spec.ts confirms replay of an existing sender/clientMessageId within the same conversation with a changed body returns the original body and success; no new message or event is written. UUID text is also not normalized unlike deal-message UUIDs.",
+      "impact": "Request identity is not bound to body; no authorization crossing or money movement demonstrated. Nonblocking consistency observation; recommend conflict on different canonical body and lowercase UUID.",
+      "disposition": "narrow changed-body consistency repair authorized by root and completed; UUID-case normalization deliberately deferred for compatibility",
+      "repair": {
+        "locations": [
+          "api/src/roommate-conversations/roommate-conversations.service.ts:177-188",
+          "api/src/roommate-conversations/roommate-conversations.service.ts:215-222"
+        ],
+        "behavior": "After membership authorization, conflict409 if the same sender/clientMessageId/conversation carries a different trimmed body, including unique-race winner recovery. Same-body ordinary replay returns durable original without extra quota/write/event.",
+        "tests": [
+          "api/test/roommate-conversations.service.spec.ts"
+        ],
+        "client_compatibility": "components/marketplace/inbox-experience.tsx:359-364 retains the same ID only when both conversation and trimmed body match; changed text generates a new ID."
+      }
+    },
+    {
+      "id": "R3-OBS-002",
+      "severity": "Medium",
+      "type": "capacity and publication abuse",
+      "location": "api/src/marketplace/marketplace.service.ts:33-44,47-69; api/src/marketplace/marketplace.controller.ts:67-75",
+      "evidence": "Independent recovery.spec.ts calls createRoommateProfile 50 times with the same synthetic authenticated owner, producing 50 active matching rows, all linked to one private Profile UUID and one reused public RoommateProfile projection. Schema has no unique(userId); unauthenticated public raw matching query returns every active row with no LIMIT or quota.",
+      "preconditions": "Authenticated beta account; no other user secrets required. Public query afterward requires no account.",
+      "impact": "One account can publish unbounded duplicate matching records, inflate database/JSON work and keep old raw profile content publicly discoverable when singleton owned projection is active. Mock probe proves application accepts duplicates; actual production denial of service not measured.",
+      "recommended_fix": "Serialize creation on the owner Profile row and reuse a canonical existing raw matching row for that singleton public projection, or enforce a small explicit per-owner quota plus a bounded public query. Preserve historical privacy states; do not silently truncate public results.",
+      "disposition": "confirmed finding assigned and repaired; focused local tests pass; real PostgreSQL regressions authored but not executed locally",
+      "repair": {
+        "locations": [
+          "api/src/marketplace/marketplace.service.ts:34-56",
+          "api/src/marketplace/marketplace.service.ts:58-89",
+          "api/src/marketplace/marketplace.service.ts:92-156",
+          "api/src/roommates/discovery-capacity.ts:1-12",
+          "api/prisma/schema.prisma:758",
+          "api/prisma/migrations/20261001013000_roommate_profile_canonical_index/migration.sql"
+        ],
+        "behavior": "Serialize writes with owner Profile then owned RoommateProfile row locks. Reuse the newest created raw row (ID tie breaker), reject updates to historical replaced IDs with409 and foreign IDs with404, validate merged budget/date facts, retire older active rows atomically with current raw facts/public card. Repeated POST rejects hidden/matched/archived singleton instead of silently opting back in; owned lock serializes with moderator archive. Explicit existing owner PATCH status opt-in remains unchanged. Public SQL exposes only canonical current rows before city/school/visibility filters; bound returned rows to5,001 and reject overflow using shared503 DISCOVERY_CAPACITY_EXCEEDED, never silently truncate supported catalogs.",
+        "tests": [
+          "api/test/marketplace.service.spec.ts",
+          "api/test/marketplace-api.e2e.spec.ts",
+          "api/test/roommate-profile-canonical.spec.ts",
+          "api/test/roommate-profile-canonical.integration.spec.ts",
+          "api/test/support/launch-prisma-mock.ts"
+        ],
+        "database_cases": "Two concurrent first creates blocked on owner lock and12concurrent subsequent creates; legacy current facts, stale/foreign ownership and hidden states; moderator archive-first blocked repeat POST; actual5,001eligible owners ->503 and5,000 ->complete public results (4 cases).",
+        "migration": "Non-destructive lookup index only; legacy historical rows are suppressed immediately by the public query and retired on the next canonical write, not deleted."
+      }
+    }
+  ],
+  "positives": [
+    "JWT HS256 only, 7-day max session age, bounded bearer token size, current database roles",
+    "OTP salted HMAC, purpose binding, serialized verification/consumption, production fail-closed Valkey rate limits",
+    "Admin mutation routes require step-up; normal data paths use authenticated identity and ownership predicates",
+    "Draft application read denies listing host in an independent probe; unrelated checkout actor denied before provider access",
+    "Media visibility rechecked before conditional cache responses; bytes checksummed, re-encoded without metadata, immutable derivative namespace",
+    "New probes deny stale/future/invalid-sub and HS384 JWTs, use database role over stale signed role, reject unavailable admin step-up and fail closed on production quota storage failure",
+    "Fresh DTO probes reject privileged profile flags, message sender forgery, excessive/blank bodies and unsafe history limits; outsider message access denied before query/quota/events",
+    "New media probes deny unpublished visibility before conditional cache read, unsigned outsider upload, corrupt bytes and dishonest-length streamed uploads; actual sharp JPEG re-encoding strips EXIF and appended script and preserves checksum",
+    "Hostile city/school input remains SQL-bound values; provider requests reject HTTP/javascript/credential URLs and cross-origin redirects",
+    "Fresh recovery probe retries a remote-success/local-commit-loss refund using the same durable provider key, transitions pending->canceled atomically; expired socket delayed join disconnects",
+    "No additional directly exploitable authorization/SQL/input/provider-boundary vulnerability identified within the reviewed source and synthetic evidence"
+  ],
+  "limits": [
+    "No actual PostgreSQL, Valkey, S3 or Docker service execution locally;10new database cases are RUN_DB_SMOKE gated for root CI. Mocks prove application branches, not native service locking/failure semantics.",
+    "Full API intermediate run remains red on the independently reproduced operations Prisma transport deadline issue; final combined suite/typecheck/build and service CI remain root/operations work.",
+    "No external traffic, live deployment/users, secrets, dependency advisory feed queries or active attack simulation against infrastructure. Source/config inspection does not certify current ingress/provider/cloud account controls.",
+    "LocalStorage bearer tokens can remain valid up to7days, logout is local-only, and there is no immediate token revocation; no exploitable DOMXSS demonstrated. This residual session design boundary is explicit, not reported as a proven injection defect.",
+    "Prior authorized like/activity/conversation history is retained; repaired privacy guards stop new publication/contact rather than erase historical relationships.",
+    "Catalog cap is an explicit supported capacity contract; future catalog expansion requires reviewed pagination/ranking changes. It limits returned JSON and ranking input, not every possible database scan or request-rate path.",
+    "UUID case normalization for message idempotency remains deferred; changed-body conflicts are repaired without changing existing key compatibility."
+  ],
+  "finalized_at": "2026-10-01T05:30:14.786705+00:00",
+  "source_frozen": true,
+  "initial_findings_preserved": true,
+  "scope": {
+    "source": [
+      "Auth/OTP HMAC, purpose, freshness, consumption, JWT guard/session age/current role, admin step-up/invites/CLI/audit sanitization",
+      "Authorization and privacy across listings, applications/revisions, media, deal rooms/threads, roommates/matches/teams/conversations, payments, groups and trips",
+      "Media ownership, cached private reads, immutable derivative names, streamed upload bounds, checksums, image decoder/re-encoding, configured origins",
+      "Payment checkout/cancellation/refund idempotency and durable recovery/provider URL boundaries",
+      "Messaging membership, match close/write serialization, message idempotency, socket expiry/room joins, distributed/local quotas",
+      "Raw SQL parameterization, DTO whitelist/limits/privileged field forgery, stored HTML/DOM injection surfaces, local bearer storage and CSP/CORS",
+      "Production environment/compose/Dockerfiles/regular deployment documentation, configuration trust boundaries; prior audit reports excluded"
+    ],
+    "new_adversarial_evidence": "/tmp/sublet-round3-probes",
+    "initial_cases": 5,
+    "additional_independent_cases": 48,
+    "current_tree_adversarial_recheck": {
+      "file": "adversarial.spec.ts",
+      "passed": 44,
+      "failed": 0
+    },
+    "note": "Initial independent.spec.ts and two recovery.spec.ts behavior probes intentionally assert pre-repair vulnerabilities/observations at the reviewed HEAD. The original record was written before reviewer contact or source changes.",
+    "production_ownerless_followup_cases": 3
+  },
+  "verification": {
+    "focused_final": {
+      "command": "cd api && npx --yes pnpm@9.15.4 exec vitest run test/marketplace.service.spec.ts test/roommate-profile-canonical.spec.ts test/marketplace-api.e2e.spec.ts test/roommate-conversations.service.spec.ts test/roommate-matches.service.spec.ts test/roommate-profile-canonical.integration.spec.ts test/roommate-action-visibility.integration.spec.ts",
+      "passed_tests": 52,
+      "skipped_real_database_tests": 10,
+      "failed": 0
+    },
+    "independent_final": {
+      "command": "cd api && npx --yes pnpm@9.15.4 exec vitest run --config /tmp/sublet-round3-probes/vitest.config.mts /tmp/sublet-round3-probes/adversarial.spec.ts",
+      "passed_tests": 44,
+      "failed": 0
+    },
+    "full_api_intermediate": {
+      "passed_tests": 760,
+      "skipped_tests": 129,
+      "failed_tests": 1,
+      "failure": "Operations-owned new prisma-query-deadline.spec.ts stalled query timeout15000ms; owner confirmed native transport deadline defect and is repairing. This is not a final passing full-suite claim."
+    },
+    "diff_check": "git diff --check passed",
+    "typescript": "Earlier API tsc --noEmit passed after first privacy fix; final combined typecheck/build reserved until operations source freeze.",
+    "final_ownerless_followup": {
+      "command": "cd api && npx --yes pnpm@9.15.4 exec vitest run test/roommate-matches.service.spec.ts test/roommates.service.spec.ts",
+      "passed_tests": 38,
+      "failed": 0,
+      "new_source_cases": 4,
+      "pre_repair_proof": "/tmp/sublet-round3-probes/ownerless-final.spec.ts captured3/3vulnerable feedback paths before the guard; intentionally not rerun against the final fixed source."
+    }
+  },
+  "changed_files": [
+    "api/src/marketplace/marketplace.service.ts",
+    "api/src/roommates/roommate-match.service.ts",
+    "api/src/roommates/discovery-capacity.ts",
+    "api/src/roommate-conversations/roommate-conversations.service.ts",
+    "api/prisma/schema.prisma",
+    "api/prisma/migrations/20261001013000_roommate_profile_canonical_index/migration.sql",
+    "api/test/marketplace.service.spec.ts",
+    "api/test/marketplace-api.e2e.spec.ts",
+    "api/test/roommate-matches.service.spec.ts",
+    "api/test/roommate-conversations.service.spec.ts",
+    "api/test/roommate-profile-canonical.spec.ts",
+    "api/test/roommate-profile-canonical.integration.spec.ts",
+    "api/test/roommate-action-visibility.integration.spec.ts",
+    "api/test/support/launch-prisma-mock.ts"
+  ]
+}

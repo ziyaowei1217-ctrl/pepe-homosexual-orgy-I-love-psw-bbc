@@ -1,0 +1,947 @@
+{
+  "records": [
+    {
+      "path": "/",
+      "width": 1440,
+      "url": "http://127.0.0.1:4411/",
+      "body": "跳到主要内容\nSublet Pipeline\nLIVE WELL, SOONER\n找房\n室友\n收藏\n消息\n我的\n房东中心\n\nA PLACE FOR YOUR NEXT CHAPTER\n\n下一站，\n住得自在。\n\n更轻松地找到全美主要城市的下一处住所\n\n从一间合适的房，到一段新的生活。先选城市，再慢慢挑。\n\n想住在哪里？\n入住\n退租\n搜索房源\n\n日期还没定？直接搜索，先发现喜欢的房源。\n\n发现一个新家\n\n近学校 · 步行可达\n\n安静的一居室，靠近学校和公共交通\n\n$850/ 月\n\n热门城市\nLos Angeles\nNew York\nBoston\nSan Francisco Bay Area\nSeattle\nChicago\nAustin\nWashington, DC\n拎包，开启新生活\n带家具的房源\n把通勤变短一点\n地铁附近的房源\n留一点自己的空间\n带独卫的房源\n和毛孩子一起住\n宠物友好房源\n为下一段生活，找个落脚点\n\n看看这些房源，从位置、月租和租期开始比较。\n\n查看全部\n\n$850/ 月\n\n4.5\n安静的一居室，靠近学校和公共交通\n\n近学校 · 步行可达\n\n1 卧 · 1 卫 · 近地铁 · 独立房间\n\n带家具\n\n$1,225/ 月\n\n4.55\n采光公寓 · Quiet study space\n\nLos Angeles · Westwood\n\n2 卧 · 1 卫 · 带家具 · 可协商\n\n$1,600/ 月\n\n4.6\n长标题体验检查：带家具、可协商起租日期的共享公寓房间\n\n近学校 · 步行可达\n\n1 卧 · 1 卫 · 近地铁 · 独立房间\n\n带家具\n\n$1,975/ 月\n\n4.65\n预算友好的独立卧室\n\nLos Angeles · Westwood\n\n2 卧 · 1 卫 · 带家具 · 可协商\n\n安心开始，不用着急决定\n\n先喜欢，再了解，最后安顿。\n也在找合拍的室友？\n01\n发现与比较\n\n按位置、月租与租期缩小范围。\n\n02\n沟通与看房\n\n联系房东，把在意的细节问清楚。\n\n03\n提交申请\n\n房东接受申请后，再进入付款。",
+      "scrollWidth": 1440,
+      "viewport": 1440,
+      "overflow": [],
+      "inputs": [
+        {
+          "type": "text",
+          "id": "",
+          "aria": "想住在哪里？"
+        },
+        {
+          "type": "date",
+          "id": "",
+          "label": "入住",
+          "aria": "入住日期"
+        },
+        {
+          "type": "date",
+          "id": "",
+          "label": "退租",
+          "aria": "退租日期"
+        }
+      ]
+    },
+    {
+      "path": "/search",
+      "width": 1440,
+      "url": "http://127.0.0.1:4411/search",
+      "body": "跳到主要内容\nSublet Pipeline\nLIVE WELL, SOONER\n找房\n室友\n收藏\n消息\n我的\n房东中心\n每月预算\n卧室\n租期\n筛选\n我的收藏\n首页\n/\n房源列表\n全部地区的可租房源\n\n6 套符合条件 · 按月租住，自在安顿\n\n价格以美元 / 月显示\n排序\n推荐优先\n价格从低到高\n价格从高到低\n评分优先\n带家具 · 轻松入住\n在地图上查看\n\n$2,725/ 月\n\n4.75\nStudy-friendly shared home\n\nLos Angeles · Westwood\n\n2 卧\n1 卫\n带家具 · 可协商\n\n12 minute walk\n\n可租 2026/10/01 — 2027/08/31\n\n在地图上查看\n\n$2,350/ 月\n\n4.7\n宽敞整洁的短租住所\n\n近学校 · 步行可达\n\n1 卧\n1 卫\n近地铁 · 独立房间\n\n12 minute walk\n\n可租 2026/10/01 — 2027/08/31\n\n带家具 · 轻松入住\n在地图上查看\n\n$1,975/ 月\n\n4.65\n预算友好的独立卧室\n\nLos Angeles · Westwood\n\n2 卧\n1 卫\n带家具 · 可协商\n\n12 minute walk\n\n可租 2026/10/01 — 2027/08/31\n\n在地图上查看\n\n$1,600/ 月\n\n4.6\n长标题体验检查：带家具、可协商起租日期的共享公寓房间\n\n近学校 · 步行可达\n\n1 卧\n1 卫\n近地铁 · 独立房间\n\n12 minute walk\n\n可租 2026/10/01 — 2027/08/31\n\n带家具 · 轻松入住\n在地图上查看\n\n$1,225/ 月\n\n4.55\n采光公寓 · Quiet study space\n\nLos Angeles · Westwood\n\n2 卧\n1 卫\n带家具 · 可协商\n\n12 minute walk\n\n可租 2026/10/01 — 2027/08/31\n\n在地图上查看\n\n$850/ 月\n\n4.5\n安静的一居室，靠近学校和公共交通\n\n近学校 · 步行可达\n\n1 卧\n1 卫\n近地铁 · 独立房间\n\n12 minute walk\n\n可租 2026/10/01 — 2027/08/31\n\n6 个地图结果\n|\n本页房源\n3\n套房源\n3\n套房源\n\n拖动地图探索 · 点击价格查看房源\n\n© OpenStreetMap contributors\n分屏\n列表\n地图",
+      "scrollWidth": 1440,
+      "viewport": 1440,
+      "overflow": [
+        {
+          "tag": "DIV",
+          "text": "",
+          "rect": {
+            "x": 1190,
+            "y": -42,
+            "width": 256,
+            "height": 256,
+            "top": -42,
+            "right": 1446,
+            "bottom": 214,
+            "left": 1190
+          }
+        },
+        {
+          "tag": "DIV",
+          "text": "",
+          "rect": {
+            "x": 1190,
+            "y": 214,
+            "width": 256,
+            "height": 256,
+            "top": 214,
+            "right": 1446,
+            "bottom": 470,
+            "left": 1190
+          }
+        },
+        {
+          "tag": "DIV",
+          "text": "",
+          "rect": {
+            "x": 1190,
+            "y": 470,
+            "width": 256,
+            "height": 256,
+            "top": 470,
+            "right": 1446,
+            "bottom": 726,
+            "left": 1190
+          }
+        },
+        {
+          "tag": "DIV",
+          "text": "",
+          "rect": {
+            "x": 1190,
+            "y": 726,
+            "width": 256,
+            "height": 256,
+            "top": 726,
+            "right": 1446,
+            "bottom": 982,
+            "left": 1190
+          }
+        },
+        {
+          "tag": "DIV",
+          "text": "",
+          "rect": {
+            "x": 1190,
+            "y": 982,
+            "width": 256,
+            "height": 256,
+            "top": 982,
+            "right": 1446,
+            "bottom": 1238,
+            "left": 1190
+          }
+        }
+      ],
+      "inputs": [
+        {
+          "type": "text",
+          "id": "",
+          "aria": "地点或学校"
+        },
+        {
+          "type": "select-one",
+          "id": "",
+          "label": "排序\n推荐优先\n价格从低到高\n价格从高到低\n评分优先",
+          "aria": "结果排序"
+        }
+      ]
+    },
+    {
+      "path": "/saved",
+      "width": 1440,
+      "url": "http://127.0.0.1:4411/saved",
+      "body": "跳到主要内容\nSublet Pipeline\nLIVE WELL, SOONER\n找房\n室友\n收藏\n消息\n我的\n房东中心\n你的空间\n收藏清单\n\n把喜欢的房放在一起比较。清单、备注与排序都只保存在当前设备。\n\n此设备上的访客收藏，暂不跨设备同步\n新建清单\n全部收藏 0\n全部收藏\n\n0 套房源\n\n排序 \n最近收藏\n价格从低到高\n价格从高到低\n地图\n还没有收藏房源\n\n浏览房源时点击爱心，这里就会成为一个干净、好比较的收藏空间。\n\n去找房",
+      "scrollWidth": 1440,
+      "viewport": 1440,
+      "overflow": [],
+      "inputs": [
+        {
+          "type": "select-one",
+          "id": "",
+          "label": "排序 \n最近收藏\n价格从低到高\n价格从高到低",
+          "aria": "收藏排序"
+        }
+      ]
+    },
+    {
+      "path": "/roommates",
+      "width": 1440,
+      "url": "http://127.0.0.1:4411/roommates",
+      "body": "跳到主要内容\nSublet Pipeline\nLIVE WELL, SOONER\n找房\n室友\n收藏\n消息\n我的\n房东中心\n\nROOMMATE MATCH\n\n找到合拍的室友\n\n浏览室友资料，互相喜欢后即可开始聊天。\n\n喜欢列表\n\n你的个人资料\n\n让室友认识你\n\n补充城市、学校和个人简介，方便彼此了解。\n\n编辑资料 →\n\n为什么适合你\n\n网络连接失败，请检查网络后重试。\n重新加载推荐",
+      "scrollWidth": 1440,
+      "viewport": 1440,
+      "overflow": [],
+      "inputs": []
+    },
+    {
+      "path": "/account",
+      "width": 1440,
+      "url": "http://127.0.0.1:4411/account",
+      "body": "跳到主要内容\nSublet Pipeline\nLIVE WELL, SOONER\n找房\n室友\n收藏\n消息\n我的\n房东中心\n\nYOUR SPACE\n\n我的账户\n\n更新个人资料，查看认证状态、申请和消息。\n\n访客账户\n登录后同步进度\n账户首页\n个人资料\n身份与认证\n通知与隐私\n账户首页\n欢迎回来\n\n使用邮箱验证码登录，查看申请、消息和租住进度。\n\n目前仅支持受邀邮箱或已有账户。请使用收到邀请的邮箱登录。\n\n邮箱地址\n发送验证码\n无需密码，验证码短时有效\n\n登录后解锁\n\n查看找房进度\n申请状态与已接受租住\n集中处理消息\n房东、预约与室友对话\n提高信任度\n完善资料与身份认证",
+      "scrollWidth": 1440,
+      "viewport": 1440,
+      "overflow": [],
+      "inputs": [
+        {
+          "type": "email",
+          "id": "account-email",
+          "label": "邮箱地址",
+          "aria": null
+        }
+      ]
+    },
+    {
+      "path": "/host/listings/new",
+      "width": 1440,
+      "url": "http://127.0.0.1:4411/host/listings/new",
+      "body": "房东工作台\nHOST WORKSPACE\n概览\n房源\n申请\n消息\n返回租客端\n房东账户\n查看账户与权限\n\nHOST WORKSPACE\n\n发布新房源\n\n完善房源资料与照片，保存草稿后提交审核。\n\n登录房东账户后继续\n登录",
+      "scrollWidth": 1440,
+      "viewport": 1440,
+      "overflow": [],
+      "inputs": []
+    },
+    {
+      "path": "/applications",
+      "width": 1440,
+      "url": "http://127.0.0.1:4411/applications",
+      "body": "跳到主要内容\nSublet Pipeline\nLIVE WELL, SOONER\n找房\n室友\n收藏\n消息\n我的\n房东中心\n\nAPPLICATION CENTER\n\n我的申请\n\n草稿、已提交和需要补充的申请都在这里。\n\n查看已接受的租住\n登录后查看真实申请状态\n\n登录后可查看草稿、审核进度和房东决定。\n\n登录",
+      "scrollWidth": 1440,
+      "viewport": 1440,
+      "overflow": [],
+      "inputs": []
+    },
+    {
+      "path": "/inbox",
+      "width": 1440,
+      "url": "http://127.0.0.1:4411/inbox",
+      "body": "跳到主要内容\nSublet Pipeline\nLIVE WELL, SOONER\n找房\n室友\n收藏\n消息\n我的\n房东中心\n\nMESSAGES\n\n收件箱\n全部\n房源申请\n预约看房\n室友匹配\n\n登录后查看真实消息\n\n登录\n选择一条对话\n\n你的真实房源沟通和室友消息会显示在这里。",
+      "scrollWidth": 1440,
+      "viewport": 1440,
+      "overflow": [],
+      "inputs": [
+        {
+          "type": "text",
+          "id": "",
+          "label": "",
+          "aria": "搜索消息"
+        }
+      ]
+    },
+    {
+      "path": "/",
+      "width": 375,
+      "url": "http://127.0.0.1:4411/",
+      "body": "跳到主要内容\n\nA PLACE FOR YOUR NEXT CHAPTER\n\n下一站，\n住得自在。\n\n更轻松地找到全美主要城市的下一处住所\n\n从一间合适的房，到一段新的生活。先选城市，再慢慢挑。\n\n想住在哪里？\n入住\n退租\n搜索房源\n\n日期还没定？直接搜索，先发现喜欢的房源。\n\n热门城市\nLos Angeles\nNew York\nBoston\nSan Francisco Bay Area\nSeattle\nChicago\nAustin\nWashington, DC\n拎包，开启新生活\n带家具的房源\n把通勤变短一点\n地铁附近的房源\n留一点自己的空间\n带独卫的房源\n和毛孩子一起住\n宠物友好房源\n为下一段生活，找个落脚点\n\n看看这些房源，从位置、月租和租期开始比较。\n\n$850/ 月\n\n4.5\n安静的一居室，靠近学校和公共交通\n\n近学校 · 步行可达\n\n1 卧 · 1 卫 · 近地铁 · 独立房间\n\n带家具\n\n$1,225/ 月\n\n4.55\n采光公寓 · Quiet study space\n\nLos Angeles · Westwood\n\n2 卧 · 1 卫 · 带家具 · 可协商\n\n$1,600/ 月\n\n4.6\n长标题体验检查：带家具、可协商起租日期的共享公寓房间\n\n近学校 · 步行可达\n\n1 卧 · 1 卫 · 近地铁 · 独立房间\n\n带家具\n\n$1,975/ 月\n\n4.65\n预算友好的独立卧室\n\nLos Angeles · Westwood\n\n2 卧 · 1 卫 · 带家具 · 可协商\n\n查看全部房源\n\n安心开始，不用着急决定\n\n先喜欢，再了解，最后安顿。\n也在找合拍的室友？\n01\n发现与比较\n\n按位置、月租与租期缩小范围。\n\n02\n沟通与看房\n\n联系房东，把在意的细节问清楚。\n\n03\n提交申请\n\n房东接受申请后，再进入付款。\n\n找房\n室友\n收藏\n消息\n我的",
+      "scrollWidth": 375,
+      "viewport": 375,
+      "overflow": [
+        {
+          "tag": "A",
+          "text": "San Francisco Bay Area",
+          "rect": {
+            "x": 372.25,
+            "y": 643.09375,
+            "width": 169.6875,
+            "height": 34,
+            "top": 643.09375,
+            "right": 541.9375,
+            "bottom": 677.09375,
+            "left": 372.25
+          }
+        },
+        {
+          "tag": "A",
+          "text": "Seattle",
+          "rect": {
+            "x": 549.9375,
+            "y": 643.09375,
+            "width": 74.859375,
+            "height": 34,
+            "top": 643.09375,
+            "right": 624.796875,
+            "bottom": 677.09375,
+            "left": 549.9375
+          }
+        },
+        {
+          "tag": "A",
+          "text": "Chicago",
+          "rect": {
+            "x": 632.796875,
+            "y": 643.09375,
+            "width": 81.328125,
+            "height": 34,
+            "top": 643.09375,
+            "right": 714.125,
+            "bottom": 677.09375,
+            "left": 632.796875
+          }
+        },
+        {
+          "tag": "A",
+          "text": "Austin",
+          "rect": {
+            "x": 722.125,
+            "y": 643.09375,
+            "width": 70.453125,
+            "height": 34,
+            "top": 643.09375,
+            "right": 792.578125,
+            "bottom": 677.09375,
+            "left": 722.125
+          }
+        },
+        {
+          "tag": "A",
+          "text": "Washington, DC",
+          "rect": {
+            "x": 800.578125,
+            "y": 643.09375,
+            "width": 126.78125,
+            "height": 34,
+            "top": 643.09375,
+            "right": 927.359375,
+            "bottom": 677.09375,
+            "left": 800.578125
+          }
+        }
+      ],
+      "inputs": [
+        {
+          "type": "text",
+          "id": "",
+          "aria": "想住在哪里？"
+        },
+        {
+          "type": "date",
+          "id": "",
+          "label": "入住",
+          "aria": "入住日期"
+        },
+        {
+          "type": "date",
+          "id": "",
+          "label": "退租",
+          "aria": "退租日期"
+        }
+      ]
+    },
+    {
+      "path": "/search",
+      "width": 375,
+      "url": "http://127.0.0.1:4411/search",
+      "body": "跳到主要内容\n每月预算\n卧室\n租期\n筛选\n首页\n/\n房源列表\n全部地区的可租房源\n\n6 套符合条件 · 按月租住，自在安顿\n\n价格以美元 / 月显示\n排序\n推荐优先\n价格从低到高\n价格从高到低\n评分优先\n带家具 · 轻松入住\n在地图上查看\n\n$2,725/ 月\n\n4.75\nStudy-friendly shared home\n\nLos Angeles · Westwood\n\n2 卧\n1 卫\n带家具 · 可协商\n\n12 minute walk\n\n可租 2026/10/01 — 2027/08/31\n\n在地图上查看\n\n$2,350/ 月\n\n4.7\n宽敞整洁的短租住所\n\n近学校 · 步行可达\n\n1 卧\n1 卫\n近地铁 · 独立房间\n\n12 minute walk\n\n可租 2026/10/01 — 2027/08/31\n\n带家具 · 轻松入住\n在地图上查看\n\n$1,975/ 月\n\n4.65\n预算友好的独立卧室\n\nLos Angeles · Westwood\n\n2 卧\n1 卫\n带家具 · 可协商\n\n12 minute walk\n\n可租 2026/10/01 — 2027/08/31\n\n在地图上查看\n\n$1,600/ 月\n\n4.6\n长标题体验检查：带家具、可协商起租日期的共享公寓房间\n\n近学校 · 步行可达\n\n1 卧\n1 卫\n近地铁 · 独立房间\n\n12 minute walk\n\n可租 2026/10/01 — 2027/08/31\n\n带家具 · 轻松入住\n在地图上查看\n\n$1,225/ 月\n\n4.55\n采光公寓 · Quiet study space\n\nLos Angeles · Westwood\n\n2 卧\n1 卫\n带家具 · 可协商\n\n12 minute walk\n\n可租 2026/10/01 — 2027/08/31\n\n在地图上查看\n\n$850/ 月\n\n4.5\n安静的一居室，靠近学校和公共交通\n\n近学校 · 步行可达\n\n1 卧\n1 卫\n近地铁 · 独立房间\n\n12 minute walk\n\n可租 2026/10/01 — 2027/08/31\n\n列表\n地图\n找房\n室友\n收藏\n消息\n我的",
+      "scrollWidth": 375,
+      "viewport": 375,
+      "overflow": [
+        {
+          "tag": "BUTTON",
+          "text": "租期",
+          "rect": {
+            "x": 320.046875,
+            "y": 147,
+            "width": 100.515625,
+            "height": 38,
+            "top": 147,
+            "right": 420.5625,
+            "bottom": 185,
+            "left": 320.046875
+          }
+        },
+        {
+          "tag": "svg",
+          "rect": {
+            "x": 391.5625,
+            "y": 159,
+            "width": 14,
+            "height": 14,
+            "top": 159,
+            "right": 405.5625,
+            "bottom": 173,
+            "left": 391.5625
+          }
+        },
+        {
+          "tag": "path",
+          "rect": {
+            "x": 395.0625,
+            "y": 164.25,
+            "width": 7,
+            "height": 3.5,
+            "top": 164.25,
+            "right": 402.0625,
+            "bottom": 167.75,
+            "left": 395.0625
+          }
+        }
+      ],
+      "inputs": [
+        {
+          "type": "text",
+          "id": "",
+          "aria": "地点或学校"
+        },
+        {
+          "type": "select-one",
+          "id": "",
+          "label": "排序\n推荐优先\n价格从低到高\n价格从高到低\n评分优先",
+          "aria": "结果排序"
+        }
+      ]
+    },
+    {
+      "path": "/saved",
+      "width": 375,
+      "url": "http://127.0.0.1:4411/saved",
+      "body": "跳到主要内容\n收藏清单\n\n把喜欢的房放在一起比较。清单、备注与排序都只保存在当前设备。\n\n此设备上的访客收藏，暂不跨设备同步\n新建清单\n全部收藏 0\n全部收藏\n\n0 套房源\n\n最近收藏\n价格从低到高\n价格从高到低\n地图\n还没有收藏房源\n\n浏览房源时点击爱心，这里就会成为一个干净、好比较的收藏空间。\n\n去找房\n找房\n室友\n收藏\n消息\n我的",
+      "scrollWidth": 375,
+      "viewport": 375,
+      "overflow": [],
+      "inputs": [
+        {
+          "type": "select-one",
+          "id": "",
+          "label": "最近收藏\n价格从低到高\n价格从高到低",
+          "aria": "收藏排序"
+        }
+      ]
+    },
+    {
+      "path": "/roommates",
+      "width": 375,
+      "url": "http://127.0.0.1:4411/roommates",
+      "body": "跳到主要内容\n找到合拍的室友\n\n浏览室友资料，互相喜欢后即可开始聊天。\n\n喜欢列表\n\n你的个人资料\n\n让室友认识你\n\n补充城市、学校和个人简介，方便彼此了解。\n\n编辑资料 →\n\n为什么适合你\n\n网络连接失败，请检查网络后重试。\n重新加载推荐\n找房\n室友\n收藏\n消息\n我的",
+      "scrollWidth": 375,
+      "viewport": 375,
+      "overflow": [],
+      "inputs": []
+    },
+    {
+      "path": "/account",
+      "width": 375,
+      "url": "http://127.0.0.1:4411/account",
+      "body": "跳到主要内容\n我的账户\n\n管理资料，查看认证与通知方式。\n\n首页\n资料\n认证\n设置\n账户首页\n欢迎回来\n\n使用邮箱验证码登录，查看申请、消息和租住进度。\n\n目前仅支持受邀邮箱或已有账户。请使用收到邀请的邮箱登录。\n\n邮箱地址\n发送验证码\n无需密码，验证码短时有效\n\n登录后解锁\n\n查看找房进度\n申请状态与已接受租住\n集中处理消息\n房东、预约与室友对话\n提高信任度\n完善资料与身份认证\n找房\n室友\n收藏\n消息\n我的",
+      "scrollWidth": 375,
+      "viewport": 375,
+      "overflow": [],
+      "inputs": [
+        {
+          "type": "email",
+          "id": "account-email",
+          "label": "邮箱地址",
+          "aria": null
+        }
+      ]
+    },
+    {
+      "path": "/host/listings/new",
+      "width": 375,
+      "url": "http://127.0.0.1:4411/host/listings/new",
+      "body": "房东工作台\n概览\n房源\n申请\n消息\n\nHOST WORKSPACE\n\n发布新房源\n\n完善房源资料与照片，保存草稿后提交审核。\n\n登录房东账户后继续\n登录",
+      "scrollWidth": 375,
+      "viewport": 375,
+      "overflow": [],
+      "inputs": []
+    },
+    {
+      "path": "/applications",
+      "width": 375,
+      "url": "http://127.0.0.1:4411/applications",
+      "body": "跳到主要内容\n\nAPPLICATION CENTER\n\n我的申请\n\n草稿、已提交和需要补充的申请都在这里。\n\n查看已接受的租住\n登录后查看真实申请状态\n\n登录后可查看草稿、审核进度和房东决定。\n\n登录\n找房\n室友\n收藏\n消息\n我的",
+      "scrollWidth": 375,
+      "viewport": 375,
+      "overflow": [],
+      "inputs": []
+    },
+    {
+      "path": "/inbox",
+      "width": 375,
+      "url": "http://127.0.0.1:4411/inbox",
+      "body": "跳到主要内容\n\nMESSAGES\n\n收件箱\n全部\n房源申请\n预约看房\n室友匹配\n\n登录后查看真实消息\n\n登录\n找房\n室友\n收藏\n消息\n我的",
+      "scrollWidth": 375,
+      "viewport": 375,
+      "overflow": [],
+      "inputs": [
+        {
+          "type": "text",
+          "id": "",
+          "label": "",
+          "aria": "搜索消息"
+        }
+      ]
+    },
+    {
+      "path": "/",
+      "width": 320,
+      "url": "http://127.0.0.1:4411/",
+      "body": "跳到主要内容\n\nA PLACE FOR YOUR NEXT CHAPTER\n\n下一站，\n住得自在。\n\n更轻松地找到全美主要城市的下一处住所\n\n从一间合适的房，到一段新的生活。先选城市，再慢慢挑。\n\n想住在哪里？\n入住\n退租\n搜索房源\n\n日期还没定？直接搜索，先发现喜欢的房源。\n\n热门城市\nLos Angeles\nNew York\nBoston\nSan Francisco Bay Area\nSeattle\nChicago\nAustin\nWashington, DC\n拎包，开启新生活\n带家具的房源\n把通勤变短一点\n地铁附近的房源\n留一点自己的空间\n带独卫的房源\n和毛孩子一起住\n宠物友好房源\n为下一段生活，找个落脚点\n\n看看这些房源，从位置、月租和租期开始比较。\n\n$850/ 月\n\n4.5\n安静的一居室，靠近学校和公共交通\n\n近学校 · 步行可达\n\n1 卧 · 1 卫 · 近地铁 · 独立房间\n\n带家具\n\n$1,225/ 月\n\n4.55\n采光公寓 · Quiet study space\n\nLos Angeles · Westwood\n\n2 卧 · 1 卫 · 带家具 · 可协商\n\n$1,600/ 月\n\n4.6\n长标题体验检查：带家具、可协商起租日期的共享公寓房间\n\n近学校 · 步行可达\n\n1 卧 · 1 卫 · 近地铁 · 独立房间\n\n带家具\n\n$1,975/ 月\n\n4.65\n预算友好的独立卧室\n\nLos Angeles · Westwood\n\n2 卧 · 1 卫 · 带家具 · 可协商\n\n查看全部房源\n\n安心开始，不用着急决定\n\n先喜欢，再了解，最后安顿。\n也在找合拍的室友？\n01\n发现与比较\n\n按位置、月租与租期缩小范围。\n\n02\n沟通与看房\n\n联系房东，把在意的细节问清楚。\n\n03\n提交申请\n\n房东接受申请后，再进入付款。\n\n找房\n室友\n收藏\n消息\n我的",
+      "scrollWidth": 320,
+      "viewport": 320,
+      "overflow": [
+        {
+          "tag": "A",
+          "text": "Boston",
+          "rect": {
+            "x": 289.734375,
+            "y": 659.59375,
+            "width": 74.515625,
+            "height": 34,
+            "top": 659.59375,
+            "right": 364.25,
+            "bottom": 693.59375,
+            "left": 289.734375
+          }
+        },
+        {
+          "tag": "A",
+          "text": "San Francisco Bay Area",
+          "rect": {
+            "x": 372.25,
+            "y": 659.59375,
+            "width": 169.6875,
+            "height": 34,
+            "top": 659.59375,
+            "right": 541.9375,
+            "bottom": 693.59375,
+            "left": 372.25
+          }
+        },
+        {
+          "tag": "A",
+          "text": "Seattle",
+          "rect": {
+            "x": 549.9375,
+            "y": 659.59375,
+            "width": 74.859375,
+            "height": 34,
+            "top": 659.59375,
+            "right": 624.796875,
+            "bottom": 693.59375,
+            "left": 549.9375
+          }
+        },
+        {
+          "tag": "A",
+          "text": "Chicago",
+          "rect": {
+            "x": 632.796875,
+            "y": 659.59375,
+            "width": 81.328125,
+            "height": 34,
+            "top": 659.59375,
+            "right": 714.125,
+            "bottom": 693.59375,
+            "left": 632.796875
+          }
+        },
+        {
+          "tag": "A",
+          "text": "Austin",
+          "rect": {
+            "x": 722.125,
+            "y": 659.59375,
+            "width": 70.453125,
+            "height": 34,
+            "top": 659.59375,
+            "right": 792.578125,
+            "bottom": 693.59375,
+            "left": 722.125
+          }
+        },
+        {
+          "tag": "A",
+          "text": "Washington, DC",
+          "rect": {
+            "x": 800.578125,
+            "y": 659.59375,
+            "width": 126.78125,
+            "height": 34,
+            "top": 659.59375,
+            "right": 927.359375,
+            "bottom": 693.59375,
+            "left": 800.578125
+          }
+        }
+      ],
+      "inputs": [
+        {
+          "type": "text",
+          "id": "",
+          "aria": "想住在哪里？"
+        },
+        {
+          "type": "date",
+          "id": "",
+          "label": "入住",
+          "aria": "入住日期"
+        },
+        {
+          "type": "date",
+          "id": "",
+          "label": "退租",
+          "aria": "退租日期"
+        }
+      ]
+    },
+    {
+      "path": "/search",
+      "width": 320,
+      "url": "http://127.0.0.1:4411/search",
+      "body": "跳到主要内容\n每月预算\n卧室\n租期\n筛选\n首页\n/\n房源列表\n全部地区的可租房源\n\n6 套符合条件 · 按月租住，自在安顿\n\n价格以美元 / 月显示\n排序\n推荐优先\n价格从低到高\n价格从高到低\n评分优先\n带家具 · 轻松入住\n在地图上查看\n\n$2,725/ 月\n\n4.75\nStudy-friendly shared home\n\nLos Angeles · Westwood\n\n2 卧\n1 卫\n带家具 · 可协商\n\n12 minute walk\n\n可租 2026/10/01 — 2027/08/31\n\n在地图上查看\n\n$2,350/ 月\n\n4.7\n宽敞整洁的短租住所\n\n近学校 · 步行可达\n\n1 卧\n1 卫\n近地铁 · 独立房间\n\n12 minute walk\n\n可租 2026/10/01 — 2027/08/31\n\n带家具 · 轻松入住\n在地图上查看\n\n$1,975/ 月\n\n4.65\n预算友好的独立卧室\n\nLos Angeles · Westwood\n\n2 卧\n1 卫\n带家具 · 可协商\n\n12 minute walk\n\n可租 2026/10/01 — 2027/08/31\n\n在地图上查看\n\n$1,600/ 月\n\n4.6\n长标题体验检查：带家具、可协商起租日期的共享公寓房间\n\n近学校 · 步行可达\n\n1 卧\n1 卫\n近地铁 · 独立房间\n\n12 minute walk\n\n可租 2026/10/01 — 2027/08/31\n\n带家具 · 轻松入住\n在地图上查看\n\n$1,225/ 月\n\n4.55\n采光公寓 · Quiet study space\n\nLos Angeles · Westwood\n\n2 卧\n1 卫\n带家具 · 可协商\n\n12 minute walk\n\n可租 2026/10/01 — 2027/08/31\n\n在地图上查看\n\n$850/ 月\n\n4.5\n安静的一居室，靠近学校和公共交通\n\n近学校 · 步行可达\n\n1 卧\n1 卫\n近地铁 · 独立房间\n\n12 minute walk\n\n可租 2026/10/01 — 2027/08/31\n\n列表\n地图\n找房\n室友\n收藏\n消息\n我的",
+      "scrollWidth": 320,
+      "viewport": 320,
+      "overflow": [
+        {
+          "tag": "BUTTON",
+          "text": "租期",
+          "rect": {
+            "x": 320.046875,
+            "y": 147,
+            "width": 100.515625,
+            "height": 38,
+            "top": 147,
+            "right": 420.5625,
+            "bottom": 185,
+            "left": 320.046875
+          }
+        },
+        {
+          "tag": "svg",
+          "rect": {
+            "x": 335.046875,
+            "y": 158,
+            "width": 16,
+            "height": 16,
+            "top": 158,
+            "right": 351.046875,
+            "bottom": 174,
+            "left": 335.046875
+          }
+        },
+        {
+          "tag": "rect",
+          "rect": {
+            "x": 337.046875,
+            "y": 160.6666717529297,
+            "width": 12,
+            "height": 12,
+            "top": 160.6666717529297,
+            "right": 349.046875,
+            "bottom": 172.6666717529297,
+            "left": 337.046875
+          }
+        },
+        {
+          "tag": "path",
+          "rect": {
+            "x": 337.046875,
+            "y": 164.6666717529297,
+            "width": 12,
+            "height": 0,
+            "top": 164.6666717529297,
+            "right": 349.046875,
+            "bottom": 164.6666717529297,
+            "left": 337.046875
+          }
+        },
+        {
+          "tag": "path",
+          "rect": {
+            "x": 340.3802185058594,
+            "y": 167.3333282470703,
+            "width": 0.00665283203125,
+            "height": 0,
+            "top": 167.3333282470703,
+            "right": 340.3868713378906,
+            "bottom": 167.3333282470703,
+            "left": 340.3802185058594
+          }
+        },
+        {
+          "tag": "path",
+          "rect": {
+            "x": 343.046875,
+            "y": 167.3333282470703,
+            "width": 0.00665283203125,
+            "height": 0,
+            "top": 167.3333282470703,
+            "right": 343.05352783203125,
+            "bottom": 167.3333282470703,
+            "left": 343.046875
+          }
+        },
+        {
+          "tag": "path",
+          "rect": {
+            "x": 345.7135314941406,
+            "y": 167.3333282470703,
+            "width": 0.006683349609375,
+            "height": 0,
+            "top": 167.3333282470703,
+            "right": 345.72021484375,
+            "bottom": 167.3333282470703,
+            "left": 345.7135314941406
+          }
+        },
+        {
+          "tag": "path",
+          "rect": {
+            "x": 340.3802185058594,
+            "y": 170,
+            "width": 0.00665283203125,
+            "height": 0,
+            "top": 170,
+            "right": 340.3868713378906,
+            "bottom": 170,
+            "left": 340.3802185058594
+          }
+        }
+      ],
+      "inputs": [
+        {
+          "type": "text",
+          "id": "",
+          "aria": "地点或学校"
+        },
+        {
+          "type": "select-one",
+          "id": "",
+          "label": "排序\n推荐优先\n价格从低到高\n价格从高到低\n评分优先",
+          "aria": "结果排序"
+        }
+      ]
+    },
+    {
+      "path": "/saved",
+      "width": 320,
+      "url": "http://127.0.0.1:4411/saved",
+      "body": "跳到主要内容\n收藏清单\n\n把喜欢的房放在一起比较。清单、备注与排序都只保存在当前设备。\n\n此设备上的访客收藏，暂不跨设备同步\n新建清单\n全部收藏 0\n全部收藏\n\n0 套房源\n\n最近收藏\n价格从低到高\n价格从高到低\n地图\n还没有收藏房源\n\n浏览房源时点击爱心，这里就会成为一个干净、好比较的收藏空间。\n\n去找房\n找房\n室友\n收藏\n消息\n我的",
+      "scrollWidth": 320,
+      "viewport": 320,
+      "overflow": [],
+      "inputs": [
+        {
+          "type": "select-one",
+          "id": "",
+          "label": "最近收藏\n价格从低到高\n价格从高到低",
+          "aria": "收藏排序"
+        }
+      ]
+    },
+    {
+      "path": "/roommates",
+      "width": 320,
+      "url": "http://127.0.0.1:4411/roommates",
+      "body": "跳到主要内容\n找到合拍的室友\n\n浏览室友资料，互相喜欢后即可开始聊天。\n\n喜欢列表\n\n你的个人资料\n\n让室友认识你\n\n补充城市、学校和个人简介，方便彼此了解。\n\n编辑资料 →\n\n为什么适合你\n\n网络连接失败，请检查网络后重试。\n重新加载推荐\n找房\n室友\n收藏\n消息\n我的",
+      "scrollWidth": 320,
+      "viewport": 320,
+      "overflow": [],
+      "inputs": []
+    },
+    {
+      "path": "/account",
+      "width": 320,
+      "url": "http://127.0.0.1:4411/account",
+      "body": "跳到主要内容\n我的账户\n\n管理资料，查看认证与通知方式。\n\n首页\n资料\n认证\n设置\n账户首页\n欢迎回来\n\n使用邮箱验证码登录，查看申请、消息和租住进度。\n\n目前仅支持受邀邮箱或已有账户。请使用收到邀请的邮箱登录。\n\n邮箱地址\n发送验证码\n无需密码，验证码短时有效\n\n登录后解锁\n\n查看找房进度\n申请状态与已接受租住\n集中处理消息\n房东、预约与室友对话\n提高信任度\n完善资料与身份认证\n找房\n室友\n收藏\n消息\n我的",
+      "scrollWidth": 320,
+      "viewport": 320,
+      "overflow": [],
+      "inputs": [
+        {
+          "type": "email",
+          "id": "account-email",
+          "label": "邮箱地址",
+          "aria": null
+        }
+      ]
+    },
+    {
+      "path": "/host/listings/new",
+      "width": 320,
+      "url": "http://127.0.0.1:4411/host/listings/new",
+      "body": "房东工作台\n概览\n房源\n申请\n消息\n\nHOST WORKSPACE\n\n发布新房源\n\n完善房源资料与照片，保存草稿后提交审核。\n\n登录房东账户后继续\n登录",
+      "scrollWidth": 320,
+      "viewport": 320,
+      "overflow": [
+        {
+          "tag": "A",
+          "text": "消息",
+          "rect": {
+            "x": 247.6875,
+            "y": 60,
+            "width": 74.5625,
+            "height": 44,
+            "top": 60,
+            "right": 322.25,
+            "bottom": 104,
+            "left": 247.6875
+          }
+        }
+      ],
+      "inputs": []
+    },
+    {
+      "path": "/applications",
+      "width": 320,
+      "url": "http://127.0.0.1:4411/applications",
+      "body": "跳到主要内容\n\nAPPLICATION CENTER\n\n我的申请\n\n草稿、已提交和需要补充的申请都在这里。\n\n查看已接受的租住\n登录后查看真实申请状态\n\n登录后可查看草稿、审核进度和房东决定。\n\n登录\n找房\n室友\n收藏\n消息\n我的",
+      "scrollWidth": 320,
+      "viewport": 320,
+      "overflow": [],
+      "inputs": []
+    },
+    {
+      "path": "/inbox",
+      "width": 320,
+      "url": "http://127.0.0.1:4411/inbox",
+      "body": "跳到主要内容\n\nMESSAGES\n\n收件箱\n全部\n房源申请\n预约看房\n室友匹配\n\n登录后查看真实消息\n\n登录\n找房\n室友\n收藏\n消息\n我的",
+      "scrollWidth": 320,
+      "viewport": 320,
+      "overflow": [],
+      "inputs": [
+        {
+          "type": "text",
+          "id": "",
+          "label": "",
+          "aria": "搜索消息"
+        }
+      ]
+    },
+    {
+      "path": "/",
+      "width": 768,
+      "url": "http://127.0.0.1:4411/",
+      "body": "跳到主要内容\nSublet Pipeline\nLIVE WELL, SOONER\n找房\n室友\n收藏\n消息\n我的\n\nA PLACE FOR YOUR NEXT CHAPTER\n\n下一站，\n住得自在。\n\n更轻松地找到全美主要城市的下一处住所\n\n从一间合适的房，到一段新的生活。先选城市，再慢慢挑。\n\n想住在哪里？\n入住\n退租\n搜索房源\n\n日期还没定？直接搜索，先发现喜欢的房源。\n\n热门城市\nLos Angeles\nNew York\nBoston\nSan Francisco Bay Area\nSeattle\nChicago\nAustin\nWashington, DC\n拎包，开启新生活\n带家具的房源\n把通勤变短一点\n地铁附近的房源\n留一点自己的空间\n带独卫的房源\n和毛孩子一起住\n宠物友好房源\n为下一段生活，找个落脚点\n\n看看这些房源，从位置、月租和租期开始比较。\n\n查看全部\n\n$850/ 月\n\n4.5\n安静的一居室，靠近学校和公共交通\n\n近学校 · 步行可达\n\n1 卧 · 1 卫 · 近地铁 · 独立房间\n\n带家具\n\n$1,225/ 月\n\n4.55\n采光公寓 · Quiet study space\n\nLos Angeles · Westwood\n\n2 卧 · 1 卫 · 带家具 · 可协商\n\n$1,600/ 月\n\n4.6\n长标题体验检查：带家具、可协商起租日期的共享公寓房间\n\n近学校 · 步行可达\n\n1 卧 · 1 卫 · 近地铁 · 独立房间\n\n带家具\n\n$1,975/ 月\n\n4.65\n预算友好的独立卧室\n\nLos Angeles · Westwood\n\n2 卧 · 1 卫 · 带家具 · 可协商\n\n安心开始，不用着急决定\n\n先喜欢，再了解，最后安顿。\n也在找合拍的室友？\n01\n发现与比较\n\n按位置、月租与租期缩小范围。\n\n02\n沟通与看房\n\n联系房东，把在意的细节问清楚。\n\n03\n提交申请\n\n房东接受申请后，再进入付款。",
+      "scrollWidth": 768,
+      "viewport": 768,
+      "overflow": [
+        {
+          "tag": "A",
+          "text": "Austin",
+          "rect": {
+            "x": 730.125,
+            "y": 624.15625,
+            "width": 70.453125,
+            "height": 34,
+            "top": 624.15625,
+            "right": 800.578125,
+            "bottom": 658.15625,
+            "left": 730.125
+          }
+        },
+        {
+          "tag": "A",
+          "text": "Washington, DC",
+          "rect": {
+            "x": 808.578125,
+            "y": 624.15625,
+            "width": 126.78125,
+            "height": 34,
+            "top": 624.15625,
+            "right": 935.359375,
+            "bottom": 658.15625,
+            "left": 808.578125
+          }
+        }
+      ],
+      "inputs": [
+        {
+          "type": "text",
+          "id": "",
+          "aria": "想住在哪里？"
+        },
+        {
+          "type": "date",
+          "id": "",
+          "label": "入住",
+          "aria": "入住日期"
+        },
+        {
+          "type": "date",
+          "id": "",
+          "label": "退租",
+          "aria": "退租日期"
+        }
+      ]
+    },
+    {
+      "path": "/search",
+      "width": 768,
+      "url": "http://127.0.0.1:4411/search",
+      "body": "跳到主要内容\nSublet Pipeline\nLIVE WELL, SOONER\n找房\n室友\n收藏\n消息\n我的\n每月预算\n卧室\n租期\n筛选\n首页\n/\n房源列表\n全部地区的可租房源\n\n6 套符合条件 · 按月租住，自在安顿\n\n价格以美元 / 月显示\n排序\n推荐优先\n价格从低到高\n价格从高到低\n评分优先\n带家具 · 轻松入住\n在地图上查看\n\n$2,725/ 月\n\n4.75\nStudy-friendly shared home\n\nLos Angeles · Westwood\n\n2 卧\n1 卫\n带家具 · 可协商\n\n12 minute walk\n\n可租 2026/10/01 — 2027/08/31\n\n在地图上查看\n\n$2,350/ 月\n\n4.7\n宽敞整洁的短租住所\n\n近学校 · 步行可达\n\n1 卧\n1 卫\n近地铁 · 独立房间\n\n12 minute walk\n\n可租 2026/10/01 — 2027/08/31\n\n带家具 · 轻松入住\n在地图上查看\n\n$1,975/ 月\n\n4.65\n预算友好的独立卧室\n\nLos Angeles · Westwood\n\n2 卧\n1 卫\n带家具 · 可协商\n\n12 minute walk\n\n可租 2026/10/01 — 2027/08/31\n\n在地图上查看\n\n$1,600/ 月\n\n4.6\n长标题体验检查：带家具、可协商起租日期的共享公寓房间\n\n近学校 · 步行可达\n\n1 卧\n1 卫\n近地铁 · 独立房间\n\n12 minute walk\n\n可租 2026/10/01 — 2027/08/31\n\n带家具 · 轻松入住\n在地图上查看\n\n$1,225/ 月\n\n4.55\n采光公寓 · Quiet study space\n\nLos Angeles · Westwood\n\n2 卧\n1 卫\n带家具 · 可协商\n\n12 minute walk\n\n可租 2026/10/01 — 2027/08/31\n\n在地图上查看\n\n$850/ 月\n\n4.5\n安静的一居室，靠近学校和公共交通\n\n近学校 · 步行可达\n\n1 卧\n1 卫\n近地铁 · 独立房间\n\n12 minute walk\n\n可租 2026/10/01 — 2027/08/31\n\n列表\n地图",
+      "scrollWidth": 768,
+      "viewport": 768,
+      "overflow": [],
+      "inputs": [
+        {
+          "type": "text",
+          "id": "",
+          "aria": "地点或学校"
+        },
+        {
+          "type": "select-one",
+          "id": "",
+          "label": "排序\n推荐优先\n价格从低到高\n价格从高到低\n评分优先",
+          "aria": "结果排序"
+        }
+      ]
+    },
+    {
+      "path": "/saved",
+      "width": 768,
+      "url": "http://127.0.0.1:4411/saved",
+      "body": "跳到主要内容\nSublet Pipeline\nLIVE WELL, SOONER\n找房\n室友\n收藏\n消息\n我的\n你的空间\n收藏清单\n\n把喜欢的房放在一起比较。清单、备注与排序都只保存在当前设备。\n\n此设备上的访客收藏，暂不跨设备同步\n新建清单\n全部收藏 0\n全部收藏\n\n0 套房源\n\n排序 \n最近收藏\n价格从低到高\n价格从高到低\n地图\n还没有收藏房源\n\n浏览房源时点击爱心，这里就会成为一个干净、好比较的收藏空间。\n\n去找房",
+      "scrollWidth": 768,
+      "viewport": 768,
+      "overflow": [],
+      "inputs": [
+        {
+          "type": "select-one",
+          "id": "",
+          "label": "排序 \n最近收藏\n价格从低到高\n价格从高到低",
+          "aria": "收藏排序"
+        }
+      ]
+    },
+    {
+      "path": "/roommates",
+      "width": 768,
+      "url": "http://127.0.0.1:4411/roommates",
+      "body": "跳到主要内容\nSublet Pipeline\nLIVE WELL, SOONER\n找房\n室友\n收藏\n消息\n我的\n找到合拍的室友\n\n浏览室友资料，互相喜欢后即可开始聊天。\n\n喜欢列表\n\n你的个人资料\n\n让室友认识你\n\n补充城市、学校和个人简介，方便彼此了解。\n\n编辑资料 →\n\n为什么适合你\n\n网络连接失败，请检查网络后重试。\n重新加载推荐",
+      "scrollWidth": 768,
+      "viewport": 768,
+      "overflow": [],
+      "inputs": []
+    },
+    {
+      "path": "/account",
+      "width": 768,
+      "url": "http://127.0.0.1:4411/account",
+      "body": "跳到主要内容\nSublet Pipeline\nLIVE WELL, SOONER\n找房\n室友\n收藏\n消息\n我的\n我的账户\n\n管理资料，查看认证与通知方式。\n\n首页\n资料\n认证\n设置\n账户首页\n欢迎回来\n\n使用邮箱验证码登录，查看申请、消息和租住进度。\n\n目前仅支持受邀邮箱或已有账户。请使用收到邀请的邮箱登录。\n\n邮箱地址\n发送验证码\n无需密码，验证码短时有效\n\n登录后解锁\n\n查看找房进度\n申请状态与已接受租住\n集中处理消息\n房东、预约与室友对话\n提高信任度\n完善资料与身份认证",
+      "scrollWidth": 768,
+      "viewport": 768,
+      "overflow": [],
+      "inputs": [
+        {
+          "type": "email",
+          "id": "account-email",
+          "label": "邮箱地址",
+          "aria": null
+        }
+      ]
+    },
+    {
+      "path": "/host/listings/new",
+      "width": 768,
+      "url": "http://127.0.0.1:4411/host/listings/new",
+      "body": "房东工作台\n概览\n房源\n申请\n消息\n\nHOST WORKSPACE\n\n发布新房源\n\n完善房源资料与照片，保存草稿后提交审核。\n\n登录房东账户后继续\n登录",
+      "scrollWidth": 768,
+      "viewport": 768,
+      "overflow": [],
+      "inputs": []
+    },
+    {
+      "path": "/applications",
+      "width": 768,
+      "url": "http://127.0.0.1:4411/applications",
+      "body": "跳到主要内容\nSublet Pipeline\nLIVE WELL, SOONER\n找房\n室友\n收藏\n消息\n我的\n\nAPPLICATION CENTER\n\n我的申请\n\n草稿、已提交和需要补充的申请都在这里。\n\n查看已接受的租住\n登录后查看真实申请状态\n\n登录后可查看草稿、审核进度和房东决定。\n\n登录",
+      "scrollWidth": 768,
+      "viewport": 768,
+      "overflow": [],
+      "inputs": []
+    },
+    {
+      "path": "/inbox",
+      "width": 768,
+      "url": "http://127.0.0.1:4411/inbox",
+      "body": "跳到主要内容\nSublet Pipeline\nLIVE WELL, SOONER\n找房\n室友\n收藏\n消息\n我的\n\nMESSAGES\n\n收件箱\n全部\n房源申请\n预约看房\n室友匹配\n\n登录后查看真实消息\n\n登录",
+      "scrollWidth": 768,
+      "viewport": 768,
+      "overflow": [],
+      "inputs": [
+        {
+          "type": "text",
+          "id": "",
+          "label": "",
+          "aria": "搜索消息"
+        }
+      ]
+    }
+  ],
+  "errors": []
+}
