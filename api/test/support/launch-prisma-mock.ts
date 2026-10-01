@@ -307,14 +307,12 @@ type ListingInclude = {
 
 type DealThreadInclude = {
   messages?: {
-    orderBy?: {
-      createdAt?: "asc" | "desc";
-    };
+    orderBy?: { createdAt?: "asc" | "desc"; id?: "asc" | "desc" } | { createdAt?: "asc" | "desc"; id?: "asc" | "desc" }[];
+    take?: number;
   };
   viewingRequests?: {
-    orderBy?: {
-      createdAt?: "asc" | "desc";
-    };
+    orderBy?: { createdAt?: "asc" | "desc"; id?: "asc" | "desc" } | { createdAt?: "asc" | "desc"; id?: "asc" | "desc" }[];
+    take?: number;
   };
 };
 
@@ -344,7 +342,26 @@ export function createLaunchPrismaMock() {
   const mock = {
     $connect: async () => undefined,
     $disconnect: async () => undefined,
-    $queryRaw: async () => [{ ok: 1 }],
+    $queryRaw: async (query: { sql?: string; values?: unknown[] }) => {
+      if (query?.sql?.includes('FROM "ViewingRequest"')) {
+        const current = new Map<string, ViewingRequestRecord>();
+        for (const request of [...state.viewingRequests].sort((left, right) => right.updatedAt.getTime() - left.updatedAt.getTime() || right.id.localeCompare(left.id))) {
+          if (query.values?.includes(request.threadId) && ["REQUESTED", "CONFIRMED"].includes(request.status) && !current.has(request.threadId)) current.set(request.threadId, request);
+        }
+        return [...current.values()];
+      }
+      if (query?.sql?.includes("FROM roommate_profiles AS matching")) {
+        const city = query.values?.[0];
+        const school = query.values?.[2];
+        return state.roommateMatchingProfiles.filter(matching => {
+          if (matching.status !== "active" || (city !== null && matching.city !== city) || (school !== null && matching.school !== school)) return false;
+          const profile = state.profiles.find(profile => profile.id === matching.userId);
+          const account = state.users.find(user => user.email === profile?.email);
+          return state.roommates.some(owned => owned.ownerId === account?.id && owned.status === "active" && owned.archivedAt === null);
+        }).sort((left, right) => right.updatedAt.getTime() - left.updatedAt.getTime() || right.id.localeCompare(left.id));
+      }
+      return [{ ok: 1 }];
+    },
     $transaction: async (operation: (transaction: object) => Promise<unknown>) =>
       operation({
         ...mock,
@@ -730,10 +747,11 @@ export function createLaunchPrismaMock() {
       }
     },
     roommateProfile: {
-      findMany: async ({ where }: { where?: { status?: string } } = {}) =>
+      findMany: async ({ where }: { where?: { status?: string; archivedAt?: null } } = {}) =>
         state.roommates.length > 0
           ? [...state.roommates]
               .filter((roommate) => !where?.status || (roommate.status ?? "active") === where.status)
+              .filter(roommate => where?.archivedAt !== null || roommate.archivedAt === null)
               .sort((a, b) => b.match - a.match)
           : [],
       findUnique: async ({ where }: { where: { id?: string; ownerId?: string } }) =>
@@ -1024,6 +1042,10 @@ export function createLaunchPrismaMock() {
       }
     },
     dealMessage: {
+      findMany: async ({ where, take }: { where: { threadId: string; OR?: ({ createdAt: { lt: Date } } | { createdAt: Date; id: { lt: string } })[] }; take: number }) =>
+        sortDealHistory(state.dealMessages.filter(message => message.threadId === where.threadId && (!where.OR || where.OR.some(clause =>
+          clause.createdAt instanceof Date ? message.createdAt.getTime() === clause.createdAt.getTime() && message.id < (clause as { id: { lt: string } }).id.lt
+            : message.createdAt < clause.createdAt.lt))), { take }),
       findUnique: async ({ where }: { where: { senderId_clientMessageId: { senderId: string; clientMessageId: string } } }) =>
         state.dealMessages.find(message => message.senderId === where.senderId_clientMessageId.senderId
           && message.clientMessageId === where.senderId_clientMessageId.clientMessageId) ?? null,
@@ -1060,16 +1082,17 @@ export function createLaunchPrismaMock() {
         orderBy
       }: {
         where: { threadId?: string; status?: { in?: ViewingRequestStatus[] } };
-        orderBy?: { updatedAt?: "asc" | "desc"; createdAt?: "asc" | "desc" };
+        orderBy?: { updatedAt?: "asc" | "desc"; createdAt?: "asc" | "desc"; id?: "asc" | "desc" } | { updatedAt?: "asc" | "desc"; createdAt?: "asc" | "desc"; id?: "asc" | "desc" }[];
       }) => {
         const matches = state.viewingRequests.filter(
           (request) =>
             (where.threadId === undefined || request.threadId === where.threadId) &&
             (where.status?.in === undefined || where.status.in.includes(request.status))
         );
-        const sorted = orderBy?.updatedAt
-          ? sortByDate(matches, "updatedAt", orderBy.updatedAt)
-          : sortByDate(matches, "createdAt", orderBy?.createdAt);
+        const firstOrder = Array.isArray(orderBy) ? orderBy[0] : orderBy;
+        const sorted = firstOrder?.updatedAt
+          ? sortByDate(matches, "updatedAt", firstOrder.updatedAt)
+          : sortByDate(matches, "createdAt", firstOrder?.createdAt);
 
         return sorted[0] ?? null;
       },
@@ -1197,23 +1220,31 @@ function withDealThreadIncludes(
     ...thread,
     ...(include.messages
       ? {
-          messages: sortByDate(
+          messages: sortDealHistory(
             messages.filter((message) => message.threadId === thread.id),
-            "createdAt",
-            include.messages.orderBy?.createdAt
+            include.messages
           )
         }
       : {}),
     ...(include.viewingRequests
       ? {
-          viewingRequests: sortByDate(
+          viewingRequests: sortDealHistory(
             viewingRequests.filter((request) => request.threadId === thread.id),
-            "createdAt",
-            include.viewingRequests.orderBy?.createdAt
+            include.viewingRequests
           )
         }
       : {})
   };
+}
+
+function sortDealHistory<T extends { id: string; createdAt: Date }>(records: T[], options: NonNullable<DealThreadInclude["messages"]>) {
+  const order = Array.isArray(options.orderBy) ? options.orderBy[0] : options.orderBy;
+  const direction = order?.createdAt ?? "desc";
+  const sorted = [...records].sort((left, right) => {
+    const compare = left.createdAt.getTime() - right.createdAt.getTime() || (left.id < right.id ? -1 : left.id > right.id ? 1 : 0);
+    return direction === "asc" ? compare : -compare;
+  });
+  return options.take === undefined ? sorted : sorted.slice(0, options.take);
 }
 
 function withListingIncludes(listing: ListingRecord, media: ListingMediaRecord[], include: ListingInclude = {}) {

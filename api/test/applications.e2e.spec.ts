@@ -51,15 +51,38 @@ describe("rental application HTTP API", () => {
     await app.close();
   });
 
-  it("stores entered contact details and exposes them after an authorized reload", async () => {
+  it("keeps draft contact details private and exposes them to the host only after submission", async () => {
     const http = request(app.getHttpServer());
     const created = await http.post("/api/v1/applications")
       .auth(tokens["renter-1"], { type: "bearer" }).set("Idempotency-Key", "create-contact-request")
       .send({ ...applicationPayload(), contactName: "  Entered Contact  ", contactEmail: "  entered@example.com  " }).expect(201);
     expect(created.body).toMatchObject({ contactName: "Entered Contact", contactEmail: "entered@example.com" });
+    await http.get(`/api/v1/applications/${created.body.id}`)
+      .auth(tokens["owner-1"], { type: "bearer" }).expect(404);
+    await http.get("/api/v1/applications/host-inbox")
+      .auth(tokens["owner-1"], { type: "bearer" }).expect(200)
+      .expect(({ body }: { body: unknown[] }) => expect(body).toEqual([]));
+    await http.get(`/api/v1/applications/${created.body.id}`)
+      .auth(tokens["renter-1"], { type: "bearer" }).expect(200);
+    await http.post(`/api/v1/applications/${created.body.id}/submit`)
+      .auth(tokens["renter-1"], { type: "bearer" }).set("Idempotency-Key", "submit-contact-request").expect(201);
     const reloaded = await http.get(`/api/v1/applications/${created.body.id}`)
       .auth(tokens["owner-1"], { type: "bearer" }).expect(200);
     expect(reloaded.body).toMatchObject({ contactName: "Entered Contact", contactEmail: "entered@example.com" });
+  });
+
+  it("does not expose a never-submitted withdrawal in the host inbox or direct detail route", async () => {
+    const http = request(app.getHttpServer());
+    const created = await http.post("/api/v1/applications")
+      .auth(tokens["renter-1"], { type: "bearer" }).set("Idempotency-Key", "create-withdrawn-draft")
+      .send({ ...applicationPayload(), contactEmail: "private@example.test" }).expect(201);
+    await http.post(`/api/v1/applications/${created.body.id}/withdraw`)
+      .auth(tokens["renter-1"], { type: "bearer" }).set("Idempotency-Key", "withdraw-never-submitted").expect(201);
+    await http.get(`/api/v1/applications/${created.body.id}`)
+      .auth(tokens["owner-1"], { type: "bearer" }).expect(404);
+    await http.get("/api/v1/applications/host-inbox")
+      .auth(tokens["owner-1"], { type: "bearer" }).expect(200)
+      .expect(({ body }: { body: unknown[] }) => expect(body).toEqual([]));
   });
 
   it.each([

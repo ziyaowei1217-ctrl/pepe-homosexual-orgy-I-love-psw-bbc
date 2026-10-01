@@ -15,10 +15,11 @@ type ValkeyPubSubClient = {
   quit(): Promise<unknown>;
   destroy?(): void;
   publish?(...arguments_: unknown[]): unknown;
-  on?(event: "error", listener: (error: unknown) => void): unknown;
+  on?(event: "error" | "ready", listener: (error: unknown) => void): unknown;
 };
 
 type SocketAdapterOptions = {
+  nodeEnv?: string;
   valkeyUrl?: string;
   clientFactory?: (url: string) => ValkeyPubSubClient;
   connectTimeoutMs?: number;
@@ -70,6 +71,9 @@ export async function createRoommateSocketAdapter(
   const reportStartupFallback = (reason: "protocol" | ReturnType<typeof categorizeValkeyFailure>) => {
     options.health?.markLocalFallback("realtime", reason);
     logger.warn({ component: "realtime", mode: "local-fallback", reason });
+    if ((options.nodeEnv ?? process.env.NODE_ENV) === "production") {
+      throw new Error("Production realtime messaging infrastructure is unavailable");
+    }
   };
   const pubCreation = constructValkeyClient(valkeyUrl, clientFactory);
   if (!pubCreation.ok) {
@@ -95,6 +99,13 @@ export async function createRoommateSocketAdapter(
   containPublishFailures(pubClient, markRuntimeFallback);
   pubClient.on?.("error", markRuntimeFallback);
   subClient.on?.("error", markRuntimeFallback);
+  const markRuntimeRecovery = () => {
+    if (lifecycle !== "active" || !runtimeFallbackReported || pubClient.isReady !== true || subClient.isReady !== true) return;
+    runtimeFallbackReported = false;
+    options.health?.markDistributed("realtime");
+  };
+  pubClient.on?.("ready", markRuntimeRecovery);
+  subClient.on?.("ready", markRuntimeRecovery);
 
   const connectTimeoutMs = options.connectTimeoutMs ?? DEFAULT_CONNECT_TIMEOUT_MS;
   const connections = await Promise.allSettled([

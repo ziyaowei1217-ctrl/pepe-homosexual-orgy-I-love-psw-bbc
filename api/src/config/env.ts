@@ -67,9 +67,24 @@ export function assertProductionRuntimeConfig(environment: Record<string, string
   if (webOrigin.pathname !== "/" || webOrigin.search || webOrigin.hash || webOrigin.username || webOrigin.password) {
     throw new Error("WEB_ORIGIN must be an HTTPS origin without a path");
   }
-  requiredUrl("VALKEY_URL", environment.VALKEY_URL, ["rediss:"]);
+  assertProductionValkeyUrl(environment.VALKEY_URL);
   if (environment.LOCAL_ADMIN_EMAILS?.trim()) {
     throw new Error("LOCAL_ADMIN_EMAILS must be empty in production");
+  }
+}
+
+export function assertProductionValkeyUrl(value: string | undefined) {
+  const url = requiredUrl("VALKEY_URL", value, ["rediss:"]);
+  try {
+    decodeURIComponent(url.username);
+    decodeURIComponent(url.password);
+  } catch {
+    throw new Error("VALKEY_URL must use valid encoded credentials");
+  }
+  const database = url.pathname.slice(1);
+  if (!url.hostname || (url.port && Number(url.port) < 1) || url.search || url.hash ||
+      (url.pathname && url.pathname !== "/" && (!/^\d+$/.test(database) || !Number.isSafeInteger(Number(database))))) {
+    throw new Error("VALKEY_URL must include a host and an optional non-negative database number without a query or fragment");
   }
 }
 

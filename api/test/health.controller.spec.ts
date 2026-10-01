@@ -1,9 +1,12 @@
 import { ServiceUnavailableException } from "@nestjs/common";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { AuthInfrastructureHealth } from "../src/health/auth-infrastructure-health";
 import { HealthController } from "../src/health/health.controller";
 import { MessagingInfrastructureHealth } from "../src/health/messaging-infrastructure-health";
 import { HealthService } from "../src/health/health.service";
+
+afterEach(() => vi.unstubAllEnvs());
 
 describe("HealthService", () => {
   it("returns process liveness without checking dependencies", () => {
@@ -49,6 +52,40 @@ describe("HealthService", () => {
         messageRateLimit: { status: "ok", mode: "single-instance" }
       }
     });
+  });
+
+  it("keeps required production dependencies out of rotation and becomes ready after recovery", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    const infrastructure = new MessagingInfrastructureHealth();
+    infrastructure.markDistributed("realtime");
+    infrastructure.markDistributed("messageRateLimit");
+    const auth = new AuthInfrastructureHealth();
+    let authAvailable = false;
+    auth.registerProbe(async () => { if (!authAvailable) throw new Error("rediss://secret:credential@cache"); });
+    const service = new HealthService({ $queryRaw: async () => [{ ok: 1 }] } as never, infrastructure, auth);
+    await expect(service.ready()).rejects.toMatchObject({ status: 503 });
+    await service.ready().catch(error => {
+      expect(JSON.stringify(error.getResponse())).not.toContain("credential");
+      expect(error.getResponse().checks).toMatchObject({ database: "ok", authRateLimit: { status: "error" } });
+    });
+    authAvailable = true;
+    await expect(service.ready()).resolves.toMatchObject({ status: "ok", checks: { authRateLimit: { status: "ok", mode: "distributed" } } });
+    infrastructure.markLocalFallback("realtime", "connection");
+    await expect(service.ready()).rejects.toMatchObject({ status: 503 });
+    infrastructure.markDistributed("realtime");
+    await expect(service.ready()).resolves.toMatchObject({ status: "ok" });
+  });
+
+  it("rejects unconfigured or local-only dependencies in production", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    const infrastructure = new MessagingInfrastructureHealth();
+    const auth = new AuthInfrastructureHealth();
+    auth.registerProbe(async () => undefined);
+    const service = new HealthService({ $queryRaw: async () => [] } as never, infrastructure, auth);
+    await expect(service.ready()).rejects.toMatchObject({ status: 503 });
+    infrastructure.markDistributed("realtime");
+    infrastructure.markDistributed("messageRateLimit");
+    await expect(new HealthService({ $queryRaw: async () => [] } as never, infrastructure).ready()).rejects.toMatchObject({ status: 503 });
   });
 
   it("returns service unavailable when the database query fails", async () => {

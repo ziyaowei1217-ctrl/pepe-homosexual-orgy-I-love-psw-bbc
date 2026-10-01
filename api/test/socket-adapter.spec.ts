@@ -7,6 +7,18 @@ import { MessagingInfrastructureHealth } from "../src/health/messaging-infrastru
 import { createRoommateSocketAdapter } from "../src/roommate-conversations/socket-adapter";
 
 describe("optional roommate Socket.IO Valkey adapter", () => {
+  it("rejects a production startup outage so the runtime can restart instead of remaining permanently local", async () => {
+    const pubClient = valkeyClient({ connectError: new Error("credential-bearing connection failure") });
+    const subClient = valkeyClient();
+    await expect(createRoommateSocketAdapter(appContext(), {
+      nodeEnv: "production", valkeyUrl: "rediss://cache.example.com",
+      clientFactory: vi.fn().mockReturnValueOnce(pubClient).mockReturnValueOnce(subClient),
+      health: messagingHealth(), logger: { warn: vi.fn() }
+    })).rejects.toThrow("Production realtime messaging infrastructure is unavailable");
+    expect(pubClient.destroy).toHaveBeenCalledTimes(1);
+    expect(subClient.destroy).toHaveBeenCalledTimes(1);
+  });
+
   it("marks realtime single-instance when VALKEY_URL is absent", async () => {
     const clientFactory = vi.fn();
     const health = messagingHealth();
@@ -329,6 +341,32 @@ describe("optional roommate Socket.IO Valkey adapter", () => {
     });
   });
 
+  it("restores distributed health after both pub/sub clients reconnect", async () => {
+    const pubClient = valkeyClient();
+    const subClient = valkeyClient();
+    const health = messagingHealth();
+    const logger = { warn: vi.fn() };
+    const adapter = await createRoommateSocketAdapter(appContext(), {
+      valkeyUrl: "redis://valkey.internal:6379",
+      clientFactory: vi.fn().mockReturnValueOnce(pubClient).mockReturnValueOnce(subClient), health, logger
+    });
+    pubClient.isReady = false;
+    subClient.isReady = false;
+    pubClient.emitError(new Error("connection lost"));
+    expect(health.snapshot().realtime.status).toBe("degraded");
+    pubClient.isReady = true;
+    pubClient.emitReady();
+    expect(health.snapshot().realtime.status).toBe("degraded");
+    subClient.isReady = true;
+    subClient.emitReady();
+    expect(health.snapshot().realtime).toEqual({ status: "ok", mode: "distributed" });
+    pubClient.emitError(new Error("later outage"));
+    expect(logger.warn).toHaveBeenCalledTimes(2);
+    await adapter?.dispose();
+    subClient.emitReady();
+    expect(health.snapshot().realtime.status).toBe("degraded");
+  });
+
   it("reports only the first runtime pub/sub error after activation", async () => {
     let timestamp = "2026-08-11T00:00:00.000Z";
     const health = new MessagingInfrastructureHealth(() => new Date(timestamp));
@@ -527,7 +565,7 @@ function messagingHealth() {
 }
 
 function valkeyClient(options: { connectError?: Error; pendingConnect?: boolean } = {}) {
-  let errorListener: ((error: unknown) => void) | undefined;
+  const listeners = new Map<string, (error: unknown) => void>();
   return {
     isOpen: false,
     isReady: false,
@@ -544,11 +582,14 @@ function valkeyClient(options: { connectError?: Error; pendingConnect?: boolean 
       return Promise.resolve();
     }),
     destroy: vi.fn(),
-    on: vi.fn((_event: "error", listener: (error: unknown) => void) => {
-      errorListener = listener;
+    on: vi.fn((event: "error" | "ready", listener: (error: unknown) => void) => {
+      listeners.set(event, listener);
     }),
     emitError(error: unknown) {
-      errorListener?.(error);
+      listeners.get("error")?.(error);
+    },
+    emitReady() {
+      listeners.get("ready")?.(undefined);
     }
   };
 }

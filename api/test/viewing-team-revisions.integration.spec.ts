@@ -102,7 +102,7 @@ describe.skipIf(process.env.RUN_DB_SMOKE !== "1")("viewing revisions and repeat 
     expect(outcomes.filter(result => result.status === "rejected")).toHaveLength(1);
     expect(await prisma.dealMessage.count({ where: { threadId: thread.id, senderId: "host" } })).toBe(1);
 
-    const next = (await threads.createViewingRequest("b", thread.id, initial)).viewingRequests.find((item: any) => item.status === "REQUESTED")!;
+    const next = (await threads.createViewingRequest("b", thread.id, { ...initial, timeLabel: "A new requested time" })).viewingRequests.find((item: any) => item.status === "REQUESTED")!;
     // A database trigger simulates a failed notification insert inside the real transaction.
     await prisma.$executeRawUnsafe(`CREATE FUNCTION fail_host_message() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW."senderId" = 'host' THEN RAISE EXCEPTION 'notification unavailable'; END IF; RETURN NEW; END $$`);
     await prisma.$executeRawUnsafe(`CREATE TRIGGER fail_host_message BEFORE INSERT ON "DealMessage" FOR EACH ROW EXECUTE FUNCTION fail_host_message()`);

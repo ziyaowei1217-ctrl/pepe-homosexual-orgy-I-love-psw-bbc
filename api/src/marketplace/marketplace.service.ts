@@ -1,5 +1,5 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from "@nestjs/common";
-import { Prisma } from "@prisma/client";
+import { Prisma, type RoommateMatchingProfile } from "@prisma/client";
 
 import { PrismaService } from "../prisma/prisma.service";
 import { CreateRoommateProfileDto, UpdateProfileDto, UpdateRoommateProfileDto } from "./dto";
@@ -45,14 +45,28 @@ export class MarketplaceService {
   }
 
   findRoommateProfiles(query: { city?: string; school?: string }) {
-    return this.prisma.roommateMatchingProfile.findMany({
-      where: definedData({
-        city: query.city,
-        school: query.school,
-        status: "active"
-      }),
-      orderBy: { updatedAt: "desc" }
-    });
+    // Profile and User use different IDs. Check the owned public projection in
+    // the same database read so archived historical matching rows stay private.
+    return this.prisma.$queryRaw<RoommateMatchingProfile[]>(Prisma.sql`
+      SELECT matching.id, matching.user_id AS "userId", matching.school, matching.city,
+        matching.budget_min AS "budgetMin", matching.budget_max AS "budgetMax",
+        matching.move_in_date AS "moveInDate", matching.move_out_date AS "moveOutDate",
+        matching.preferred_neighborhoods AS "preferredNeighborhoods", matching.room_type AS "roomType",
+        matching.cleanliness, matching.sleep_schedule AS "sleepSchedule", matching.smoking, matching.pets,
+        matching.guests, matching.intro, matching.looking_for AS "lookingFor", matching.status,
+        matching.created_at AS "createdAt", matching.updated_at AS "updatedAt"
+      FROM roommate_profiles AS matching
+      WHERE matching.status = 'active'
+        AND (${query.city ?? null}::text IS NULL OR matching.city = ${query.city ?? null})
+        AND (${query.school ?? null}::text IS NULL OR matching.school = ${query.school ?? null})
+        AND EXISTS (
+          SELECT 1 FROM profiles AS profile
+          JOIN "User" AS account ON account.email = profile.email
+          JOIN "RoommateProfile" AS owned ON owned."ownerId" = account.id
+          WHERE profile.id = matching.user_id AND owned.status = 'active' AND owned."archivedAt" IS NULL
+        )
+      ORDER BY matching.updated_at DESC, matching.id DESC
+    `);
   }
 
   async updateRoommateProfile(ownerId: string, email: string, id: string, dto: UpdateRoommateProfileDto) {

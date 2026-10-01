@@ -14,6 +14,15 @@ describe("environment config", () => {
     })).not.toThrow();
   });
 
+  it.each(["/not-a-db", "/-1", "/1/extra", "/9007199254740992", "/0?database=1", "/0#fragment"])("rejects unsupported Redis database syntax %s in production", suffix => {
+    expect(() => assertProductionRuntimeConfig({
+      NODE_ENV: "production",
+      DATABASE_URL: "postgresql://db.example.com/app?sslmode=require&sslaccept=strict",
+      WEB_ORIGIN: "https://app.example.com",
+      VALKEY_URL: `rediss://cache.example.com:6379${suffix}`
+    })).toThrow("VALKEY_URL");
+  });
+
   it("uses the development fallback outside production", () => {
     expect(getJwtSecret({ nodeEnv: "development" })).toBe("dev-change-me");
   });

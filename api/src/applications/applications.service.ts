@@ -136,7 +136,9 @@ export class ApplicationsService {
 
   async hostInbox(userId: string) {
     const applications = await this.prisma.rentalApplication.findMany({
-      where: { listingOwnerId: userId },
+      // A withdrawn draft was never disclosed either. Persisted submission,
+      // rather than the current status, establishes the host's read permission.
+      where: { listingOwnerId: userId, submittedAt: { not: null } },
       orderBy: { updatedAt: "desc" },
       include: applicationListingInclude
     });
@@ -391,7 +393,8 @@ export class ApplicationsService {
   }
 
   private async canView(userId: string, application: ApplicationRecord) {
-    if (application.submitterId === userId || application.listingOwnerId === userId) return true;
+    if (application.submitterId === userId) return true;
+    if (application.listingOwnerId === userId) return application.submittedAt !== null;
     if (!application.teamId) return false;
     const team = await this.prisma.roommateTeam.findUnique({ where: { id: application.teamId }, include: { members: true } });
     return Boolean(team?.members.some((member) => member.userId === userId));

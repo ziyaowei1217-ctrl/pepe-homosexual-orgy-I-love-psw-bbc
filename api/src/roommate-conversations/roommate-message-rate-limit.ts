@@ -41,6 +41,7 @@ type RoommateMessageRateLimiterFactoryInput = {
 type LocalRoommateMessageRateLimiterOptions = {
   now?: () => number;
   limit?: number;
+  actorLimit?: number;
   windowMs?: number;
 };
 
@@ -60,8 +61,10 @@ type ResilientLimiterOptions = {
 
 export class LocalRoommateMessageRateLimiter extends RoommateMessageRateLimiter {
   private readonly timestamps = new Map<string, number[]>();
+  private readonly actorTimestamps = new Map<string, number[]>();
   private readonly now: () => number;
   private readonly limit: number;
+  private readonly actorLimit: number;
   private readonly windowMs: number;
   private nextCleanupAt = 0;
 
@@ -69,6 +72,7 @@ export class LocalRoommateMessageRateLimiter extends RoommateMessageRateLimiter 
     super();
     this.now = options.now ?? Date.now;
     this.limit = options.limit ?? 20;
+    this.actorLimit = options.actorLimit ?? 100;
     this.windowMs = options.windowMs ?? 60_000;
   }
 
@@ -79,36 +83,56 @@ export class LocalRoommateMessageRateLimiter extends RoommateMessageRateLimiter 
       for (const [key, timestamps] of this.timestamps) {
         if (timestamps[timestamps.length - 1] <= cutoff) this.timestamps.delete(key);
       }
+      for (const [key, timestamps] of this.actorTimestamps) {
+        if (timestamps[timestamps.length - 1] <= cutoff) this.actorTimestamps.delete(key);
+      }
       this.nextCleanupAt = now + this.windowMs;
     }
     const key = `${request.userId}:${request.conversationId}`;
     const active = (this.timestamps.get(key) ?? []).filter((timestamp) => timestamp > now - this.windowMs);
+    const actorActive = (this.actorTimestamps.get(request.userId) ?? []).filter(timestamp => timestamp > now - this.windowMs);
 
     if (active.length >= this.limit) {
       const retryAfterSeconds = Math.max(1, Math.ceil((active[0] + this.windowMs - now) / 1000));
       this.timestamps.set(key, active);
       throw rateLimitExceeded(retryAfterSeconds);
     }
+    if (actorActive.length >= this.actorLimit) {
+      const retryAfterSeconds = Math.max(1, Math.ceil((actorActive[0] + this.windowMs - now) / 1000));
+      this.actorTimestamps.set(request.userId, actorActive);
+      throw rateLimitExceeded(retryAfterSeconds);
+    }
 
+    // Check both scopes before mutating either, so a rejected conversation
+    // write cannot silently spend the actor's allowance in another thread.
     active.push(now);
+    actorActive.push(now);
     this.timestamps.set(key, active);
+    this.actorTimestamps.set(request.userId, actorActive);
   }
 }
 
 const consumeScript = `
 local server_time = redis.call('TIME')
 local now_ms = tonumber(server_time[1]) * 1000 + math.floor(tonumber(server_time[2]) / 1000)
-local limit = tonumber(ARGV[1])
-local window_ms = tonumber(ARGV[2])
-redis.call('ZREMRANGEBYSCORE', KEYS[1], '-inf', now_ms - window_ms)
-local count = tonumber(redis.call('ZCARD', KEYS[1]))
-if count >= limit then
-  local oldest = redis.call('ZRANGE', KEYS[1], 0, 0, 'WITHSCORES')
-  local retry_after_ms = tonumber(oldest[2]) + window_ms - now_ms
-  return {0, math.max(1, math.ceil(retry_after_ms / 1000))}
+local window_ms = tonumber(ARGV[3])
+local retry_after_seconds = 0
+for scope = 1, 2 do
+  redis.call('ZREMRANGEBYSCORE', KEYS[scope], '-inf', now_ms - window_ms)
+  local count = tonumber(redis.call('ZCARD', KEYS[scope]))
+  if count >= tonumber(ARGV[scope]) then
+    local oldest = redis.call('ZRANGE', KEYS[scope], 0, 0, 'WITHSCORES')
+    local retry_after_ms = tonumber(oldest[2]) + window_ms - now_ms
+    retry_after_seconds = math.max(retry_after_seconds, math.max(1, math.ceil(retry_after_ms / 1000)))
+  end
 end
-redis.call('ZADD', KEYS[1], now_ms, ARGV[3])
-redis.call('PEXPIRE', KEYS[1], window_ms)
+if retry_after_seconds > 0 then
+  return {0, retry_after_seconds}
+end
+for scope = 1, 2 do
+  redis.call('ZADD', KEYS[scope], now_ms, ARGV[4])
+  redis.call('PEXPIRE', KEYS[scope], window_ms)
+end
 return {1, 0}
 `;
 
@@ -169,7 +193,7 @@ export class ValkeyRoommateMessageRateLimiter extends RoommateMessageRateLimiter
 
   async consume(request: RoommateMessageRateLimitRequest): Promise<void> {
     const client = this.currentClient();
-    if (!client.isOpen) {
+    if (!client.isOpen || this.connectOperation?.client === client) {
       const connection =
         this.connectOperation?.client === client ? this.connectOperation.operation : this.startConnect(client);
       await settleWithin(connection, this.operationTimeoutMs, () => this.invalidateClient(client));
@@ -180,8 +204,10 @@ export class ValkeyRoommateMessageRateLimiter extends RoommateMessageRateLimiter
 
     const evaluation = Promise.resolve().then(() =>
       client.eval(consumeScript, {
-        keys: [`roommate-message-rate-limit:${request.userId}:${request.conversationId}`],
-        arguments: ["20", "60000", randomUUID()]
+        // The same actor hash tag keeps both scopes in one Valkey cluster slot.
+        keys: [`roommate-message-rate-limit:{${request.userId}}:conversation:${request.conversationId}`,
+          `roommate-message-rate-limit:{${request.userId}}:actor`],
+        arguments: ["20", "100", "60000", randomUUID()]
       })
     );
     const result = await settleWithin(
@@ -202,6 +228,27 @@ export class ValkeyRoommateMessageRateLimiter extends RoommateMessageRateLimiter
       throw new ValkeyProtocolError();
     }
     if (allowed === 0) throw rateLimitExceeded(retryAfterSeconds);
+  }
+
+  async checkReadiness(): Promise<void> {
+    const client = this.currentClient();
+    const deadline = Date.now() + this.operationTimeoutMs;
+    try {
+      if (!client.isOpen || this.connectOperation?.client === client) {
+        const connection = this.connectOperation?.client === client
+          ? this.connectOperation.operation : this.startConnect(client);
+        await settleWithin(connection, this.operationTimeoutMs, () => this.invalidateClient(client));
+      }
+      if (this.client !== client || !client.isOpen || client.isReady === false) throw new ValkeyCommandNotReadyError();
+      // Check command connectivity without adding events to any actor or conversation quota.
+      const result = await settleWithin(Promise.resolve().then(() => client.eval("return 1", {
+        keys: [], arguments: []
+      })), Math.max(1, deadline - Date.now()), () => this.invalidateClient(client));
+      if (result !== 1) throw new ValkeyProtocolError();
+    } catch (error) {
+      this.invalidateClient(client);
+      throw error;
+    }
   }
 
   async onModuleDestroy(): Promise<void> {
@@ -276,6 +323,7 @@ type DistributedRecoveryState =
   | { mode: "probing" };
 
 export class ResilientRoommateMessageRateLimiter extends RoommateMessageRateLimiter {
+  private readinessProbe?: Promise<void>;
   private recoveryState: DistributedRecoveryState = { mode: "distributed" };
   private readonly distributed: RoommateMessageRateLimiter;
   private readonly local: LocalRoommateMessageRateLimiter;
@@ -292,6 +340,29 @@ export class ResilientRoommateMessageRateLimiter extends RoommateMessageRateLimi
     this.now = options.now ?? Date.now;
     this.retryCooldownMs = options.retryCooldownMs ?? 30_000;
     this.logger = options.logger ?? new Logger("RoommateMessageRateLimiter");
+    this.health.registerProbe("messageRateLimit", () => this.checkReadiness());
+  }
+
+  checkReadiness(): Promise<void> {
+    if (this.readinessProbe) return this.readinessProbe;
+    if (this.recoveryState.mode === "cooldown" && this.now() < this.recoveryState.nextProbeAt) return Promise.resolve();
+    if (this.recoveryState.mode === "cooldown") this.recoveryState = { mode: "probing" };
+    this.readinessProbe = this.probeDistributed().finally(() => { this.readinessProbe = undefined; });
+    return this.readinessProbe;
+  }
+
+  private async probeDistributed() {
+    try {
+      const probe = (this.distributed as { checkReadiness?: () => Promise<void> }).checkReadiness;
+      if (!probe) throw new ValkeyProtocolError();
+      await probe.call(this.distributed);
+      this.markDistributed();
+    } catch (error) {
+      const reason = categorizeValkeyFailure(error);
+      this.recoveryState = { mode: "cooldown", nextProbeAt: this.now() + this.retryCooldownMs };
+      this.health.markLocalFallback("messageRateLimit", reason);
+      this.logger.warn({ component: "messageRateLimit", mode: "local-fallback", reason });
+    }
   }
 
   async consume(request: RoommateMessageRateLimitRequest): Promise<void> {

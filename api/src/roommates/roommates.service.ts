@@ -9,7 +9,7 @@ import {
   RoommateDeckQueryDto,
   UpdateRoommateProfileDto
 } from "./dto";
-import { buildRoommateDeck, getActionFeedback, toPublicRoommate } from "./matching";
+import { buildRankedRoommateCandidates, buildRoommateDeck, getActionFeedback, toPublicRoommate } from "./matching";
 import { RoommateMatchService } from "./roommate-match.service";
 
 @Injectable()
@@ -50,16 +50,8 @@ export class RoommatesService {
         (!userId || profile.ownerId !== userId) &&
         (!profile.id || !excludedRoommateProfileIds.has(profile.id))
     );
-    let cursor = 0;
-
-    while (true) {
-      const deck = buildRoommateDeck(eligibleProfiles, { cursor, limit: 80 });
-      const candidate = deck.items.find((item) => item.id === candidateId);
-      if (candidate) return candidate;
-      if (deck.pageInfo.nextCursor === null) break;
-      cursor = deck.pageInfo.nextCursor;
-    }
-
+    const candidate = buildRankedRoommateCandidates(eligibleProfiles).find(item => item.id === candidateId);
+    if (candidate) return candidate;
     throw new NotFoundException("Roommate candidate not found");
   }
 
@@ -181,6 +173,7 @@ export class RoommatesService {
     return this.prisma.roommateProfile.findMany({
       where: {
         status: "active",
+        archivedAt: null,
         ...(process.env.NODE_ENV === "production" ? { ownerId: { not: null } } : {})
       },
       orderBy: {

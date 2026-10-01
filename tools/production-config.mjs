@@ -79,7 +79,19 @@ export function validateProductionConfig(environment) {
   rejectPublicUrlComponents(paymentServiceUrl, "PAYMENT_SERVICE_URL", errors);
   rejectBaseUrlQuery(paymentServiceUrl, "PAYMENT_SERVICE_URL", errors);
 
-  requireUrl(environment, "VALKEY_URL", ["rediss:"], errors);
+  requireUrl(environment, "VALKEY_URL", ["rediss:"], errors, (url) => {
+    const database = url.pathname.slice(1);
+    if ((url.port && Number(url.port) < 1) || url.search || url.hash ||
+        (url.pathname && url.pathname !== "/" && (!/^\d+$/.test(database) || !Number.isSafeInteger(Number(database))))) {
+      errors.push("VALKEY_URL must use an optional non-negative database number without a query or fragment");
+    }
+    try {
+      decodeURIComponent(url.username);
+      decodeURIComponent(url.password);
+    } catch {
+      errors.push("VALKEY_URL must use valid encoded credentials");
+    }
+  });
 
   const storageUrl = requireUrl(environment, "LISTING_MEDIA_STORAGE_ENDPOINT", ["https:"], errors);
   rejectPublicUrlComponents(storageUrl, "LISTING_MEDIA_STORAGE_ENDPOINT", errors);

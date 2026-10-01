@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { buildRoommateDeck } from "../src/roommates/matching";
 import { RoommatesService } from "../src/roommates/roommates.service";
 
 describe("RoommatesService", () => {
@@ -33,6 +34,12 @@ describe("RoommatesService", () => {
     }
   });
 
+  it("excludes archived cards even when historical status still says active", async () => {
+    const prisma = createPrismaMock([candidate({ id: "visible" }), candidate({ id: "archived", archivedAt: new Date() }), candidate({ id: "hidden", status: "hidden" })]);
+    const service = new RoommatesService(prisma as never, createDealRoomsMock() as never, createRoommateMatchesMock() as never);
+    await expect(service.findAll()).resolves.toEqual([expect.objectContaining({ id: "visible" })]);
+  });
+
   it("does not leak server-owned fields from owned profiles in the deck", async () => {
     const prisma = createPrismaMock([candidate({ ownerId: "user-2", localReciprocalLike: true })]);
     const service = new RoommatesService(prisma as never, createDealRoomsMock() as never, createRoommateMatchesMock() as never);
@@ -42,6 +49,25 @@ describe("RoommatesService", () => {
     expect(deck.items).toHaveLength(1);
     expect(deck.items[0]).not.toHaveProperty("ownerId");
     expect(deck.items[0]).not.toHaveProperty("localReciprocalLike");
+  });
+
+  it("returns the same full ranking metadata for candidates beyond the first deck page", async () => {
+    const profiles = Array.from({ length: 240 }, (_, index) => candidate({ id: `profile-${index}`, ownerId: `user-${index}`, name: `Candidate ${index}` }));
+    const expected = buildRoommateDeck(profiles, { cursor: 160, limit: 80 }).items.at(-1)!;
+    const service = new RoommatesService(createPrismaMock(profiles) as never, createDealRoomsMock() as never, createRoommateMatchesMock() as never);
+    await expect(service.findDeckCandidate(expected.id!)).resolves.toEqual(expected);
+  });
+
+  it("reads each input profile once when an absent candidate requires scanning every ranking page", async () => {
+    let reads = 0;
+    const profiles = Array.from({ length: 240 }, (_, index) => {
+      const profile = candidate({ id: `profile-${index}`, ownerId: `user-${index}` });
+      Object.defineProperty(profile, "budget", { enumerable: true, get() { reads += 1; return "$1,450/month"; } });
+      return profile;
+    });
+    const service = new RoommatesService(createPrismaMock(profiles) as never, createDealRoomsMock() as never, createRoommateMatchesMock() as never);
+    await expect(service.findDeckCandidate("absent-candidate")).rejects.toThrow("Roommate candidate not found");
+    expect(reads).toBe(profiles.length);
   });
 
   it("records a pending like without creating a deal room", async () => {
@@ -108,6 +134,8 @@ function candidate(overrides: Record<string, unknown> = {}) {
     tags: ["quiet"],
     localReciprocalLike: false,
     ownerId: null as string | null,
+    status: "active",
+    archivedAt: null as Date | null,
     createdAt: new Date(),
     ...overrides
   };
@@ -116,8 +144,8 @@ function candidate(overrides: Record<string, unknown> = {}) {
 function createPrismaMock(candidates: ReturnType<typeof candidate>[]) {
   return {
     roommateProfile: {
-      findMany: async ({ where }: { where?: { ownerId?: { not: null } } } = {}) =>
-        where?.ownerId ? candidates.filter((item) => item.ownerId) : candidates,
+      findMany: async ({ where }: { where?: { ownerId?: { not: null }; status?: string; archivedAt?: null } } = {}) =>
+        candidates.filter(item => (!where?.ownerId || item.ownerId) && (!where?.status || item.status === where.status) && (where?.archivedAt !== null || item.archivedAt === null)),
       findUnique: async ({ where }: { where: { id: string } }) =>
         candidates.find((item) => item.id === where.id) ?? null
     }

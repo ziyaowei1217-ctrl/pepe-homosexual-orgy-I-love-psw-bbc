@@ -102,10 +102,30 @@ describe("ApplicationsService draft and submit workflow", () => {
     const mine = await service.mine("renter-1");
     const hostInbox = await service.hostInbox("owner-1");
     expect(mine.map((record) => record.id).sort()).toEqual(["application-1", "application-team"]);
-    expect(hostInbox.map((record) => record.id).sort()).toEqual(["application-1", "application-team"]);
+    expect(hostInbox).toEqual([]);
     expect(mine.every((record) => record.listingTitle === "Westwood room")).toBe(true);
     expect(hostInbox.every((record) => record.listingTitle === "Westwood room")).toBe(true);
     expect((await service.findOne("renter-2", "application-team")).id).toBe("application-team");
+  });
+
+  it("keeps never-submitted draft and withdrawn PII private while preserving submitted host history", async () => {
+    const prisma = createMarketplaceDemoPrismaMock();
+    const service = new ApplicationsService(prisma as never);
+    const input = { ...soloInput, contactName: "Private Contact", contactEmail: "private@example.test" };
+    const draft = await service.create("renter-1", "create-private-draft", input);
+    expect(await service.hostInbox("owner-1")).toEqual([]);
+    await expect(service.findOne("owner-1", draft.id)).rejects.toBeInstanceOf(NotFoundException);
+    expect(await service.findOne("renter-1", draft.id)).toMatchObject({ contactEmail: input.contactEmail });
+
+    await service.withdraw("renter-1", draft.id, "withdraw-private-draft");
+    expect(await service.hostInbox("owner-1")).toEqual([]);
+    await expect(service.findOne("owner-1", draft.id)).rejects.toBeInstanceOf(NotFoundException);
+
+    const submittedDraft = await service.create("renter-1", "create-submitted-history", input);
+    await service.submit("renter-1", submittedDraft.id, "submit-private-history");
+    await service.withdraw("renter-1", submittedDraft.id, "withdraw-submitted-history");
+    expect((await service.hostInbox("owner-1")).map(record => record.id)).toEqual([submittedDraft.id]);
+    expect(await service.findOne("owner-1", submittedDraft.id)).toMatchObject({ status: "WITHDRAWN", contactEmail: input.contactEmail });
   });
 
   it("submits on exact availability boundaries, returns same-key retries, and withdraws once", async () => {
