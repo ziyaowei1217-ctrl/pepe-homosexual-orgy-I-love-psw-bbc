@@ -15,6 +15,8 @@ import { readStoredAdminStepUpSession, writeStoredAdminStepUpSession } from "@/l
 import type { AdminStepUpSession } from "@/lib/admin-step-up";
 import { useAuthSessionToken } from "@/lib/use-auth-session-token";
 import { useMarketplaceSession } from "@/lib/use-marketplace-session";
+import { getBrowserStorage } from "@/lib/browser-storage";
+import { clearStoredAdminStepUpSession } from "@/lib/admin-step-up";
 
 export function AdminDashboardExperience() {
   const token = useAuthSessionToken();
@@ -72,7 +74,10 @@ function AdminOperationalExperience({ kind }: { kind: "trust" | "roommates" }) {
 
   useEffect(() => {
     if (!session.user || typeof window === "undefined") return;
-    setStepUpSession(readStoredAdminStepUpSession(window.localStorage, session.user));
+    // Enhanced credentials are scoped to the current tab and cleared from the
+    // old persistent location instead of promoting it into an active session.
+    clearStoredAdminStepUpSession(getBrowserStorage("localStorage"));
+    setStepUpSession(readStoredAdminStepUpSession(getBrowserStorage("sessionStorage"), session.user));
   }, [session.user]);
 
   function authenticationError() {
@@ -86,7 +91,7 @@ function AdminOperationalExperience({ kind }: { kind: "trust" | "roommates" }) {
     <AdminAccess session={session} returnTo={kind === "trust" ? "/admin/trust" : "/admin/roommates"} />
     {session.token && session.user?.role === "ADMIN" && kind === "trust" ? <AdminTrustScreen assertSessionCurrent={() => assertCurrentAuthSession(session.token)} token={session.token} user={session.user} stepUpSession={stepUpSession} onStepUpRequired={() => setStepUpOpen(true)} onCatalogChanged={async () => undefined} onTrustMetricsChanged={async () => undefined} onToast={setToast} onAuthenticationError={() => { authenticationError(); }} /> : null}
     {session.token && session.user?.role === "ADMIN" && kind === "roommates" ? <AdminRoommatesScreen assertSessionCurrent={() => assertCurrentAuthSession(session.token)} token={session.token} user={session.user} stepUpSession={stepUpSession} onStepUpRequired={() => setStepUpOpen(true)} onToast={setToast} onAuthenticationError={() => { authenticationError(); }} /> : null}
-    {session.token && session.user ? <AdminStepUpPanel assertSessionCurrent={() => assertCurrentAuthSession(session.token)} open={stepUpOpen} sessionToken={session.token} email={session.user.email} onCancel={() => setStepUpOpen(false)} onVerified={(verified) => { assertCurrentAuthSession(session.token); setStepUpSession(verified); writeStoredAdminStepUpSession(window.localStorage, session.user!, verified); setStepUpOpen(false); setToast("管理员验证已完成。"); }} /> : null}
+    {session.token && session.user ? <AdminStepUpPanel assertSessionCurrent={() => assertCurrentAuthSession(session.token)} open={stepUpOpen} sessionToken={session.token} email={session.user.email} onCancel={() => setStepUpOpen(false)} onVerified={(verified) => { assertCurrentAuthSession(session.token); setStepUpSession(verified); writeStoredAdminStepUpSession(getBrowserStorage("sessionStorage"), session.user!, verified); setStepUpOpen(false); setToast("管理员验证已完成。"); }} /> : null}
     {toast ? <div className="fixed bottom-5 left-1/2 z-50 -translate-x-1/2 rounded-full bg-slate-950 px-5 py-3 text-sm font-bold text-white shadow-xl">{toast}</div> : null}
   </>;
 }

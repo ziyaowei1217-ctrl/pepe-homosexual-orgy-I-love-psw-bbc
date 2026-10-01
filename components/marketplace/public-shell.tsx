@@ -85,7 +85,7 @@ export function PublicShell({ active, mobileNavigation = "bottom", children }: {
         </div>
       </header>
 
-      <div id="main-content" className={cn(mobileNavigation === "bottom" && "pb-[calc(5rem+env(safe-area-inset-bottom))] md:pb-0")}>
+      <div id="main-content" tabIndex={-1} className={cn(mobileNavigation === "bottom" && "pb-[calc(5rem+env(safe-area-inset-bottom))] md:pb-0")}>
         {children}
       </div>
 

@@ -5,6 +5,7 @@ import { toProductApiError } from "./product-errors";
 
 export const MAX_LISTING_MEDIA_BYTES = 10 * 1024 * 1024;
 export const MAX_LISTING_MEDIA_COUNT = 12;
+export const LISTING_MEDIA_UPLOAD_TIMEOUT_MS = 120_000;
 export const LISTING_MEDIA_MIME_TYPES = ["image/jpeg", "image/png", "image/webp"] as const;
 export const LISTING_IMAGE_FALLBACK =
   "https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?auto=format&fit=crop&w=1200&q=80";
@@ -96,8 +97,12 @@ export function listingFileError(file: FileDescriptor, currentCount: number): st
 }
 
 export async function sha256Hex(bytes: ArrayBuffer): Promise<string> {
-  const digest = await globalThis.crypto.subtle.digest("SHA-256", bytes);
-  return Array.from(new Uint8Array(digest), (value) => value.toString(16).padStart(2, "0")).join("");
+  let subtle: SubtleCrypto | undefined;
+  try { subtle = globalThis.crypto?.subtle; } catch { /* Some embedded browsers deny this getter. */ }
+  const digest = subtle
+    ? new Uint8Array(await subtle.digest("SHA-256", bytes))
+    : (await import("@noble/hashes/sha2.js")).sha256(new Uint8Array(bytes));
+  return Array.from(digest, (value) => value.toString(16).padStart(2, "0")).join("");
 }
 
 export function buildListingMediaSummary(
@@ -199,6 +204,7 @@ export function putPresignedFile(
   return new Promise((resolve, reject) => {
     const request = new XMLHttpRequest();
     request.open("PUT", uploadUrl);
+    request.timeout = LISTING_MEDIA_UPLOAD_TIMEOUT_MS;
     request.setRequestHeader("Content-Type", file.type);
     request.upload.onprogress = (event) => {
       if (event.lengthComputable && event.total > 0) {
@@ -214,6 +220,7 @@ export function putPresignedFile(
       }
     };
     request.onerror = () => reject(toProductApiError(new TypeError("Failed to fetch")));
+    request.ontimeout = () => reject(toProductApiError({ status: 408 }));
     request.onabort = () => reject(toProductApiError({ status: 408 }));
     request.send(file);
   });

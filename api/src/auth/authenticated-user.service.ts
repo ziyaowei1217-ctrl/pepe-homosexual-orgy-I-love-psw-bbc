@@ -10,6 +10,9 @@ export type AuthenticatedUser = {
   adminReauthenticatedAt?: number;
 };
 
+export const MAX_BEARER_TOKEN_LENGTH = 8_192;
+export const MAX_SESSION_AGE_SECONDS = 7 * 24 * 60 * 60;
+
 @Injectable()
 export class AuthenticatedUserService {
   constructor(
@@ -18,10 +21,20 @@ export class AuthenticatedUserService {
   ) {}
 
   async fromBearerToken(token: string): Promise<AuthenticatedUser> {
-    let payload: { sub?: string; adminReauthenticatedAt?: unknown };
+    return (await this.fromBearerTokenWithExpiry(token)).user;
+  }
+
+  async fromBearerTokenWithExpiry(token: string): Promise<{ user: AuthenticatedUser; expiresAt: number }> {
+    let payload: { sub?: string; iat?: number; exp?: number; adminReauthenticatedAt?: unknown };
     try {
-      payload = await this.jwt.verifyAsync<typeof payload>(token);
+      if (typeof token !== "string" || !token || token.length > MAX_BEARER_TOKEN_LENGTH) {
+        throw new UnauthorizedException("Invalid bearer token");
+      }
+      payload = await this.jwt.verifyAsync<typeof payload>(token, { algorithms: ["HS256"], maxAge: "7d" });
       if (!payload || typeof payload.sub !== "string" || !payload.sub) throw new UnauthorizedException("Invalid bearer token");
+      if (!Number.isSafeInteger(payload.iat) || payload.iat! > Math.floor(Date.now() / 1000) + 60) {
+        throw new UnauthorizedException("Invalid bearer token");
+      }
     } catch {
       throw new UnauthorizedException("Invalid bearer token");
     }
@@ -29,13 +42,17 @@ export class AuthenticatedUserService {
     const user = await this.prisma.user.findUnique({ where: { id: payload.sub } });
     if (!user) throw new UnauthorizedException("Invalid bearer token");
 
-    return {
+    const authenticatedUser: AuthenticatedUser = {
       id: user.id,
       email: user.email,
       role: user.role,
       ...(Number.isSafeInteger(payload.adminReauthenticatedAt)
         ? { adminReauthenticatedAt: payload.adminReauthenticatedAt as number }
         : {})
+    };
+    return {
+      user: authenticatedUser,
+      expiresAt: Math.min(payload.exp ?? Infinity, payload.iat! + MAX_SESSION_AGE_SECONDS) * 1000
     };
   }
 }

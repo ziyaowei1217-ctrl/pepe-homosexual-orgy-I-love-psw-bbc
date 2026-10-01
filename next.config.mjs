@@ -19,10 +19,12 @@ const contentSecurityPolicy = [
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: "standalone",
+  poweredByHeader: false,
   images: {
     // In local Docker the browser's localhost API is outside the web container.
     // Let the browser request development images directly; production optimizes them.
     unoptimized: !production,
+    minimumCacheTTL: 0,
     remotePatterns: [
       { protocol: "https", hostname: "images.unsplash.com" },
       ...remotePatternFor(apiBaseUrl)
@@ -30,7 +32,7 @@ const nextConfig = {
   },
   async headers() {
     const headers = [
-      { key: "Content-Security-Policy", value: contentSecurityPolicy },
+      ...(!production ? [{ key: "Content-Security-Policy", value: contentSecurityPolicy }] : []),
       { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
       { key: "X-Content-Type-Options", value: "nosniff" },
       { key: "X-Frame-Options", value: "DENY" },
@@ -51,7 +53,7 @@ function remotePatternFor(value) {
   try {
     const url = new URL(value);
     if (url.protocol !== "http:" && url.protocol !== "https:") return [];
-    return [{ protocol: url.protocol.slice(0, -1), hostname: url.hostname, port: url.port || undefined }];
+    return [{ protocol: url.protocol.slice(0, -1), hostname: url.hostname, port: url.port || undefined, pathname: "/api/v1/listing-media/*/content" }];
   } catch { return []; }
 }
 

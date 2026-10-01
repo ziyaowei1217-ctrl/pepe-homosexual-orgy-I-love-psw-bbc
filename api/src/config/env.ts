@@ -51,12 +51,20 @@ const developmentIdentifierHashSecret = "development-identifier-hash-secret";
 export function assertProductionRuntimeConfig(environment: Record<string, string | undefined> = process.env) {
   if (environment.NODE_ENV !== "production") return;
 
+  if (environment.NODE_TLS_REJECT_UNAUTHORIZED === "0") {
+    throw new Error("NODE_TLS_REJECT_UNAUTHORIZED must not disable TLS verification in production");
+  }
+
   const databaseUrl = requiredUrl("DATABASE_URL", environment.DATABASE_URL, ["postgresql:", "postgres:"]);
-  if (databaseUrl.searchParams.get("sslmode") !== "require" && databaseUrl.searchParams.get("sslmode") !== "verify-full") {
+  if (databaseUrl.searchParams.getAll("sslmode").length !== 1 || databaseUrl.searchParams.get("sslmode") !== "require") {
     throw new Error("DATABASE_URL must require TLS in production");
   }
+  // Prisma 6 defaults sslaccept to accept_invalid_certs; encryption alone is insufficient.
+  if (databaseUrl.searchParams.getAll("sslaccept").length !== 1 || databaseUrl.searchParams.get("sslaccept") !== "strict") {
+    throw new Error("DATABASE_URL must use sslaccept=strict in production");
+  }
   const webOrigin = requiredUrl("WEB_ORIGIN", environment.WEB_ORIGIN, ["https:"]);
-  if (webOrigin.pathname !== "/" || webOrigin.search || webOrigin.hash) {
+  if (webOrigin.pathname !== "/" || webOrigin.search || webOrigin.hash || webOrigin.username || webOrigin.password) {
     throw new Error("WEB_ORIGIN must be an HTTPS origin without a path");
   }
   requiredUrl("VALKEY_URL", environment.VALKEY_URL, ["rediss:"]);
@@ -72,6 +80,9 @@ export function getJwtSecret(input: JwtSecretInput = {}) {
   if (nodeEnv === "production") {
     if (!jwtSecret || jwtSecret === developmentJwtSecret) {
       throw new Error("JWT_SECRET is required in production");
+    }
+    if (Buffer.byteLength(jwtSecret.trim(), "utf8") < 32) {
+      throw new Error("JWT_SECRET must be at least 32 bytes in production");
     }
 
     return jwtSecret;
@@ -190,8 +201,8 @@ export function getListingMediaStorageConfig(
     throw new Error("LISTING_MEDIA_UPLOAD_TTL_SECONDS must be 600");
   }
 
-  validateStorageEndpoint("LISTING_MEDIA_STORAGE_ENDPOINT", endpoint);
-  validateStorageEndpoint("LISTING_MEDIA_UPLOAD_ENDPOINT", uploadEndpoint);
+  validateStorageEndpoint("LISTING_MEDIA_STORAGE_ENDPOINT", endpoint, nodeEnv);
+  validateStorageEndpoint("LISTING_MEDIA_UPLOAD_ENDPOINT", uploadEndpoint, nodeEnv);
 
   return {
     endpoint,
@@ -227,7 +238,7 @@ function storageValue(name: string, value: string | undefined, developmentDefaul
   return normalized || developmentDefault;
 }
 
-function validateStorageEndpoint(name: string, value: string) {
+function validateStorageEndpoint(name: string, value: string, nodeEnv: string) {
   let parsedEndpoint: URL;
   try {
     parsedEndpoint = new URL(value);
@@ -236,6 +247,12 @@ function validateStorageEndpoint(name: string, value: string) {
   }
   if (parsedEndpoint.protocol !== "http:" && parsedEndpoint.protocol !== "https:") {
     throw new Error(`${name} must use HTTP or HTTPS`);
+  }
+  if (nodeEnv === "production" && parsedEndpoint.protocol !== "https:") {
+    throw new Error(`${name} must use HTTPS in production`);
+  }
+  if (parsedEndpoint.username || parsedEndpoint.password || parsedEndpoint.search || parsedEndpoint.hash) {
+    throw new Error(`${name} must not contain credentials, a query, or a fragment`);
   }
 }
 

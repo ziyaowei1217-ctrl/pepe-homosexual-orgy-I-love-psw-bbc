@@ -5,6 +5,11 @@ Frontend + backend MVP for a high-trust sublet marketplace and co-living matchin
 中文交接与体验说明见 [README_先看这里.md](README_先看这里.md)。无需运行服务即可打开
 [当前界面截图预览](output/handoff-preview/index.html)；完整交互以启动后的网页为准。
 
+The September 30 hardening handoff includes the [security review](docs/security-review-2026-09-30.md),
+[validation record](docs/handoff-validation-2026-09-30.md) and [threat model](docs/sublet-pipeline-threat-model.md).
+Start with [demo and operations](docs/demo-and-operations.md) for setup and phone/LAN testing.
+Earlier files under `output/handoff` are historical review artifacts, not the current release source.
+
 ## Stack
 
 - Next.js App Router
@@ -170,6 +175,13 @@ DATABASE_URL='postgresql://sublet:sublet@localhost:5432/sublet_pipeline?schema=p
 ```
 
 ## Launch Readiness
+
+For portable demo setup, private-LAN phone testing, container hardening, backups and rollback,
+see [`docs/demo-and-operations.md`](docs/demo-and-operations.md). The GitHub Actions release
+workflow checks native Windows, macOS and Linux, plus Linux database/storage/realtime and container
+journeys; enable the resulting checks in branch protection after their first successful run.
+The current web deliverable and future iOS, Android and WeChat boundaries are detailed in
+[`docs/platform-delivery.md`](docs/platform-delivery.md).
 
 For the provider-independent production configuration and operator checklist, see
 [`docs/production-launch-checklist.md`](docs/production-launch-checklist.md). Run the complete local

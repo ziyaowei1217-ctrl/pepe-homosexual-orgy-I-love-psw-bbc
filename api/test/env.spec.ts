@@ -8,7 +8,7 @@ describe("environment config", () => {
     expect(() => assertProductionRuntimeConfig({ NODE_ENV: "production" })).toThrow("DATABASE_URL");
     expect(() => assertProductionRuntimeConfig({
       NODE_ENV: "production",
-      DATABASE_URL: "postgresql://db.example.com/app?sslmode=require",
+      DATABASE_URL: "postgresql://db.example.com/app?sslmode=require&sslaccept=strict",
       WEB_ORIGIN: "https://app.example.com",
       VALKEY_URL: "rediss://cache.example.com:6379"
     })).not.toThrow();
@@ -26,7 +26,27 @@ describe("environment config", () => {
   });
 
   it("accepts explicit production secrets", () => {
-    expect(getJwtSecret({ nodeEnv: "production", jwtSecret: "prod-secret-value" })).toBe("prod-secret-value");
+    const secret = "production-jwt-secret-at-least-32-bytes";
+    expect(getJwtSecret({ nodeEnv: "production", jwtSecret: secret })).toBe(secret);
+    expect(() => getJwtSecret({ nodeEnv: "production", jwtSecret: "short" })).toThrow("JWT_SECRET must be at least 32 bytes");
+    expect(() => getJwtSecret({ nodeEnv: "production", jwtSecret: " ".repeat(64) })).toThrow("JWT_SECRET must be at least 32 bytes");
+  });
+
+  it("rejects disabled certificate verification and origin credentials in production", () => {
+    const environment = {
+      NODE_ENV: "production",
+      DATABASE_URL: "postgresql://db.example.com/app?sslmode=require&sslaccept=strict",
+      WEB_ORIGIN: "https://app.example.com",
+      VALKEY_URL: "rediss://cache.example.com:6379"
+    };
+    expect(() => assertProductionRuntimeConfig({ ...environment, NODE_TLS_REJECT_UNAUTHORIZED: "0" }))
+      .toThrow("NODE_TLS_REJECT_UNAUTHORIZED");
+    for (const parameters of ["sslmode=require", "sslmode=require&sslaccept=accept_invalid_certs", "sslmode=require&sslaccept=strict&sslaccept=accept_invalid_certs"]) {
+      expect(() => assertProductionRuntimeConfig({ ...environment, DATABASE_URL: `postgresql://db.example.com/app?${parameters}` }))
+        .toThrow("DATABASE_URL must use sslaccept=strict");
+    }
+    expect(() => assertProductionRuntimeConfig({ ...environment, WEB_ORIGIN: "https://user:password@app.example.com" }))
+      .toThrow("WEB_ORIGIN");
   });
 
   it("validates verification lifetimes and production security secrets", () => {

@@ -17,6 +17,11 @@ example API and map hosts. `NEXT_PUBLIC_API_BASE_URL` must be the public HTTPS A
 `/api/v1`. Public map settings and the API URL are embedded in the browser bundle, so rebuild the web
 application after changing them.
 
+Set `NEXT_PUBLIC_MEDIA_UPLOAD_ORIGIN` to the HTTPS origin of `LISTING_MEDIA_UPLOAD_ENDPOINT`.
+The production gate checks that they match so the browser Content Security Policy permits
+presigned uploads. Private provider credentials must never be a `NEXT_PUBLIC_*` value; any public
+map token embedded in the tile URL must be restricted appropriately by the map provider.
+
 Compose separately supplies `API_INTERNAL_BASE_URL=http://api:4000/api/v1` to the web server at
 runtime. Server-rendered pages use that container-network address; browsers use
 `NEXT_PUBLIC_API_BASE_URL`. Other hosting platforms should set the server-only internal variable to
@@ -29,7 +34,11 @@ deployment provider's secret manager rather than writing a populated file into t
 production:
 
 - set `NODE_ENV=production`;
-- use a dedicated PostgreSQL database with TLS and backups;
+- use a dedicated PostgreSQL database with TLS and backups. Prisma 6 requires
+  `sslmode=require&sslaccept=strict` in `DATABASE_URL` for encrypted connections with certificate
+  verification; configure the provider CA certificate as required. `sslmode=require` alone leaves
+  Prisma's default acceptance of invalid certificates enabled. Do not use PostgreSQL CLI-only
+  `verify-full` as a substitute in this Prisma 6 connection string;
 - generate distinct high-entropy values for `JWT_SECRET`, `OTP_HASH_SECRET`, and
   `SECURITY_IDENTIFIER_HASH_SECRET`;
 - set `EMAIL_SENDER=resend`, a verified `EMAIL_FROM`, and a valid `RESEND_API_KEY`;
@@ -81,6 +90,12 @@ copy the local-development `.env.example` for a production deployment.
 
 The migration job must finish successfully before the API starts, and the API must become ready
 before the web container starts.
+
+Production host bindings default to `127.0.0.1`; use HTTPS ingress in front of the application.
+Containers drop all capabilities, prevent privilege escalation and mount their root filesystem
+read-only, with bounded temporary storage and an ephemeral web image cache. See
+[`demo-and-operations.md`](demo-and-operations.md) for proxy/network setup, immutable image
+references, database/object recovery, readiness alerts and schema-aware rollback.
 
 ## 5. Operator-owned gates
 

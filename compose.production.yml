@@ -1,5 +1,20 @@
+x-runtime-security: &runtime-security
+  init: true
+  read_only: true
+  cap_drop: ["ALL"]
+  security_opt: ["no-new-privileges:true"]
+  tmpfs:
+    - /tmp:rw,noexec,nosuid,size=64m
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+
 services:
   migrate:
+    <<: *runtime-security
+    image: ${API_IMAGE:-sublet-pipeline-api:local}
     build:
       context: .
       dockerfile: Dockerfile.api
@@ -9,6 +24,8 @@ services:
     restart: "no"
 
   api:
+    <<: *runtime-security
+    image: ${API_IMAGE:-sublet-pipeline-api:local}
     build:
       context: .
       dockerfile: Dockerfile.api
@@ -18,7 +35,8 @@ services:
       NODE_ENV: production
       PORT: 4000
     ports:
-      - "${API_HOST_PORT:-4000}:4000"
+      - "${API_BIND_HOST:-127.0.0.1}:${API_HOST_PORT:-4000}:4000"
+    stop_grace_period: 30s
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -31,11 +49,14 @@ services:
     restart: unless-stopped
 
   web:
+    <<: *runtime-security
+    image: ${WEB_IMAGE:-sublet-pipeline-web:local}
     build:
       context: .
       dockerfile: Dockerfile.web
       args:
         NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL}
+        NEXT_PUBLIC_MEDIA_UPLOAD_ORIGIN: ${NEXT_PUBLIC_MEDIA_UPLOAD_ORIGIN}
         NEXT_PUBLIC_MAP_TILE_URL_TEMPLATE: ${NEXT_PUBLIC_MAP_TILE_URL_TEMPLATE}
         NEXT_PUBLIC_MAP_ATTRIBUTION: ${NEXT_PUBLIC_MAP_ATTRIBUTION}
     environment:
@@ -44,7 +65,11 @@ services:
       HOSTNAME: 0.0.0.0
       API_INTERNAL_BASE_URL: http://api:4000/api/v1
     ports:
-      - "${WEB_HOST_PORT:-3000}:3000"
+      - "${WEB_BIND_HOST:-127.0.0.1}:${WEB_HOST_PORT:-3000}:3000"
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+      - /app/.next/cache:rw,noexec,nosuid,uid=1000,gid=1000,size=256m
+    stop_grace_period: 30s
     depends_on:
       api:
         condition: service_healthy

@@ -1,8 +1,17 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 
 import { SavedListingsProvider } from "@/components/marketplace/saved-listings-provider";
 
 import "./globals.css";
+
+// Per-request CSP nonces must be rendered alongside the matching HTML scripts.
+export const dynamic = "force-dynamic";
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover"
+};
 
 export const metadata: Metadata = {
   title: {

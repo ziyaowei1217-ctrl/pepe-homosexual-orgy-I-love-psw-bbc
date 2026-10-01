@@ -7,9 +7,34 @@ import {
   MAX_LISTING_MEDIA_BYTES,
   type SupportedListingMediaMimeType
 } from "../src/listing-media/listing-media.constants";
-import { validateListingImage } from "../src/listing-media/listing-media-validation";
+import { prepareListingImage, validateListingImage } from "../src/listing-media/listing-media-validation";
 
 describe("listing image byte validation", () => {
+  it("rejects a truncated image whose header still exposes valid dimensions before publication", async () => {
+    const complete = await imageBytes("png", 2, 3);
+    const bytes = complete.subarray(0, complete.length - 20);
+    await expect(validateListingImage(bytes, expected(bytes, "image/png"))).resolves.toMatchObject({ width: 2, height: 3 });
+    await expect(prepareListingImage(bytes, expected(bytes, "image/png")))
+      .rejects.toMatchObject({ code: "IMAGE_VALIDATION_FAILED" });
+  });
+  it.each(["jpeg", "png", "webp"] as const)("publishes a decoded %s with private metadata removed and phone orientation corrected", async (format) => {
+    const bytes = await sharp({ create: { width: 2, height: 3, channels: 3, background: "red" } })
+      .withMetadata({ orientation: 6 })
+      .withExifMerge({ IFD0: { Artist: "private photographer" } })
+      .toFormat(format).toBuffer();
+    const original = await sharp(bytes).metadata();
+    expect(original.exif).toBeDefined();
+    const mimeType = `image/${format === "jpeg" ? "jpeg" : format}` as SupportedListingMediaMimeType;
+    const prepared = await prepareListingImage(bytes, expected(bytes, mimeType));
+    const published = await sharp(prepared.bytes).metadata();
+    expect(published).toMatchObject({ format, width: 3, height: 2 });
+    expect(published.exif).toBeUndefined();
+    expect(published.xmp).toBeUndefined();
+    expect(published.iptc).toBeUndefined();
+    expect(published.orientation).toBeUndefined();
+    expect(prepared).toMatchObject({ mimeType, width: 3, height: 2, sizeBytes: prepared.bytes.length, checksumSha256: sha256(prepared.bytes) });
+    expect(prepared.checksumSha256).not.toBe(sha256(bytes));
+  });
   it.each([
     ["jpeg", "image/jpeg"],
     ["png", "image/png"],

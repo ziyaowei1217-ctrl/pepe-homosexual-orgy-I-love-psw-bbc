@@ -14,6 +14,7 @@ export type RoommateRealtimeEvent =
     };
 
 type RoommateSocket = {
+  connected?: boolean;
   on(name: string, handler: (payload?: unknown) => void): unknown;
   connect(): unknown;
   disconnect(): unknown;
@@ -41,11 +42,15 @@ const EVENT_NAMES = [
 export function createRoommateRealtimeClient(options: CreateRoommateRealtimeClientOptions) {
   let socket: RoommateSocket | null = null;
   let connectedBefore = false;
+  let stopRecovery: (() => void) | null = null;
   const socketFactory: RoommateSocketFactory = options.socketFactory ?? ((url, socketOptions) => io(url, socketOptions));
 
   return {
     connect() {
-      if (socket) return;
+      if (socket) {
+        if (socket.connected === false) socket.connect();
+        return;
+      }
 
       socket = socketFactory(roommateSocketUrl(), {
         auth: { token: options.token },
@@ -64,10 +69,29 @@ export function createRoommateRealtimeClient(options: CreateRoommateRealtimeClie
         if (connectedBefore) options.onReconnect();
         connectedBefore = true;
       });
+      // Resume after mobile suspension or a long outage exhausts the bounded
+      // retry budget. Keep background/offline devices from starting more work.
+      if (typeof window !== "undefined") {
+        const recover = () => {
+          if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+          if (typeof navigator !== "undefined" && navigator.onLine === false) return;
+          if (socket?.connected === false) socket.connect();
+        };
+        window.addEventListener("online", recover);
+        window.addEventListener("focus", recover);
+        if (typeof document !== "undefined") document.addEventListener("visibilitychange", recover);
+        stopRecovery = () => {
+          window.removeEventListener("online", recover);
+          window.removeEventListener("focus", recover);
+          if (typeof document !== "undefined") document.removeEventListener("visibilitychange", recover);
+        };
+      }
       socket.connect();
     },
     disconnect() {
       if (!socket) return;
+      stopRecovery?.();
+      stopRecovery = null;
       socket.removeAllListeners();
       socket.disconnect();
       socket = null;

@@ -6,6 +6,7 @@ import { parseEnv } from "node:util";
 const required = [
   "NODE_ENV",
   "NEXT_PUBLIC_API_BASE_URL",
+  "NEXT_PUBLIC_MEDIA_UPLOAD_ORIGIN",
   "NEXT_PUBLIC_MAP_TILE_URL_TEMPLATE",
   "NEXT_PUBLIC_MAP_ATTRIBUTION",
   "DATABASE_URL",
@@ -39,6 +40,9 @@ export function validateProductionConfig(environment) {
     .map((name) => `${name} is required`);
 
   if (environment.NODE_ENV && environment.NODE_ENV !== "production") errors.push("NODE_ENV must be production");
+  if (environment.NODE_TLS_REJECT_UNAUTHORIZED === "0") {
+    errors.push("NODE_TLS_REJECT_UNAUTHORIZED must not disable TLS verification");
+  }
 
   const publicApiUrl = requireUrl(environment, "NEXT_PUBLIC_API_BASE_URL", ["https:"], errors);
   rejectPublicUrlComponents(publicApiUrl, "NEXT_PUBLIC_API_BASE_URL", errors);
@@ -52,6 +56,9 @@ export function validateProductionConfig(environment) {
   if (environment.NEXT_PUBLIC_MAP_TILE_URL_TEMPLATE && !["{z}", "{x}", "{y}"].every((token) => environment.NEXT_PUBLIC_MAP_TILE_URL_TEMPLATE.includes(token))) {
     errors.push("NEXT_PUBLIC_MAP_TILE_URL_TEMPLATE must include {z}, {x}, and {y}");
   }
+  if (mapTileUrl && [...mapTileUrl.searchParams.values()].some(isPlaceholder)) {
+    errors.push("NEXT_PUBLIC_MAP_TILE_URL_TEMPLATE must not contain placeholder credentials");
+  }
 
   const webOrigin = requireUrl(environment, "WEB_ORIGIN", ["https:"], errors);
   rejectPublicUrlComponents(webOrigin, "WEB_ORIGIN", errors);
@@ -60,8 +67,11 @@ export function validateProductionConfig(environment) {
   }
 
   requireUrl(environment, "DATABASE_URL", ["postgresql:", "postgres:"], errors, (url) => {
-    if (url.searchParams.get("sslmode") !== "require" && url.searchParams.get("sslmode") !== "verify-full") {
-      errors.push("DATABASE_URL must require TLS");
+    if (url.searchParams.get("sslmode") !== "require" || url.searchParams.getAll("sslmode").length !== 1) {
+      errors.push("DATABASE_URL must use one sslmode=require setting supported by Prisma 6");
+    }
+    if (url.searchParams.get("sslaccept") !== "strict" || url.searchParams.getAll("sslaccept").length !== 1) {
+      errors.push("DATABASE_URL must use one sslaccept=strict setting for certificate verification");
     }
   });
 
@@ -71,9 +81,20 @@ export function validateProductionConfig(environment) {
 
   requireUrl(environment, "VALKEY_URL", ["rediss:"], errors);
 
-  requireUrl(environment, "LISTING_MEDIA_STORAGE_ENDPOINT", ["http:", "https:"], errors);
+  const storageUrl = requireUrl(environment, "LISTING_MEDIA_STORAGE_ENDPOINT", ["https:"], errors);
+  rejectPublicUrlComponents(storageUrl, "LISTING_MEDIA_STORAGE_ENDPOINT", errors);
+  rejectBaseUrlQuery(storageUrl, "LISTING_MEDIA_STORAGE_ENDPOINT", errors);
   const uploadUrl = requireUrl(environment, "LISTING_MEDIA_UPLOAD_ENDPOINT", ["https:"], errors);
   rejectPublicUrlComponents(uploadUrl, "LISTING_MEDIA_UPLOAD_ENDPOINT", errors);
+  rejectBaseUrlQuery(uploadUrl, "LISTING_MEDIA_UPLOAD_ENDPOINT", errors);
+  const publicUploadOrigin = requireUrl(environment, "NEXT_PUBLIC_MEDIA_UPLOAD_ORIGIN", ["https:"], errors);
+  rejectPublicUrlComponents(publicUploadOrigin, "NEXT_PUBLIC_MEDIA_UPLOAD_ORIGIN", errors);
+  if (publicUploadOrigin && (publicUploadOrigin.pathname !== "/" || publicUploadOrigin.search || publicUploadOrigin.hash)) {
+    errors.push("NEXT_PUBLIC_MEDIA_UPLOAD_ORIGIN must be an HTTPS origin without a path, query, or fragment");
+  }
+  if (publicUploadOrigin && uploadUrl && publicUploadOrigin.origin !== uploadUrl.origin) {
+    errors.push("NEXT_PUBLIC_MEDIA_UPLOAD_ORIGIN must match the LISTING_MEDIA_UPLOAD_ENDPOINT origin");
+  }
 
   if (environment.EMAIL_SENDER !== "resend") errors.push("EMAIL_SENDER must be resend");
   if (environment.EMAIL_FROM?.trim() === "Sublet Pipeline <no-reply@example.com>") {
@@ -89,6 +110,11 @@ export function validateProductionConfig(environment) {
       errors.push(`${name} must not use a development default`);
     }
   }
+  for (const name of [...authenticationSecrets, "RESEND_API_KEY", "PAYMENT_SERVICE_API_KEY", "LISTING_MEDIA_STORAGE_ACCESS_KEY_ID", "LISTING_MEDIA_STORAGE_SECRET_ACCESS_KEY"]) {
+    if (typeof environment[name] === "string" && isPlaceholder(environment[name])) {
+      errors.push(`${name} must not use a placeholder`);
+    }
+  }
   const configuredAuthenticationSecrets = authenticationSecrets.map((name) => environment[name]).filter(Boolean);
   if (new Set(configuredAuthenticationSecrets).size !== configuredAuthenticationSecrets.length) {
     errors.push("Authentication secrets must be distinct");
@@ -101,6 +127,10 @@ export function validateProductionConfig(environment) {
   requireFixedPositiveInteger(environment, "LISTING_MEDIA_UPLOAD_TTL_SECONDS", 600, errors);
 
   return errors;
+}
+
+function isPlaceholder(value) {
+  return /^(?:replace[-_ ]?me|change[-_ ]?me|your[-_ ](?:.*)|todo|example)$/i.test(value.trim());
 }
 
 function requireUrl(environment, name, protocols, errors, validate) {

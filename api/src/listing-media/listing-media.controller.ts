@@ -3,6 +3,7 @@ import {
   Controller,
   Delete,
   Get,
+  Headers,
   Inject,
   Param,
   Patch,
@@ -43,7 +44,8 @@ const uploadAttemptPipe = new ValidationPipe({
 
 type BinaryResponse = {
   setHeader(name: string, value: string): void;
-  send(body: Buffer): unknown;
+  status(code: number): BinaryResponse;
+  send(body?: Buffer): unknown;
 };
 
 @UseGuards(AuthGuard)
@@ -113,12 +115,15 @@ export class PublicListingMediaController {
   constructor(@Inject(ListingMediaService) private readonly media: ListingMediaService) {}
 
   @Get(":mediaId/content")
-  async content(@Param("mediaId") mediaId: string, @Res() response: BinaryResponse) {
-    const content = await this.media.readPublished(mediaId);
+  async content(@Param("mediaId") mediaId: string, @Res() response: BinaryResponse, @Headers("if-none-match") ifNoneMatch?: string) {
+    const content = await this.media.readPublished(mediaId, ifNoneMatch);
+    // Revalidate visibility when a listing leaves the public catalog; ETag still avoids repeat transfers.
+    response.setHeader("Cache-Control", "public, max-age=0, must-revalidate");
+    response.setHeader("X-Content-Type-Options", "nosniff");
+    response.setHeader("ETag", content.etag);
+    if ("notModified" in content) return response.status(304).send();
     response.setHeader("Content-Type", content.mimeType);
     response.setHeader("Content-Length", String(content.bytes.length));
-    response.setHeader("Cache-Control", "public, max-age=31536000, immutable");
-    response.setHeader("X-Content-Type-Options", "nosniff");
     return response.send(content.bytes);
   }
 }

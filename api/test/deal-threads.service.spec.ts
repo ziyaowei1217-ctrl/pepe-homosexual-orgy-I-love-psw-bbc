@@ -3,8 +3,34 @@ import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
 
 import { DealThreadsService } from "../src/deal-threads/deal-threads.service";
+import { LocalRoommateMessageRateLimiter } from "../src/roommate-conversations/roommate-message-rate-limit";
 
 describe("DealThreadsService", () => {
+  it("limits new messages while allowing committed retries and preserving sender quotas", async () => {
+    const prisma = createPrismaMock();
+    const limiter = new LocalRoommateMessageRateLimiter({ now: () => 1_000, limit: 1 });
+    const service = new DealThreadsService(prisma as never, limiter);
+    const thread = await service.createOrFindThread("renter-1", { listingId: "listing-1" });
+    const message = { body: "Hello host", clientMessageId: randomUUID() };
+    await service.sendMessage("renter-1", thread.id, message);
+    await expect(service.sendMessage("renter-1", thread.id, message)).resolves.toMatchObject({ id: thread.id });
+    await expect(service.sendMessage("renter-1", thread.id, { body: "Spam", clientMessageId: randomUUID() }))
+      .rejects.toMatchObject({ status: 429 });
+    await expect(service.sendMessage("host-1", thread.id, { body: "Hello renter", clientMessageId: randomUUID() }))
+      .resolves.toMatchObject({ id: thread.id });
+    const [saved] = await service.findForUser("renter-1");
+    expect(saved.messages.map((item: any) => item.body)).toEqual(["Hello host", "Hello renter"]);
+  });
+
+  it("separates deal-message quotas from roommate-message quotas", async () => {
+    const prisma = createPrismaMock();
+    const limiter = new LocalRoommateMessageRateLimiter({ now: () => 1_000, limit: 1 });
+    const service = new DealThreadsService(prisma as never, limiter);
+    const thread = await service.createOrFindThread("renter-1", { listingId: "listing-1" });
+    await limiter.consume({ userId: "renter-1", conversationId: thread.id });
+    await expect(service.sendMessage("renter-1", thread.id, { body: "Hello host", clientMessageId: randomUUID() }))
+      .resolves.toMatchObject({ id: thread.id });
+  });
   it("derives listing ownership and context instead of trusting the client", async () => {
     const prisma = createPrismaMock();
     const service = new DealThreadsService(prisma as never);

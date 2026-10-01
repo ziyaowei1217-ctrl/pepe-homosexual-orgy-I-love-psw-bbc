@@ -89,6 +89,8 @@ import {
   type VerifyEmailResponse,
   type CreateViewingRequestInput
 } from "@/lib/api";
+import { getBrowserStorage } from "@/lib/browser-storage";
+import { newBrowserCommandId } from "@/lib/browser-id";
 import { getListingCoverUrl } from "@/lib/listing-media";
 import { sendDealMessage } from "@/lib/deal-message-commands";
 import { useWindowFocusRefresh } from "@/lib/use-window-focus-refresh";
@@ -847,8 +849,8 @@ export default function HomePage({
     if (adminStepUpIdentityRef.current === adminStepUpIdentityKey) return;
     adminStepUpIdentityRef.current = adminStepUpIdentityKey;
     setAdminStepUpSession(
-      adminStepUpIdentity && window.sessionStorage
-        ? readStoredAdminStepUpSession(window.sessionStorage, adminStepUpIdentity)
+      adminStepUpIdentity && getBrowserStorage("sessionStorage")
+        ? readStoredAdminStepUpSession(getBrowserStorage("sessionStorage"), adminStepUpIdentity)
         : null
     );
     setAdminStepUpOpen(false);
@@ -857,7 +859,7 @@ export default function HomePage({
   useEffect(() => {
     if (!adminStepUpSession) return;
     if (!getActiveAdminStepUpToken(adminStepUpSession)) {
-      clearStoredAdminStepUpSession(window.sessionStorage);
+      clearStoredAdminStepUpSession(getBrowserStorage("sessionStorage"));
       setAdminStepUpSession(null);
       return;
     }
@@ -868,7 +870,7 @@ export default function HomePage({
           ? null
           : current
       );
-      clearStoredAdminStepUpSession(window.sessionStorage);
+      clearStoredAdminStepUpSession(getBrowserStorage("sessionStorage"));
     }, delay);
     return () => window.clearTimeout(timer);
   }, [adminStepUpSession]);
@@ -876,7 +878,7 @@ export default function HomePage({
   useEffect(() => {
     const storedSession = readStoredAuthSession();
     if (storedSession) setToken(storedSession.accessToken);
-    clearLegacyProductStorage(window.localStorage);
+    clearLegacyProductStorage(getBrowserStorage("localStorage"));
     setAuthSessionHydrated(true);
   }, []);
 
@@ -959,7 +961,11 @@ export default function HomePage({
       favoriteListingIds: Array.from(favoriteIds),
       notifications: user ? notifications : []
     };
-    window.localStorage.setItem(storageKey, JSON.stringify(state));
+    try {
+      window.localStorage.setItem(storageKey, JSON.stringify(state));
+    } catch {
+      // Favorites and reminders remain usable in memory when optional storage is denied.
+    }
   }, [favoriteIds, notifications, user, userUiHydratedFor]);
 
   useEffect(() => {
@@ -1069,7 +1075,7 @@ export default function HomePage({
             const productError = toProductApiError(error);
             if (shouldClearAuthSession(productError)) {
               clearStoredAuthSession();
-              clearStoredAdminStepUpSession(window.sessionStorage);
+              clearStoredAdminStepUpSession(getBrowserStorage("sessionStorage"));
               setToken(null);
               setUser(null);
               setResolvedUserToken(null);
@@ -1097,7 +1103,7 @@ export default function HomePage({
     const productError = toProductApiError(error);
     if (!shouldClearAuthSession(productError)) return false;
     clearStoredAuthSession();
-    clearStoredAdminStepUpSession(window.sessionStorage);
+    clearStoredAdminStepUpSession(getBrowserStorage("sessionStorage"));
     invalidateLatestRequests(profileRequestGuard);
     setAdminStepUpSession(null);
     setAdminStepUpOpen(false);
@@ -1136,7 +1142,7 @@ export default function HomePage({
     const productError = toProductApiError(error);
     if (shouldClearAuthSession(productError)) {
       clearStoredAuthSession();
-      clearStoredAdminStepUpSession(window.sessionStorage);
+      clearStoredAdminStepUpSession(getBrowserStorage("sessionStorage"));
       setToken(null);
       setUser(null);
       setProfile(null);
@@ -1838,7 +1844,7 @@ export default function HomePage({
 
     const optimistic = createOptimisticRoommateMessage({
       conversationId: conversation.id,
-      clientMessageId: crypto.randomUUID(),
+      clientMessageId: newBrowserCommandId(),
       body: trimmedBody,
       createdAt: new Date().toISOString()
     });
@@ -2548,7 +2554,7 @@ export default function HomePage({
     const shouldReturnFromAuthPage =
       pathname.startsWith("/account") && Boolean(authReturnTo) && !shouldOpenOnboarding;
     writeStoredAuthSession(response.accessToken);
-    clearStoredAdminStepUpSession(window.sessionStorage);
+    clearStoredAdminStepUpSession(getBrowserStorage("sessionStorage"));
     setAdminStepUpSession(null);
     setAdminStepUpOpen(false);
     setToken(response.accessToken);
@@ -2563,7 +2569,7 @@ export default function HomePage({
 
   function handleLogout() {
     clearStoredAuthSession();
-    clearStoredAdminStepUpSession(window.sessionStorage);
+    clearStoredAdminStepUpSession(getBrowserStorage("sessionStorage"));
     invalidateLatestRequests(profileRequestGuard);
     setAdminStepUpSession(null);
     setAdminStepUpOpen(false);
@@ -2739,7 +2745,7 @@ export default function HomePage({
         email={user?.email ?? ""}
         onVerified={(session) => {
           if (adminStepUpIdentity) {
-            writeStoredAdminStepUpSession(window.sessionStorage, adminStepUpIdentity, session);
+            writeStoredAdminStepUpSession(getBrowserStorage("sessionStorage"), adminStepUpIdentity, session);
           }
           setAdminStepUpSession(session);
           setAdminStepUpOpen(false);

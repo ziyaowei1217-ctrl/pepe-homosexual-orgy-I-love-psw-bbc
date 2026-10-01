@@ -9,6 +9,7 @@ import { Prisma, ViewingMode, ViewingRequestStatus } from "@prisma/client";
 import { isUUID } from "class-validator";
 
 import { PrismaService } from "../prisma/prisma.service";
+import { LocalRoommateMessageRateLimiter, RoommateMessageRateLimiter } from "../roommate-conversations/roommate-message-rate-limit";
 import { CreateDealThreadDto, CreateViewingRequestDto, SendDealMessageDto, ViewingModeDtoValue } from "./dto";
 
 const threadInclude = {
@@ -18,7 +19,10 @@ const threadInclude = {
 
 @Injectable()
 export class DealThreadsService {
-  constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
+  constructor(
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(RoommateMessageRateLimiter) private readonly messageRateLimiter: RoommateMessageRateLimiter = new LocalRoommateMessageRateLimiter()
+  ) {}
 
   async findForUser(userId: string) {
     const threads = await this.prisma.dealThread.findMany({
@@ -135,6 +139,8 @@ export class DealThreadsService {
     if (existing) {
       assertSameMessage(existing);
     } else {
+      // Authorize and recover committed retries first; only a new write consumes quota.
+      await this.messageRateLimiter.consume({ userId, conversationId: `deal:${threadId}` });
       try {
         await this.prisma.dealMessage.create({
           data: {

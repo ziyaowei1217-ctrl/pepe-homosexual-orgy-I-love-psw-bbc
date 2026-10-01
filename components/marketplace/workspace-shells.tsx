@@ -70,7 +70,7 @@ function WorkspaceShell<Key extends string>({ title, eyebrow, active, items, acc
   children: ReactNode;
 }) {
   return (
-    <div className="min-h-dvh bg-[#f4f6f9] text-slate-950 lg:grid lg:grid-cols-[252px_minmax(0,1fr)]">
+    <div className="marketplace-shell min-h-dvh bg-[#f4f6f9] text-slate-950 lg:grid lg:grid-cols-[252px_minmax(0,1fr)]">
       <aside className={cn("hidden min-h-dvh flex-col border-r px-4 py-5 text-white lg:sticky lg:top-0 lg:flex lg:h-dvh", accent === "blue" ? "border-blue-900/20 bg-[#071b35]" : "border-slate-800 bg-[#0d1624]")}>
         <Link href="/" className="flex items-center gap-3 rounded-[18px] px-2 py-2">
           <span className="grid size-10 place-items-center rounded-[14px] bg-[#0668e1] shadow-lg"><Home className="size-5" /></span>

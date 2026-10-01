@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { emptyFilters, searchAmenities, searchDateError, type SearchState } from "@/lib/search-state";
 import { cn } from "@/lib/utils";
+import { useModalFocus } from "./use-modal-focus";
 
 export type SearchFilterSection = "budget" | "beds" | "dates";
 
@@ -18,35 +19,24 @@ export function SearchFiltersDialog({ initial, initialSection = "budget", prices
   const content = useRef<HTMLDivElement>(null);
   const bedrooms = useRef<HTMLFieldSetElement>(null);
   const dates = useRef<HTMLElement>(null);
+  useModalFocus(dialog, onClose);
   const ceiling = Math.max(5000, Math.ceil(Math.max(0, ...prices, initial.priceMax, initial.priceMin) / 500) * 500);
   const histogram = Array.from({ length: 28 }, (_, index) => prices.filter((price) => Math.min(27, Math.floor(price / ceiling * 28)) === index).length);
   const error = searchDateError(draft.moveIn, draft.moveOut) || (draft.priceMax && draft.priceMin > draft.priceMax ? "最高预算不能低于最低预算。" : "");
   const count = error ? 0 : getCount(draft);
 
   useEffect(() => {
-    const previous = document.activeElement as HTMLElement | null;
-    const overflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    dialog.current?.querySelector<HTMLButtonElement>("button")?.focus();
     const target = initialSection === "dates" ? dates.current : initialSection === "beds" ? bedrooms.current : null;
     if (target && content.current) {
       target.focus({ preventScroll: true });
       content.current.scrollTop = target.offsetTop;
     }
-    return () => { document.body.style.overflow = overflow; previous?.focus(); };
   }, [initialSection]);
 
   const update = (patch: Partial<SearchState>) => setDraft((value) => ({ ...value, ...patch }));
 
   return <div className="marketplace-modal-backdrop fixed inset-0 z-[80] flex items-end justify-center bg-slate-950/35 p-0 backdrop-blur-sm sm:items-center sm:p-8" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-    <section ref={dialog} role="dialog" aria-modal="true" aria-labelledby="filter-title" className="marketplace-modal-panel search-filter-dialog flex max-h-[94dvh] w-full flex-col overflow-hidden rounded-t-[28px] bg-white shadow-2xl sm:max-h-[88dvh] sm:max-w-[640px] sm:rounded-[28px]" onKeyDown={(event) => {
-      if (event.key === "Escape") { event.stopPropagation(); onClose(); }
-      if (event.key !== "Tab") return;
-      const nodes = dialog.current?.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), a[href]');
-      const first = nodes?.[0]; const last = nodes?.[nodes.length - 1];
-      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
-      if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
-    }}>
+    <section ref={dialog} role="dialog" aria-modal="true" aria-labelledby="filter-title" className="marketplace-modal-panel search-filter-dialog flex max-h-[94dvh] w-full flex-col overflow-hidden rounded-t-[28px] bg-white shadow-2xl sm:max-h-[88dvh] sm:max-w-[640px] sm:rounded-[28px]">
       <header className="relative flex shrink-0 items-center justify-center border-b border-slate-200 px-6 py-5">
         <button type="button" onClick={onClose} aria-label="关闭筛选" className="absolute left-5 grid size-9 place-items-center rounded-full hover:bg-slate-100"><X className="size-5" /></button>
         <h2 id="filter-title" className="text-base font-bold">筛选房源</h2>

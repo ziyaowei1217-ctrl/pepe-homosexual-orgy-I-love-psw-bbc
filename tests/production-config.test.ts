@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -16,9 +16,10 @@ function validEnvironment() {
   return {
     NODE_ENV: "production",
     NEXT_PUBLIC_API_BASE_URL: "https://api.example.com/api/v1",
+    NEXT_PUBLIC_MEDIA_UPLOAD_ORIGIN: "https://uploads.example.com",
     NEXT_PUBLIC_MAP_TILE_URL_TEMPLATE: "https://maps.example.com/{z}/{x}/{y}.png?key=public-map-key",
     NEXT_PUBLIC_MAP_ATTRIBUTION: "Example Maps",
-    DATABASE_URL: "postgresql://app:database-password@db.example.com/app?sslmode=verify-full",
+    DATABASE_URL: "postgresql://app:database-password@db.example.com/app?sslmode=require&sslaccept=strict",
     WEB_ORIGIN: "https://app.example.com",
     JWT_SECRET: "jwt-production-secret-with-more-than-32-bytes",
     OTP_HASH_SECRET: "otp-production-secret-with-more-than-32-bytes",
@@ -29,7 +30,7 @@ function validEnvironment() {
     PAYMENT_SERVICE_URL: "https://payments.example.com",
     PAYMENT_SERVICE_API_KEY: "payment-production-key",
     VALKEY_URL: "rediss://cache-user:cache-password@cache.example.com:6379",
-    LISTING_MEDIA_STORAGE_ENDPOINT: "http://private-storage:9000",
+    LISTING_MEDIA_STORAGE_ENDPOINT: "https://private-storage.example.com",
     LISTING_MEDIA_UPLOAD_ENDPOINT: "https://uploads.example.com",
     LISTING_MEDIA_STORAGE_REGION: "us-west-2",
     LISTING_MEDIA_STORAGE_BUCKET: "listing-media",
@@ -55,6 +56,7 @@ function runCli(arguments_: string[], environment: Record<string, string> = {}) 
 function effectiveComposeConfig(apiOverrides: Record<string, string> = {}) {
   const {
     NEXT_PUBLIC_API_BASE_URL,
+    NEXT_PUBLIC_MEDIA_UPLOAD_ORIGIN,
     NEXT_PUBLIC_MAP_TILE_URL_TEMPLATE,
     NEXT_PUBLIC_MAP_ATTRIBUTION,
     ...apiEnvironment
@@ -66,6 +68,7 @@ function effectiveComposeConfig(apiOverrides: Record<string, string> = {}) {
         build: {
           args: {
             NEXT_PUBLIC_API_BASE_URL,
+            NEXT_PUBLIC_MEDIA_UPLOAD_ORIGIN,
             NEXT_PUBLIC_MAP_TILE_URL_TEMPLATE,
             NEXT_PUBLIC_MAP_ATTRIBUTION
           }
@@ -78,14 +81,18 @@ function effectiveComposeConfig(apiOverrides: Record<string, string> = {}) {
 function installFakeDocker(directory: string, output: string, exitCode = 0) {
   const outputPath = join(directory, "docker-output.txt");
   const argumentsPath = join(directory, "docker-arguments.json");
-  const dockerPath = join(directory, "docker");
+  const windows = process.platform === "win32";
+  const dockerPath = join(directory, windows ? "docker.exe" : "docker");
+  const scriptPath = windows ? join(directory, "fake-docker.cjs") : dockerPath;
   writeFileSync(outputPath, output);
-  writeFileSync(dockerPath, `#!${process.execPath}\nconst fs = require("node:fs");\nfs.writeFileSync(process.env.FAKE_DOCKER_ARGUMENTS_PATH, JSON.stringify(process.argv.slice(2)));\nprocess.stdout.write(fs.readFileSync(process.env.FAKE_DOCKER_OUTPUT_PATH, "utf8"));\nprocess.stderr.write(process.env.FAKE_DOCKER_STDERR || "");\nprocess.exit(Number(process.env.FAKE_DOCKER_EXIT_CODE || 0));\n`);
-  chmodSync(dockerPath, 0o755);
+  writeFileSync(scriptPath, `${windows ? "" : `#!${process.execPath}\n`}if (${windows ? 'require("node:path").basename(process.execPath).toLowerCase() === "docker.exe"' : "true"}) {\nconst fs = require("node:fs");\nfs.writeFileSync(process.env.FAKE_DOCKER_ARGUMENTS_PATH, JSON.stringify(${windows ? '["compose", ...process.argv.slice(2)]' : "process.argv.slice(2)"}));\nprocess.stdout.write(fs.readFileSync(process.env.FAKE_DOCKER_OUTPUT_PATH, "utf8"));\nprocess.stderr.write(process.env.FAKE_DOCKER_STDERR || "");\nprocess.exit(Number(process.env.FAKE_DOCKER_EXIT_CODE || 0));\n}\n`);
+  if (windows) copyFileSync(process.execPath, dockerPath);
+  else chmodSync(dockerPath, 0o755);
   return {
     argumentsPath,
     environment: {
       PATH: directory,
+      ...(windows ? { NODE_OPTIONS: `--require "${scriptPath}"` } : {}),
       FAKE_DOCKER_ARGUMENTS_PATH: argumentsPath,
       FAKE_DOCKER_OUTPUT_PATH: outputPath,
       FAKE_DOCKER_EXIT_CODE: String(exitCode)
@@ -120,8 +127,21 @@ describe("production configuration gate", () => {
     ["non-origin web URL", "WEB_ORIGIN", "https://app.example.com/account"],
     ["web URL query", "WEB_ORIGIN", "https://app.example.com/?preview=true"],
     ["database without TLS", "DATABASE_URL", "postgresql://db.example.com/app?sslmode=disable"],
+    ["database without explicit certificate verification", "DATABASE_URL", "postgresql://db.example.com/app?sslmode=require"],
+    ["unsupported Prisma TLS mode", "DATABASE_URL", "postgresql://db.example.com/app?sslmode=verify-full&sslaccept=strict"],
+    ["database with disabled certificate verification", "DATABASE_URL", "postgresql://db.example.com/app?sslmode=require&sslaccept=accept_invalid_certs"],
+    ["database with ambiguous TLS", "DATABASE_URL", "postgresql://db.example.com/app?sslmode=require&sslmode=disable"],
+    ["database with ambiguous certificate verification", "DATABASE_URL", "postgresql://db.example.com/app?sslmode=require&sslaccept=strict&sslaccept=accept_invalid_certs"],
+    ["disabled Node TLS verification", "NODE_TLS_REJECT_UNAUTHORIZED", "0"],
+    ["placeholder map key", "NEXT_PUBLIC_MAP_TILE_URL_TEMPLATE", "https://maps.example.com/{z}/{x}/{y}.png?key=replace-me"],
+    ["placeholder secret", "PAYMENT_SERVICE_API_KEY", "replace-me"],
     ["non-TLS Valkey", "VALKEY_URL", "redis://cache.example.com:6379"],
+    ["non-TLS object storage", "LISTING_MEDIA_STORAGE_ENDPOINT", "http://private-storage:9000"],
+    ["storage endpoint URL credentials", "LISTING_MEDIA_STORAGE_ENDPOINT", "https://secret:credential@storage.example.com"],
+    ["storage endpoint query", "LISTING_MEDIA_STORAGE_ENDPOINT", "https://storage.example.com?credential=secret"],
     ["insecure browser upload", "LISTING_MEDIA_UPLOAD_ENDPOINT", "http://uploads.example.com"],
+    ["mismatched browser upload origin", "NEXT_PUBLIC_MEDIA_UPLOAD_ORIGIN", "https://other-uploads.example.com"],
+    ["upload origin with a path", "NEXT_PUBLIC_MEDIA_UPLOAD_ORIGIN", "https://uploads.example.com/images"],
     ["malformed payment URL", "PAYMENT_SERVICE_URL", "https://"],
     ["payment service query", "PAYMENT_SERVICE_URL", "https://payments.example.com?tenant=one"]
   ])("rejects %s", (_caseName, name, value) => {

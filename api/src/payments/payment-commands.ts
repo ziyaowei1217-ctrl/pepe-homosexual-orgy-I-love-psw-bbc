@@ -44,6 +44,9 @@ export function createPaymentCommands(input: PaymentCommandsFactoryInput = {}): 
   if (!apiKey) throw new Error("PAYMENT_SERVICE_API_KEY is required in production");
   const url = new URL(serviceUrl);
   if (url.protocol !== "https:") throw new Error("PAYMENT_SERVICE_URL must use HTTPS in production");
+  if (url.username || url.password || url.search || url.hash) {
+    throw new Error("PAYMENT_SERVICE_URL must not contain credentials, a query, or a fragment");
+  }
   return new HttpPaymentCommands(url.href.replace(/\/+$/, ""), apiKey, input.fetchImpl ?? fetch);
 }
 
@@ -108,6 +111,7 @@ class HttpPaymentCommands implements PaymentCommands {
           ...(input ? { "Idempotency-Key": input.idempotencyKey } : {})
         },
         ...(input ? { body: JSON.stringify(input.body) } : {}),
+        redirect: "error",
         signal: AbortSignal.timeout(8_000)
       });
       if (!response.ok) throw new ServiceUnavailableException("Payment gateway request failed");

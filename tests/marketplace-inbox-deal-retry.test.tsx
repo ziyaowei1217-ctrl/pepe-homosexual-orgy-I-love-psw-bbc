@@ -104,3 +104,27 @@ it('does not reuse an unresolved operation after the authenticated account chang
   await waitFor(() => expect(server.requests).toHaveLength(2));
   expect(server.requests[1].clientMessageId).not.toBe(server.requests[0].clientMessageId);
 });
+
+it('keeps a confirmed message when an older background refresh finishes afterward', async () => {
+  writeStoredAuthSession('stale-poll-token');
+  let resolvePoll!: (response: Response) => void;
+  const oldPoll = new Promise<Response>((resolve) => { resolvePoll = resolve; });
+  let reads = 0;
+  vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    if (url.endsWith('/deal-threads')) return ++reads === 1 ? Response.json([thread()]) : oldPoll;
+    if (url.endsWith('/roommate-conversations')) return Response.json([]);
+    if (url.endsWith('/thread-A/messages') && init?.method === 'POST') return Response.json({
+      ...thread(), updatedAt: '2026-09-01T00:01:00.000Z',
+      messages: [{ id: 'confirmed', body: 'Confirmed message', align: 'right', createdAt: '2026-09-01T00:01:00.000Z' }]
+    });
+    return Response.json({}, { status: 404 });
+  }));
+  render(<InboxExperience initialConversationId='thread-A' />);
+  await screen.findByRole('heading', { name: 'thread-A' });
+  fireEvent.focus(window);
+  await send('Confirmed message');
+  await screen.findAllByText('Confirmed message');
+  await act(async () => { resolvePoll(Response.json([thread()])); });
+  expect(screen.getAllByText('Confirmed message').length).toBeGreaterThan(0);
+});

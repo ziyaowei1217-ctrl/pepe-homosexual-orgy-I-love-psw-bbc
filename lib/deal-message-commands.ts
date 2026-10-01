@@ -1,5 +1,6 @@
 import { apiPost, type ApiDealThread } from "@/lib/api";
 import { assertCurrentAuthSession } from "@/lib/auth-session";
+import { newBrowserCommandId } from "@/lib/browser-id";
 
 // Keep unresolved operations through Inbox route remounts, without persisting
 // message content or credentials to browser storage. A new session replaces them.
@@ -11,7 +12,7 @@ export async function sendDealMessage(token: string, threadId: string, text: str
   const session = pendingSession;
   const body = text.trim();
   const operation = JSON.stringify([threadId, body]);
-  const clientMessageId = session.commands.get(operation) ?? globalThis.crypto.randomUUID();
+  const clientMessageId = session.commands.get(operation) ?? newBrowserCommandId();
   session.commands.set(operation, clientMessageId);
   const updated = await apiPost<ApiDealThread>(`/deal-threads/${encodeURIComponent(threadId)}/messages`, { body, clientMessageId }, token);
   assertCurrentAuthSession(token);

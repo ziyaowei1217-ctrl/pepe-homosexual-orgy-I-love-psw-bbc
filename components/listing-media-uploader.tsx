@@ -1,5 +1,7 @@
 "use client";
 
+import { newBrowserCommandId } from "@/lib/browser-id";
+
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 
@@ -87,7 +89,7 @@ export function ListingMediaUploader({
     }
 
     const additions = files.map((file, index): MediaRow => {
-      const commandId = globalThis.crypto.randomUUID();
+      const commandId = newBrowserCommandId();
       const key = `local-${commandId}`;
       const previewUrl = typeof URL.createObjectURL === "function" ? URL.createObjectURL(file) : undefined;
       if (previewUrl) previews.current.add(previewUrl);

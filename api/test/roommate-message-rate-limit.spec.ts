@@ -125,7 +125,7 @@ describe("roommate message rate limiter selection", () => {
     expect(rejection).toBeInstanceOf(HttpException);
     expect((rejection as HttpException).getStatus()).toBe(429);
     expect((rejection as HttpException).getResponse()).toMatchObject({
-      message: "Roommate message rate limit exceeded",
+      message: "Message rate limit exceeded",
       retryAfterSeconds: 41
     });
   });

@@ -35,7 +35,9 @@ function CancellationSession({ application, token, currentUserId, onApplicationC
   useEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
 
   useEffect(() => {
-    if (["CANCELLED", "COMPLETED", "WITHDRAWN", "REJECTED", "DRAFT"].includes(application.status)) localStorage.removeItem(storageKey);
+    if (["CANCELLED", "COMPLETED", "WITHDRAWN", "REJECTED", "DRAFT"].includes(application.status)) {
+      try { localStorage.removeItem(storageKey); } catch { /* The server already confirmed the terminal state. */ }
+    }
   }, [application.status, storageKey]);
 
   const canCancel = application.status === "ACCEPTED" && localDate() < application.moveIn.slice(0, 10) &&
@@ -55,7 +57,9 @@ function CancellationSession({ application, token, currentUserId, onApplicationC
       const updated = await cancelRentalApplication(token, application.id, command.reason, command.key);
       assertCurrentAuthSession(token);
       if (!active.current) return;
-      if (updated.status === "CANCELLED") localStorage.removeItem(storageKey);
+      if (updated.status === "CANCELLED") {
+        try { localStorage.removeItem(storageKey); } catch { /* Keep the confirmed cancellation visible. */ }
+      }
       onApplicationChange(updated);
       setOpen(false);
     } catch (caught) {

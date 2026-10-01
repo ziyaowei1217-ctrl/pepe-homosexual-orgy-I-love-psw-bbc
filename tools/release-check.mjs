@@ -1,4 +1,7 @@
-import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
+import { runPnpm, requireSuccess } from "./process-runner.mjs";
+
+const rootDirectory = fileURLToPath(new URL("../", import.meta.url));
 
 const gates = [
   ["check"],
@@ -7,10 +10,5 @@ const gates = [
 ];
 
 for (const args of gates) {
-  const result = spawnSync("pnpm", args, { stdio: "inherit" });
-  if (result.error) {
-    console.error(result.error.message);
-    process.exit(1);
-  }
-  if (result.status !== 0) process.exit(result.status ?? 1);
+  requireSuccess(runPnpm(args, { cwd: rootDirectory }), "pnpm is required to run the release checks.");
 }

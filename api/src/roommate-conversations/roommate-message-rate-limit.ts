@@ -63,6 +63,7 @@ export class LocalRoommateMessageRateLimiter extends RoommateMessageRateLimiter 
   private readonly now: () => number;
   private readonly limit: number;
   private readonly windowMs: number;
+  private nextCleanupAt = 0;
 
   constructor(options: LocalRoommateMessageRateLimiterOptions = {}) {
     super();
@@ -73,6 +74,13 @@ export class LocalRoommateMessageRateLimiter extends RoommateMessageRateLimiter 
 
   async consume(request: RoommateMessageRateLimitRequest) {
     const now = request.now?.getTime() ?? this.now();
+    if (now >= this.nextCleanupAt) {
+      const cutoff = now - this.windowMs;
+      for (const [key, timestamps] of this.timestamps) {
+        if (timestamps[timestamps.length - 1] <= cutoff) this.timestamps.delete(key);
+      }
+      this.nextCleanupAt = now + this.windowMs;
+    }
     const key = `${request.userId}:${request.conversationId}`;
     const active = (this.timestamps.get(key) ?? []).filter((timestamp) => timestamp > now - this.windowMs);
 
@@ -381,7 +389,7 @@ function isRateLimitExceeded(error: unknown): error is HttpException {
 
 function rateLimitExceeded(retryAfterSeconds: number) {
   return new HttpException(
-    { statusCode: HttpStatus.TOO_MANY_REQUESTS, message: "Roommate message rate limit exceeded", retryAfterSeconds },
+    { statusCode: HttpStatus.TOO_MANY_REQUESTS, message: "Message rate limit exceeded", retryAfterSeconds },
     HttpStatus.TOO_MANY_REQUESTS
   );
 }
