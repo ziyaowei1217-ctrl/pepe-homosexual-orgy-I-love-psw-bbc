@@ -18,7 +18,7 @@ function runApiCommand(name: string, environment: Record<string, string> = {}) {
   const logPath = join(directory, "commands.jsonl");
   writeFileSync(entryPoint, `const fs = require("node:fs");
 const args = process.argv.slice(2);
-fs.appendFileSync(process.env.COMMAND_TEST_LOG, JSON.stringify({ args, cwd: process.cwd(), database: process.env.DATABASE_URL, dbSmoke: process.env.RUN_DB_SMOKE, marketplaceSmoke: process.env.RUN_MARKETPLACE_SMOKE }) + "\\n");
+fs.appendFileSync(process.env.COMMAND_TEST_LOG, JSON.stringify({ args, cwd: process.cwd(), database: process.env.DATABASE_URL, dbSmoke: process.env.RUN_DB_SMOKE, marketplaceSmoke: process.env.RUN_MARKETPLACE_SMOKE, mediaSmoke: process.env.RUN_MEDIA_SMOKE, valkeySmoke: process.env.RUN_VALKEY_SMOKE }) + "\\n");
 if (args.join(" ") === process.env.COMMAND_TEST_FAIL) process.exit(17);
 `);
   const result = spawnSync(process.execPath, ["tools/api-command.mjs", name], {
@@ -55,5 +55,23 @@ describe("portable API command runner", () => {
     expect(result.status).toBe(1);
     expect(result.commands).toEqual([]);
     expect(result.stderr).toContain("VALKEY_URL is required");
+  });
+
+  it("selects database/privacy regressions serially and opts into real media checks", () => {
+    const result = runApiCommand("launch:smoke:database", { DATABASE_URL: "postgresql://fixture-host/disposable" });
+    expect(result.status).toBe(0);
+    expect(result.commands).toHaveLength(1);
+    expect(result.commands[0]).toMatchObject({ dbSmoke: "1", mediaSmoke: "1" });
+    expect(result.commands[0].args).toEqual(expect.arrayContaining([
+      "test/deal-message-idempotency.integration.spec.ts", "test/roommate-profile-ranges.integration.spec.ts",
+      "test/listing-media-immutable.integration.spec.ts", "--maxWorkers=1", "--no-file-parallelism"
+    ]));
+  });
+
+  it("executes actor quota regressions with distributed service smoke checks", () => {
+    const result = runApiCommand("launch:smoke:valkey", { DATABASE_URL: "postgresql://fixture-host/disposable", VALKEY_URL: "redis://fixture-host" });
+    expect(result.status).toBe(0);
+    expect(result.commands[0]).toMatchObject({ valkeySmoke: "1", dbSmoke: "1" });
+    expect(result.commands[0].args).toContain("test/roommate-message-rate-limit.integration.spec.ts");
   });
 });

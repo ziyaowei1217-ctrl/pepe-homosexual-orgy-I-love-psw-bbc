@@ -66,6 +66,8 @@ jobs:
           docker compose --profile realtime up -d --build --wait --wait-timeout 120 db minio valkey
           docker compose run --rm --build minio-init
       - run: pnpm release:check
+      - name: Exercise isolated database and media regression suites
+        run: pnpm -C api launch:smoke:database
       - run: pnpm -C api launch:smoke:roommate
       - run: pnpm -C api launch:smoke:valkey
         env:
