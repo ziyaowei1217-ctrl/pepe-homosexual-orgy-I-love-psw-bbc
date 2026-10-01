@@ -1,0 +1,154 @@
+{
+  "review": "Independent second-round cybersecurity audit",
+  "commit": "4244856b8ca2093493bad0588bf0e6f5e617a498",
+  "independence": "Source inspected directly; no prior review reports, PR descriptions, previous /tmp evidence, or other reviewers findings read.",
+  "status": "independent review complete; assigned fixes complete; local validation passed; live service CI checks required",
+  "findings": [
+    {
+      "id": "SEC-R2-001",
+      "severity": "medium",
+      "title": "Unsubmitted rental application drafts disclose PII to listing owner",
+      "locations": [
+        {
+          "file": "api/src/applications/applications.service.ts",
+          "line": 139
+        },
+        {
+          "file": "api/src/applications/applications.service.ts",
+          "line": 394
+        },
+        {
+          "file": "api/src/applications/applications.presenter.ts",
+          "line": 4
+        }
+      ],
+      "evidence": "hostInbox filters only listingOwnerId; canView admits listingOwnerId regardless status/submittedAt; presenter spreads all persisted fields. lib/rental-applications.ts:81 tells users DRAFT materials are not submitted to landlord.",
+      "preconditions": "Authenticated listing owner; another renter has created a server-side DRAFT (including failed-submit recovery, or a withdrawn never-submitted draft).",
+      "impact": "Host GET /applications/host-inbox and GET /applications/:id return contact name/email, income band, guarantor status, occupation, note and member snapshots before submission.",
+      "reproduction": "Pinned pnpm 9.15.4, host Node 25, source-import probe /tmp/sublet-round2-security-probe.cjs confirmed hostInbox and findOne return DRAFT PII with submittedAt null.",
+      "fix": "Gate host reads on persisted submittedAt != null (rather than merely status != DRAFT, since never-submitted withdrawals also exist); keep submitter/team draft access. Add authorization regressions for DRAFT and WITHDRAWN with submittedAt null, and retain host access to submitted historical decisions."
+    },
+    {
+      "id": "SEC-R2-002",
+      "severity": "medium",
+      "title": "Viewing changes bypass message quota and grow unbounded thread history",
+      "locations": [
+        {
+          "file": "api/src/deal-threads/deal-threads.service.ts",
+          "line": 167
+        },
+        {
+          "file": "api/src/deal-threads/deal-threads.service.ts",
+          "line": 196
+        },
+        {
+          "file": "api/src/deal-threads/deal-threads.service.ts",
+          "line": 16
+        }
+      ],
+      "evidence": "sendMessage consumes quota at line143, but each createViewingRequest call updates/creates a request and unconditionally inserts a dealMessage without invoking limiter. Every response and inbox query includes entire message history.",
+      "preconditions": "One authenticated renter with a conversation for an approved listing; no host acceptance or mutual match required.",
+      "impact": "Attacker can POST viewing changes repeatedly to flood the host inbox, bypass 20/min message limit, persist unlimited messages, and amplify future response memory/DB/browser work as history grows.",
+      "reproduction": "Pinned pnpm 9.15.4 source-import probe with limiter always throwing: 100 identical createViewingRequest calls succeeded, limiter calls0, messages100, final response messages100.",
+      "fix": "Consume shared deal conversation quota before every new viewing mutation that writes a message; make exact replay idempotent/no-op. Bound or paginate deal message history and viewing history in listing/read/write responses."
+    },
+    {
+      "id": "SEC-R2-003",
+      "severity": "medium",
+      "title": "Authentication rate-limit dependency waits have no deadline",
+      "locations": [
+        {
+          "file": "api/src/auth/valkey-rate-limit-store.ts",
+          "line": 58
+        },
+        {
+          "file": "api/src/auth/valkey-rate-limit-store.ts",
+          "line": 71
+        },
+        {
+          "file": "api/src/auth/valkey-rate-limit-store.ts",
+          "line": 92
+        }
+      ],
+      "evidence": "ValkeyRateLimitStore directly awaits client.connect() and client.eval() without a deadline or invalidation; driver uses default reconnect strategy and no socketTimeout. Authentication fails closed only after rejection, so hung operations never reach HTTP503.",
+      "preconditions": "Valkey or its network path accepts connections but stops replying, or a command stalls. An unauthenticated attacker can then repeatedly POST valid-shaped email-code/verify-email requests; frontend cancellation does not cancel the awaited dependency work.",
+      "impact": "Login verification becomes indefinitely unavailable and retained unauthenticated requests amplify API memory/socket exhaustion during dependency degradation.",
+      "reproduction": "/tmp/sublet-round2-auth-blackhole-probe.cjs uses the actual installed Redis5.12.1 client with a localhost TCP server consuming Redis handshake bytes without replying. Pinned pnpm9.15.4/Node25 AuthRateLimiter operation still pending after6203ms; source confirms no total deadline. Local server/client destroyed in cleanup; no external traffic.",
+      "fix": "Bound connect and eval waits, invalidate/destroy timed-out client so queued work is rejected, map timeout to existing production503, allow bounded reconnection/recovery. Reuse the bounded operation/invalidation approach already present in roommate-message-rate-limit.ts. Add stalled handshake and stalled EVAL tests."
+    },
+    {
+      "id": "SEC-R2-004",
+      "severity": "medium",
+      "title": "Archived roommate member preferences remain publicly enumerable through raw profile endpoint",
+      "locations": [
+        {
+          "file": "api/src/marketplace/marketplace.controller.ts",
+          "line": 67
+        },
+        {
+          "file": "api/src/marketplace/marketplace.service.ts",
+          "line": 47
+        },
+        {
+          "file": "api/src/roommates/roommates.service.ts",
+          "line": 111
+        },
+        {
+          "file": "api/src/roommates/admin-roommates.controller.ts",
+          "line": 46
+        }
+      ],
+      "preconditions": "An owned roommate profile created through the marketplace has been archived by an authenticated administrator. Any visitor can enumerate the unauthenticated raw profile collection.",
+      "evidence": "Create/update write RoommateMatchingProfile plus RoommateProfile; admin archive hides only RoommateProfile. GET /roommate-profiles filters only raw matching status active, without enforcing owned public projection visibility.",
+      "impact": "Archived member intro, budgets, date preferences and lifestyle details remain publicly returned even though the public roommate deck removes the member.",
+      "reproduction": "Pinned pnpm9.15.4 source-import probe /tmp/sublet-round2-profile-archive-probe.cjs: owned hidden, public deck0, raw public rows1 with intro unchanged.",
+      "fix": "Make all public roommate surfaces enforce the same persisted visibility boundary; synchronize archive to associated matching rows or filter raw public profiles against the visible owned projection. Test both public endpoints after archive."
+    }
+  ],
+  "limitations": [
+    "Initial source-import reproductions use in-memory Prisma seams; no real production traffic.",
+    "Added PostgreSQL and real Valkey regressions are gated because Docker, local PostgreSQL/Valkey runtimes and VALKEY_URL are unavailable on this host.",
+    "Outer deal thread list count is still unbounded. Per-thread message/viewing histories are bounded; deployment capacity and future outer pagination remain requirements.",
+    "Repository edits authorized after initial independent findings; no commits or publication by this reviewer.",
+    "New public visibility SQL and DISTINCT ON active-viewing SQL require actual PostgreSQL execution. Root assigned explicit serial integration CI gate; tests remain environment-gated locally."
+  ],
+  "checks": {
+    "apiFocusedExistingTests": {
+      "command": "npx --yes pnpm@9.15.4 -C api exec vitest run test/auth.guard.spec.ts test/authenticated-user.service.spec.ts test/admin.guard.spec.ts test/admin-step-up.guard.spec.ts test/auth-hardening.service.spec.ts test/auth-rate-limit.e2e.spec.ts test/listing-media-validation.spec.ts test/listing-media-storage.spec.ts test/roommate-conversations.gateway.spec.ts test/legacy-data-security.e2e.spec.ts test/payments.service.spec.ts --maxWorkers=1 --fileParallelism=false",
+      "files": 11,
+      "passed": 89
+    },
+    "sourceImportAdversarialProbes": [
+      "/tmp/sublet-round2-security-probe.cjs",
+      "/tmp/sublet-round2-auth-blackhole-probe.cjs",
+      "/tmp/sublet-round2-profile-archive-probe.cjs"
+    ],
+    "finalAssignedRegressionSuite": {
+      "command": "npx --yes pnpm@9.15.4 -C api exec vitest run test/applications.service.spec.ts test/applications.e2e.spec.ts test/deal-threads.service.spec.ts test/deal-threads.e2e.spec.ts test/roommate-conversations.service.spec.ts test/roommate-message-rate-limit.spec.ts test/roommate-message-rate-limit-retention.spec.ts test/message-limiter-readiness.spec.ts test/marketplace.service.spec.ts test/marketplace-api.e2e.spec.ts test/roommates.service.spec.ts test/marketplace-demo-journey.smoke.spec.ts test/launch-smoke.spec.ts test/roommate-message-rate-limit.integration.spec.ts test/deal-message-idempotency.integration.spec.ts test/viewing-team-revisions.integration.spec.ts test/roommate-profile-ranges.integration.spec.ts --maxWorkers=1 --fileParallelism=false",
+      "selectedFiles": 17,
+      "passedFiles": 11,
+      "skippedFiles": 6,
+      "passedTests": 130,
+      "skippedTests": 30
+    },
+    "strictApiTypes": {
+      "command": "npx --yes pnpm@9.15.4 -C api typecheck",
+      "result": "passed"
+    },
+    "apiBuild": {
+      "command": "npx --yes pnpm@9.15.4 -C api build",
+      "result": "passed"
+    },
+    "whitespace": {
+      "command": "git diff --check",
+      "result": "passed"
+    },
+    "apiLint": "Repository eslint.config.mjs explicitly ignores api/**; selected API lint returned only16 ignored-file warnings, no actual lint evaluation. Strict tsc covers API source/tests."
+  },
+  "remediation": {
+    "SEC-R2-001": "Host inbox/direct detail now require persisted submittedAt; renter/team authorization unchanged; draft and never-submitted withdrawn HTTP/service tests pass.",
+    "SEC-R2-002": "Exact active viewing replay is no-op even when confirmed; real viewing mutations and host decisions share quota. Actor100/min plus20/conversation with atomic same-slot two-key Valkey script and check-before-insert local state. Authorized history pages1..100; inbox latest1, detail/write latest50 chronological messages + additive messagePageInfo. Viewing latest50 includes most recently updated active state, using one DISTINCT ON batch for authorized inbox threads.",
+    "SEC-R2-003": "Assigned to delivery reviewer; bounded auth dependency waits/readiness/recovery implemented there, final consolidated tests owned root.",
+    "SEC-R2-004": "Public raw matching-profile read now parameterized SQL EXISTS joins Profile\u2192User\u2192owned RoommateProfile, requiring active+archivedAt null in same read. Public deck requires same archivedAt null. HTTP archive and historically active/archived mismatch regressions pass; gated actual PG tests added."
+  }
+}

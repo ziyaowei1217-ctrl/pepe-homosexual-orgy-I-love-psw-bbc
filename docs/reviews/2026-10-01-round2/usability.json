@@ -1,0 +1,221 @@
+{
+  "review": "Fresh independent round 2 usability, aesthetics, efficiency and flow audit",
+  "head": "4244856b8ca2093493bad0588bf0e6f5e617a498",
+  "preview": "http://127.0.0.1:4411",
+  "method": "Direct current source inspection before initial findings; then fresh production-browser journeys and screenshots with new synthetic network fixtures. Previous audit reports, PR descriptions, previous reviewer findings, and old /tmp results were never read.",
+  "findings": [
+    {
+      "id": "UX2-1",
+      "priority": "P2",
+      "status": "confirmed",
+      "title": "Preserve favorites added while account storage is hydrating",
+      "file": "components/marketplace/saved-listings-provider.tsx",
+      "line": 95,
+      "reproduction": "Begin with an authenticated local session and empty account favorites. Delay /auth/me, open /search, and click a listing heart while the request is pending. Release /auth/me.",
+      "actual": "The heart becomes pressed, then reverts when hydrate calls setState(next). The account localStorage value contains listingIds: []. The success toast can remain visible after the saved listing is lost.",
+      "expected": "Once the save action is accepted, loading persisted state must retain it or the save action must wait for hydration.",
+      "evidence": {
+        "pressedCountBefore": 1,
+        "pressedCountAfter": 0,
+        "screenshots": [
+          "/tmp/sublet-round2-ux-evidence/saved-hydration-after.png"
+        ],
+        "observationFile": "/tmp/sublet-round2-ux-evidence/observations.json"
+      },
+      "suggestedFix": "Merge pending local changes into hydrated storage state, or temporarily gate save/create/note actions until hydration and display their loading state.",
+      "resolution": {
+        "status": "fixed and verified on rebuilt production preview",
+        "description": "Queue explicit save, membership, collection and note intentions during pending hydration, then replay onto the merged guest/account snapshot. Collection ID collisions are remapped and replay is idempotent; untouched restored notes cannot be erased by a stale card input."
+      }
+    },
+    {
+      "id": "UX2-2",
+      "priority": "P2",
+      "status": "confirmed",
+      "title": "Make older roommate message history reachable",
+      "file": "components/marketplace/inbox-experience.tsx",
+      "line": 143,
+      "reproduction": "Open a roommate conversation with more than 50 messages. Return the latest 50 messages and a non-null nextCursor from the messages API, as the real API does by default.",
+      "actual": "The first history fetch breaks on !hasHistory even when nextCursor is present. The browser makes no cursor GET, and the conversation exposes no control or scroll handler to load messages 1–10. Reloading repeats the same truncated history.",
+      "expected": "Previous messages in the conversation remain accessible through earlier-history pagination.",
+      "evidence": {
+        "GETQueries": [
+          ""
+        ],
+        "POSTQueries": [
+          ""
+        ],
+        "screenshots": [
+          "/tmp/sublet-round2-ux-evidence/desktop-chat-open.png"
+        ],
+        "observationFile": "/tmp/sublet-round2-ux-evidence/observations.json"
+      },
+      "suggestedFix": "Keep nextCursor separately from the reconnect anchor and add earlier-history fetching with a visible load-earlier control or scroll trigger. Preserve scroll position when prepending history.",
+      "resolution": {
+        "status": "fixed and verified on rebuilt production preview",
+        "description": "Keep the oldest history cursor separately from reconnect anchors; selected deal threads fetch the first history page, and both deal/roommate conversations expose earlier-message loading that preserves reading position and identity-deduplicates responses."
+      }
+    },
+    {
+      "id": "UX2-3",
+      "priority": "P2",
+      "status": "confirmed",
+      "title": "Reveal the current exchange when opening or sending in a long conversation",
+      "file": "components/marketplace/inbox-experience.tsx",
+      "line": 410,
+      "reproduction": "Open a 50-message conversation at 1440×950, then send a message successfully without manually scrolling to the bottom.",
+      "actual": "The chronological history starts at scrollTop 0 and stays at 0 after send. The newly sent bubble appears at y4856–4880 while the viewport is only 950px tall; the composer clears but the message confirmation is invisible. The screenshot still shows historical messages 11–17.",
+      "expected": "The initial view opens at the latest exchange and a successful own send is revealed. Reading older messages should preserve position when unrelated incoming messages arrive.",
+      "evidence": {
+        "onOpen": {
+          "scrollTop": 0,
+          "clientHeight": 615,
+          "scrollHeight": 4632
+        },
+        "afterSend": {
+          "scrollTop": 0,
+          "clientHeight": 615,
+          "scrollHeight": 4724
+        },
+        "screenshots": [
+          "/tmp/sublet-round2-ux-evidence/desktop-chat-after-send.png",
+          "/tmp/sublet-round2-ux-evidence/mobile-chat.png"
+        ]
+      },
+      "suggestedFix": "Track the history element and scroll after initial history and successful own send; follow incoming updates only when already near the bottom.",
+      "resolution": {
+        "status": "fixed and verified on rebuilt production preview",
+        "description": "Open at the latest exchange and reveal successful own sends; only follow incoming changes when near the bottom, retaining older-history scroll position on reconnect."
+      }
+    },
+    {
+      "id": "UX2-4",
+      "priority": "P2",
+      "status": "confirmed",
+      "title": "Load the next roommate batch before declaring there are no new candidates",
+      "file": "components/marketplace/roommate-experiences.tsx",
+      "line": 32,
+      "reproduction": "Return a deck page containing two candidates with nextCursor: 2 and totalCandidates: 3. As an authenticated viewer, skip both candidates.",
+      "actual": "The page displays 当前没有新的推荐，稍后再来看看。 without any deck request after either decision. pageInfo is discarded. In the real 24-item page, the same behavior occurs after 24 actions even when other eligible profiles exist.",
+      "expected": "Continue to the remaining eligible candidates or offer a next-batch control before displaying an exhausted state.",
+      "evidence": {
+        "actionCount": 2,
+        "deckRequestsAfterActions": 0,
+        "screenshots": [
+          "/tmp/sublet-round2-ux-evidence/desktop-roommate-exhaustion.png"
+        ]
+      },
+      "suggestedFix": "Refetch the deck when the current batch empties, or retain and use paging information. Since successful actions remove candidates server-side, refetching the first eligible page avoids skipping candidates as offsets change.",
+      "resolution": {
+        "status": "fixed and verified on rebuilt production preview",
+        "description": "Retain deck paging information, refetch the first eligible page as action offsets shift, continue cursor pages when filtering leaves duplicate/acted candidates, and preserve URL filters."
+      }
+    },
+    {
+      "id": "UX2-5",
+      "priority": "P2",
+      "status": "confirmed",
+      "title": "Honor the default 最近收藏 order",
+      "file": "components/marketplace/saved-page-experience.tsx",
+      "line": 39,
+      "reproduction": "Save the first lower-price search listing, then the second. Open /saved with default 最近收藏 selected.",
+      "actual": "The cards show the first-saved listing first and the second-saved listing second, matching catalog order. The recent branch never orders by the stored saved ID sequence.",
+      "expected": "The listing just saved is shown before older saves.",
+      "evidence": {
+        "saveOrder": [
+          "安静的一居室，靠近学校和公共交通",
+          "采光公寓 · Quiet study space"
+        ],
+        "shownOrder": [
+          "安静的一居室，靠近学校和公共交通",
+          "采光公寓 · Quiet study space"
+        ],
+        "screenshots": [
+          "/tmp/sublet-round2-ux-evidence/mobile-saved.png"
+        ]
+      },
+      "suggestedFix": "Sort recent items by the saved sequence in reverse order, with a consistent sequence for all collections.",
+      "resolution": {
+        "status": "fixed and verified on rebuilt production preview",
+        "description": "Maintain a durable global oldest-to-newest saved sequence independent of collection membership and catalog order; recent sorting uses its reverse order."
+      }
+    },
+    {
+      "id": "UX2-6",
+      "priority": "P2",
+      "status": "confirmed",
+      "title": "Keep failed collection creation visible and recoverable",
+      "file": "components/marketplace/saved-page-experience.tsx",
+      "line": 49,
+      "reproduction": "Open 新建清单, enter an emoji-only name such as 🏠, and submit. A duplicate or colliding slug also follows the same failure path.",
+      "actual": "The dialog closes and input clears, but no collection appears and no error is shown. addSavedCollection silently returns unchanged state because createCollectionId strips every character or collides with an existing ID.",
+      "expected": "The chosen name creates a collection, or the dialog preserves it and explains why it cannot be created.",
+      "evidence": {
+        "dialogOpenAfterSubmit": false,
+        "groupTextAfterSubmit": "全部收藏 2",
+        "observationFile": "/tmp/sublet-round2-ux-evidence/observations.json"
+      },
+      "suggestedFix": "Use stable unique collection IDs independent of display names, or return a creation result and keep the dialog open with inline validation on failure.",
+      "resolution": {
+        "status": "fixed and verified on rebuilt production preview",
+        "description": "Validate invalid and duplicate names with an inline accessible error while retaining dialog/input; support Unicode letter/number names and allocate a unique suffix for distinct names with colliding slugs."
+      }
+    }
+  ],
+  "positiveChecks": [
+    "Search filter dialog traps Tab/Shift+Tab, closes with Escape, and restores focus to its trigger.",
+    "375px search and saved layouts have no page-wide horizontal overflow; filter chips use an intentional horizontal scroll region.",
+    "320px host publishing form has no horizontal overflow and remains legible.",
+    "Auth service error displays a clear error below the email input and keeps the email available for retry.",
+    "Listing stay-date error disables confirmation and remains clear at 375px; Escape returns focus to the rent trigger.",
+    "Listing gallery opens at the correct 1/1 item and restores its trigger after Escape.",
+    "Application required-name validation focuses the name field; successful Continue focuses the next step and scrolls it into view.",
+    "Mobile map has no page-wide horizontal overflow and keeps keyboard arrow focus in the map.",
+    "Across both engines/sizes, the new collection error remains within the dialog, sent messages remain above the composer, earlier messages remain readable, and roommate next-page actions remain available without horizontal page overflow."
+  ],
+  "limitations": [
+    "Synthetic production preview and browser-routed private API fixtures were used; no real users, real messages, payments, or storage mutations occurred.",
+    "No live mobile keyboard or real object-store upload service was available."
+  ],
+  "sourceModified": true,
+  "validation": {
+    "fullWebTests": "113 files / 731 tests passed before final active-viewing addition",
+    "latestTargetedTests": "3 files / 16 tests passed, including approved active-viewing selection",
+    "scopedEslint": "passed without warnings",
+    "plainTypeScript": "tsc --noEmit --incremental false passed",
+    "browserRecheck": "Passed Chromium and WebKit at 1440×950 desktop and 375×812 touch mobile against rebuilt production preview. No additional client source changes required.",
+    "regressionFiles": [
+      "tests/saved-interaction-durability.test.tsx",
+      "tests/marketplace-inbox-history-scroll.test.tsx",
+      "tests/roommate-deck-pagination.test.tsx",
+      "tests/marketplace-inbox-round3.test.tsx"
+    ],
+    "rootBuild": "Root reported successful Next type generation, tsc, and production build after final client source freeze including active-viewing selection."
+  },
+  "additionalEvidence": "/tmp/sublet-round2-ux-evidence/extra-observations.json",
+  "afterEvidence": {
+    "observationFile": "/tmp/sublet-round2-ux-evidence/after/observations.json",
+    "script": "/tmp/sublet-round2-ux-after.cjs",
+    "screenshotDirectory": "/tmp/sublet-round2-ux-evidence/after/",
+    "checks": [
+      "Real most-recent-first saved order",
+      "Invalid emoji name preserves visible dialog/input and announced error",
+      "Held /auth/me save survives account hydration",
+      "Keyboard filter trap, Escape and focus restoration",
+      "Selected deal first page and actual earlier cursor requests for both message sources",
+      "Earlier page deduplication and reading-position-preserving prepend",
+      "Sent bubble is inside actual history viewport and composer is cleared",
+      "Loaded earlier history and sent bubble survive focus refresh with scrollTop unchanged",
+      "Third roommate candidate becomes actionable and deck has no page-wide horizontal overflow"
+    ],
+    "visualInspection": [
+      "chromium-375-collection-error.png",
+      "webkit-375-collection-error.png",
+      "chromium-1440-rm-latest.png",
+      "webkit-375-rm-latest.png",
+      "webkit-375-deal-earlier.png",
+      "webkit-375-deck-next.png",
+      "chromium-1440-saved.png"
+    ]
+  }
+}

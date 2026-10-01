@@ -1,0 +1,170 @@
+[
+  {
+    "engine": "chromium",
+    "width": 1440,
+    "checks": {
+      "savedRecent": true,
+      "invalidNameRecoverable": true,
+      "filterKeyboard": true,
+      "pendingSavePreserved": true,
+      "rmSentVisible": true,
+      "rmHistory": {
+        "open": {
+          "top": 4075,
+          "height": 4690,
+          "client": 615
+        },
+        "after": {
+          "top": 886,
+          "height": 5644,
+          "client": 615
+        },
+        "cursorRequest": true
+      },
+      "rmReconnectReadingRetained": true,
+      "dealSentVisible": true,
+      "dealHistory": {
+        "open": {
+          "top": 4075,
+          "height": 4690,
+          "client": 615
+        },
+        "after": {
+          "top": 886,
+          "height": 5644,
+          "client": 615
+        },
+        "cursorRequest": true
+      },
+      "dealReconnectReadingRetained": true,
+      "deckContinues": true,
+      "deckNoOverflow": true
+    }
+  },
+  {
+    "engine": "chromium",
+    "width": 375,
+    "checks": {
+      "savedRecent": true,
+      "invalidNameRecoverable": true,
+      "filterKeyboard": true,
+      "pendingSavePreserved": true,
+      "rmSentVisible": true,
+      "rmHistory": {
+        "open": {
+          "top": 4227,
+          "height": 4690,
+          "client": 463
+        },
+        "after": {
+          "top": 886,
+          "height": 5644,
+          "client": 463
+        },
+        "cursorRequest": true
+      },
+      "rmReconnectReadingRetained": true,
+      "dealSentVisible": true,
+      "dealHistory": {
+        "open": {
+          "top": 4227,
+          "height": 4690,
+          "client": 463
+        },
+        "after": {
+          "top": 886,
+          "height": 5644,
+          "client": 463
+        },
+        "cursorRequest": true
+      },
+      "dealReconnectReadingRetained": true,
+      "deckContinues": true,
+      "deckNoOverflow": true
+    }
+  },
+  {
+    "engine": "webkit",
+    "width": 1440,
+    "checks": {
+      "savedRecent": true,
+      "invalidNameRecoverable": true,
+      "filterKeyboard": true,
+      "pendingSavePreserved": true,
+      "rmSentVisible": true,
+      "rmHistory": {
+        "open": {
+          "top": 4075,
+          "height": 4690,
+          "client": 615
+        },
+        "after": {
+          "top": 886,
+          "height": 5644,
+          "client": 615
+        },
+        "cursorRequest": true
+      },
+      "rmReconnectReadingRetained": true,
+      "dealSentVisible": true,
+      "dealHistory": {
+        "open": {
+          "top": 4075,
+          "height": 4690,
+          "client": 615
+        },
+        "after": {
+          "top": 886,
+          "height": 5644,
+          "client": 615
+        },
+        "cursorRequest": true
+      },
+      "dealReconnectReadingRetained": true,
+      "deckContinues": true,
+      "deckNoOverflow": true
+    }
+  },
+  {
+    "engine": "webkit",
+    "width": 375,
+    "checks": {
+      "savedRecent": true,
+      "invalidNameRecoverable": true,
+      "filterKeyboard": true,
+      "pendingSavePreserved": true,
+      "rmSentVisible": true,
+      "rmHistory": {
+        "open": {
+          "top": 4227,
+          "height": 4690,
+          "client": 463
+        },
+        "after": {
+          "top": 886,
+          "height": 5644,
+          "client": 463
+        },
+        "cursorRequest": true
+      },
+      "rmReconnectReadingRetained": true,
+      "dealSentVisible": true,
+      "dealHistory": {
+        "open": {
+          "top": 4227,
+          "height": 4690,
+          "client": 463
+        },
+        "after": {
+          "top": 886,
+          "height": 5644,
+          "client": 463
+        },
+        "cursorRequest": true
+      },
+      "dealReconnectReadingRetained": true,
+      "deckContinues": true,
+      "deckNoOverflow": true
+    }
+  }
+]
