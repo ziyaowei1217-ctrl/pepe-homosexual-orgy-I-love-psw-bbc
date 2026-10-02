@@ -156,6 +156,8 @@ describe("RoommateMatchService", () => {
   });
 
   it.each([
+    { status: "hidden", archivedAt: null },
+    { status: "matched", archivedAt: null },
     { status: "hidden", archivedAt: new Date() },
     { status: "matched", archivedAt: new Date() },
     { status: "active", archivedAt: new Date() }
@@ -176,7 +178,7 @@ describe("RoommateMatchService", () => {
     const database = createDatabase();
     const service = new RoommateMatchService(database.prisma as never);
     await service.recordAction("user-b", "profile-a", "LIKE");
-    Object.assign(database.profiles[0], { status, archivedAt: new Date() });
+    Object.assign(database.profiles[0], { status, archivedAt: null });
     await expect(service.recordAction("user-a", "profile-b", "LIKE")).rejects.toBeInstanceOf(BadRequestException);
     expect(database.actions).toHaveLength(1);
     expect(database.actions[0].userId).toBe("user-b");

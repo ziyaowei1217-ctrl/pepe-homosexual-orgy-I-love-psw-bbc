@@ -194,6 +194,12 @@ describe("marketplace database API", () => {
       .send(roommateProfilePayload()).expect(409);
     await http.get("/api/v1/roommate-profiles").expect(200).expect([]);
     await http.get("/api/v1/roommates").expect(200).expect([]);
+    await http.patch(`/api/v1/roommate-profiles/${first.body.id}`).set("Authorization", `Bearer ${token}`)
+      .send({ status: "active" }).expect(200);
+    await http.get("/api/v1/roommate-profiles").expect(200)
+      .expect((response: any) => expect(response.body).toHaveLength(1));
+    await http.get("/api/v1/roommates").expect(200)
+      .expect((response: any) => expect(response.body).toHaveLength(1));
   });
 
   it("keeps archived roommate preferences private on both public endpoints even for inconsistent historical rows", async () => {
@@ -207,6 +213,10 @@ describe("marketplace database API", () => {
     const admin = await jwt.verifyAsync(adminSession);
     const adminToken = await jwt.signAsync({ sub: admin.sub, email: admin.email, role: "ADMIN", adminReauthenticatedAt: Math.floor(Date.now() / 1000) });
     await http.post(`/api/v1/admin/roommates/${cards.body[0].id}/archive`).set("Authorization", `Bearer ${adminToken}`).expect(201);
+    for (const patch of [{ intro: "Owner edit after archive" }, { status: "active" }, { status: "hidden" }, { status: "matched" }]) {
+      await http.patch(`/api/v1/roommate-profiles/${created.body.id}`).set("Authorization", `Bearer ${token}`)
+        .send(patch).expect(409);
+    }
     // This is the persisted mismatch that existed before the fix: archive
     // changes the owned card while the raw matching profile remains active.
     const raw = await prisma.roommateMatchingProfile.findMany();
@@ -218,6 +228,12 @@ describe("marketplace database API", () => {
     await prisma.roommateProfile.update({ where: { id: cards.body[0].id }, data: { status: "active" } });
     await http.get("/api/v1/roommates").expect(200).expect([]);
     await http.get("/api/v1/roommate-profiles").expect(200).expect([]);
+    await http.patch(`/api/v1/admin/roommates/${cards.body[0].id}`).set("Authorization", `Bearer ${adminToken}`)
+      .send({ status: "active" }).expect(200);
+    await http.patch(`/api/v1/roommate-profiles/${created.body.id}`).set("Authorization", `Bearer ${token}`)
+      .send({ intro: "Edit after administrator restore" }).expect(200);
+    await http.get("/api/v1/roommate-profiles").expect(200)
+      .expect((response: any) => expect(response.body).toEqual([expect.objectContaining({ id: created.body.id, intro: "Edit after administrator restore" })]));
   });
 
   it("retires every legacy housing-listing collection and item operation", async () => {

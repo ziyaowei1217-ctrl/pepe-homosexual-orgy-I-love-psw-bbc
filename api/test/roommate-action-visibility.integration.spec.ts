@@ -29,6 +29,8 @@ describe.skipIf(process.env.RUN_DB_SMOKE !== "1")("roommate action visibility on
   });
 
   it.each([
+    { status: "hidden", archivedAt: null },
+    { status: "matched", archivedAt: null },
     { status: "hidden", archivedAt: new Date() },
     { status: "matched", archivedAt: new Date() },
     { status: "active", archivedAt: new Date() }

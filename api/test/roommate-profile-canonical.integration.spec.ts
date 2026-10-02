@@ -87,7 +87,7 @@ describe.skipIf(process.env.RUN_DB_SMOKE !== "1")("canonical roommate publicatio
     await expect(service.createRoommateProfile(fixture.id, fixture.email, { age: 27, city: fixture.city })).rejects.toBeInstanceOf(ConflictException);
   });
 
-  it("holds a moderator archive lock before repeated POST visibility checks and never republishes it", async () => {
+  it.each(["POST", "PATCH"])("holds a moderator archive lock before owner %s visibility checks and never republishes it", async command => {
     const fixture = await owner();
     const service = new MarketplaceService(first as never);
     const profile = await service.createRoommateProfile(fixture.id, fixture.email, { age: 25, city: fixture.city, intro: "Preserved facts" });
@@ -101,7 +101,9 @@ describe.skipIf(process.env.RUN_DB_SMOKE !== "1")("canonical roommate publicatio
       await release;
     });
     await locked;
-    const creating = service.createRoommateProfile(fixture.id, fixture.email, { age: 25, city: fixture.city, intro: "Must not republish" })
+    const creating = (command === "POST"
+      ? service.createRoommateProfile(fixture.id, fixture.email, { age: 25, city: fixture.city, intro: "Must not republish" })
+      : service.updateRoommateProfile(fixture.id, fixture.email, profile.id, { intro: "Must not republish", status: "active" }))
       .then(value => ({ value }), error => ({ error }));
     try {
       await waitForLocks(second, "RoommateProfile", 1);
@@ -114,6 +116,55 @@ describe.skipIf(process.env.RUN_DB_SMOKE !== "1")("canonical roommate publicatio
       .toEqual([expect.objectContaining({ id: profile.id, intro: "Preserved facts" })]);
     expect(await observer.roommateProfile.findUniqueOrThrow({ where: { ownerId: fixture.id } }))
       .toMatchObject({ status: "hidden", archivedAt: expect.any(Date) });
+    expect(await service.findRoommateProfiles({ city: fixture.city })).toEqual([]);
+  });
+
+  it("lets an owner update commit first, then preserves the moderator archive waiting on that same row", async () => {
+    const fixture = await owner();
+    const service = new MarketplaceService(first as never);
+    const profile = await service.createRoommateProfile(fixture.id, fixture.email, { age: 25, city: fixture.city, intro: "Before update" });
+    let unlock!: () => void;
+    let ready!: () => void;
+    const release = new Promise<void>(resolve => { unlock = resolve; });
+    const locked = new Promise<void>(resolve => { ready = resolve; });
+    const delayedOwner = new MarketplaceService({
+      profile: first.profile,
+      $transaction: (operation: (transaction: unknown) => Promise<unknown>) => first.$transaction(async transaction => {
+        const delayedMatching = new Proxy(transaction.roommateMatchingProfile, {
+          get(target, key) {
+            if (key === "update") return async (args: Parameters<typeof target.update>[0]) => {
+              // The actual service has already locked the owned card when it
+              // reaches this write. Hold that lock to prove the reverse ordering.
+              ready();
+              await release;
+              return target.update(args);
+            };
+            return Reflect.get(target, key);
+          }
+        });
+        return operation(new Proxy(transaction, {
+          get(target, key) {
+            return key === "roommateMatchingProfile" ? delayedMatching : Reflect.get(target, key);
+          }
+        }));
+      })
+    } as never);
+    const updating = delayedOwner.updateRoommateProfile(fixture.id, fixture.email, profile.id, { intro: "Committed owner facts" });
+    await locked;
+    const archiving = observer.roommateProfile.update({ where: { ownerId: fixture.id }, data: { status: "hidden", archivedAt: new Date() } })
+      .then(value => value);
+    try {
+      await waitForLocks(second, "RoommateProfile", 1);
+    } finally {
+      unlock();
+      await updating;
+    }
+    await archiving;
+    expect(await observer.roommateMatchingProfile.findUniqueOrThrow({ where: { id: profile.id } }))
+      .toMatchObject({ intro: "Committed owner facts" });
+    expect(await observer.roommateProfile.findUniqueOrThrow({ where: { ownerId: fixture.id } }))
+      .toMatchObject({ status: "hidden", archivedAt: expect.any(Date) });
+    await expect(service.updateRoommateProfile(fixture.id, fixture.email, profile.id, { status: "active" })).rejects.toBeInstanceOf(ConflictException);
     expect(await service.findRoommateProfiles({ city: fixture.city })).toEqual([]);
   });
 

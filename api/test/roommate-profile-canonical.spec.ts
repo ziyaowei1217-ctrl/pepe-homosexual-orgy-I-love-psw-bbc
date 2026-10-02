@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { MarketplaceService } from "../src/marketplace/marketplace.service";
 import { MAX_DISCOVERABLE_ROOMMATE_PROFILES } from "../src/roommates/discovery-capacity";
+import { RoommatesService } from "../src/roommates/roommates.service";
 import { createLaunchPrismaMock } from "./support/launch-prisma-mock";
 
 async function fixture() {
@@ -64,6 +65,56 @@ describe("canonical roommate publication", () => {
     await expect(create({ intro: "Republished facts" })).rejects.toBeInstanceOf(ConflictException);
     expect(await prisma.roommateMatchingProfile.findMany()).toEqual([expect.objectContaining({ id: original.id, intro: "Preserved facts" })]);
     expect(await service.findRoommateProfiles({})).toEqual([]);
+  });
+
+  it.each(["hidden", "matched", "active"])("owner PATCH cannot clear an archived %s projection", async status => {
+    const { prisma, service, create, owner, email } = await fixture();
+    const original = await create({ intro: "Preserved facts" });
+    const archivedAt = new Date("2026-10-01T12:00:00Z");
+    const owned = await prisma.roommateProfile.findUnique({ where: { ownerId: owner.id } });
+    await prisma.roommateProfile.update({ where: { id: owned!.id }, data: { status, archivedAt } });
+
+    for (const patch of [{ intro: "Ordinary edit" }, { status: "active" }, { status: "hidden" }, { status: "matched" }]) {
+      await expect(service.updateRoommateProfile(owner.id, email, original.id, patch)).rejects.toBeInstanceOf(ConflictException);
+    }
+    expect(await prisma.roommateMatchingProfile.findFirst({ where: { id: original.id } }))
+      .toMatchObject({ status: "active", intro: "Preserved facts" });
+    expect(await prisma.roommateProfile.findUnique({ where: { ownerId: owner.id } }))
+      .toMatchObject({ status, archivedAt });
+    expect(await service.findRoommateProfiles({})).toEqual([]);
+    expect(await new RoommatesService(prisma as never, {} as never).findAll()).toEqual([]);
+  });
+
+  it.each(["hidden", "matched"])("allows owner %s opt-out and restore without manufacturing an archive marker", async status => {
+    const { prisma, service, create, owner, email } = await fixture();
+    const original = await create({ intro: "Original facts" });
+    const roommates = new RoommatesService(prisma as never, {} as never);
+    await service.updateRoommateProfile(owner.id, email, original.id, { status });
+    expect(await prisma.roommateProfile.findUnique({ where: { ownerId: owner.id } })).toMatchObject({ status, archivedAt: null });
+    expect(await service.findRoommateProfiles({})).toEqual([]);
+    expect(await roommates.findAll()).toEqual([]);
+
+    await service.updateRoommateProfile(owner.id, email, original.id, { intro: "Edited while opted out" });
+    expect(await roommates.findAll()).toEqual([]);
+    await service.updateRoommateProfile(owner.id, email, original.id, { status: "active" });
+    expect(await service.findRoommateProfiles({})).toEqual([expect.objectContaining({ id: original.id, intro: "Edited while opted out" })]);
+    expect(await roommates.findAll()).toHaveLength(1);
+  });
+
+  it("keeps a moderator archive of an already self-hidden card until an administrator restores it", async () => {
+    const { prisma, service, create, owner, email } = await fixture();
+    const original = await create();
+    const roommates = new RoommatesService(prisma as never, {} as never);
+    const owned = await prisma.roommateProfile.findUnique({ where: { ownerId: owner.id } });
+    await service.updateRoommateProfile(owner.id, email, original.id, { status: "hidden" });
+    await roommates.updateAdminProfile(owned!.id, { status: "hidden" });
+
+    await expect(service.updateRoommateProfile(owner.id, email, original.id, { status: "active" })).rejects.toBeInstanceOf(ConflictException);
+    expect(await roommates.findAll()).toEqual([]);
+    await roommates.updateAdminProfile(owned!.id, { status: "active" });
+    await service.updateRoommateProfile(owner.id, email, original.id, { status: "active" });
+    expect(await roommates.findAll()).toHaveLength(1);
+    expect(await prisma.roommateProfile.findUnique({ where: { ownerId: owner.id } })).toMatchObject({ status: "active", archivedAt: null });
   });
 
   it("checks merged ranges on a repeated create before overwriting current facts", async () => {

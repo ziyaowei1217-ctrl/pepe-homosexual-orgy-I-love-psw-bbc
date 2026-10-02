@@ -106,6 +106,12 @@ export class MarketplaceService {
       if (canonical?.id !== id) {
         throw new ConflictException("This historical roommate profile has been replaced by the current profile");
       }
+      const owned = await transaction.roommateProfile.findUnique({ where: { ownerId } });
+      // The owned row is locked above. Owner edits must never clear a moderator
+      // archive, including an archive committed while this request waited.
+      if (owned?.archivedAt) {
+        throw new ConflictException("This roommate profile is archived; an administrator must restore it before editing");
+      }
       this.assertMergedRanges(existing, dto);
 
       const matchingProfile = await transaction.roommateMatchingProfile.update({
@@ -279,8 +285,10 @@ function ownedRoommateProfileData(
 
 function ownedRoommateProfileStatus(status: string) {
   if (status === "active") return { status: "active", archivedAt: null };
-  if (status === "hidden") return { status: "hidden", archivedAt: new Date() };
-  if (status === "matched") return { status: "matched", archivedAt: new Date() };
+  // Owner opt-out is enforced by status. Reserve archivedAt for administrator
+  // moderation so hiding and restoring one's own card cannot erase an archive.
+  if (status === "hidden") return { status: "hidden", archivedAt: null };
+  if (status === "matched") return { status: "matched", archivedAt: null };
   throw new BadRequestException("Unsupported roommate profile status");
 }
 

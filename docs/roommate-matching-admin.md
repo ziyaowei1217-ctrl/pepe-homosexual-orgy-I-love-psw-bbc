@@ -78,6 +78,10 @@ POST /api/v1/admin/roommates/:id/archive
 
 Archive sets `status` to `hidden` and stamps `archivedAt`. The profile is removed from active discovery, but historical actions and deal-room records stay intact.
 
+An owner cannot clear a moderator archive by editing preferences, changing visibility or creating another profile. To restore a reviewed card, an administrator uses `PATCH /api/v1/admin/roommates/:id` with `{"status":"active"}`; this clears the archive marker. Administrator writes require a recent step-up verification.
+
+Owner self-hide and matched visibility use the non-active `status` with `archivedAt` left empty, so owners can restore their own cards through the existing owner update endpoint. Both states remain excluded from public discovery and new matching actions. Older releases also stamped `archivedAt` for owner self-hide, making those rows indistinguishable from moderator archives. After this repair, any such legacy row stays hidden and rejects owner edits until an administrator reviews and restores it. Do not bulk-clear archive markers during rollout.
+
 If `:id` is one of the built-in seed profiles, the API materializes that seed into the database first, then applies the edit. That keeps the demo convenient while making future edits persistent.
 
 ## Read managed profiles
