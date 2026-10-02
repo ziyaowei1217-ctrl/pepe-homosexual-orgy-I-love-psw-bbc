@@ -19,6 +19,25 @@ describe("opt-in website demo boundaries", () => {
     expect(canBrowseWebsiteDemo(path)).toBe(false);
   });
 
+  it.each(["/brand/psw-logo.svg", "/brand/psw-mark.svg", "/brand/psw-logo-white.svg", "/brand/psw-logo.png"])("serves the explicit public artwork %s without opening writes", async (path) => {
+    vi.stubEnv("NEXT_PUBLIC_WEBSITE_DEMO", "true");
+    vi.stubEnv("NODE_ENV", "production");
+    for (const method of ["GET", "HEAD"]) {
+      const result = middleware(new NextRequest(`https://demo.example${path}`, { method }));
+      expect(result.headers.get("x-middleware-next")).toBe("1");
+      expect(result.headers.get("x-middleware-rewrite")).toBeNull();
+      expect(result.headers.get("Content-Security-Policy")).toContain("connect-src 'self';");
+      expect(result.headers.get("X-Robots-Tag")).toBe("noindex, nofollow, noarchive");
+    }
+    const denied = middleware(new NextRequest(`https://demo.example${path}`, { method: "POST" }));
+    expect(denied.status).toBe(403);
+    expect(await denied.json()).toEqual({ code: "WEBSITE_DEMO_READ_ONLY" });
+  });
+
+  it.each(["/brand/README.md", "/brand/.env", "/brand/psw-logo.svg.js", "/brand/psw-logo.svg/private", "/brand/%2e%2e/.env"])("keeps non-artwork branding paths isolated: %s", (path) => {
+    expect(canBrowseWebsiteDemo(path)).toBe(false);
+  });
+
   it.each(["production", "development"])("rewrites private pages without collecting their query in %s", (environment) => {
     vi.stubEnv("NEXT_PUBLIC_WEBSITE_DEMO", "true");
     vi.stubEnv("NODE_ENV", environment);

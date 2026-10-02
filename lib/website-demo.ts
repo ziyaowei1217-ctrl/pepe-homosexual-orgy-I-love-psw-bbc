@@ -18,6 +18,8 @@ export function websiteDemoUnavailableError() {
 
 export function canBrowseWebsiteDemo(pathname: string) {
   try { pathname = decodeURIComponent(pathname); } catch { return false; }
+  // Public, inert identity exports only. Other files and directories stay isolated.
+  if (["/brand/psw-logo.svg", "/brand/psw-mark.svg", "/brand/psw-logo-white.svg", "/brand/psw-logo.png"].includes(pathname)) return true;
   if (["/", "/search", "/saved", "/roommates", "/demo", "/api/health"].includes(pathname)) return true;
   if (/^\/listing\/(?!mine$)[^/]+$/.test(pathname)) return true;
   return /^\/roommates\/(?!likes$|teams$)[^/]+$/.test(pathname);

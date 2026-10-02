@@ -54,7 +54,7 @@ storage keys, and historical review evidence retain their established identifier
 The security reviewer compared the complete presentation diff with baseline `f1e7dd6`,
 including behavior-bearing JSX attributes. API, shared logic, session keys, middleware,
 Next configuration, dependency manifests, lockfile, and deployment configuration remained
-unchanged. The independent focused review passed 140 existing tests across 13 files.
+unchanged in the presentation pass. The independent focused review passed 140 existing tests across 13 files.
 The full web suite passed 787 existing tests in 116 files; lint, types, and an optimized
 demonstration build passed. The browser smoke gate passed 63 route checks and six private
 API-image optimizer denials across Chromium, Firefox, and WebKit.
@@ -71,3 +71,11 @@ contrast ratios of 9.81, 8.28, 5.76, and 5.38 to one respectively. These values 
 those color pairs, not a blanket accessibility certification. No external fonts, runtime
 dependency, authentication flow, or marketplace capability was added. Hosting acceptance
 and exact-commit CI evidence are recorded separately with the deployment handoff.
+
+The independent hosting review subsequently found that the demo path allowlist rewrote
+the new logo export requests to its explanation page. The only routing exception added
+allows the four exact, trusted SVG/PNG artwork paths above. It does not open the brand
+directory, documents, private paths, APIs, or writes. Boundary regressions cover GET/HEAD
+artwork access, blocked POST requests, and isolation of sibling/traversal-looking paths.
+The independent security review of this exception passed 75 tests in five files and
+30 additional middleware probes for other write methods and encoded/malformed paths.
