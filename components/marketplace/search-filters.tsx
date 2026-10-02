@@ -45,8 +45,8 @@ export function SearchFiltersDialog({ initial, initialSection = "budget", prices
         <section className="border-b border-slate-200 py-7">
           <h3 className="text-lg font-bold">每月预算</h3>
           <p className="mt-1 text-sm text-slate-500">按月租筛选，其他费用请在房源详情中确认。</p>
-          <div className="mt-7 flex h-20 items-end gap-[3px]" aria-hidden="true">{histogram.map((count, index) => <span key={index} className={cn("flex-1 rounded-t-[3px]", index * ceiling / 28 >= draft.priceMin && (!draft.priceMax || index * ceiling / 28 < draft.priceMax) ? "bg-[#0668e1]/75" : "bg-slate-200")} style={{ height: `${Math.max(4, count / Math.max(1, ...histogram) * 100)}%` }} />)}</div>
-          <input type="range" min="0" max={ceiling} step="100" value={draft.priceMax || ceiling} onChange={(event) => update({ priceMax: Number(event.target.value) === ceiling ? 0 : Math.max(100, Number(event.target.value)) })} className="mt-1 w-full accent-[#0668e1]" aria-label="每月最高预算" />
+          <div className="mt-7 flex h-20 items-end gap-[3px]" aria-hidden="true">{histogram.map((count, index) => <span key={index} className={cn("flex-1 rounded-t-[3px]", index * ceiling / 28 >= draft.priceMin && (!draft.priceMax || index * ceiling / 28 < draft.priceMax) ? "bg-[#234B3B]/75" : "bg-slate-200")} style={{ height: `${Math.max(4, count / Math.max(1, ...histogram) * 100)}%` }} />)}</div>
+          <input type="range" min="0" max={ceiling} step="100" value={draft.priceMax || ceiling} onChange={(event) => update({ priceMax: Number(event.target.value) === ceiling ? 0 : Math.max(100, Number(event.target.value)) })} className="mt-1 w-full accent-[#234B3B]" aria-label="每月最高预算" />
           <div className="mt-5 grid grid-cols-[1fr_auto_1fr] items-center gap-4">
             <BudgetField label="最低预算" value={draft.priceMin} placeholder="0" onChange={(priceMin) => update({ priceMin })} />
             <span className="h-px w-4 bg-slate-300" />
@@ -75,7 +75,7 @@ export function SearchFiltersDialog({ initial, initialSection = "budget", prices
       </div>
       <footer className="flex shrink-0 items-center justify-between gap-3 border-t border-slate-200 bg-white px-6 pb-[max(20px,env(safe-area-inset-bottom))] pt-5 sm:px-8">
         <button type="button" onClick={() => update({ ...emptyFilters, moveIn: "", moveOut: "" })} className="rounded-lg py-2 text-sm font-bold underline underline-offset-4">全部重置</button>
-        <button type="button" disabled={Boolean(error)} onClick={() => onApply(draft)} className="rounded-xl bg-[#0668e1] px-6 py-3.5 text-sm font-bold text-white transition-colors hover:bg-blue-700 disabled:opacity-40">查看 {count} 套房源</button>
+        <button type="button" disabled={Boolean(error)} onClick={() => onApply(draft)} className="rounded-xl bg-[#234B3B] px-6 py-3.5 text-sm font-bold text-white transition-colors hover:bg-brand-moss disabled:opacity-40">查看 {count} 套房源</button>
       </footer>
     </section>
   </div>;

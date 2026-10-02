@@ -10,6 +10,13 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
+        brand: {
+          DEFAULT: "#234B3B",
+          moss: "#416F5A",
+          soft: "#EDF4EE",
+          citrus: "#E9F2A9",
+          ink: "#203C30"
+        },
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",

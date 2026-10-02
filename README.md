@@ -1,9 +1,13 @@
-# Sublet Pipeline
+# psw — people spaces wellbeing
 
 Frontend + backend MVP for a high-trust sublet marketplace and co-living matching product.
 
+Product identity, reusable colors, and logo exports are documented in the
+[psw design system](docs/psw-design.md). The [public demonstration](https://sublet-pipeline-demo-zihao.netlify.app)
+uses fictional examples and device-local favorites.
+
 中文交接与体验说明见 [README_先看这里.md](README_先看这里.md)。无需运行服务即可打开
-[当前界面截图预览](output/handoff-preview/index.html)；完整交互以启动后的网页为准。
+[历史界面截图（旧品牌）](output/handoff-preview/index.html)；当前界面以运行后的网页为准。
 
 The September 30 hardening handoff includes the [security review](docs/security-review-2026-09-30.md),
 [validation record](docs/handoff-validation-2026-09-30.md) and [threat model](docs/sublet-pipeline-threat-model.md).

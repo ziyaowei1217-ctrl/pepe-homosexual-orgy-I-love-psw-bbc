@@ -49,7 +49,7 @@ describe("product showcase builder", () => {
 
     const html = readFileSync(join(outputDir, "index.html"), "utf8");
     expect(result).toEqual({ pageCount: 1, panelCount: 1, imageCount: 2 });
-    expect(html).toContain("Sublet Pipeline 产品展示");
+    expect(html).toContain("psw 产品展示");
     expect(html).toContain("data-kind=\"page\"");
     expect(html).toContain("screenshots/filters.png");
     expect(html).toContain("搜索筛选");
