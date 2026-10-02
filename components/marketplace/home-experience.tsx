@@ -12,17 +12,17 @@ export function HomeExperience({ listings }: { listings: PreviewListing[] }) {
   return (
     <main className="bg-white text-[#203C30]">
       <section className="border-b border-[#234B3B]/15 bg-[#F5F8F5]">
-        <div className="mx-auto max-w-[1440px] px-4 pb-7 pt-8 sm:px-6 sm:pt-10 lg:px-10 lg:pb-8 lg:pt-12">
-          <div className="grid items-center gap-10 lg:grid-cols-[1.08fr_0.92fr] lg:gap-12 xl:gap-20">
-            <div className="min-w-0 py-1 lg:py-5">
-              <h1 className="text-[42px] font-semibold leading-[1.18] tracking-[-0.035em] sm:text-[56px] xl:text-[76px]">
+        <div className="mx-auto max-w-[1440px] px-4 pb-7 pt-7 sm:px-6 sm:pt-9 lg:px-10 lg:pb-8 lg:pt-10">
+          <div className="grid items-center gap-8 lg:grid-cols-[1.08fr_0.92fr] lg:gap-10 xl:gap-16">
+            <div className="min-w-0 py-1 lg:py-2">
+              <h1 className="text-[38px] font-semibold leading-[1.2] tracking-[-0.025em] sm:text-[50px] xl:text-[64px]">
                 留学生转租，<br />接上下一站。
               </h1>
-              <p className="mt-6 max-w-lg text-sm leading-7 text-[#416F5A] sm:text-base">回国过暑假、异地实习、毕业搬家，住处和租期都要接得上。</p>
+              <p className="mt-4 max-w-lg text-sm leading-7 text-[#416F5A] sm:text-base">回国过暑假、异地实习、毕业搬家，住处和租期都要接得上。</p>
               <p className="mt-1 max-w-lg text-sm leading-7 text-[#416F5A]">按学校周边、月租和可租日期，找到适合自己的转租。</p>
 
-              <form action="/search" method="get" aria-label="搜索房源" className="relative z-10 mt-7 rounded-[24px] border border-[#234B3B]/20 bg-white p-2 shadow-[0_12px_36px_rgba(35,75,59,0.05)]">
-                <div className="flex items-center gap-3 rounded-[18px] px-3 py-3 focus-within:bg-[#F5F8F5]">
+              <form action="/search" method="get" aria-label="搜索房源" className="relative z-10 mt-6 rounded-[20px] border border-[#234B3B]/20 bg-white p-2 shadow-[0_12px_36px_rgba(35,75,59,0.05)]">
+                <div className="flex items-center gap-3 rounded-[14px] px-3 py-3 focus-within:bg-[#F5F8F5]">
                   <MapPin className="size-5 shrink-0 text-[#416F5A]" aria-hidden="true" />
                   <div className="min-w-0 flex-1">
                     <span className="mb-1 block text-xs font-medium text-[#416F5A]">想住在哪里？</span>
@@ -39,7 +39,7 @@ export function HomeExperience({ listings }: { listings: PreviewListing[] }) {
                     <span className="mb-1 flex items-center gap-1.5 text-xs font-medium text-[#416F5A]"><CalendarDays className="size-3.5" aria-hidden="true" />退租</span>
                     <input type="date" name="moveOut" aria-label="退租日期" className="min-h-11 w-full min-w-0 bg-transparent text-base font-medium text-[#203C30] outline-none sm:text-sm" />
                   </label>
-                  <button type="submit" className="mt-1 flex min-h-12 w-full items-center justify-center gap-2 rounded-[18px] bg-[#234B3B] px-5 py-3.5 text-sm font-semibold text-white transition-colors hover:bg-[#416F5A] sm:mt-0 sm:w-auto">
+                  <button type="submit" className="mt-1 flex min-h-12 w-full items-center justify-center gap-2 rounded-[14px] bg-[#234B3B] px-5 py-3.5 text-sm font-semibold text-white transition-colors hover:bg-[#416F5A] sm:mt-0 sm:w-auto">
                     <Search className="size-4" aria-hidden="true" />搜索转租
                   </button>
                 </div>
@@ -48,17 +48,17 @@ export function HomeExperience({ listings }: { listings: PreviewListing[] }) {
             </div>
 
             {featured ? (
-              <Link href={`/listing/${encodeURIComponent(featured.id)}`} className="group hidden overflow-hidden rounded-[28px] rounded-tl-[140px] bg-white lg:block">
-                <div className="relative h-[390px] bg-[#234B3B]/10 xl:h-[440px]">
+              <Link href={`/listing/${encodeURIComponent(featured.id)}`} className="group hidden overflow-hidden rounded-[20px] border border-[#234B3B]/15 bg-white lg:block">
+                <div className="relative h-[280px] bg-[#234B3B]/10 xl:h-[300px]">
                   <Image src={featured.image} alt={featured.title} fill priority sizes="(min-width: 1440px) 580px, 43vw" className="object-cover" />
-                  <span className="absolute bottom-5 left-6 rounded-full bg-white px-4 py-2 text-xs font-medium text-[#234B3B]">了解转租房源</span>
+                  <span className="absolute bottom-4 left-5 rounded-full bg-white px-4 py-2 text-xs font-medium text-[#234B3B]">了解转租房源</span>
                 </div>
-                <div className="flex items-center justify-between gap-4 px-6 py-6 xl:px-7">
+                <div className="flex items-center justify-between gap-4 px-5 py-5 xl:px-6">
                   <div className="min-w-0">
                     <p className="flex items-center gap-1.5 text-xs text-[#416F5A]"><MapPin className="size-3.5 shrink-0" aria-hidden="true" /><span className="truncate">{featured.area}</span></p>
                     <h2 className="mt-2 truncate text-lg font-semibold group-hover:text-[#416F5A]">{featured.title}</h2>
-                    <p className="mt-2 text-lg font-semibold">${featured.price.toLocaleString()}<span className="ml-1 text-xs font-normal text-[#416F5A]">/ 月</span></p>
-                    <p className="mt-2 text-xs leading-6 text-[#416F5A]">{featured.availableFrom && featured.availableTo ? `可租日期 ${featured.availableFrom} – ${featured.availableTo}` : "租期待确认"}</p>
+                    <p className="mt-3 text-2xl font-semibold tracking-tight">${featured.price.toLocaleString()}<span className="ml-1 text-xs font-normal text-[#416F5A]">/ 月</span></p>
+                    <p className="mt-3 border-t border-[#234B3B]/10 pt-3 text-xs leading-6 text-[#416F5A]">{featured.availableFrom && featured.availableTo ? `可租日期 ${featured.availableFrom} – ${featured.availableTo}` : "租期待确认"}</p>
                   </div>
                   <span className="grid size-11 shrink-0 place-items-center rounded-full bg-[#E9F2A9] text-[#234B3B]"><ArrowRight className="size-5" aria-hidden="true" /></span>
                 </div>
@@ -108,7 +108,7 @@ export function HomeExperience({ listings }: { listings: PreviewListing[] }) {
               <p className="mt-4 text-xl font-semibold tracking-tight">${listing.price.toLocaleString()}<span className="ml-1 text-xs font-normal text-[#416F5A]">/ 月</span></p>
               <h3 className="mt-1.5 truncate text-sm font-semibold group-hover:text-[#416F5A]">{listing.title}</h3>
               <p className="mt-1 truncate text-xs text-[#416F5A]">{listing.area}</p>
-              <p className="mt-2 text-xs leading-6 text-[#416F5A]">{listing.availableFrom && listing.availableTo ? `可租 ${listing.availableFrom} – ${listing.availableTo}` : "租期待确认"}</p>
+              <p className="mt-3 border-t border-[#234B3B]/10 pt-2 text-xs leading-6 text-[#416F5A]">{listing.availableFrom && listing.availableTo ? `可租 ${listing.availableFrom} – ${listing.availableTo}` : "租期待确认"}</p>
               <p className="mt-2 text-xs leading-6 text-[#416F5A]">{listing.beds} 卧 · {listing.baths} 卫 · {listing.tags.slice(0, 2).join(" · ")}</p>
             </Link>
           ))}
@@ -118,7 +118,7 @@ export function HomeExperience({ listings }: { listings: PreviewListing[] }) {
       </section>
 
       <section className="mx-auto max-w-[1440px] px-4 pb-14 pt-5 sm:px-6 lg:px-10">
-        <div className="grid gap-7 rounded-[28px] bg-[#F5F8F5] p-6 sm:p-8 lg:grid-cols-[0.9fr_1.1fr] lg:items-center lg:gap-12 lg:p-10">
+        <div className="grid gap-7 rounded-[20px] bg-[#F5F8F5] p-6 sm:p-8 lg:grid-cols-[0.9fr_1.1fr] lg:items-center lg:gap-12 lg:p-10">
           <div>
             <h2 className="text-2xl font-semibold leading-snug tracking-tight">先核对租期，再沟通转租。</h2>
             <p className="mt-3 text-sm leading-7 text-[#416F5A]">接租前，和发布者确认原租约、转租许可、费用与交接安排。</p>

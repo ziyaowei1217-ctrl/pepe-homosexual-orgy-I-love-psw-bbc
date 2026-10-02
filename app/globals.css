@@ -108,7 +108,7 @@
 
   .app-scrollbar {
     scrollbar-width: thin;
-    scrollbar-color: rgba(65, 116, 141, 0.35) transparent;
+    scrollbar-color: rgba(65, 111, 90, 0.35) transparent;
   }
 
   .app-scrollbar::-webkit-scrollbar {
@@ -117,7 +117,7 @@
   }
 
   .app-scrollbar::-webkit-scrollbar-thumb {
-    background: rgba(65, 116, 141, 0.35);
+    background: rgba(65, 111, 90, 0.35);
     border-radius: 999px;
   }
 
@@ -135,7 +135,7 @@
 
 @layer components {
   .search-pill {
-    @apply inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-full border border-slate-200 bg-white px-3.5 py-2.5 text-xs font-semibold text-slate-700 transition-colors hover:border-slate-500;
+    @apply inline-flex min-h-11 shrink-0 items-center gap-2 whitespace-nowrap rounded-full border border-slate-200 bg-white px-3.5 py-2.5 text-xs font-semibold text-slate-700 transition-colors hover:border-slate-500;
   }
   .search-pill-active {
     @apply border-brand-moss/30 bg-brand-soft text-brand;

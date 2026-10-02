@@ -1,13 +1,13 @@
 // @vitest-environment jsdom
 
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { SearchExperience } from "../components/marketplace/search-experience";
 import { SavedListingsProvider } from "../components/marketplace/saved-listings-provider";
 import { createPreviewListings } from "../lib/preview-data";
 
-afterEach(() => { cleanup(); window.history.replaceState(null, "", "/"); });
+afterEach(() => { cleanup(); window.history.replaceState(null, "", "/"); vi.unstubAllGlobals(); });
 
 const fixtures = createPreviewListings().slice(0, 3).map((item, index) => ({
   ...item, title: ["经济单间", "带独卫公寓", "宽敞两居"][index],
@@ -78,6 +78,23 @@ describe("search refinement journey", () => {
     expect((screen.getByRole("combobox", { name: "地点或学校" }) as HTMLInputElement).value).toBe("Westwood");
     expect((screen.getByRole("combobox", { name: "结果排序" }) as HTMLSelectElement).value).toBe("price-low");
     expect(screen.getByRole("button", { name: "移除 Wi-Fi" })).toBeTruthy();
+  });
+
+  it.each([
+    { smallScreen: true, view: "", selected: "列表" },
+    { smallScreen: false, view: "", selected: "分屏" },
+    { smallScreen: true, view: "list", selected: "列表" },
+    { smallScreen: true, view: "map", selected: "地图" }
+  ])("restores a usable selected view on history navigation ($smallScreen, $view)", ({ smallScreen, view, selected }) => {
+    vi.stubGlobal("matchMedia", vi.fn(() => ({ matches: smallScreen })));
+    setup();
+    fireEvent.click(screen.getByRole("button", { name: "地图" }));
+    expect(screen.getByRole("button", { name: "地图" }).getAttribute("aria-pressed")).toBe("true");
+    // The URL without a view uses split on desktop, but split is unavailable on phones.
+    window.history.replaceState(null, "", `/search?q=Westwood${view ? `&view=${view}` : ""}`);
+    fireEvent.popState(window);
+    expect(screen.getByRole("button", { name: selected }).getAttribute("aria-pressed")).toBe("true");
+    expect((screen.getByRole("combobox", { name: "地点或学校" }) as HTMLInputElement).value).toBe("Westwood");
   });
 
   it("restores a search URL when returning from a detail page with cached server props", () => {

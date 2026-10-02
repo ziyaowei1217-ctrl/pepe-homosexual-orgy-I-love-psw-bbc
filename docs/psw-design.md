@@ -22,11 +22,27 @@ fallbacks stay local. Body text is readable, titles have a clear scale, and the 
 wordmark uses its own drawn letterforms rather than a font download.
 
 The home page pairs a literal international-student sublease headline and left-aligned
-search with an asymmetric architectural photograph. Monthly rent and available dates
+search with a compact photograph of an existing listing. Monthly rent and available dates
 lead the listing cards; school commuting and lease-condition confirmation shape the copy.
 The search remains the main action; listing data, navigation destinations, and query
-behavior remain unchanged. The photo is the memorable element, with quieter
-surfaces around it. The layout collapses to a single column on small screens.
+behavior remain unchanged. The search and lease information lead the page; the photo
+supports them. The layout collapses to a single column on small screens.
+
+## October 2 visual calibration plan
+
+Keep the forest, moss, mist and citrus tokens and the local font stack. Reduce the
+home headline to 38/50/64 px and the featured image to 280/300 px. Use 20 px content
+corners and restrained borders instead of the large asymmetric hero curve and heavy
+shadows. Saved, listing detail and roommate headings use the same semibold hierarchy.
+Selection and recommendation surfaces use brand-soft; red errors and amber warnings
+keep their meaning. Increase existing search, save, map and date controls to at least
+44 px without changing their actions. Keep the 72 px sticky-header offsets, navigation,
+query names, local storage, validation and demonstration isolation.
+
+Critique: the previous scale made the photograph dominate a practical student-sublease
+task. This pass should make search easier to reach and lease information easier to scan,
+while retaining the existing imagery and student-oriented copy. Review actual phone and
+desktop rendering, keyboard paths, overflow, dialog focus and reduced motion before release.
 
 ```text
 Desktop: [psw / navigation / account]

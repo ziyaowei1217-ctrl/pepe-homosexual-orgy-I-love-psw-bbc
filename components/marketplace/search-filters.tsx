@@ -38,7 +38,7 @@ export function SearchFiltersDialog({ initial, initialSection = "budget", prices
   return <div className="marketplace-modal-backdrop fixed inset-0 z-[80] flex items-end justify-center bg-slate-950/35 p-0 backdrop-blur-sm sm:items-center sm:p-8" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
     <section ref={dialog} role="dialog" aria-modal="true" aria-labelledby="filter-title" className="marketplace-modal-panel search-filter-dialog flex max-h-[94dvh] w-full flex-col overflow-hidden rounded-t-[28px] bg-white shadow-2xl sm:max-h-[88dvh] sm:max-w-[640px] sm:rounded-[28px]">
       <header className="relative flex shrink-0 items-center justify-center border-b border-slate-200 px-6 py-5">
-        <button type="button" onClick={onClose} aria-label="关闭筛选" className="absolute left-5 grid size-9 place-items-center rounded-full hover:bg-slate-100"><X className="size-5" /></button>
+        <button type="button" onClick={onClose} aria-label="关闭筛选" className="absolute left-5 grid size-11 place-items-center rounded-full hover:bg-slate-100"><X className="size-5" /></button>
         <h2 id="filter-title" className="text-base font-bold">筛选房源</h2>
       </header>
       <div ref={content} className="relative overflow-y-auto px-6 sm:px-8">
@@ -55,20 +55,20 @@ export function SearchFiltersDialog({ initial, initialSection = "budget", prices
         </section>
         <fieldset ref={bedrooms} tabIndex={-1} className="border-b border-slate-200 py-7 outline-none">
           <legend className="float-left w-full text-lg font-bold">卧室数量</legend>
-          <div className="clear-both flex gap-2 pt-4">{[0, 1, 2, 3, 4].map((beds) => <button key={beds} type="button" onClick={() => update({ beds })} aria-pressed={draft.beds === beds} className={cn("min-w-0 flex-1 rounded-full border px-2 py-3 text-sm font-semibold", draft.beds === beds ? "border-slate-950 bg-slate-950 text-white" : "border-slate-200 hover:border-slate-500")}>{beds ? `${beds}+` : "不限"}</button>)}</div>
+          <div className="clear-both flex gap-2 pt-4">{[0, 1, 2, 3, 4].map((beds) => <button key={beds} type="button" onClick={() => update({ beds })} aria-pressed={draft.beds === beds} className={cn("min-w-0 flex-1 rounded-full border px-2 py-3 text-sm font-semibold", draft.beds === beds ? "border-brand bg-brand text-white" : "border-slate-200 hover:border-slate-500")}>{beds ? `${beds}+` : "不限"}</button>)}</div>
         </fieldset>
         <fieldset className="border-b border-slate-200 py-7">
           <legend className="float-left w-full text-lg font-bold">让生活更方便</legend>
           <p className="clear-both pt-1 text-sm text-slate-500">可多选，房源需同时满足所选条件。</p>
-          <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">{searchAmenities.map((amenity) => <button key={amenity} type="button" aria-pressed={draft.amenities.includes(amenity)} onClick={() => update({ amenities: draft.amenities.includes(amenity) ? draft.amenities.filter((value) => value !== amenity) : [...draft.amenities, amenity] })} className={cn("flex items-center justify-between rounded-2xl border px-4 py-4 text-sm font-semibold", draft.amenities.includes(amenity) ? "border-slate-950 bg-slate-50 ring-1 ring-slate-950" : "border-slate-200 hover:border-slate-400")}>
+          <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">{searchAmenities.map((amenity) => <button key={amenity} type="button" aria-pressed={draft.amenities.includes(amenity)} onClick={() => update({ amenities: draft.amenities.includes(amenity) ? draft.amenities.filter((value) => value !== amenity) : [...draft.amenities, amenity] })} className={cn("flex items-center justify-between rounded-2xl border px-4 py-4 text-sm font-semibold", draft.amenities.includes(amenity) ? "border-brand bg-brand-soft ring-1 ring-brand" : "border-slate-200 hover:border-slate-400")}>
             {amenity}<Check className={cn("size-4", !draft.amenities.includes(amenity) && "invisible")} />
           </button>)}</div>
         </fieldset>
         <section ref={dates} tabIndex={-1} aria-labelledby="filter-dates-title" className="py-7 outline-none">
           <div className="flex items-center justify-between"><h3 id="filter-dates-title" className="text-lg font-bold">入住与退租</h3><button type="button" onClick={() => update({ moveIn: "", moveOut: "" })} className="text-xs font-semibold underline">日期灵活</button></div>
           <div className="mt-4 grid grid-cols-2 gap-3">
-            <label className="rounded-2xl border border-slate-200 p-3 text-xs text-slate-500">入住日期<input type="date" aria-label="筛选入住日期" value={draft.moveIn} onChange={(event) => update({ moveIn: event.target.value })} className="mt-2 block w-full min-w-0 bg-transparent text-sm font-semibold text-slate-950" /></label>
-            <label className="rounded-2xl border border-slate-200 p-3 text-xs text-slate-500">退租日期<input type="date" aria-label="筛选退租日期" value={draft.moveOut} min={draft.moveIn} onChange={(event) => update({ moveOut: event.target.value })} className="mt-2 block w-full min-w-0 bg-transparent text-sm font-semibold text-slate-950" /></label>
+            <label className="rounded-2xl border border-slate-200 p-3 text-xs text-slate-500">入住日期<input type="date" aria-label="筛选入住日期" value={draft.moveIn} onChange={(event) => update({ moveIn: event.target.value })} className="mt-2 block w-full min-w-0 min-h-11 bg-transparent text-base font-semibold text-slate-950 sm:text-sm" /></label>
+            <label className="rounded-2xl border border-slate-200 p-3 text-xs text-slate-500">退租日期<input type="date" aria-label="筛选退租日期" value={draft.moveOut} min={draft.moveIn} onChange={(event) => update({ moveOut: event.target.value })} className="mt-2 block w-full min-w-0 min-h-11 bg-transparent text-base font-semibold text-slate-950 sm:text-sm" /></label>
           </div>
           {error ? <p role="alert" className="mt-3 text-sm text-red-600">{error}</p> : null}
         </section>
