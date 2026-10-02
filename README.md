@@ -1,6 +1,6 @@
 # psw — people spaces wellbeing
 
-Frontend + backend MVP for a high-trust sublet marketplace and co-living matching product.
+Frontend + backend MVP for an international-student sublease marketplace and roommate matching product.
 
 Product identity, reusable colors, and logo exports are documented in the
 [psw design system](docs/psw-design.md). The [public demonstration](https://sublet-pipeline-demo-zihao.netlify.app)

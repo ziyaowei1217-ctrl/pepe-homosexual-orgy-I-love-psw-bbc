@@ -17,10 +17,10 @@ export const viewport: Viewport = {
 export const metadata: Metadata = {
   ...(isWebsiteDemo() ? { robots: { index: false, follow: false } } : {}),
   title: {
-    default: "psw｜全美学生与职场租房及室友匹配",
+    default: "psw｜留学生转租、接租与室友",
     template: "%s｜psw"
   },
-  description: "搜索全美主要城市、学校或大企业附近的房源，并在地图上同步比较租期、通勤与信任信息。"
+  description: "面向留学生的转租与接租平台，按学校周边、月租和可租日期查找房源，衔接回国、异地实习与毕业换房的居住安排。"
 };
 
 export default function RootLayout({

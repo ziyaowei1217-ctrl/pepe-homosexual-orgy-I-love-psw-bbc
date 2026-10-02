@@ -141,7 +141,7 @@ export function ListingDetailExperience({ listing, initialStay }: { listing: Pre
             </section>
 
             <section className="border-b border-slate-200 py-8">
-              <h2 id="listing-highlights" className="scroll-mt-40 text-2xl font-black tracking-[-0.035em]">为什么值得看看</h2>
+              <h2 id="listing-highlights" className="scroll-mt-40 text-2xl font-black tracking-[-0.035em]">租期与转租条件</h2>
               <div className="mt-6 grid gap-4 sm:grid-cols-2">
                 {[
                   [TrainFront, "通勤轻松", listing.commute],
@@ -156,8 +156,8 @@ export function ListingDetailExperience({ listing, initialStay }: { listing: Pre
             </section>
 
             <section className="border-b border-slate-200 py-8">
-              <h2 className="text-2xl font-black tracking-[-0.035em]">关于这个家</h2>
-              <p className="mt-5 max-w-3xl text-base leading-8 text-slate-600">房源的租期、价格、设施、交通与信任状态已汇总在本页。申请前建议通过站内消息确认细节，并按需预约看房。</p>
+              <h2 className="text-2xl font-black tracking-[-0.035em]">转租信息</h2>
+              <p className="mt-5 max-w-3xl text-base leading-8 text-slate-600">先核对月租、可租日期和学校或实习通勤。申请前，通过站内消息向发布者确认原租约、转租许可、费用和交接安排，并按需预约看房。</p>
             </section>
 
             <section className="border-b border-slate-200 py-8">

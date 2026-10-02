@@ -15,7 +15,7 @@ import { cn } from "@/lib/utils";
 export type PublicNavKey = "discover" | "roommates" | "saved" | "inbox" | "account";
 
 const publicNav = [
-  { key: "discover", label: "找房", href: "/search", icon: Search },
+  { key: "discover", label: "转租", href: "/search", icon: Search },
   { key: "roommates", label: "室友", href: "/roommates", icon: UsersRound },
   { key: "saved", label: "收藏", href: "/saved", icon: Heart },
   { key: "inbox", label: "消息", href: "/inbox", icon: Mail },
@@ -36,7 +36,7 @@ export function PublicShell({ active, mobileNavigation = "bottom", children }: {
         <div className="mx-auto flex h-[72px] max-w-[1440px] items-center gap-3 px-4 sm:gap-5 sm:px-6 lg:px-10">
           <Link href="/" className="flex min-h-11 shrink-0 flex-col justify-center" aria-label="psw 首页">
             <PswLogo className="h-8 w-[92px] sm:h-9 sm:w-auto" />
-            <span className="hidden text-[10px] leading-3 text-[#416F5A] lg:block">people spaces wellbeing</span>
+            <span className="hidden text-[10px] leading-3 text-[#416F5A] lg:block">留学生转租与接租</span>
           </Link>
 
           <nav className="hidden flex-1 items-center justify-center gap-1 md:flex" aria-label="主导航">
@@ -57,7 +57,7 @@ export function PublicShell({ active, mobileNavigation = "bottom", children }: {
 
           <div className="ml-auto flex items-center gap-2">
             {mobileNavigation === "header" ? <nav aria-label="手机快捷导航" className="flex items-center gap-1 md:hidden">
-              <Link href="/search" aria-label="找房" className="flex min-h-11 items-center gap-1 rounded-full px-1.5 text-[13px] font-medium text-[#234B3B] hover:bg-[#F5F8F5] sm:gap-1.5 sm:px-2.5 sm:text-sm"><Search className="size-3.5 sm:size-4" aria-hidden="true" />找房</Link>
+              <Link href="/search" aria-label="转租" className="flex min-h-11 items-center gap-1 rounded-full px-1.5 text-[13px] font-medium text-[#234B3B] hover:bg-[#F5F8F5] sm:gap-1.5 sm:px-2.5 sm:text-sm"><Search className="size-3.5 sm:size-4" aria-hidden="true" />转租</Link>
               <Link href="/saved" aria-label="收藏房源" className="flex min-h-11 items-center gap-1 rounded-full px-1.5 text-[13px] font-medium text-[#234B3B] hover:bg-[#F5F8F5] sm:gap-1.5 sm:px-2.5 sm:text-sm"><Heart className="size-3.5 sm:size-4" aria-hidden="true" />收藏</Link>
             </nav> : null}
             <Link

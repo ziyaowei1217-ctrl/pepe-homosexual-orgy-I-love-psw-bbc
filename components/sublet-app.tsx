@@ -500,7 +500,7 @@ const listings = previewListings;
 const roommates = previewDataEnabled ? createRoommates() : [];
 
 const navItems: Array<{ label: string; section: AppSection }> = [
-  { label: "找房", section: "Discover" },
+  { label: "转租", section: "Discover" },
   { label: "找室友", section: "Roommates" },
   { label: "消息", section: "Messages" },
   { label: "看房", section: "Trips" },
@@ -3035,7 +3035,7 @@ function StandaloneAuthScreen({
         <div className="flex items-center gap-3">
           <div>
             <PswLogo className="h-9 w-auto max-w-full" />
-            <div className="mt-1 text-xs font-bold text-[#416F5A]">可信赖的短租与室友平台</div>
+            <div className="mt-1 text-xs font-bold text-[#416F5A]">留学生转租与室友平台</div>
           </div>
         </div>
         <Button type="button" variant="ghost" size="sm" onClick={onClose}>
@@ -3121,7 +3121,7 @@ function AppHeader({
         <div className="flex min-w-0 items-center gap-3 md:col-span-2 xl:col-span-3">
           <div className="min-w-0 leading-tight">
             <PswLogo className="h-9 w-auto max-w-full" />
-            <div className="mt-1 hidden text-xs font-bold text-[#416F5A] xl:block">可信赖的短租与室友平台</div>
+            <div className="mt-1 hidden text-xs font-bold text-[#416F5A] xl:block">留学生转租与室友平台</div>
           </div>
         </div>
 
@@ -4611,9 +4611,9 @@ function SearchHero({
       <Card className="rounded-[18px] border-border bg-card shadow-panel">
         <CardContent className="grid grid-cols-4 gap-4 p-4 md:grid-cols-8 md:gap-5 md:p-5 xl:grid-cols-12 xl:items-end xl:gap-6 xl:p-6">
           <div className="col-span-4 min-w-0 md:col-span-8 xl:col-span-3">
-            <span className="editorial-kicker">01 / 短租</span>
+            <span className="editorial-kicker">01 / 转租</span>
             <h2 className="mt-2 text-2xl font-black leading-tight tracking-[-0.035em] text-foreground">
-              查找适合你的短租
+              查找适合你的转租
             </h2>
             {previewDataEnabled ? <Badge className="mt-2" variant="warning">开发预览数据</Badge> : null}
           </div>
@@ -4627,7 +4627,7 @@ function SearchHero({
                 onChange={(event) =>
                   onFiltersChange({ ...filters, query: event.target.value, page: 1 })
                 }
-                placeholder="学校、公司、街区"
+                placeholder="学校、城市或街区"
               />
             </div>
           </label>

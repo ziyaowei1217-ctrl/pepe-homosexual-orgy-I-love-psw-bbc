@@ -1,7 +1,8 @@
 # psw — people spaces wellbeing
 
-The product connects a place to live with the people and everyday routines that make it
-comfortable. The identity uses a lowercase wordmark and three connected, doorway-like
+The product focuses on subleasing for international students: matching a place and its
+available dates to school, a trip home, an internship, or a move after graduation.
+The identity uses a lowercase wordmark and three connected, doorway-like
 figures: people, spaces, and wellbeing have equal weight. It must stay legible at small
 sizes, in a single color, and without scripts, external fonts, or a graphics library.
 
@@ -20,9 +21,11 @@ The existing system sans-serif stack gains Avenir Next where installed; platform
 fallbacks stay local. Body text is readable, titles have a clear scale, and the vector
 wordmark uses its own drawn letterforms rather than a font download.
 
-The home page pairs a left-aligned search with an asymmetric architectural photograph.
-The search remains the main action; listing information and navigation retain their
-existing labels and destinations. The photo is the memorable element, with quieter
+The home page pairs a literal international-student sublease headline and left-aligned
+search with an asymmetric architectural photograph. Monthly rent and available dates
+lead the listing cards; school commuting and lease-condition confirmation shape the copy.
+The search remains the main action; listing data, navigation destinations, and query
+behavior remain unchanged. The photo is the memorable element, with quieter
 surfaces around it. The layout collapses to a single column on small screens.
 
 ```text
