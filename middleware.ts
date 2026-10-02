@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { buildContentSecurityPolicy, isHttpLoopbackRequest } from "./lib/content-security-policy";
 import { canBrowseWebsiteDemo, isWebsiteDemo } from "./lib/website-demo";
+import { isCanonicalWebsiteStaticPath } from "./lib/website-static-path";
 
 export function middleware(request: NextRequest) {
   const demo = isWebsiteDemo();
@@ -14,6 +15,11 @@ export function middleware(request: NextRequest) {
     if (demo && request.nextUrl.pathname !== "/api/health") {
       return NextResponse.json({ code: "WEBSITE_DEMO_READ_ONLY" }, { status: 403, headers: { ...demoHeaders, "Cache-Control": "no-store" } });
     }
+    return NextResponse.next({ headers: demoHeaders });
+  }
+  // Check methods and demo API isolation first. Broad matcher exclusions let a
+  // host-normalized encoded asset path reach a private page without this guard.
+  if (isCanonicalWebsiteStaticPath(request.nextUrl.pathname)) {
     return NextResponse.next({ headers: demoHeaders });
   }
   const unavailable = demo && !canBrowseWebsiteDemo(request.nextUrl.pathname);
@@ -50,5 +56,5 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|icon.svg|apple-icon.png).*)"]
+  matcher: ["/(.*)"]
 };

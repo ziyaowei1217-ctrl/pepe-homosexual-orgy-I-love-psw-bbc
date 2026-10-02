@@ -33,6 +33,23 @@ reviews and restores them; do not bulk-clear markers. See `docs/roommate-matchin
 This backend flaw was not reachable through the demo, which refuses account operations
 and upstream transport, but the maintained backend source needed the repair.
 
+### P1 — excluded static prefixes could bypass demo routing after decoding (repaired; hosted acceptance required)
+
+The final hosted review retained actual account-page HTML and its account Flight tree
+from raw `/_next/static/%2e%2e/%2e%2e/account` requests, including an uppercase encoding.
+Those responses lacked CSP and nonces. An encoded icon-prefix health request also reached
+the normalized health handler. This proved that a matcher exclusion based on the raw
+static prefix could be followed by provider route normalization to a protected page.
+Publication was held when this was established. No real user data or provider action
+was demonstrated, but the demo isolation and document-security boundary was bypassed.
+
+`middleware.ts:58` selects every request, and `lib/website-static-path.ts:8`
+validates canonical paths before static or public-page eligibility. Only validated canonical inert asset
+paths skip document nonce processing; write denials happen before that static fast path.
+Regression tests must cover encoded/double-encoded/traversal-looking exclusions, protected
+routes and API methods alongside genuine CSS/JS/image assets. Final raw-path hosted
+acceptance is required because unit requests cannot certify provider normalization.
+
 ### P2 — phone Back navigation could select a hidden view (repaired)
 
 `components/marketplace/search-experience.tsx:41` applies the small-screen split-to-list
@@ -47,7 +64,10 @@ Split and explicit List/Map URLs. Query criteria continue to restore normally.
 through visible enabled dialog controls rather than depending on Safari's button-tab
 preference. It preserves Escape, focus restoration, body locking, editing keys and
 browser shortcuts. Hidden, disabled and inert controls are excluded; positive tab
-order is retained. New regressions failed before the fix. Browser acceptance must
+order is retained. New regressions failed before the fix. Gallery openers also explicitly focus their
+clicked button before opening, so Safari pointer activation restores the trigger on
+Escape instead of the prior body; two pointer regressions failed before that repair.
+Browser acceptance must
 include WebKit at small phone widths as well as Chromium and Firefox.
 
 ### P2 / usability — cramped controls and inconsistent hierarchy (repaired)
@@ -73,13 +93,11 @@ image-CDN errors may have separate headers, so claims about every response are a
 
 ## Further observations and limits
 
-- Two initial encoded-dot-segment probes recorded HTML 200 responses without a demo
-  marker, but that probe did not retain the bodies. Follow-up raw-path requests with
-  preserved bodies, including curl without normalization and concurrent Python probes
-  on both the stable and immutable baseline, returned empty 404s. Canonical account and
-  full RSC responses contained the demo explanation only. No protected body or router
-  exposure was established. The original observation and its missing-body limitation
-  remain in the hosting evidence; this is not claimed as a confirmed or repaired flaw.
+- The initial encoded-path probe did not retain its two surprising 200 response bodies,
+  and 14 exact raw-path repetitions returned empty 404s. It was initially unconfirmed.
+  The later immutable-preview check captured complete account responses and established
+  the defect above. Both observations remain preserved; repeat 404s did not invalidate
+  the later confirmed exposure, and the release was held for repair.
 - Full RSC and prefetch skeletons have different protocol payloads. A classifier that
   expected full demo copy in a skeleton was corrected, with original evidence retained.
   Cancelled speculative RSC requests during navigation are recorded separately from
@@ -108,6 +126,15 @@ the local host has no Docker/PostgreSQL runtime.
 Local corrected checks: 804 web tests in 116 files plus lint, types and optimized
 normal build; 807 API tests passed with 138 explicit opt-in service cases skipped,
 plus API types, build and Prisma validation. The independent archive repair review
-passed nine additional adversarial cases. JSX behavior attributes are unchanged in
-eight presentation components; full programs are unchanged apart from classes in
-seven, with only the documented history repair changing search logic.
+passed nine additional adversarial cases. The initial eight-component presentation comparison verified navigation, form/query
+values and persistent keys. The final gallery opener intentionally adds focus before
+opening; six component programs remain unchanged apart from classes, while gallery
+opener focus and search history normalization are documented behavior repairs.
+
+After the final routing and pointer repairs, the full local normal-profile web check
+passed 914 tests in 117 files, lint, types and the optimized build. The independent
+route repair review passed 169 focused tests and 120 additional raw-path/header/write
+probes. Compiled shared first-load JavaScript remains 102 kB; middleware grows from
+34.6 to 35.1 kB for the canonical-path guard. These are build sizes, not physical-device
+performance certification. Final hosted raw-path checks and exact-head CI remain
+required; earlier passing CI on 885cc223 did not certify the provider path boundary.

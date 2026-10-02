@@ -55,6 +55,18 @@ describe("listing to application journey", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
+  it.each([/^查看图片 2$/, /^查看全部图片/])("restores the clicked gallery opener when pointer activation does not focus it (%s)", (name) => {
+    render(<SavedListingsProvider><ListingDetailExperience listing={listing} /></SavedListingsProvider>);
+    const trigger = screen.getByRole("button", { name });
+    expect(document.activeElement).not.toBe(trigger);
+    // Safari pointer activation does not focus a button automatically.
+    fireEvent.click(trigger);
+    const dialog = screen.getByRole("dialog", { name: "全部图片" });
+    fireEvent.keyDown(dialog, { key: "Escape" });
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+  });
+
   it("prefills requested dates without losing a personal draft or later edits on reload", () => {
     const first = render(<ApplicationFormExperience listing={listing} initialStay={stay} />);
     fireEvent.change(screen.getByPlaceholderText("你的姓名"), { target: { value: "Lin" } });

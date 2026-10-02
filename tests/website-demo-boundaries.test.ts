@@ -26,7 +26,8 @@ describe("opt-in website demo boundaries", () => {
       const result = middleware(new NextRequest(`https://demo.example${path}`, { method }));
       expect(result.headers.get("x-middleware-next")).toBe("1");
       expect(result.headers.get("x-middleware-rewrite")).toBeNull();
-      expect(result.headers.get("Content-Security-Policy")).toContain("connect-src 'self';");
+      expect(result.headers.get("Content-Security-Policy")).toBeNull();
+      expect(result.headers.get("Cache-Control")).toBeNull();
       expect(result.headers.get("X-Robots-Tag")).toBe("noindex, nofollow, noarchive");
     }
     const denied = middleware(new NextRequest(`https://demo.example${path}`, { method: "POST" }));

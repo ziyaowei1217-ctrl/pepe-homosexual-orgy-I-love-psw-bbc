@@ -1,4 +1,5 @@
 import { ProductApiError } from "./product-errors";
+import { canonicalWebsitePath, WEBSITE_PUBLIC_ARTWORK_PATHS } from "./website-static-path";
 
 // A separate, opt-in website build. The reviewed backend and normal production
 // website never enable this flag. It is public configuration, not a credential.
@@ -17,9 +18,11 @@ export function websiteDemoUnavailableError() {
 }
 
 export function canBrowseWebsiteDemo(pathname: string) {
-  try { pathname = decodeURIComponent(pathname); } catch { return false; }
+  const canonical = canonicalWebsitePath(pathname);
+  if (canonical === null) return false;
+  pathname = canonical;
   // Public, inert identity exports only. Other files and directories stay isolated.
-  if (["/brand/psw-logo.svg", "/brand/psw-mark.svg", "/brand/psw-logo-white.svg", "/brand/psw-logo.png"].includes(pathname)) return true;
+  if (WEBSITE_PUBLIC_ARTWORK_PATHS.some(path => path === pathname)) return true;
   if (["/", "/search", "/saved", "/roommates", "/demo", "/api/health"].includes(pathname)) return true;
   if (/^\/listing\/(?!mine$)[^/]+$/.test(pathname)) return true;
   return /^\/roommates\/(?!likes$|teams$)[^/]+$/.test(pathname);
