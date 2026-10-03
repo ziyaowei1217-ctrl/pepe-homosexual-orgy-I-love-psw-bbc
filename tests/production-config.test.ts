@@ -117,7 +117,9 @@ function installFakeDocker(directory: string, output: string, exitCode = 0) {
 }
 
 afterEach(() => {
-  for (const directory of temporaryDirectories.splice(0)) rmSync(directory, { recursive: true, force: true });
+  // Windows can briefly retain a handle to the copied fake Docker executable.
+  // Retry only filesystem cleanup; assertion failures and persistent locks still fail.
+  for (const directory of temporaryDirectories.splice(0)) rmSync(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 });
 
 describe("production configuration gate", () => {
