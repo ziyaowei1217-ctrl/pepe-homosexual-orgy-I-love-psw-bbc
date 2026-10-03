@@ -181,6 +181,9 @@ async function runProfile(profile) {
   const atPath = (pathname) => wait((expected) => location.pathname === expected, pathname);
   const visibleHeading = (text) => page.getByRole("heading", { level: 1 }).filter({ hasText: text }).waitFor({ state: "visible" });
   const search = () => page.locator("#result-heading").waitFor({ state: "visible" });
+  const decodedVisibleImages = () => wait(() => [...document.images].filter((image) => {
+    const box = image.getBoundingClientRect(); return box.width > 0 && box.height > 0 && box.top < innerHeight && box.bottom > 0;
+  }).every((image) => image.complete && image.naturalWidth > 0));
   const nav = (name) => page.getByRole("navigation", { name: profile.width >= 768 ? "主导航" : "手机导航", exact: true }).getByRole("link", { name, exact: true });
   const logo = () => page.getByRole("link", { name: "psw 首页", exact: true });
   async function hit(control, label, { scroll = true, fully = true } = {}) {
@@ -270,7 +273,14 @@ async function runProfile(profile) {
       const saved = profile.width < 768 ? page.getByRole("navigation", { name: "手机快捷导航", exact: true }).getByRole("link", { name: "收藏房源", exact: true }) : nav("收藏");
       await hit(saved, "Saved navigation", { scroll: false }); await atPath("/saved"); await visibleHeading("收藏清单"); await page.getByRole("heading", { level: 3, name: listingTitle, exact: true }).waitFor({ state: "visible" });
     });
-    await step("Reload retains only current-device synthetic Saved", async () => { await page.reload({ waitUntil: "domcontentloaded" }); await visibleHeading("收藏清单"); await page.getByRole("heading", { level: 3, name: listingTitle, exact: true }).waitFor({ state: "visible" }); });
+    await step("Reload retains only current-device synthetic Saved", async () => {
+      // Wait for the current page's visible card and icon/asset work before the
+      // intentional reload, so it tests persistence rather than cancel timing.
+      await decodedVisibleImages(); await page.waitForLoadState("networkidle", { timeout: 12_000 });
+      await page.reload({ waitUntil: "domcontentloaded" }); await visibleHeading("收藏清单");
+      await page.getByRole("heading", { level: 3, name: listingTitle, exact: true }).waitFor({ state: "visible" });
+      await decodedVisibleImages();
+    });
     await step("Saved listing click opens its detail", async () => { await hit(page.locator('article a[href^="/listing/"]').filter({ has: page.locator("img") }).first(), "Saved listing image card", { fully: false }); await atPath(listingPath); await visibleHeading(listingTitle); });
     await step("Detail return restores actual search", async () => { await hit(page.getByRole("link", { name: "返回搜索", exact: true }), "Return search"); await atPath("/search"); await search(); });
     await step("Native Back Forward restore visible detail search", async () => { await page.goBack({ waitUntil: "domcontentloaded" }); await atPath(listingPath); await visibleHeading(listingTitle); await page.goForward({ waitUntil: "domcontentloaded" }); await atPath("/search"); await search(); });
