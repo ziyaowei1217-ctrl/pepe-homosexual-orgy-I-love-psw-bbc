@@ -115,13 +115,13 @@ export function ListingDetailExperience({ listing, initialStay }: { listing: Pre
         <div className="grid gap-10 pb-20 pt-9 lg:grid-cols-[minmax(0,1fr)_390px] lg:gap-16">
           <div className="min-w-0">
             <section id="listing-overview" className="scroll-mt-40 border-b border-slate-200 pb-8">
-              <div className="flex flex-wrap items-center gap-2 text-xs font-bold">
+              <div className="flex flex-wrap items-center gap-2 text-xs font-medium">
                 {listing.trust ? <span className="rounded-full bg-slate-100 px-3 py-1.5 text-slate-600"><ShieldCheck className="mr-1 inline size-3.5" />{listing.trust}</span> : null}
                 <span className="rounded-full bg-brand-soft px-3 py-1.5 text-[#234B3B]">{availabilityLabel}</span>
               </div>
               <h1 className="mt-5 text-balance text-3xl font-semibold leading-[1.2] tracking-[-0.025em] text-brand-ink sm:text-[40px]">{listing.title}</h1>
               <p className="mt-4 flex items-center gap-2 text-sm font-semibold text-slate-500"><MapPin className="size-4 text-[#234B3B]" />{listing.area}</p>
-              <div className="mt-6 flex flex-wrap items-center gap-x-5 gap-y-3 text-sm font-semibold text-slate-700">
+              <div className="mt-6 flex flex-wrap items-center gap-x-5 gap-y-3 text-sm font-medium text-brand-ink">
                 <span className="flex items-center gap-1.5"><BedDouble className="size-4 text-slate-400" />{listing.beds} 间卧室</span>
                 <span className="flex items-center gap-1.5"><Bath className="size-4 text-slate-400" />{listing.baths} 间卫浴</span>
                 <span className="flex items-center gap-1.5"><Star className="size-4 fill-amber-400 text-amber-400" />{listing.score} 评分</span>
@@ -150,7 +150,7 @@ export function ListingDetailExperience({ listing, initialStay }: { listing: Pre
                   [Sparkles, "入住条件", moveInTags.join(" · ")]
                 ].map(([Icon, title, detail]) => {
                   const ItemIcon = Icon as typeof TrainFront;
-                  return <div key={String(title)} className="flex gap-3 rounded-[20px] bg-slate-50 p-4"><span className="grid size-10 shrink-0 place-items-center rounded-full bg-white text-[#234B3B] shadow-sm"><ItemIcon className="size-5" /></span><div><h3 className="text-sm font-semibold">{String(title)}</h3><p className="mt-1 text-sm leading-6 text-slate-500">{String(detail)}</p></div></div>;
+                  return <div key={String(title)} className="flex gap-3 border-l-2 border-brand/20 py-2 pl-4"><span className="grid size-10 shrink-0 place-items-center rounded-xl bg-brand-soft text-[#234B3B]"><ItemIcon className="size-5" /></span><div><h3 className="text-sm font-semibold">{String(title)}</h3><p className="mt-1 text-sm leading-6 text-slate-600">{String(detail)}</p></div></div>;
                 })}
               </div>
             </section>
@@ -182,14 +182,14 @@ export function ListingDetailExperience({ listing, initialStay }: { listing: Pre
 
           <aside className="hidden lg:block">
             <div className="sticky top-[148px] rounded-[20px] border border-brand/15 bg-white p-6 shadow-[0_8px_24px_rgba(35,75,59,0.05)]">
-              <div className="flex items-end justify-between gap-4"><p><span className="text-3xl font-semibold tracking-[-0.05em]">${listing.price.toLocaleString()}</span><span className="text-sm text-slate-500"> / 月</span></p><span className="flex items-center gap-1 text-sm font-bold"><Star className="size-4 fill-amber-400 text-amber-400" />{listing.score}</span></div>
+              <div className="flex items-end justify-between gap-4"><p><span className="text-3xl font-semibold tabular-nums tracking-[-0.025em] text-brand-ink">${listing.price.toLocaleString()}</span><span className="text-sm text-brand-moss"> / 月</span></p><span className="flex items-center gap-1 text-sm font-bold"><Star className="size-4 fill-amber-400 text-amber-400" />{listing.score}</span></div>
               <div className="mt-5"><ListingStayFields listing={listing} stay={stay} onChange={updateStay} /></div>
               {stayError ? <p role="alert" className="mt-3 text-sm leading-6 text-red-700">{stayError}</p> : <p className="mt-3 flex items-center gap-1.5 text-xs text-emerald-700"><Check className="size-3.5" />所选租期可申请</p>}
               {stayError ? <button disabled className="mt-4 w-full rounded-xl bg-slate-200 px-5 py-3.5 text-sm font-bold text-slate-500">请先确认租期</button> : <Link href={applyHref} className="mt-4 flex w-full items-center justify-center rounded-xl bg-[#234B3B] px-5 py-3.5 text-sm font-bold text-white shadow-[0_10px_28px_rgba(35,75,59,0.12)] hover:bg-brand-moss">申请租住</Link>}
               <p className="mt-3 text-center text-xs text-slate-500">提交申请不会立即扣款</p>
               <div className="mt-5 border-t border-slate-200 pt-5">
                 <div className="flex items-center justify-between"><h2 className="text-sm font-semibold">费用明细</h2><span className="text-xs text-slate-400">月度估算</span></div>
-                <dl className="mt-4 space-y-3 text-sm"><div className="flex justify-between text-slate-600"><dt>月租</dt><dd>${listing.price.toLocaleString()}</dd></div><div className="flex justify-between text-slate-600"><dt>平台服务</dt><dd>申请接受后确认</dd></div><div className="flex justify-between border-t border-slate-200 pt-3 font-semibold"><dt>申请时支付</dt><dd>$0</dd></div></dl>
+                <dl className="mt-4 space-y-3 text-sm tabular-nums"><div className="flex justify-between text-slate-600"><dt>月租</dt><dd>${listing.price.toLocaleString()}</dd></div><div className="flex justify-between text-slate-600"><dt>平台服务</dt><dd>申请接受后确认</dd></div><div className="flex justify-between border-t border-slate-200 pt-3 font-semibold"><dt>申请时支付</dt><dd>$0</dd></div></dl>
               </div>
               <div className="mt-5 grid grid-cols-2 gap-2">
                 <Link href={`${inboxHref}&tour=1`} className="flex items-center justify-center gap-1.5 rounded-full border border-slate-200 px-3 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"><CalendarDays className="size-4" />预约看房</Link>
@@ -202,7 +202,7 @@ export function ListingDetailExperience({ listing, initialStay }: { listing: Pre
       </div>
 
       <div className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white px-4 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2 shadow-[0_-8px_30px_rgba(15,23,42,0.08)] lg:hidden">
-        <div className="mx-auto flex max-w-2xl items-center gap-3"><div className="min-w-0 flex-1"><p className="text-lg font-semibold">${listing.price.toLocaleString()} <span className="text-xs font-medium text-slate-600">/ 月</span></p><button type="button" aria-label="编辑租期" onClick={(event) => { event.currentTarget.focus(); setStayOpen(true); }} className="block min-h-11 max-w-full truncate text-xs font-semibold text-slate-600 underline underline-offset-4">{stayError ? "选择可租日期" : `${stay.moveIn.replaceAll("-", "/")} – ${stay.moveOut.replaceAll("-", "/")}`}<span className="ml-2 text-[#234B3B]">修改</span></button></div>{stayError ? <button type="button" onClick={(event) => { event.currentTarget.focus(); setStayOpen(true); }} className="shrink-0 rounded-xl bg-[#234B3B] px-5 py-3.5 text-sm font-bold text-white">选择租期</button> : <Link href={applyHref} className="shrink-0 rounded-xl bg-[#234B3B] px-5 py-3.5 text-sm font-bold text-white">申请租住</Link>}</div>
+        <div className="mx-auto flex max-w-2xl items-center gap-3"><div className="min-w-0 flex-1"><p className="text-lg font-semibold tabular-nums text-brand-ink">${listing.price.toLocaleString()} <span className="text-xs font-medium text-slate-600">/ 月</span></p><button type="button" aria-label="编辑租期" onClick={(event) => { event.currentTarget.focus(); setStayOpen(true); }} className="block min-h-11 max-w-full truncate text-xs font-semibold text-slate-600 underline underline-offset-4">{stayError ? "选择可租日期" : `${stay.moveIn.replaceAll("-", "/")} – ${stay.moveOut.replaceAll("-", "/")}`}<span className="ml-2 text-[#234B3B]">修改</span></button></div>{stayError ? <button type="button" onClick={(event) => { event.currentTarget.focus(); setStayOpen(true); }} className="shrink-0 rounded-xl bg-[#234B3B] px-5 py-3.5 text-sm font-bold text-white">选择租期</button> : <Link href={applyHref} className="shrink-0 rounded-xl bg-[#234B3B] px-5 py-3.5 text-sm font-bold text-white">申请租住</Link>}</div>
       </div>
 
       {stayOpen ? <ListingStayDialog listing={listing} stay={stay} onClose={() => setStayOpen(false)} onApply={(value) => { updateStay(value); setStayOpen(false); }} /> : null}

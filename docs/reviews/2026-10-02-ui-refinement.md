@@ -1,0 +1,13 @@
+# psw student-sublease UI refinement
+
+The public interface gives monthly rent and available lease dates stronger hierarchy. The home page pairs the existing location/date search with a compact lease-window poster, preserving existing listing data and destinations. Listing and search cards use readable date bands and tabular prices. The desktop-only hero photograph no longer requests eager loading; visible listing priority is preserved.
+
+The public shell keeps the 72px sticky header and existing phone navigation dimensions. The account link now uses an account cue rather than a misleading menu symbol. Saved has separate heading and control rows on narrow phones, consistent public-page gutters, and a more compact empty state. Roommate actions fit narrow phones, and the browsing-only demo labels synthetic profiles as examples. Demo recovery places browsing actions before its grouped explanation; all fictional-data, service-availability, device-storage and sensitive-information guidance remains.
+
+This is a presentation change: no new features, dependencies, fonts, analytics or network destinations. API/authentication/data libraries, root layout and security configuration, provider setup, local storage, map geometry, gallery/date behavior and the committed browser gate remain unchanged. The unused proposed demo query handling was removed during independent review; existing private-route handling is retained.
+
+Validation before source handoff: full frontend lint, type checking, 922 tests across118 files and normal production build passed. Independent preservation review compared351 protected file hashes, confirmed unchanged interaction-sensitive JSX attributes across7 TSX files, and passed120 focused tests. An additional implementation review passed45 focused tests. No test expectations were relaxed.
+
+Publication uses the existing exact-source Netlify process: validate the demo production build and fresh actual-pointer browser checks, accept the immutable deployment, then promote that same deployment and validate the stable URL. The existing browser gate covers123 regression groups across fresh Chromium/Firefox/WebKit desktop, narrow-phone and landscape profiles. It keeps runtime, CSP, network, asset and private-route failures fatal. Screenshots, logs, provider/source identity and final acceptance results are retained with the release evidence. Previous accepted deployment and source remain available for rollback.
+
+The review branch remains separate from main. Future adjustments can be made in the existing public components and scoped typography helpers without changing application security or routing mechanisms.

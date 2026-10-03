@@ -134,6 +134,14 @@
 }
 
 @layer components {
+  .psw-numerals {
+    font-variant-numeric: tabular-nums;
+  }
+
+  .psw-home :is(h1, h2) {
+    text-wrap: balance;
+  }
+
   .search-pill {
     @apply inline-flex min-h-11 shrink-0 items-center gap-2 whitespace-nowrap rounded-full border border-slate-200 bg-white px-3.5 py-2.5 text-xs font-semibold text-slate-700 transition-colors hover:border-slate-500;
   }
