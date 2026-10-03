@@ -333,6 +333,7 @@ function matchesApplication(
   if (where.listingId && application.listingId !== where.listingId) return false;
   if (where.listingOwnerId && application.listingOwnerId !== where.listingOwnerId) return false;
   if (where.submitterId && application.submitterId !== where.submitterId) return false;
+  if (where.submittedAt?.not === null && application.submittedAt === null) return false;
   if (where.teamId && application.teamId !== where.teamId) return false;
   if (where.status) {
     if (typeof where.status === "string" && application.status !== where.status) return false;

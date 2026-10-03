@@ -1,7 +1,7 @@
 "use client";
 
 import { ChevronLeft, ChevronRight, Grid2X2, ImageIcon, X } from "lucide-react";
-import Image from "next/image";
+import Image from "@/components/ui/app-image";
 import { useRef, useState } from "react";
 import { buildListingGallery, getGalleryIndex } from "@/lib/listing-detail";
 import type { PreviewListing } from "@/lib/preview-data";
@@ -14,10 +14,10 @@ export function ListingPhotoGallery({ listing }: { listing: PreviewListing }) {
   const count = Math.min(images.length, 5);
   return <>
     <section id="listing-photos" className="relative grid h-[300px] scroll-mt-36 grid-cols-4 grid-rows-2 gap-2 overflow-hidden rounded-[24px] bg-slate-100 sm:h-[380px] lg:h-[430px]" aria-label="房源图片">
-      {images.slice(0, 5).map((src, index) => <button key={src} type="button" aria-label={`查看图片 ${index + 1}`} onClick={() => setActive(index)} className={cn("group relative overflow-hidden bg-slate-200 focus-visible:z-10 focus-visible:ring-inset", index === 0 ? "col-span-4 row-span-2" : "hidden sm:block", index === 0 && count > 1 && "sm:col-span-2", index > 0 && count <= 3 && "sm:col-span-2", count === 2 && index === 1 && "sm:row-span-2", count === 4 && index === 3 && "sm:col-span-2")}>
+      {images.slice(0, 5).map((src, index) => <button key={src} type="button" aria-label={`查看图片 ${index + 1}`} onClick={(event) => { event.currentTarget.focus(); setActive(index); }} className={cn("group relative overflow-hidden bg-slate-200 focus-visible:z-10 focus-visible:ring-inset", index === 0 ? "col-span-4 row-span-2" : "hidden sm:block", index === 0 && count > 1 && "sm:col-span-2", index > 0 && count <= 3 && "sm:col-span-2", count === 2 && index === 1 && "sm:row-span-2", count === 4 && index === 3 && "sm:col-span-2")}>
         <Image src={src} alt={index === 0 ? listing.title : `${listing.title} 图片 ${index + 1}`} fill priority={index === 0} sizes={count === 1 ? "100vw" : index === 0 ? "(max-width: 640px) 100vw, 50vw" : "25vw"} className="object-cover transition duration-300 group-hover:scale-[1.025] group-hover:brightness-95" />
       </button>)}
-      {!images.length ? <div className="col-span-4 row-span-2 grid place-content-center gap-3 text-center text-slate-500"><ImageIcon className="mx-auto size-10" /><p className="text-sm">房东暂未提供图片</p></div> : <button type="button" onClick={() => setActive(0)} className="absolute bottom-4 right-4 flex items-center gap-2 rounded-xl border border-white/70 bg-white/95 px-4 py-2.5 text-xs font-bold text-slate-900 shadow-lg"><Grid2X2 className="size-4" />查看全部图片<span className="text-slate-500">· {images.length}</span></button>}
+      {!images.length ? <div className="col-span-4 row-span-2 grid place-content-center gap-3 text-center text-slate-500"><ImageIcon className="mx-auto size-10" /><p className="text-sm">房东暂未提供图片</p></div> : <button type="button" onClick={(event) => { event.currentTarget.focus(); setActive(0); }} className="absolute bottom-4 right-4 z-20 flex min-h-11 items-center gap-2 rounded-xl border border-white/70 bg-white/95 px-4 py-2.5 text-xs font-bold text-slate-900 shadow-lg"><Grid2X2 className="size-4" />查看全部图片<span className="text-slate-500">· {images.length}</span></button>}
     </section>
     {active !== null ? <PhotoViewer title={listing.title} images={images} initialIndex={active} onClose={() => setActive(null)} /> : null}
   </>;

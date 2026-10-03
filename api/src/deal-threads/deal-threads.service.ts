@@ -5,28 +5,46 @@ import {
   Injectable,
   NotFoundException
 } from "@nestjs/common";
-import { Prisma, ViewingMode, ViewingRequestStatus } from "@prisma/client";
+import { Prisma, ViewingMode, ViewingRequestStatus, type DealMessage, type ViewingRequest } from "@prisma/client";
 import { isUUID } from "class-validator";
 
 import { PrismaService } from "../prisma/prisma.service";
+import { LocalRoommateMessageRateLimiter, RoommateMessageRateLimiter } from "../roommate-conversations/roommate-message-rate-limit";
 import { CreateDealThreadDto, CreateViewingRequestDto, SendDealMessageDto, ViewingModeDtoValue } from "./dto";
+import {
+  chronologicalHistoryPage, DEAL_MESSAGE_PREVIEW_LIMIT, DEAL_VIEWING_PREVIEW_LIMIT,
+  historyBefore, parseDealMessageHistoryQuery
+} from "./message-history";
 
 const threadInclude = {
-  messages: { orderBy: { createdAt: "asc" as const } },
-  viewingRequests: { orderBy: { createdAt: "asc" as const } }
+  // Every list, retry and write response uses bounded previews. Older messages
+  // remain available through the participant-authorized cursor endpoint.
+  messages: { orderBy: [{ createdAt: "desc" as const }, { id: "desc" as const }], take: DEAL_MESSAGE_PREVIEW_LIMIT + 1 },
+  viewingRequests: { orderBy: [{ createdAt: "desc" as const }, { id: "desc" as const }], take: DEAL_VIEWING_PREVIEW_LIMIT }
 };
 
 @Injectable()
 export class DealThreadsService {
-  constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
+  constructor(
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(RoommateMessageRateLimiter) private readonly messageRateLimiter: RoommateMessageRateLimiter = new LocalRoommateMessageRateLimiter()
+  ) {}
 
   async findForUser(userId: string) {
     const threads = await this.prisma.dealThread.findMany({
       where: { OR: [{ ownerId: userId }, { listingOwnerId: userId }] },
-      include: threadInclude,
+      include: { ...threadInclude, messages: { ...threadInclude.messages, take: 2 } },
       orderBy: { updatedAt: "desc" }
     });
-    return threads.map((thread) => this.toThreadResponse(thread, userId));
+    if (!threads.length) return [];
+    // One current-state query for the whole inbox, rather than one per thread.
+    const currentRequests = await this.prisma.$queryRaw<ViewingRequest[]>(Prisma.sql`
+      SELECT DISTINCT ON ("threadId") * FROM "ViewingRequest"
+      WHERE "threadId" IN (${Prisma.join(threads.map(thread => thread.id))}) AND "status" IN ('REQUESTED', 'CONFIRMED')
+      ORDER BY "threadId", "updatedAt" DESC, "id" DESC
+    `);
+    const currentByThread = new Map(currentRequests.map(request => [request.threadId, request]));
+    return Promise.all(threads.map((thread) => this.toThreadResponse(thread, userId, 1, currentByThread.get(thread.id) ?? null)));
   }
 
   async createOrFindThread(renterId: string, dto: CreateDealThreadDto) {
@@ -135,6 +153,8 @@ export class DealThreadsService {
     if (existing) {
       assertSameMessage(existing);
     } else {
+      // Authorize and recover committed retries first; only a new write consumes quota.
+      await this.messageRateLimiter.consume({ userId, conversationId: `deal:${threadId}` });
       try {
         await this.prisma.dealMessage.create({
           data: {
@@ -156,6 +176,21 @@ export class DealThreadsService {
       }
     }
     return this.reloadForViewer(userId, thread.id);
+  }
+
+  async listMessages(userId: string, threadId: string, query: Record<string, unknown> = {}) {
+    const authorized = await this.prisma.dealThread.findFirst({
+      where: { id: threadId, OR: [{ ownerId: userId }, { listingOwnerId: userId }] }, select: { id: true }
+    });
+    if (!authorized) throw new NotFoundException("Deal thread not found");
+    const { limit, cursor } = parseDealMessageHistoryQuery(query);
+    const rows = await this.prisma.dealMessage.findMany({
+      where: { threadId, ...historyBefore(cursor) },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      take: limit + 1
+    });
+    const page = chronologicalHistoryPage(rows, limit);
+    return { messages: page.messages.map(message => presentDealMessage(message, userId)), nextCursor: page.nextCursor };
   }
 
   async createViewingRequest(renterId: string, threadId: string, dto: CreateViewingRequestDto) {
@@ -182,6 +217,10 @@ export class DealThreadsService {
         where: { threadId, status: { in: ["REQUESTED", "CONFIRMED"] } },
         orderBy: { updatedAt: "desc" }
       });
+      // Replaying an unchanged request cannot flood the host with generated
+      // messages or reset a confirmed viewing. Quota applies to actual changes.
+      if (active && sameViewingRequest(active, data)) return;
+      await this.messageRateLimiter.consume({ userId: renterId, conversationId: `deal:${threadId}` });
       if (active) {
         await transaction.viewingRequest.update({ where: { id: active.id }, data: { ...data, revision: { increment: 1 } } });
       } else {
@@ -234,6 +273,7 @@ export class DealThreadsService {
           ? request.status === "REQUESTED"
           : request.status === "REQUESTED" || request.status === "CONFIRMED";
       if (!allowed) throw new BadRequestException("Viewing request cannot transition from its current status");
+      await this.messageRateLimiter.consume({ userId: hostId, conversationId: `deal:${threadId}` });
       const changed = await transaction.viewingRequest.updateMany({
         where: { id: requestId, threadId, revision: expectedRevision, status: request.status },
         data: { status: nextStatus, revision: { increment: 1 } }
@@ -291,23 +331,51 @@ export class DealThreadsService {
     return profile?.displayName?.trim() || user.email.split("@")[0];
   }
 
-  private toThreadResponse(thread: any, viewerId: string) {
+  private async toThreadResponse(thread: any, viewerId: string, messageLimit = DEAL_MESSAGE_PREVIEW_LIMIT, currentRequest?: ViewingRequest | null) {
     const viewerRole = thread.ownerId === viewerId ? "renter" : "host";
+    const page = chronologicalHistoryPage<DealMessage>(thread.messages ?? [], messageLimit);
+    let viewingRequests = chronologicalHistoryPage<ViewingRequest>(thread.viewingRequests ?? [], DEAL_VIEWING_PREVIEW_LIMIT).messages;
+    const current = currentRequest === undefined ? await this.prisma.viewingRequest.findFirst({
+      where: { threadId: thread.id, status: { in: [ViewingRequestStatus.REQUESTED, ViewingRequestStatus.CONFIRMED] } },
+      orderBy: [{ updatedAt: "desc" }, { id: "desc" }]
+    }) : currentRequest;
+    if (current) {
+      // A legacy active request can be older than the preview window. Reserve
+      // one slot for the latest writable state, replacing any stale snapshot.
+      viewingRequests = chronologicalHistoryPage([
+        ...viewingRequests.filter(request => request.id !== current.id).slice(-(DEAL_VIEWING_PREVIEW_LIMIT - 1)), current
+      ], DEAL_VIEWING_PREVIEW_LIMIT).messages;
+    }
     return {
       ...thread,
       viewerRole,
       contactName: viewerRole === "renter" ? thread.contactName : thread.participantNames[0] ?? "Renter",
-      messages: (thread.messages ?? []).map((message: any) => ({
-        ...message,
-        align: message.senderId === viewerId ? "right" : "left",
-        status: message.senderId === viewerId ? "sent" : "received"
-      })),
-      viewingRequests: (thread.viewingRequests ?? []).map((request: any) => ({
+      messages: page.messages.map(message => presentDealMessage(message, viewerId)),
+      messagePageInfo: { nextCursor: page.nextCursor, hasMore: page.hasMore },
+      viewingRequests: viewingRequests.map((request: any) => ({
         ...request,
         mode: request.mode === "VIDEO" ? "video" : "in-person"
       }))
     };
   }
+}
+
+function presentDealMessage<T extends { senderId: string | null }>(message: T, viewerId: string) {
+  return {
+    ...message,
+    align: message.senderId === viewerId ? "right" : "left",
+    status: message.senderId === viewerId ? "sent" : "received"
+  };
+}
+
+function sameViewingRequest(
+  current: { requesterId: string; listingId: string; timeLabel: string; iso: Date; mode: ViewingMode; participantNames: string[] },
+  next: { requesterId: string; listingId: string; timeLabel: string; iso: Date; mode: ViewingMode; participantNames: string[] }
+) {
+  return current.requesterId === next.requesterId && current.listingId === next.listingId &&
+    current.timeLabel === next.timeLabel && current.iso.getTime() === next.iso.getTime() && current.mode === next.mode &&
+    current.participantNames.length === next.participantNames.length &&
+    current.participantNames.every((name, index) => name === next.participantNames[index]);
 }
 
 function uniqueNames(names: string[]) {

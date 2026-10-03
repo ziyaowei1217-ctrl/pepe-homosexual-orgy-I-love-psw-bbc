@@ -1,6 +1,7 @@
 import { productErrorForStatus, toProductApiError } from "./product-errors";
 import { getBrowserDeviceId } from "./device-id";
 import { normalizeRoommateMessageBody } from "./roommate-conversations";
+import { isWebsiteDemo, websiteDemoUnavailableError } from "./website-demo";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000/api/v1";
 
@@ -354,6 +355,7 @@ export type ApiDealThread = {
   contactName: string;
   participantNames: string[];
   messages: ApiDealMessage[];
+  messagePageInfo?: { nextCursor: string | null; hasMore: boolean };
   viewingRequests: ApiViewingRequest[];
   createdAt: string;
   updatedAt: string;
@@ -454,26 +456,17 @@ export function getAdminListingReviewQueue(token: string) {
 }
 
 export async function getAdminListingMediaContent(token: string, path: string) {
+  if (isWebsiteDemo()) throw websiteDemoUnavailableError();
   if (!/^\/api\/v1\/admin\/listings\/[^/]+\/media\/[^/]+\/content$/.test(path)) {
     throw productErrorForStatus(400);
   }
 
-  let response: Response;
-  try {
-    response = await fetch(`${apiOrigin()}${path}`, {
+  return boundedApiResponse(`${apiOrigin()}${path}`, {
       headers: {
         Authorization: `Bearer ${token}`,
         ...(getBrowserDeviceId() ? { "X-Device-ID": getBrowserDeviceId()! } : {})
       }
-    });
-  } catch (error) {
-    throw toProductApiError(error);
-  }
-
-  if (!response.ok) {
-    throw productErrorForStatus(response.status, await readSafeErrorCode(response));
-  }
-  return response.blob();
+  }, (response) => response.blob());
 }
 
 export function approveAdminListing(token: string, id: string, revision: number) {
@@ -510,6 +503,11 @@ export function getRoommateMessages(token: string, conversationId: string, curso
   return apiGet<ApiRoommateMessagePage>(`/roommate-conversations/${encodedConversationId}/messages${query}`, token);
 }
 
+export function getDealMessages(token: string, conversationId: string, cursor?: string) {
+  const query = cursor === undefined ? "" : `?cursor=${encodeURIComponent(cursor)}`;
+  return apiGet<{ messages: ApiDealMessage[]; nextCursor: string | null }>(`/deal-threads/${encodeURIComponent(conversationId)}/messages${query}`, token);
+}
+
 export function sendRoommateMessage(
   token: string,
   conversationId: string,
@@ -535,10 +533,13 @@ export function archiveAdminRoommate(token: string, id: string) {
 }
 
 async function apiRequest<T>(path: string, init: RequestInit, token?: string): Promise<T> {
-  let response: Response;
+  if (isWebsiteDemo()) {
+    if (init.method !== "GET") throw websiteDemoUnavailableError();
+    const { getWebsiteDemoData } = await import("./website-demo-data");
+    return getWebsiteDemoData(path) as T;
+  }
   const deviceId = getBrowserDeviceId();
-  try {
-    response = await fetch(`${apiBaseUrl()}${path}`, {
+  return boundedApiResponse(`${apiBaseUrl()}${path}`, {
       ...init,
       headers: {
         "Content-Type": "application/json",
@@ -546,19 +547,41 @@ async function apiRequest<T>(path: string, init: RequestInit, token?: string): P
         ...(deviceId ? { "X-Device-ID": deviceId } : {}),
         ...init.headers
       }
-    });
-  } catch (error) {
-    throw toProductApiError(error);
-  }
+  }, async (response) => {
+    try {
+      return (await response.json()) as T;
+    } catch (error) {
+      if (error instanceof Error && error.name === "AbortError") throw error;
+      throw productErrorForStatus(502);
+    }
+  });
+}
 
-  if (!response.ok) {
-    throw productErrorForStatus(response.status, await readSafeErrorCode(response));
-  }
-
+async function boundedApiResponse<T>(url: string, init: RequestInit, read: (response: Response) => Promise<T>) {
+  // Include non-JSON transports, such as moderator media downloads. A demo
+  // build must never contact a configured real backend, even with a stale token.
+  if (isWebsiteDemo()) throw websiteDemoUnavailableError();
+  const controller = new AbortController();
+  // Include response-body reads in the deadline. Never automatically replay
+  // writes: a timed-out request may already have committed on the server.
+  const deadline = setTimeout(() => controller.abort(), 15_000);
   try {
-    return (await response.json()) as T;
-  } catch {
-    throw productErrorForStatus(502);
+    const response = await fetch(url, {
+      ...init,
+      signal: controller.signal,
+      cache: "no-store",
+      credentials: "omit",
+      redirect: "error"
+    });
+    if (!response.ok) {
+      throw productErrorForStatus(response.status, await readSafeErrorCode(response));
+    }
+    return await read(response);
+  } catch (error) {
+    if (controller.signal.aborted) throw productErrorForStatus(408);
+    throw toProductApiError(error);
+  } finally {
+    clearTimeout(deadline);
   }
 }
 

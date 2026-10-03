@@ -15,7 +15,7 @@ export function getActiveAdminStepUpToken(
 }
 
 export function writeStoredAdminStepUpSession(
-  storage: Storage,
+  storage: Storage | null,
   identity: AdminStepUpIdentity,
   session: AdminStepUpSession,
   now = Date.now()
@@ -24,16 +24,20 @@ export function writeStoredAdminStepUpSession(
     clearStoredAdminStepUpSession(storage);
     return;
   }
-  storage.setItem(adminStepUpStorageKey, JSON.stringify({ identity, session }));
+  try {
+    storage?.setItem(adminStepUpStorageKey, JSON.stringify({ identity, session }));
+  } catch {
+    // The verified session remains available in this workspace's memory.
+  }
 }
 
 export function readStoredAdminStepUpSession(
-  storage: Storage,
+  storage: Storage | null,
   identity: AdminStepUpIdentity,
   now = Date.now()
 ): AdminStepUpSession | null {
   try {
-    const raw = storage.getItem(adminStepUpStorageKey);
+    const raw = storage?.getItem(adminStepUpStorageKey);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as {
       identity?: Partial<AdminStepUpIdentity>;
@@ -57,6 +61,10 @@ export function readStoredAdminStepUpSession(
   }
 }
 
-export function clearStoredAdminStepUpSession(storage: Storage) {
-  storage.removeItem(adminStepUpStorageKey);
+export function clearStoredAdminStepUpSession(storage: Storage | null) {
+  try {
+    storage?.removeItem(adminStepUpStorageKey);
+  } catch {
+    // Stored sessions are also checked against account identity and expiry.
+  }
 }

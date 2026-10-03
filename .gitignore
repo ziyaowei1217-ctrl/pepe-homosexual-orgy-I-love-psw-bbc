@@ -6,6 +6,7 @@ dist/
 coverage/
 .tmp-tests/
 .worktrees/
+.netlify/
 *.tsbuildinfo
 .env
 .env.*

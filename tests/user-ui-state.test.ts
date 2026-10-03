@@ -70,4 +70,14 @@ describe("user UI state", () => {
     expect(next.map((item) => item.read)).toEqual([true, false]);
     expect(notifications[0].read).toBe(false);
   });
+
+  it("rejects stored reminders targeting a different origin", () => {
+    const notification = { id: "1", title: "Follow up", detail: "Stored", createdAt: 1, read: false };
+    const normalized = normalizeUserUiState({ version: 2, favoriteListingIds: [], notifications: [
+      { ...notification, target: "//example.test/sign-in" },
+      { ...notification, target: "/\\example.test/sign-in" },
+      { ...notification, target: "/trips" }
+    ] });
+    expect(normalized.notifications.map((item) => item.target)).toEqual(["/trips"]);
+  });
 });

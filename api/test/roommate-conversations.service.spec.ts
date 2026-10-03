@@ -1,8 +1,10 @@
-import { BadRequestException, HttpException, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ConflictException, HttpException, NotFoundException } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
-import { describe, expect, it } from "vitest";
+import { randomUUID } from "node:crypto";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { encodeRoommateMessageCursor } from "../src/roommate-conversations/dto";
+import { DealThreadsService } from "../src/deal-threads/deal-threads.service";
 import { RoommateConversationsService } from "../src/roommate-conversations/roommate-conversations.service";
 import type {
   RoommateConversationEvent,
@@ -14,6 +16,7 @@ import {
 } from "../src/roommate-conversations/roommate-message-rate-limit";
 
 describe("RoommateConversationsService", () => {
+  afterEach(() => vi.useRealTimers());
   it("lists only member conversations with peer profile and unread count", async () => {
     const database = createConversationDatabase();
     database.addMessage({ id: "message-1", senderId: "user-b", body: "Already read", createdAt: at(1) });
@@ -129,6 +132,32 @@ describe("RoommateConversationsService", () => {
     expect(database.messages).toHaveLength(1);
   });
 
+  it("rejects changed-body retries and replays the same trimmed body without extra quota, writes or events", async () => {
+    const database = createConversationDatabase();
+    const consume = vi.fn(async () => undefined);
+    const publish = vi.fn(async () => undefined);
+    const service = createService(database, { publish }, { consume });
+    const command = { clientMessageId: randomUUID(), body: "  Original body  " };
+    const sent = await service.sendMessage("user-a", "conversation-a-b", command);
+    await expect(service.sendMessage("user-a", "conversation-a-b", { ...command, body: "Changed body" }))
+      .rejects.toBeInstanceOf(ConflictException);
+    await expect(service.sendMessage("user-c", "conversation-a-b", command)).rejects.toBeInstanceOf(NotFoundException);
+    expect(await service.sendMessage("user-a", "conversation-a-b", { ...command, body: "Original body" })).toEqual(sent);
+    expect(database.messages).toHaveLength(1);
+    expect(consume).toHaveBeenCalledTimes(1);
+    expect(publish).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects a changed-body duplicate insertion against the durable race winner", async () => {
+    const database = createConversationDatabase({ loseNextMessageRace: true, winningBody: "Winning body" });
+    const publish = vi.fn(async () => undefined);
+    await expect(createService(database, { publish }).sendMessage("user-a", "conversation-a-b", {
+      clientMessageId: randomUUID(), body: "Losing body"
+    })).rejects.toBeInstanceOf(ConflictException);
+    expect(database.messages).toEqual([expect.objectContaining({ body: "Winning body" })]);
+    expect(publish).not.toHaveBeenCalled();
+  });
+
   it("rejects empty, over-2000-character, and closed-match sends", async () => {
     const database = createConversationDatabase();
     const service = createService(database);
@@ -237,6 +266,42 @@ describe("RoommateConversationsService", () => {
     await expect(limiter.consume(request)).resolves.toBeUndefined();
   });
 
+  it("shares actor quota across actual roommate and deal sends while committed retries remain readable", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(1_000);
+    const database = createConversationDatabase();
+    const limiter = new LocalRoommateMessageRateLimiter({ now: () => 1_000, actorLimit: 2 });
+    const roommates = createService(database, undefined, limiter);
+    const dealMessages: any[] = [];
+    const thread = { id: "deal-thread", ownerId: "user-a", listingOwnerId: "user-b", participantNames: ["User A"],
+      contactName: "User B", messages: dealMessages, viewingRequests: [] };
+    const dealPrisma = {
+      user: { findUnique: async () => ({ email: "user-a@example.test" }) },
+      profile: { findUnique: async () => ({ displayName: "User A" }) },
+      viewingRequest: { findFirst: async () => null },
+      dealThread: { findFirst: async ({ where }: any) => where.id === thread.id && where.OR.some((clause: any) =>
+        clause.ownerId === thread.ownerId || clause.listingOwnerId === thread.listingOwnerId) ? thread : null },
+      dealMessage: {
+        findUnique: async ({ where }: any) => dealMessages.find(message =>
+          message.senderId === where.senderId_clientMessageId.senderId && message.clientMessageId === where.senderId_clientMessageId.clientMessageId) ?? null,
+        create: async ({ data }: any) => { const message = { id: "deal-message", createdAt: at(1), ...data }; dealMessages.push(message); return message; }
+      }
+    };
+    const deals = new DealThreadsService(dealPrisma as never, limiter);
+    const roommateCommand = { clientMessageId: randomUUID(), body: "Roommate hello" };
+    const dealCommand = { clientMessageId: randomUUID(), body: "Host hello" };
+    await roommates.sendMessage("user-a", "conversation-a-b", roommateCommand);
+    await deals.sendMessage("user-a", thread.id, dealCommand);
+    await expect(roommates.sendMessage("user-a", "conversation-a-b", { clientMessageId: randomUUID(), body: "More" }))
+      .rejects.toMatchObject({ status: 429 });
+    await expect(deals.sendMessage("user-a", thread.id, { clientMessageId: randomUUID(), body: "More" }))
+      .rejects.toMatchObject({ status: 429 });
+    await expect(roommates.sendMessage("user-a", "conversation-a-b", roommateCommand)).resolves.toMatchObject({ body: roommateCommand.body });
+    await expect(deals.sendMessage("user-a", thread.id, dealCommand)).resolves.toMatchObject({ id: thread.id });
+    expect(database.messages).toHaveLength(1);
+    expect(dealMessages).toHaveLength(1);
+  });
+
   it("rejects a read cursor message from another conversation", async () => {
     const database = createConversationDatabase();
     database.addMessage({
@@ -294,7 +359,7 @@ type Message = {
   createdAt: Date;
 };
 
-function createConversationDatabase(options: { loseNextMessageRace?: boolean; closeBeforeTransaction?: boolean } = {}) {
+function createConversationDatabase(options: { loseNextMessageRace?: boolean; closeBeforeTransaction?: boolean; winningBody?: string } = {}) {
   const match: Match = { id: "match-a-b", status: "ACTIVE" };
   const conversation: Conversation = {
     id: "conversation-a-b",
@@ -338,7 +403,8 @@ function createConversationDatabase(options: { loseNextMessageRace?: boolean; cl
           const winning = {
             id: "message-race-winner",
             createdAt: at(10),
-            ...data
+            ...data,
+            body: options.winningBody ?? data.body
           };
           messages.push(winning);
           throw new Prisma.PrismaClientKnownRequestError("Unique constraint", {

@@ -24,8 +24,15 @@ describe("payment command provider", () => {
     expect(() => createPaymentCommands({ nodeEnv: "production" })).toThrow("PAYMENT_SERVICE_URL");
   });
 
+  it("rejects ambiguous provider URLs before sending credentials", () => {
+    for (const serviceUrl of ["https://user:pass@payments.example.com", "https://payments.example.com?next=other", "https://payments.example.com#fragment"]) {
+      expect(() => createPaymentCommands({ nodeEnv: "production", serviceUrl, apiKey: "secret" }))
+        .toThrow("PAYMENT_SERVICE_URL must not contain credentials");
+    }
+  });
+
   it("forwards accepted applications and cancellations to the configured gateway", async () => {
-    const fetchImpl = vi.fn(async (input: string | URL | Request) => new Response(
+    const fetchImpl = vi.fn(async (input: string | URL | Request, _init?: RequestInit) => new Response(
       String(input).endsWith("/cancellations")
         ? JSON.stringify({ result: "REFUNDED" })
         : String(input).endsWith("/checkout-sessions")
@@ -46,5 +53,6 @@ describe("payment command provider", () => {
     await expect(commands.refundForCancellation({} as never, "application-1", "owner-1", "cancel-1"))
       .resolves.toBe("REFUNDED");
     expect(fetchImpl).toHaveBeenCalledTimes(3);
+    for (const [, options] of fetchImpl.mock.calls) expect(options?.redirect).toBe("error");
   });
 });

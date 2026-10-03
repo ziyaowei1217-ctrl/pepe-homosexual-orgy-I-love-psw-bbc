@@ -1,4 +1,4 @@
-import { BadRequestException, Inject, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 
 import { PrismaService } from "../prisma/prisma.service";
@@ -184,6 +184,7 @@ export class RoommateConversationsService {
     })) as MessageRecord | null;
     if (existing) {
       if (existing.conversationId !== conversationId) throw new BadRequestException("clientMessageId was already used");
+      if (existing.body !== body) throw new ConflictException("clientMessageId was already used for a different message body");
       return serializeMessage(existing, userId);
     }
 
@@ -217,6 +218,7 @@ export class RoommateConversationsService {
         where: { senderId_clientMessageId: { senderId: userId, clientMessageId: dto.clientMessageId } }
       })) as MessageRecord | null;
       if (!winner || winner.conversationId !== conversationId) throw error;
+      if (winner.body !== body) throw new ConflictException("clientMessageId was already used for a different message body");
       return serializeMessage(winner, userId);
     }
 

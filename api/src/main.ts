@@ -8,11 +8,8 @@ import { assertProductionRuntimeConfig, getAuthSecurityConfig } from "./config/e
 import { configureCors, getCorsOrigins } from "./config/cors";
 import { MessagingInfrastructureHealth } from "./health/messaging-infrastructure-health";
 import { requestIdMiddleware } from "./http/request-id";
+import { securityHeadersMiddleware } from "./http/security-headers";
 import { createRoommateSocketAdapter } from "./roommate-conversations/socket-adapter";
-
-type SecurityHeaderResponse = {
-  setHeader(name: string, value: string): unknown;
-};
 
 async function bootstrap() {
   assertProductionRuntimeConfig();
@@ -27,17 +24,12 @@ async function bootstrap() {
   app.enableShutdownHooks();
   const webOrigins = getCorsOrigins(config.get<string>("WEB_ORIGIN"));
   const securityConfig = getAuthSecurityConfig();
-  const express = app.getHttpAdapter().getInstance() as { set(name: string, value: number): void };
+  const express = app.getHttpAdapter().getInstance() as { set(name: string, value: number): void; disable(name: string): void };
   express.set("trust proxy", securityConfig.trustedProxyHops);
+  express.disable("x-powered-by");
 
   app.use(requestIdMiddleware);
-  app.use((_request: unknown, response: SecurityHeaderResponse, next: () => void) => {
-    response.setHeader("X-Content-Type-Options", "nosniff");
-    response.setHeader("X-Frame-Options", "DENY");
-    response.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
-    response.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
-    next();
-  });
+  app.use(securityHeadersMiddleware);
   configureCors(app, webOrigins);
   app.setGlobalPrefix("api/v1");
   app.useGlobalPipes(

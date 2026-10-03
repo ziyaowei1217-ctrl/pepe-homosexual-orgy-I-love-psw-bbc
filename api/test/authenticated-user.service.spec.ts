@@ -1,8 +1,8 @@
 import { UnauthorizedException } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
-import { AuthenticatedUserService } from "../src/auth/authenticated-user.service";
+import { AuthenticatedUserService, MAX_BEARER_TOKEN_LENGTH } from "../src/auth/authenticated-user.service";
 
 describe("AuthenticatedUserService", () => {
   it("reloads the current database user from a valid bearer token", async () => {
@@ -40,6 +40,39 @@ describe("AuthenticatedUserService", () => {
     } as never);
 
     await expect(service.fromBearerToken(token)).rejects.toBeInstanceOf(UnauthorizedException);
+  });
+
+  it("rejects another HMAC algorithm and expired or over-age signed sessions before database access", async () => {
+    const jwt = new JwtService({ secret: "test-secret" });
+    const findUnique = vi.fn();
+    const service = new AuthenticatedUserService(jwt, { user: { findUnique } } as never);
+    const now = Math.floor(Date.now() / 1000);
+    const tokens = [
+      await jwt.signAsync({ sub: "user-1" }, { algorithm: "HS512" }),
+      await jwt.signAsync({ sub: "user-1", exp: now - 1 }),
+      await jwt.signAsync({ sub: "user-1", iat: now - 8 * 24 * 60 * 60 }),
+      await jwt.signAsync({ sub: "user-1", iat: now + 120 })
+    ];
+    for (const token of tokens) await expect(service.fromBearerToken(token)).rejects.toBeInstanceOf(UnauthorizedException);
+    expect(findUnique).not.toHaveBeenCalled();
+  });
+
+  it("bounds token input before invoking verification", async () => {
+    const jwt = new JwtService({ secret: "test-secret" });
+    const verify = vi.spyOn(jwt, "verifyAsync");
+    const service = new AuthenticatedUserService(jwt, { user: { findUnique: vi.fn() } } as never);
+    await expect(service.fromBearerToken("a".repeat(MAX_BEARER_TOKEN_LENGTH + 1))).rejects.toBeInstanceOf(UnauthorizedException);
+    expect(verify).not.toHaveBeenCalled();
+  });
+
+  it("returns the earlier of the signed expiry and maximum session age for socket lifecycle", async () => {
+    const jwt = new JwtService({ secret: "test-secret" });
+    const iat = Math.floor(Date.now() / 1000);
+    const service = new AuthenticatedUserService(jwt, {
+      user: { findUnique: async () => ({ id: "user-1", email: "current@example.test", role: "USER" }) }
+    } as never);
+    const token = await jwt.signAsync({ sub: "user-1", iat, exp: iat + 60 });
+    await expect(service.fromBearerTokenWithExpiry(token)).resolves.toMatchObject({ expiresAt: (iat + 60) * 1000 });
   });
 });
 

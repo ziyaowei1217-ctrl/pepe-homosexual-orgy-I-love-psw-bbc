@@ -21,6 +21,7 @@ describe("auth session storage", () => {
       },
       configurable: true
     });
+    clearStoredAuthSession();
     window.localStorage.clear();
     vi.useRealTimers();
   });
@@ -55,5 +56,20 @@ describe("auth session storage", () => {
 
     expect(window.localStorage.getItem("sublet_auth_session")).toBeNull();
     expect(window.localStorage.getItem("sublet_token")).toBeNull();
+  });
+  it("supports login and logout when storage getters are blocked", () => {
+    Object.defineProperty(window, "localStorage", { configurable: true, get() { throw new Error("SecurityError"); } });
+    expect(readStoredAuthSession()).toBeNull();
+    expect(() => writeStoredAuthSession("memory-token")).not.toThrow();
+    expect(readStoredAuthSession()).toEqual({ accessToken: "memory-token" });
+    expect(() => clearStoredAuthSession()).not.toThrow();
+    expect(readStoredAuthSession()).toBeNull();
+  });
+
+  it("does not restore an old credential when browser deletion fails", () => {
+    writeStoredAuthSession("old-token");
+    window.localStorage.removeItem = () => { throw new Error("blocked"); };
+    clearStoredAuthSession();
+    expect(readStoredAuthSession()).toBeNull();
   });
 });

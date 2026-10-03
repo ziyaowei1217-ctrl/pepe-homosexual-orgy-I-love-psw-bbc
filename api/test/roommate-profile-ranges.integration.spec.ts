@@ -2,6 +2,7 @@ import "reflect-metadata";
 import { PrismaClient } from "@prisma/client";
 import { beforeAll, afterAll, describe, expect, it } from "vitest";
 import { MarketplaceService } from "../src/marketplace/marketplace.service";
+import { RoommatesService } from "../src/roommates/roommates.service";
 import { createDisposablePostgres } from "./support/disposable-postgres";
 
 describe.skipIf(process.env.RUN_DB_SMOKE !== "1")("roommate merged ranges on disposable PostgreSQL", () => {
@@ -46,5 +47,22 @@ describe.skipIf(process.env.RUN_DB_SMOKE !== "1")("roommate merged ranges on dis
     const saved = await service.updateRoommateProfile("owner", "owner@ranges.example", profile.id, { budgetMax: 0, moveInDate: "2099-06-01", moveOutDate: "2099-06-01" });
     expect(saved).toMatchObject({ budgetMin: 0, budgetMax: 0 });
     await expect(service.updateRoommateProfile("other", "other@ranges.example", profile.id, { budgetMax: 500 })).rejects.toMatchObject({ status: 404 });
+  });
+
+  it("enforces archived owned visibility on historical raw profiles in one parameterized public read", async () => {
+    await prisma.user.create({ data: { id: "archive-owner", email: "archive@ranges.example" } });
+    const created = await service.createRoommateProfile("archive-owner", "archive@ranges.example", {
+      age: 25, city: "Archive City", school: "Archive School", intro: "Archived introduction", budgetMin: 1200
+    });
+    expect(await service.findRoommateProfiles({ city: "Archive City", school: "Archive School" }))
+      .toMatchObject([{ id: created.id, userId: created.userId, intro: "Archived introduction", budgetMin: 1200 }]);
+    const owned = await prisma.roommateProfile.findUniqueOrThrow({ where: { ownerId: "archive-owner" } });
+    await new RoommatesService(prisma as never, {} as never).updateAdminProfile(owned.id, { status: "hidden" });
+    expect(await prisma.roommateMatchingProfile.findUniqueOrThrow({ where: { id: created.id } })).toMatchObject({ status: "active" });
+    expect(await service.findRoommateProfiles({ city: "Archive City" })).toEqual([]);
+    expect(await service.findRoommateProfiles({ city: "Archive City' OR 1=1 --" })).toEqual([]);
+    // Guard against historically inconsistent status/archivedAt combinations.
+    await prisma.roommateProfile.update({ where: { id: owned.id }, data: { status: "active" } });
+    expect(await service.findRoommateProfiles({ city: "Archive City" })).toEqual([]);
   });
 });

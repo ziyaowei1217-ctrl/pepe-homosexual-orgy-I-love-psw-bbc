@@ -1,0 +1,223 @@
+{
+  "report_type": "round3_focused_repair_verification",
+  "reviewer_role": "database_driver_verification",
+  "independent_initial_round3_reviewer": false,
+  "date": "2026-10-01",
+  "scope": "Read-only repair review of the official Prisma PostgreSQL adapter adoption and bounded application driver; repository changes, CI/build and release/provider validation belong to root.",
+  "repository": "<review-workspace>/delivery-security-review",
+  "repository_mutations_by_verifier": false,
+  "runtime_versions": {
+    "node": "25.8.0",
+    "@prisma/client": "6.19.3",
+    "prisma": "6.19.3",
+    "@prisma/adapter-pg": "6.19.3",
+    "pg": "8.20.0"
+  },
+  "implementation": [
+    {
+      "path": "api/src/prisma/bounded-postgres.ts",
+      "sha256": "c4f1763413f905a32f3eeb1846c42cda3446a113322465f6513c671ce533e00a"
+    },
+    {
+      "path": "api/src/prisma/prisma.service.ts",
+      "sha256": "04a608c00efbf09e4690ee73b62e5acd87becb4b6985693cb60fc047cb5ee58d"
+    },
+    {
+      "path": "api/src/config/env.ts",
+      "sha256": "0b48bf309368ffb7e1b58035575caa4a5520149b9d0d19dfb5da7fe2ef986273"
+    },
+    {
+      "path": "tools/production-config.mjs",
+      "sha256": "383b1d1bbfd67db200da8016ae75e75cd21d3d56b8d40bbacf2b4d418451d4ea"
+    },
+    {
+      "path": "api/package.json",
+      "sha256": "5ff3c887f26973b048d24e29b77166d7fade7023d6e86904d2b1826b7513bf60"
+    },
+    {
+      "path": "pnpm-lock.yaml",
+      "sha256": "fc9983f28d6cb3b25564c03faf0088e7324fadfd654f7f934938ff03002eff55"
+    }
+  ],
+  "observations": [
+    {
+      "id": "prototype_transaction_transport",
+      "command": "node /tmp/sublet-round3-driver-transaction-trial.cjs",
+      "exit_code": 0,
+      "result": {
+        "stalled_transaction_elapsed_ms": 3064,
+        "accepted_selects": 1,
+        "closed_connections": 1,
+        "recovery_transaction_elapsed_ms": 6,
+        "recovery_connections": 2,
+        "successful_commit_count": 1
+      },
+      "interpretation": "Timer-only pg public client.end forced socket closure and transaction rejection; next transaction used a fresh connection."
+    },
+    {
+      "id": "independent_pg_queue_shutdown",
+      "command": "node /tmp/sublet-driver-independent-verify.cjs",
+      "exit_code": 0,
+      "result": {
+        "same_client_active_and_queued_rejected_ms": 3006,
+        "accepted_before_failure": 1,
+        "subsequent_query_connections": 2,
+        "pool_total_after_release": 0,
+        "pool_waiting_after_release": 0,
+        "pool_shutdown_ms": 3006,
+        "pool_shutdown_waiting": 0,
+        "pool_shutdown_total": 0
+      },
+      "interpretation": "No queued SELECT reached the stalled socket; acquisition expired after 2 seconds and pool.end completed after active transport close."
+    },
+    {
+      "id": "exact_runtime_queue_disposal_shutdown",
+      "command": "node /tmp/sublet-driver-exact-helper-verify.cjs",
+      "exit_code": 0,
+      "result": {
+        "same_client_active_and_queued_ms": 3007,
+        "post_disposal_stalled_query_ms": 3006,
+        "post_disposal_recovery_connections_total": 4,
+        "concurrent_prisma_queries_disconnect_ms": 3012,
+        "disconnect_accepted_selects": 1,
+        "disconnect_closed_connections": 1,
+        "disconnect_pool_total": 0,
+        "disconnect_pool_waiting": 0
+      },
+      "interpretation": "Exact repository helper retained Client subclass instrumentation after adapter-created pool recreation and permitted subsequent queries; concurrent raw query shutdown cleared actual sockets and queued acquisitions."
+    },
+    {
+      "id": "exact_runtime_tls_hostname_sni_ca",
+      "command": "node /tmp/sublet-driver-tls-review/exact-helper-tls.cjs",
+      "exit_code": 0,
+      "result": [
+        {
+          "host": "localhost",
+          "explicit_test_ca": true,
+          "connected": true,
+          "observed_sni": "localhost"
+        },
+        {
+          "host": "127.0.0.1",
+          "explicit_test_ca": true,
+          "connected": false,
+          "code": "ERR_TLS_CERT_ALTNAME_INVALID"
+        },
+        {
+          "host": "localhost",
+          "explicit_test_ca": false,
+          "connected": false,
+          "code": "DEPTH_ZERO_SELF_SIGNED_CERT"
+        }
+      ],
+      "interpretation": "Full URL hostname verification and DNS SNI were preserved; certificate chain verification remained enabled. CA and private key belonged only to a temporary local synthetic certificate."
+    },
+    {
+      "id": "serialization_and_rollback_mapping",
+      "commands": [
+        "node /tmp/sublet-driver-error-mapping.cjs",
+        "node /tmp/sublet-driver-native-error-mapping.cjs"
+      ],
+      "exit_code": 0,
+      "result": {
+        "model_40001": "PrismaClientKnownRequestError P2034 in both native and adapter",
+        "raw_40001": "PrismaClientKnownRequestError P2010 in both",
+        "raw_40P01": "PrismaClientKnownRequestError P2010 in both",
+        "model_40P01": "PrismaClientUnknownRequestError in both",
+        "rollback_count_per_failure": 1
+      },
+      "interpretation": "Existing model serialization retries remain compatible; raw serialization/deadlock and model deadlock retry gaps predate this repair."
+    },
+    {
+      "id": "interactive_transaction_concurrent_disconnect_limit",
+      "command": "node /tmp/sublet-driver-exact-transaction-verify.cjs",
+      "exit_code": 1,
+      "result": {
+        "transaction_and_shutdown_settled_ms": 5009,
+        "accepted_selects": 1,
+        "closed_connections": 1,
+        "pool_total": 0,
+        "pool_waiting": 0,
+        "transaction_error": "Connection terminated",
+        "same_client_post_shutdown_reuse_error": "GenericFailure: Engine is not yet connected (even after explicit $connect)"
+      },
+      "interpretation": "Terminal shutdown during an active interactive transaction uses the default approximately 5-second Prisma transaction deadline. All transport/pool work drains, but safe reuse of that same client is not established. This failed stress harness is retained as a limit, not a passing test."
+    },
+    {
+      "id": "healthy_query_event_emitter_deadline_cleanup",
+      "command": "node /tmp/sublet-driver-query-emitter-verify.cjs",
+      "exit_code": 0,
+      "result": {
+        "successful_queries": 2,
+        "wait_after_first_query_ms": 3100,
+        "connections": 1,
+        "closed_connections_before_cleanup": 0
+      },
+      "interpretation": "Final helper cleared the deadline for pg Query emitter completion, retained the healthy socket beyond3 seconds, and successfully queried again on that same connection."
+    }
+  ],
+  "concerns_resolved": [
+    {
+      "concern": "pg URL parameters override an explicit strict SSL object",
+      "evidence": "Direct constructor probe reproduced ssl=0 -> false and ssl=no-verify -> rejectUnauthorized:false. Final helper removes all query parameters; runtime and production gate reject unsupported/ambiguous settings."
+    },
+    {
+      "concern": "Prisma sslcert and pg sslcert have different meanings",
+      "resolution": "Certificate URL aliases are rejected rather than forwarded. Runtime uses platform trust store and the explicitly verified URL host. Private provider CA/client identity configuration is not supported by this repair and requires a separately reviewed extension."
+    },
+    {
+      "concern": "Strict pg8.20 TLS alone can verify localhost instead of an IP URL host",
+      "evidence": "Original direct pg strict config accepted a trusted DNS:localhost certificate with host127.0.0.1; final explicit tls.checkServerIdentity(expectedHost,cert) rejects the mismatch."
+    },
+    {
+      "concern": "Adapter schema option does not set raw-query search_path",
+      "resolution": "Final helper supplies the same literal schema to adapter and quoted startup search_path; double quotes are doubled, whitespace/backslash escaped, names constrained to nonempty/NUL-free <=63 bytes, special $user and pg_temp aliases rejected."
+    },
+    {
+      "concern": "Event-only instrumentation is lost during external pool disposal/recreation",
+      "evidence": "Direct factory dispose/connect reproduced replacement connect listener count0; final config retains BoundedPostgresClient, and exact runtime post-disposal3-second deadline/recovery passed."
+    },
+    {
+      "concern": "Version mismatch or unbounded connection pool defaults",
+      "resolution": "Client, CLI and adapter are exactly6.19.3, pg exactly8.20.0. Explicit connection/acquisition timeout2s, query transport deadline3s, pool connection_limit1..10 are enforced."
+    }
+  ],
+  "durable_callers": {
+    "source_review": "HealthService shares underlying readiness checks and clears in-flight work after query settles. PaymentOperationsService catches drain failures, resets running in finally, retries later scans, and preserves durable idempotency keys/leases when writes or commit outcomes are uncertain.",
+    "limitation": "No live payment provider, real payment write/commit, or production readiness endpoint was exercised by this verifier. Operations agent/root owns service regression and final CI."
+  },
+  "limitations": [
+    "All traffic was loopback to minimal owned PostgreSQL wire/TLS fixtures; no real credentials or provider/account traffic.",
+    "Wire fixtures exercise installed drivers and issued SQL messages; they are not a database emulator and do not establish real row rollback, schema permissions, recovery scans against PostgreSQL, or production TLS.",
+    "Custom-schema startup escaping and special-alias guards were reviewed against primary PostgreSQL documentation and configuration probes; no real PostgreSQL server was available for server-side schema execution.",
+    "Socket closure after a write/COMMIT leaves the outcome uncertain; callers must not infer rollback from timeout and must retain durable retry/idempotency safeguards.",
+    "Interactive transaction concurrent shutdown is terminal and approximately5s, with same-client post-shutdown reuse unverified/failed in the retained stress harness.",
+    "Native Prisma CLI/schema-engine network deadlines remain a separate deployment/migration concern; the helper bounds application pg traffic only.",
+    "Root owns final lint/typecheck/tests/build/audit and source-state reconciliation.",
+    "Independent harnesses ran with the local node executable v25.8.0; the supported Node >=22.13.0/container runtime requires root final validation."
+  ],
+  "primary_sources": [
+    "https://node-postgres.com/features/ssl",
+    "https://node-postgres.com/apis/client",
+    "https://node-postgres.com/apis/pool",
+    "https://www.prisma.io/docs/orm/v6/overview/databases/postgresql",
+    "https://www.postgresql.org/docs/current/libpq-connect.html",
+    "https://www.postgresql.org/docs/current/runtime-config-client.html"
+  ],
+  "small_evidence_files": [
+    "/tmp/sublet-driver-independent-verify.cjs",
+    "/tmp/sublet-driver-exact-helper-verify.cjs",
+    "/tmp/sublet-driver-error-fixture.ts",
+    "/tmp/sublet-driver-error-mapping.cjs",
+    "/tmp/sublet-driver-native-error-mapping.cjs",
+    "/tmp/sublet-driver-exact-transaction-verify.cjs",
+    "/tmp/sublet-driver-tls-review/exact-helper-tls.cjs",
+    "/tmp/sublet-driver-query-emitter-verify.cjs",
+    "/tmp/sublet-driver-final-runtime.jsonl",
+    "/tmp/sublet-driver-final-tls.jsonl"
+  ],
+  "conclusion": "Official adapter adoption fixes the accepted-query transport hang while preserving verified TLS, reserved transaction ownership, ordinary serialization retries, bounded acquisition, queue cleanup and ordinary pool recreation. Accept within the recorded terminal-shutdown, CLI and service-backed validation limits.",
+  "tls_fixture_generation": "openssl req -x509 -newkey rsa:2048 -nodes -keyout /tmp/sublet-driver-tls-review/server.key -out /tmp/sublet-driver-tls-review/server.pem -days 1 -subj /CN=localhost -addext subjectAltName=DNS:localhost (executed with the subject and extension shell-quoted)",
+  "source_freeze": "Final ops source freeze including healthy pg Query EventEmitter completion; exact helper transport/disposal/shutdown and TLS checks rerun afterward.",
+  "artifact_hygiene": "Root redacted the local absolute repository path before publication; recorded evidence and source hashes unchanged."
+}

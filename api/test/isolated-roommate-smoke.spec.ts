@@ -25,7 +25,8 @@ describe("isolated roommate smoke process", () => {
       "run",
       "test/roommate-realtime-smoke.spec.ts",
       "--pool=threads",
-      "--poolOptions.threads.singleThread"
+      "--maxWorkers=1",
+      "--no-file-parallelism"
     ]);
     expect(spawnSyncMock.mock.calls[0]?.[2]).toEqual(
       expect.objectContaining({

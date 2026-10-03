@@ -1,0 +1,250 @@
+{
+  "reviewer": "round3_operations_final",
+  "initialReviewedHead": "6e79733dbad38adb6800e462b62e18f3e6da7704",
+  "recordedAt": "2026-10-01",
+  "independence": {
+    "initialReport": "/tmp/sublet-round3-operations.json",
+    "initialSourceReviewReadOnly": true,
+    "priorAuditReportsReadBeforeConclusions": false,
+    "repairsExplicitlyApprovedByRoot": true
+  },
+  "repairStatus": "Sources frozen; local focused checks passed; root owns combined build/full suite and final real-service CI",
+  "repairs": [
+    {
+      "id": "OPS3-1",
+      "priority": "P2",
+      "state": "local regression verified; real-service release gate remains required",
+      "problem": "Active isReady sockets can blackhole PUBLISH or subscribed delivery while old readiness reports distributed healthy.",
+      "implementation": [
+        {
+          "file": "api/src/roommate-conversations/socket-adapter.ts",
+          "line": 101,
+          "detail": "Lifecycle failure closes both clients and stays unready until a fresh process/adapter; existing room memberships are not replaced."
+        },
+        {
+          "file": "api/src/roommate-conversations/socket-adapter.ts",
+          "line": 131,
+          "detail": "Bounded active nonce round trip requires both accepted PUBLISH and subscribed nonce delivery; single in-flight probe."
+        },
+        {
+          "file": "api/src/roommate-conversations/socket-adapter.ts",
+          "line": 167,
+          "detail": "Operational PUBLISH has one-second deadline; actual clients destroyed on timeout; repeated calls after failure cannot accumulate commands."
+        }
+      ],
+      "tests": {
+        "files": [
+          "api/test/socket-adapter.spec.ts",
+          "api/test/socket-adapter-protocol.spec.ts"
+        ],
+        "actualInstalledDriver": "redis5.12.1 real local TCP RESP fixture",
+        "results": "Lost delivery while commands work -> production503; blackholed PUBLISH returns within bound and closes actual sockets; failed adapter cannot heal from isReady; recovered fresh adapter passes actual round trip."
+      },
+      "limit": "Local Redis protocol fixture is not a real Render Valkey deployment; Socket.IO polling affinity across deploys and public reconnect must still be verified."
+    },
+    {
+      "id": "OPS3-2",
+      "priority": "P2",
+      "state": "actual installed Prisma driver transport settlement/recovery verified locally; real-PG CI protection added",
+      "rejectedApproach": {
+        "nativeSocketTimeout": "Installed Prisma6.19.3 accepted SELECT remained pending13 seconds despite exact socket_timeout=3 override. Native $disconnect also remained pending5.1 seconds; only externally destroyed socket settled both. Native URL timeout is not claimed as actual cancellation.",
+        "evidence": [
+          "/tmp/sublet-round3-native-debug.cjs",
+          "/tmp/sublet-round3-disconnect-debug.cjs"
+        ]
+      },
+      "implementation": [
+        {
+          "file": "api/src/prisma/bounded-postgres.ts",
+          "line": 8,
+          "detail": "Official adapter-pg6.19.3 with pg8.20; actual per-query3s public client.end() closes active socket;2s acquire/connect; pool maximum1..10; constructor instrumentation survives adapter-created reconnect pool."
+        },
+        {
+          "file": "api/src/prisma/bounded-postgres.ts",
+          "line": 17,
+          "detail": "Query-free driver URL; explicit strict CA-chain and exact URL-host identity, preserving DNS SNI; custom schema quoted and whitespace/backslash escaped in startup search_path and passed to adapter."
+        },
+        {
+          "file": "api/src/config/env.ts",
+          "line": 297,
+          "detail": "Reject unknown/ambiguous query settings and dangerous SSL/options aliases; bounded max; nonempty63-byte literal schema including special alias rejection."
+        },
+        {
+          "file": "api/src/health/health.service.ts",
+          "line": 23,
+          "detail": "Single shared underlying readiness work, parallel distributed probes and DB query,3.5s response deadline; caller timeouts cannot accumulate database queries."
+        },
+        {
+          "file": "tools/production-config.mjs",
+          "line": 69,
+          "detail": "Combined production release gate requires exact connect2/pool2/socket3 settings and supported safe parameters."
+        }
+      ],
+      "tests": {
+        "files": [
+          "api/test/prisma-query-deadline.spec.ts",
+          "api/test/bounded-postgres.spec.ts",
+          "api/test/prisma-query-deadline.integration.spec.ts",
+          "api/test/health.controller.spec.ts",
+          "api/test/env.spec.ts",
+          "tests/production-config.test.ts"
+        ],
+        "actualTransport": "Installed PrismaService against local PostgreSQL wire fixture, and real pg TCP/TLS sockets against a trusted test-only certificate.",
+        "results": [
+          "Accepted query settles~3s from actual transport destruction;12 readiness callers emit only1 accepted query, then later readiness and payment recovery scan proceed.",
+          "Interactive transaction failure retires connection, fresh transaction SELECT+COMMIT succeeds; same-client queued query never reaches wire; pool acquisition fails2s and shutdown drains sockets/pool/queue.",
+          "Disconnect then implicit reconnect retains3s actual query deadline.",
+          "Trusted localhost certificate succeeds; same trusted certificate for127.0.0.1 fails ERR_TLS_CERT_ALTNAME_INVALID; untrusted chain also independently rejected.",
+          "Healthy pg Query emitter clears timer and retains socket after3.1s.",
+          "Five real PostgreSQL integration cases added: pg_sleep6 rejects<4.5s thenSELECT, shared readiness, transaction write rollback/recovery, unique model error mapping, custom schema raw query. These five correctly skipped locally because no Docker/Postgres installed."
+        ]
+      },
+      "limits": [
+        "Terminating an in-flight commit leaves outcome uncertain; existing durable idempotency/fencing/reconciliation is required.",
+        "Shutdown overlapping active interactive transaction can settle~5s; shutdown is terminal and that Prisma instance must not be reused.",
+        "Migration CLI uses separate native schema engine and does not acquire app driver cancellation; reviewed finite server/process operational timeout and explicit success are required.",
+        "No actual PostgreSQL/Render endpoint test performed locally; future protection must execute on final release CI."
+      ]
+    },
+    {
+      "id": "OPS3-3",
+      "priority": "P2",
+      "state": "bounded explicit capacity and below-cap completeness locally verified",
+      "implementation": [
+        {
+          "file": "api/src/roommates/roommates.service.ts",
+          "line": 187,
+          "detail": "Active/unarchived/production-owned DB query take5001, deterministic matchdesc/id tie, explicit503 DISCOVERY_CAPACITY_EXCEEDED above5000 before ranking."
+        },
+        {
+          "file": "api/src/roommates/roommates.service.ts",
+          "line": 48,
+          "detail": "Missing, hidden, archived, self and previously acted detail IDs return404 before catalog scan/ranking."
+        },
+        {
+          "file": "api/src/roommates/roommates.service.ts",
+          "line": 177,
+          "detail": "Action lookup restricted to candidate IDs and bounded5001."
+        },
+        {
+          "file": "api/src/roommates/matching.ts",
+          "line": 179,
+          "detail": "Reuse already-computed preference for ranking; do not change ranking strategy/diversity sorts."
+        }
+      ],
+      "tests": {
+        "file": "api/test/roommates.service.spec.ts",
+        "results": "Complete ordered paging241; exactly5000 includes final40 candidates with total5000; above-cap5020 performs no scoring; take5001 asserted; absent/ineligible/actioned details do not scan.",
+        "performance": [
+          {
+            "size": 1000,
+            "status": 200,
+            "readBudget": 1000,
+            "take": 5001,
+            "elapsedMs": 9.559750000000008,
+            "eventLoopLagMs": 9.669999999999959,
+            "cpuUserMs": 16.053,
+            "heapDeltaBytes": 3701424,
+            "rssBytes": 219414528
+          },
+          {
+            "size": 5000,
+            "status": 200,
+            "readBudget": 5000,
+            "take": 5001,
+            "elapsedMs": 27.799959,
+            "eventLoopLagMs": 27.823458999999957,
+            "cpuUserMs": 35.029,
+            "heapDeltaBytes": 13873072,
+            "rssBytes": 263667712
+          },
+          {
+            "size": 5001,
+            "status": 503,
+            "readBudget": 0,
+            "take": 5001,
+            "elapsedMs": 0.14108299999998053,
+            "eventLoopLagMs": 0.16241700000000492,
+            "cpuUserMs": 0.154,
+            "heapDeltaBytes": 73704,
+            "rssBytes": 263782400
+          },
+          {
+            "size": 50000,
+            "status": 503,
+            "readBudget": 0,
+            "take": 5001,
+            "elapsedMs": 0.05333300000000918,
+            "eventLoopLagMs": 0.21691700000002356,
+            "cpuUserMs": 0.214,
+            "heapDeltaBytes": 44640,
+            "rssBytes": 296796160
+          }
+        ],
+        "fixture": "/tmp/sublet-round3-capacity-repair-harness.cjs"
+      },
+      "limits": "Mac arm64 Node25.8 timings are diagnostic, not capacity proof for Render1c2g. Anonymous request-rate/concurrency ingress controls and measured latency/event-loop load remain deployment requirements. Canonical raw publication/write repair is owned by independent security reviewer."
+    }
+  ],
+  "ownExecution": [
+    {
+      "command": "npx --yes pnpm@9.15.4 -C api exec vitest run focused operations suite",
+      "result": "98 passed,5 real-PG skipped at source freeze; additional final capacity/emitter targeted36 passed and Redis protocol2 passed; no build/typegen/dev."
+    },
+    {
+      "command": "npx --yes pnpm@9.15.4 exec vitest run tests/production-config.test.ts",
+      "result": "63 passed"
+    },
+    {
+      "command": "git diff --check",
+      "result": "passed"
+    },
+    {
+      "command": "npx --yes pnpm@9.15.4 audit --prod --json",
+      "result": "0 high/critical,1 existing moderate Nest SSE GHSA-36xv-jgw5-4q75; no SSE routes/source path found; driver additions introduce no new advisory.",
+      "output": "/tmp/sublet-round3-operations-repaired-audit.json"
+    }
+  ],
+  "independentDriverVerification": [
+    "/tmp/sublet-driver-exact-helper-verify.cjs",
+    "/tmp/sublet-driver-exact-transaction-verify.cjs",
+    "/tmp/sublet-driver-tls-review/exact-helper-tls.cjs"
+  ],
+  "render": {
+    "schemaValidation": "Initial fresh official Render JSON schema validation passed; no concrete Blueprint mismatch found.",
+    "source": "/tmp/sublet-round3-render-schema-evidence.json",
+    "pricing": {
+      "date": "2026-10-01",
+      "officialSource": "https://render.com/pricing",
+      "api": 25,
+      "web": 7,
+      "postgres": 19,
+      "keyValue": 10,
+      "hobbyWorkspace": 0,
+      "baselineMonthlyCompute": 61,
+      "exclusions": "Storage,bandwidth,build/pipeline/provider charges,domains,adapter hosting,monitoring,restore resources,taxes,workspace upgrades. No approved ceiling."
+    },
+    "docs": [
+      {
+        "file": "docs/render-deployment.md",
+        "line": 34
+      },
+      {
+        "file": "README.md",
+        "line": 197
+      }
+    ]
+  },
+  "concreteDeploymentBlockers": [
+    "User has authorized public publication on Render but has supplied no monthly spending ceiling; authenticated workspace requires payment information and no card is on file. No paid resources/public deployment created.",
+    "Actual S3-compatible bucket+verified sender/map/provider URLs+keys are not supplied/validated.",
+    "Hosted external sandbox payment adapter does not exist yet; only client contract supplied; must prove durable idempotency/refund/fencing/recovery behavior.",
+    "Exact final release CI including service-backed PostgreSQL/media/Valkey/container checks must succeed; previous-head CI success does not validate repaired source.",
+    "Real Render TLS/network allowlists,forwarded-hop spoof tests,combined actual production config,polling-only/deploy reconnect/public browser/provider interruption/restore acceptance must be completed."
+  ],
+  "limits": [
+    "No deployment,spending,credential entry,or provider messages performed by reviewer.",
+    "No actual Docker/Postgres/Valkey/localWindows/Linux/native mobile execution. Root owns final builds/service CI and final reporting.",
+    "Initial independent audit report remains unmodified; repair evidence is separate."
+  ]
+}

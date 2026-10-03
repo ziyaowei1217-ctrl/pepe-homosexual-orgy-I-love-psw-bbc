@@ -1,6 +1,8 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createRoommateRealtimeClient } from "../lib/roommate-realtime";
+
+afterEach(() => vi.unstubAllGlobals());
 
 function createFakeSocket() {
   const handlers = new Map<string, Array<(payload?: unknown) => void>>();
@@ -35,7 +37,7 @@ describe("roommate realtime client", () => {
 
     client.connect();
     expect(factory).toHaveBeenCalledWith(
-      "http://localhost:4000/roommate-messaging",
+      `${new URL(process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000/api/v1").origin}/roommate-messaging`,
       expect.objectContaining({
         auth: { token: "token-a" },
         autoConnect: false,
@@ -148,5 +150,30 @@ describe("roommate realtime client", () => {
     fake.emit("roommate.conversation.updated", {});
 
     expect(onEvent).not.toHaveBeenCalled();
+  });
+
+  it("resumes an exhausted connection on visible network recovery and removes recovery listeners", () => {
+    const windowTarget = new EventTarget();
+    const documentTarget = Object.assign(new EventTarget(), { visibilityState: "hidden" });
+    vi.stubGlobal("window", windowTarget);
+    vi.stubGlobal("document", documentTarget);
+    vi.stubGlobal("navigator", { onLine: true });
+    const fake = createFakeSocket();
+    const socket = { ...fake.socket, connected: false };
+    const client = createRoommateRealtimeClient({ token: "token-a", onEvent: vi.fn(), onReconnect: vi.fn(), socketFactory: () => socket });
+    client.connect();
+    expect(socket.connect).toHaveBeenCalledOnce();
+    windowTarget.dispatchEvent(new Event("online"));
+    expect(socket.connect).toHaveBeenCalledOnce();
+    documentTarget.visibilityState = "visible";
+    documentTarget.dispatchEvent(new Event("visibilitychange"));
+    expect(socket.connect).toHaveBeenCalledTimes(2);
+    socket.connected = true;
+    windowTarget.dispatchEvent(new Event("focus"));
+    expect(socket.connect).toHaveBeenCalledTimes(2);
+    client.disconnect();
+    socket.connected = false;
+    windowTarget.dispatchEvent(new Event("online"));
+    expect(socket.connect).toHaveBeenCalledTimes(2);
   });
 });

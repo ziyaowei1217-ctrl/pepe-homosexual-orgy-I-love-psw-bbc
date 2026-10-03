@@ -1,7 +1,7 @@
 "use client";
 
 import { Building2, CalendarDays, ClipboardCheck, Eye, MapPin, MessageCircle, Pencil, Plus } from "lucide-react";
-import Image from "next/image";
+import Image from "@/components/ui/app-image";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -286,12 +286,12 @@ function HostListingEditorSession({ listingId }: { listingId?: string }) {
   </HostPage>;
 }
 
-function HostPage({ title, description, action, children }: { title: string; description: string; action?: React.ReactNode; children: React.ReactNode }) { return <main className="min-h-dvh bg-[#f4f6f9] p-4 sm:p-6 lg:p-8 xl:p-10"><div className="mx-auto max-w-[1380px]"><header className="flex flex-col justify-between gap-5 border-b border-slate-200 pb-7 sm:flex-row sm:items-end"><div><p className="text-xs font-black uppercase tracking-[0.14em] text-[#0668e1]">Host workspace</p><h1 className="mt-2 text-4xl font-black tracking-[-0.05em] sm:text-5xl">{title}</h1><p className="mt-3 text-sm text-slate-500">{description}</p></div>{action}</header>{children}</div></main>; }
+function HostPage({ title, description, action, children }: { title: string; description: string; action?: React.ReactNode; children: React.ReactNode }) { return <main className="min-h-dvh bg-[#F5F8F5] p-4 sm:p-6 lg:p-8 xl:p-10"><div className="mx-auto max-w-[1380px]"><header className="flex flex-col justify-between gap-5 border-b border-slate-200 pb-7 sm:flex-row sm:items-end"><div><p className="text-xs font-black uppercase tracking-[0.14em] text-[#234B3B]">Host workspace</p><h1 className="mt-2 text-4xl font-black tracking-[-0.05em] sm:text-5xl">{title}</h1><p className="mt-3 text-sm text-slate-500">{description}</p></div>{action}</header>{children}</div></main>; }
 function LoginGate({ text, returnTo }: { text: string; returnTo: string }) { return <section className="mt-6 rounded-[24px] border border-dashed border-blue-200 bg-white p-8 text-center"><h2 className="text-xl font-black">{text}</h2><Link href={authRoute({ returnTo })} className="primary-action mt-5">登录</Link></section>; }
 function ErrorNotice({ text }: { text: string }) { return <p role="alert" className="mt-6 rounded-[16px] bg-red-50 p-4 text-sm font-bold text-red-700">{text}</p>; }
 function EmptyState({ text }: { text: string }) { return <p className="mt-6 rounded-[20px] border border-dashed border-slate-300 bg-white p-8 text-center text-sm font-bold text-slate-500">{text}</p>; }
 function RoleGate() { return <section className="mt-6 rounded-[20px] border border-dashed border-slate-300 bg-white p-8 text-center"><p className="text-sm font-bold text-slate-500">请先在账户资料中将身份设置为房东或租客兼房东。</p><Link href="/account/profile" className="primary-action mt-5">前往账户资料</Link></section>; }
-function Metric({ icon: Icon, label, value, href }: { icon: typeof Building2; label: string; value: string; href: string }) { return <Link href={href} className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm"><span className="grid size-10 place-items-center rounded-[14px] bg-blue-50 text-[#0668e1]"><Icon className="size-5" /></span><p className="mt-5 text-xs font-black text-slate-500">{label}</p><p className="mt-2 text-3xl font-black">{value}</p></Link>; }
+function Metric({ icon: Icon, label, value, href }: { icon: typeof Building2; label: string; value: string; href: string }) { return <Link href={href} className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm"><span className="grid size-10 place-items-center rounded-[14px] bg-blue-50 text-[#234B3B]"><Icon className="size-5" /></span><p className="mt-5 text-xs font-black text-slate-500">{label}</p><p className="mt-2 text-3xl font-black">{value}</p></Link>; }
 function statusKey(status?: ApiListing["status"]) { return status === "DRAFT" || status === "REJECTED" ? "draft" : status === "SUBMITTED" ? "review" : status === "APPROVED" ? "published" : "rented"; }
 function statusLabel(status?: ApiListing["status"]) { return status === "DRAFT" ? "草稿" : status === "SUBMITTED" ? "审核中" : status === "APPROVED" ? "已发布" : status === "REJECTED" ? "已退回" : "已出租"; }
 

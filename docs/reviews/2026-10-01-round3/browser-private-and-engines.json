@@ -1,0 +1,1370 @@
+[
+  {
+    "name": "chromium",
+    "checks": [
+      {
+        "name": "Guest application retains context through login",
+        "result": {
+          "loginUrl": "http://127.0.0.1:4411/account?returnTo=%2Fapplications%2Fnew%3FlistingId%3Dindependent-round2-1&intent=application",
+          "status": "SUBMITTED",
+          "creates": 1
+        },
+        "status": "pass"
+      },
+      {
+        "name": "Profile update at 320px and reload persists",
+        "result": {
+          "scrollWidth": 320,
+          "overflow": []
+        },
+        "status": "pass"
+      },
+      {
+        "name": "Deck shows rationale and advances once per action",
+        "result": {
+          "actions": [
+            "r3-peer-1",
+            "r3-peer-2"
+          ]
+        },
+        "status": "pass"
+      },
+      {
+        "name": "Inbox history prepend, retained failed draft and command retry",
+        "result": {
+          "prependPosition": {
+            "top": 2654,
+            "scrollHeight": 5552,
+            "clientHeight": 463
+          },
+          "retrySameCommand": true
+        },
+        "status": "pass"
+      },
+      {
+        "name": "Publish basic/pricing validation and draft save at 320px",
+        "result": {
+          "saved": 1,
+          "scrollWidth": 320,
+          "body": "房东工作台\n概览\n房源\n申请\n消息\n\nHOST WORKSPACE\n\n发布新房源\n\n完善房源资料与照片，保存草稿后提交审核。\n\n草稿已保存。\n\n房源资料\n\n填写房源信息并添加照片。提交审核后，照片将暂时锁定。\n\n保存草稿\n01\n基础信息\n标题、区域、可租期、房型与交通\n02\n价格与设施\n月租、原价、设施与声明\n03\n图片与分类\n文件上传、排序与封面\n04\n预览与提交\n检查信息、照片与发布须知\n拖放图片到这里，或点击选择文件\nJPEG、PNG、WebP · 单张不超过 10 MB · 最多 12 张\n\n尚未添加图片。\n\n上一步\n下一步"
+        },
+        "status": "pass"
+      },
+      {
+        "name": "Keyboard filter trap, Escape return and 200% reflow",
+        "result": {
+          "overflow": {
+            "width": 1440,
+            "client": 1440,
+            "inner": 1440
+          }
+        },
+        "status": "pass"
+      }
+    ],
+    "errors": [],
+    "unhandled": [],
+    "logs": [
+      {
+        "p": "/listing-media/00000000-0000-4000-8000-000000000001/content",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/auth/email-code",
+        "method": "POST",
+        "body": {
+          "email": "round3@example.test"
+        }
+      },
+      {
+        "p": "/auth/verify-email",
+        "method": "POST",
+        "body": {
+          "email": "round3@example.test",
+          "code": "123456"
+        }
+      },
+      {
+        "p": "/auth/me",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/profiles/me",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/applications/mine",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/auth/me",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/listing-media/00000000-0000-4000-8000-000000000001/content",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/auth/me",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/auth/me",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/applications/mine",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/applications",
+        "method": "POST",
+        "body": {
+          "listingId": "independent-round2-1",
+          "scope": "SOLO",
+          "moveIn": "2026-10-15",
+          "moveOut": "2027-03-15",
+          "schoolOrOccupation": "Independent College",
+          "incomeBand": "TWO_TO_THREE_X",
+          "guarantorStatus": "AVAILABLE",
+          "note": "",
+          "contactName": "Robin Review",
+          "contactEmail": "contact@example.test"
+        }
+      },
+      {
+        "p": "/applications/round3-application/submit",
+        "method": "POST",
+        "body": {}
+      },
+      {
+        "p": "/auth/me",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/profiles/me",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/applications/mine",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/auth/me",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/profiles/me",
+        "method": "PATCH",
+        "body": {
+          "displayName": "New name 名字",
+          "school": "Independent College",
+          "city": "Boston",
+          "role": "both",
+          "bio": "A quiet roommate looking for a study-friendly home."
+        }
+      },
+      {
+        "p": "/auth/me",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/profiles/me",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/applications/mine",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/auth/me",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/roommates/deck",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/roommates/deck",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/auth/me",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/listing-media/00000000-0000-4000-8000-000000000001/content",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/roommates/r3-peer-1/actions",
+        "method": "POST",
+        "body": {
+          "action": "LIKE"
+        }
+      },
+      {
+        "p": "/roommates/r3-peer-2/actions",
+        "method": "POST",
+        "body": {
+          "action": "PASS"
+        }
+      },
+      {
+        "p": "/deal-threads",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/roommate-conversations",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/auth/me",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/roommate-conversations/round3-chat/messages",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/roommate-conversations/round3-chat/read",
+        "method": "POST",
+        "body": {
+          "lastReadMessageId": "m-034"
+        }
+      },
+      {
+        "p": "/roommate-conversations/round3-chat/messages",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/roommate-conversations/round3-chat/messages",
+        "method": "POST",
+        "body": {
+          "clientMessageId": "b5527333-062e-4504-be0c-b7034cbc58ad",
+          "body": "Can we discuss move-in plans next week?"
+        }
+      },
+      {
+        "p": "/roommate-conversations/round3-chat/messages",
+        "method": "POST",
+        "body": {
+          "clientMessageId": "b5527333-062e-4504-be0c-b7034cbc58ad",
+          "body": "Can we discuss move-in plans next week?"
+        }
+      },
+      {
+        "p": "/auth/me",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/profiles/me",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/auth/me",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/listings",
+        "method": "POST",
+        "body": {
+          "title": "Quiet study home",
+          "area": "Boston · Cambridge",
+          "availableFrom": "2026-10-15",
+          "availableTo": "2027-03-15",
+          "price": 1600,
+          "originalPrice": 1800,
+          "beds": 1,
+          "baths": 1,
+          "commute": "10 minute bus ride",
+          "transit": "Near Red Line",
+          "trust": "房东知情声明 · 待平台审核",
+          "tags": [
+            "Wi-Fi",
+            "房东知情"
+          ],
+          "score": 4.8
+        }
+      },
+      {
+        "p": "/listings/round3-host-listing/media",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/listing-media/00000000-0000-4000-8000-000000000006/content",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/listing-media/00000000-0000-4000-8000-000000000005/content",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/listing-media/00000000-0000-4000-8000-000000000004/content",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/listing-media/00000000-0000-4000-8000-000000000003/content",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/listing-media/00000000-0000-4000-8000-000000000002/content",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/listing-media/00000000-0000-4000-8000-000000000001/content",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/auth/me",
+        "method": "GET",
+        "body": null
+      }
+    ]
+  },
+  {
+    "name": "firefox",
+    "checks": [
+      {
+        "name": "Guest application retains context through login",
+        "result": {
+          "loginUrl": "http://127.0.0.1:4411/account?returnTo=%2Fapplications%2Fnew%3FlistingId%3Dindependent-round2-1&intent=application",
+          "status": "SUBMITTED",
+          "creates": 1
+        },
+        "status": "pass"
+      },
+      {
+        "name": "Profile update at 320px and reload persists",
+        "result": {
+          "scrollWidth": 350,
+          "overflow": [
+            {
+              "tag": "ASIDE",
+              "class": "flex min-w-0 items-center overflow-hidden rounded-[18px] border border-slate-200 bg-white p-1 shadow-sm lg:block lg:rounded-[24px] lg:p-2",
+              "rect": {
+                "x": 16,
+                "y": 177,
+                "width": 334,
+                "height": 54,
+                "top": 177,
+                "right": 350,
+                "bottom": 231,
+                "left": 16
+              },
+              "text": "首页\n资料\n认证\n设置"
+            },
+            {
+              "tag": "BUTTON",
+              "class": "ml-1 flex size-11 shrink-0 items-center justify-center rounded-[14px] text-sm font-bold text-slate-600 hover:bg-slate-50 lg:ml-0 lg:mt-2 lg:h-auto lg:w-full lg:justify-start lg:gap-3 lg:px-3 lg:py-3",
+              "rect": {
+                "x": 301,
+                "y": 182,
+                "width": 44,
+                "height": 44,
+                "top": 182,
+                "right": 345,
+                "bottom": 226,
+                "left": 301
+              },
+              "text": ""
+            },
+            {
+              "tag": "svg",
+              "class": {},
+              "rect": {
+                "x": 315,
+                "y": 196,
+                "width": 16,
+                "height": 16,
+                "top": 196,
+                "right": 331,
+                "bottom": 212,
+                "left": 315
+              }
+            },
+            {
+              "tag": "path",
+              "class": {},
+              "rect": {
+                "x": 316.04998779296875,
+                "y": 197.0500030517578,
+                "width": 5.899993896484375,
+                "height": 13.899993896484375,
+                "top": 197.0500030517578,
+                "right": 321.9499816894531,
+                "bottom": 210.9499969482422,
+                "left": 316.04998779296875
+              }
+            },
+            {
+              "tag": "polyline",
+              "class": {},
+              "rect": {
+                "x": 324.7166748046875,
+                "y": 199.71665954589844,
+                "width": 5.23333740234375,
+                "height": 8.566680908203125,
+                "top": 199.71665954589844,
+                "right": 329.95001220703125,
+                "bottom": 208.28334045410156,
+                "left": 324.7166748046875
+              }
+            },
+            {
+              "tag": "line",
+              "class": {},
+              "rect": {
+                "x": 320.33331298828125,
+                "y": 203.3333282470703,
+                "width": 9.350006103515625,
+                "height": 1.350006103515625,
+                "top": 203.3333282470703,
+                "right": 329.6833190917969,
+                "bottom": 204.68333435058594,
+                "left": 320.33331298828125
+              }
+            },
+            {
+              "tag": "SECTION",
+              "class": "rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm sm:p-8",
+              "rect": {
+                "x": 16,
+                "y": 247,
+                "width": 334,
+                "height": 746,
+                "top": 247,
+                "right": 350,
+                "bottom": 993,
+                "left": 16
+              },
+              "text": "个人资料\n\n更新账户名称、所在地和个人简介。租房申请的联系人信息请在提交时核对。\n\n显示名称\n学校或公司\n城市"
+            },
+            {
+              "tag": "H2",
+              "class": "text-2xl font-black",
+              "rect": {
+                "x": 41,
+                "y": 272,
+                "width": 284,
+                "height": 32,
+                "top": 272,
+                "right": 325,
+                "bottom": 304,
+                "left": 41
+              },
+              "text": "个人资料"
+            },
+            {
+              "tag": "P",
+              "class": "mt-2 text-sm text-slate-500",
+              "rect": {
+                "x": 41,
+                "y": 312,
+                "width": 284,
+                "height": 40,
+                "top": 312,
+                "right": 325,
+                "bottom": 352,
+                "left": 41
+              },
+              "text": "更新账户名称、所在地和个人简介。租房申请的联系人信息请在提交时核对。"
+            },
+            {
+              "tag": "FORM",
+              "class": "mt-7 grid gap-5 sm:grid-cols-2",
+              "rect": {
+                "x": 41,
+                "y": 380,
+                "width": 284,
+                "height": 588,
+                "top": 380,
+                "right": 325,
+                "bottom": 968,
+                "left": 41
+              },
+              "text": "显示名称\n学校或公司\n城市\n身份\n个人简介\n保存资料"
+            },
+            {
+              "tag": "LABEL",
+              "class": "grid gap-2 text-sm font-black",
+              "rect": {
+                "x": 41,
+                "y": 380,
+                "width": 284,
+                "height": 76,
+                "top": 380,
+                "right": 325,
+                "bottom": 456,
+                "left": 41
+              },
+              "text": "显示名称"
+            },
+            {
+              "tag": "INPUT",
+              "class": "application-input",
+              "rect": {
+                "x": 41,
+                "y": 408,
+                "width": 284,
+                "height": 48,
+                "top": 408,
+                "right": 325,
+                "bottom": 456,
+                "left": 41
+              },
+              "text": ""
+            },
+            {
+              "tag": "LABEL",
+              "class": "grid gap-2 text-sm font-black",
+              "rect": {
+                "x": 41,
+                "y": 476,
+                "width": 284,
+                "height": 76,
+                "top": 476,
+                "right": 325,
+                "bottom": 552,
+                "left": 41
+              },
+              "text": "学校或公司"
+            },
+            {
+              "tag": "INPUT",
+              "class": "application-input",
+              "rect": {
+                "x": 41,
+                "y": 504,
+                "width": 284,
+                "height": 48,
+                "top": 504,
+                "right": 325,
+                "bottom": 552,
+                "left": 41
+              },
+              "text": ""
+            },
+            {
+              "tag": "LABEL",
+              "class": "grid gap-2 text-sm font-black",
+              "rect": {
+                "x": 41,
+                "y": 572,
+                "width": 284,
+                "height": 76,
+                "top": 572,
+                "right": 325,
+                "bottom": 648,
+                "left": 41
+              },
+              "text": "城市"
+            },
+            {
+              "tag": "INPUT",
+              "class": "application-input",
+              "rect": {
+                "x": 41,
+                "y": 600,
+                "width": 284,
+                "height": 48,
+                "top": 600,
+                "right": 325,
+                "bottom": 648,
+                "left": 41
+              },
+              "text": ""
+            },
+            {
+              "tag": "LABEL",
+              "class": "grid gap-2 text-sm font-black",
+              "rect": {
+                "x": 41,
+                "y": 668,
+                "width": 284,
+                "height": 76,
+                "top": 668,
+                "right": 325,
+                "bottom": 744,
+                "left": 41
+              },
+              "text": "身份"
+            },
+            {
+              "tag": "SELECT",
+              "class": "application-input",
+              "rect": {
+                "x": 41,
+                "y": 696,
+                "width": 284,
+                "height": 48,
+                "top": 696,
+                "right": 325,
+                "bottom": 744,
+                "left": 41
+              },
+              "text": ""
+            },
+            {
+              "tag": "LABEL",
+              "class": "grid gap-2 text-sm font-black sm:col-span-2",
+              "rect": {
+                "x": 41,
+                "y": 764,
+                "width": 284,
+                "height": 140,
+                "top": 764,
+                "right": 325,
+                "bottom": 904,
+                "left": 41
+              },
+              "text": "个人简介"
+            },
+            {
+              "tag": "TEXTAREA",
+              "class": "min-h-28 rounded-[16px] border border-slate-200 p-4 text-sm outline-none focus:border-blue-400",
+              "rect": {
+                "x": 41,
+                "y": 792,
+                "width": 284,
+                "height": 112,
+                "top": 792,
+                "right": 325,
+                "bottom": 904,
+                "left": 41
+              },
+              "text": ""
+            }
+          ]
+        },
+        "status": "pass"
+      },
+      {
+        "name": "Deck shows rationale and advances once per action",
+        "result": {
+          "actions": [
+            "r3-peer-1",
+            "r3-peer-2"
+          ]
+        },
+        "status": "pass"
+      },
+      {
+        "name": "Inbox history prepend, retained failed draft and command retry",
+        "result": {
+          "prependPosition": {
+            "top": 2654,
+            "scrollHeight": 5552,
+            "clientHeight": 463
+          },
+          "retrySameCommand": true
+        },
+        "status": "pass"
+      },
+      {
+        "name": "Publish basic/pricing validation and draft save at 320px",
+        "result": {
+          "saved": 1,
+          "scrollWidth": 320,
+          "body": "房东工作台\n概览\n房源\n申请\n消息\n\nHOST WORKSPACE\n\n发布新房源\n\n完善房源资料与照片，保存草稿后提交审核。\n\n草稿已保存。\n\n房源资料\n\n填写房源信息并添加照片。提交审核后，照片将暂时锁定。\n\n保存草稿\n01\n基础信息\n标题、区域、可租期、房型与交通\n02\n价格与设施\n月租、原价、设施与声明\n03\n图片与分类\n文件上传、排序与封面\n04\n预览与提交\n检查信息、照片与发布须知\n拖放图片到这里，或点击选择文件\nJPEG、PNG、WebP · 单张不超过 10 MB · 最多 12 张\n\n尚未添加图片。\n\n上一步\n下一步"
+        },
+        "status": "pass"
+      },
+      {
+        "name": "Keyboard filter trap, Escape return and 200% reflow",
+        "result": {
+          "overflow": {
+            "width": 1440,
+            "client": 1440,
+            "inner": 1440
+          }
+        },
+        "status": "pass"
+      }
+    ],
+    "errors": [],
+    "unhandled": [],
+    "logs": [
+      {
+        "p": "/listing-media/00000000-0000-4000-8000-000000000001/content",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/auth/email-code",
+        "method": "POST",
+        "body": {
+          "email": "round3@example.test"
+        }
+      },
+      {
+        "p": "/auth/verify-email",
+        "method": "POST",
+        "body": {
+          "email": "round3@example.test",
+          "code": "123456"
+        }
+      },
+      {
+        "p": "/auth/me",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/profiles/me",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/applications/mine",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/auth/me",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/listing-media/00000000-0000-4000-8000-000000000001/content",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/auth/me",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/auth/me",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/applications/mine",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/applications",
+        "method": "POST",
+        "body": {
+          "listingId": "independent-round2-1",
+          "scope": "SOLO",
+          "moveIn": "2026-10-15",
+          "moveOut": "2027-03-15",
+          "schoolOrOccupation": "Independent College",
+          "incomeBand": "TWO_TO_THREE_X",
+          "guarantorStatus": "AVAILABLE",
+          "note": "",
+          "contactName": "Robin Review",
+          "contactEmail": "contact@example.test"
+        }
+      },
+      {
+        "p": "/applications/round3-application/submit",
+        "method": "POST",
+        "body": {}
+      },
+      {
+        "p": "/auth/me",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/profiles/me",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/applications/mine",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/auth/me",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/profiles/me",
+        "method": "PATCH",
+        "body": {
+          "displayName": "New name 名字",
+          "school": "Independent College",
+          "city": "Boston",
+          "role": "both",
+          "bio": "A quiet roommate looking for a study-friendly home."
+        }
+      },
+      {
+        "p": "/auth/me",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/profiles/me",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/applications/mine",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/auth/me",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/roommates/deck",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/roommates/deck",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/auth/me",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/listing-media/00000000-0000-4000-8000-000000000001/content",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/roommates/r3-peer-1/actions",
+        "method": "POST",
+        "body": {
+          "action": "LIKE"
+        }
+      },
+      {
+        "p": "/roommates/r3-peer-2/actions",
+        "method": "POST",
+        "body": {
+          "action": "PASS"
+        }
+      },
+      {
+        "p": "/deal-threads",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/roommate-conversations",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/auth/me",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/roommate-conversations/round3-chat/messages",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/roommate-conversations/round3-chat/read",
+        "method": "POST",
+        "body": {
+          "lastReadMessageId": "m-034"
+        }
+      },
+      {
+        "p": "/roommate-conversations/round3-chat/messages",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/roommate-conversations/round3-chat/messages",
+        "method": "POST",
+        "body": {
+          "clientMessageId": "51668c3a-8e67-46af-a084-ddf2c95bf2a7",
+          "body": "Can we discuss move-in plans next week?"
+        }
+      },
+      {
+        "p": "/roommate-conversations/round3-chat/messages",
+        "method": "POST",
+        "body": {
+          "clientMessageId": "51668c3a-8e67-46af-a084-ddf2c95bf2a7",
+          "body": "Can we discuss move-in plans next week?"
+        }
+      },
+      {
+        "p": "/auth/me",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/profiles/me",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/auth/me",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/listings",
+        "method": "POST",
+        "body": {
+          "title": "Quiet study home",
+          "area": "Boston · Cambridge",
+          "availableFrom": "2026-10-15",
+          "availableTo": "2027-03-15",
+          "price": 1600,
+          "originalPrice": 1800,
+          "beds": 1,
+          "baths": 1,
+          "commute": "10 minute bus ride",
+          "transit": "Near Red Line",
+          "trust": "房东知情声明 · 待平台审核",
+          "tags": [
+            "Wi-Fi",
+            "房东知情"
+          ],
+          "score": 4.8
+        }
+      },
+      {
+        "p": "/listings/round3-host-listing/media",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/listing-media/00000000-0000-4000-8000-000000000006/content",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/listing-media/00000000-0000-4000-8000-000000000005/content",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/listing-media/00000000-0000-4000-8000-000000000004/content",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/listing-media/00000000-0000-4000-8000-000000000003/content",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/listing-media/00000000-0000-4000-8000-000000000002/content",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/listing-media/00000000-0000-4000-8000-000000000001/content",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/auth/me",
+        "method": "GET",
+        "body": null
+      }
+    ]
+  },
+  {
+    "name": "webkit",
+    "checks": [
+      {
+        "name": "Guest application retains context through login",
+        "result": {
+          "loginUrl": "http://127.0.0.1:4411/account?returnTo=%2Fapplications%2Fnew%3FlistingId%3Dindependent-round2-1&intent=application",
+          "status": "SUBMITTED",
+          "creates": 1
+        },
+        "status": "pass"
+      },
+      {
+        "name": "Profile update at 320px and reload persists",
+        "result": {
+          "scrollWidth": 320,
+          "overflow": []
+        },
+        "status": "pass"
+      },
+      {
+        "name": "Deck shows rationale and advances once per action",
+        "result": {
+          "actions": [
+            "r3-peer-1",
+            "r3-peer-2"
+          ]
+        },
+        "status": "pass"
+      },
+      {
+        "name": "Inbox history prepend, retained failed draft and command retry",
+        "result": {
+          "prependPosition": {
+            "top": 2654,
+            "scrollHeight": 5552,
+            "clientHeight": 463
+          },
+          "retrySameCommand": true
+        },
+        "status": "pass"
+      },
+      {
+        "name": "Publish basic/pricing validation and draft save at 320px",
+        "result": {
+          "saved": 1,
+          "scrollWidth": 320,
+          "body": "房东工作台\n概览\n房源\n申请\n消息\n\nHOST WORKSPACE\n\n发布新房源\n\n完善房源资料与照片，保存草稿后提交审核。\n\n草稿已保存。\n\n房源资料\n\n填写房源信息并添加照片。提交审核后，照片将暂时锁定。\n\n保存草稿\n01\n基础信息\n标题、区域、可租期、房型与交通\n02\n价格与设施\n月租、原价、设施与声明\n03\n图片与分类\n文件上传、排序与封面\n04\n预览与提交\n检查信息、照片与发布须知\n拖放图片到这里，或点击选择文件\nJPEG、PNG、WebP · 单张不超过 10 MB · 最多 12 张\n\n尚未添加图片。\n\n上一步\n下一步"
+        },
+        "status": "pass"
+      },
+      {
+        "name": "Keyboard filter trap, Escape return and 200% reflow",
+        "status": "fail",
+        "error": "Expected values to be strictly equal:\n\nfalse !== true\n"
+      }
+    ],
+    "errors": [],
+    "unhandled": [],
+    "logs": [
+      {
+        "p": "/listing-media/00000000-0000-4000-8000-000000000001/content",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/auth/email-code",
+        "method": "POST",
+        "body": {
+          "email": "round3@example.test"
+        }
+      },
+      {
+        "p": "/auth/verify-email",
+        "method": "POST",
+        "body": {
+          "email": "round3@example.test",
+          "code": "123456"
+        }
+      },
+      {
+        "p": "/auth/me",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/profiles/me",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/applications/mine",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/auth/me",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/listing-media/00000000-0000-4000-8000-000000000001/content",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/auth/me",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/auth/me",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/applications/mine",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/applications",
+        "method": "POST",
+        "body": {
+          "listingId": "independent-round2-1",
+          "scope": "SOLO",
+          "moveIn": "2026-10-15",
+          "moveOut": "2027-03-15",
+          "schoolOrOccupation": "Independent College",
+          "incomeBand": "TWO_TO_THREE_X",
+          "guarantorStatus": "AVAILABLE",
+          "note": "",
+          "contactName": "Robin Review",
+          "contactEmail": "contact@example.test"
+        }
+      },
+      {
+        "p": "/applications/round3-application/submit",
+        "method": "POST",
+        "body": {}
+      },
+      {
+        "p": "/auth/me",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/profiles/me",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/applications/mine",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/auth/me",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/profiles/me",
+        "method": "PATCH",
+        "body": {
+          "displayName": "New name 名字",
+          "school": "Independent College",
+          "city": "Boston",
+          "role": "both",
+          "bio": "A quiet roommate looking for a study-friendly home."
+        }
+      },
+      {
+        "p": "/auth/me",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/profiles/me",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/applications/mine",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/auth/me",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/roommates/deck",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/roommates/deck",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/auth/me",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/listing-media/00000000-0000-4000-8000-000000000001/content",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/roommates/r3-peer-1/actions",
+        "method": "POST",
+        "body": {
+          "action": "LIKE"
+        }
+      },
+      {
+        "p": "/roommates/r3-peer-2/actions",
+        "method": "POST",
+        "body": {
+          "action": "PASS"
+        }
+      },
+      {
+        "p": "/deal-threads",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/roommate-conversations",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/auth/me",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/roommate-conversations/round3-chat/messages",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/roommate-conversations/round3-chat/read",
+        "method": "POST",
+        "body": {
+          "lastReadMessageId": "m-034"
+        }
+      },
+      {
+        "p": "/roommate-conversations/round3-chat/messages",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/roommate-conversations/round3-chat/messages",
+        "method": "POST",
+        "body": {
+          "clientMessageId": "0ec4d30c-ac14-4444-9b1e-471aaae5de73",
+          "body": "Can we discuss move-in plans next week?"
+        }
+      },
+      {
+        "p": "/roommate-conversations/round3-chat/messages",
+        "method": "POST",
+        "body": {
+          "clientMessageId": "0ec4d30c-ac14-4444-9b1e-471aaae5de73",
+          "body": "Can we discuss move-in plans next week?"
+        }
+      },
+      {
+        "p": "/auth/me",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/profiles/me",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/auth/me",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/listings",
+        "method": "POST",
+        "body": {
+          "title": "Quiet study home",
+          "area": "Boston · Cambridge",
+          "availableFrom": "2026-10-15",
+          "availableTo": "2027-03-15",
+          "price": 1600,
+          "originalPrice": 1800,
+          "beds": 1,
+          "baths": 1,
+          "commute": "10 minute bus ride",
+          "transit": "Near Red Line",
+          "trust": "房东知情声明 · 待平台审核",
+          "tags": [
+            "Wi-Fi",
+            "房东知情"
+          ],
+          "score": 4.8
+        }
+      },
+      {
+        "p": "/listings/round3-host-listing/media",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/listing-media/00000000-0000-4000-8000-000000000006/content",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/listing-media/00000000-0000-4000-8000-000000000005/content",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/listing-media/00000000-0000-4000-8000-000000000004/content",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/listing-media/00000000-0000-4000-8000-000000000003/content",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/listing-media/00000000-0000-4000-8000-000000000002/content",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/listing-media/00000000-0000-4000-8000-000000000001/content",
+        "method": "GET",
+        "body": null
+      },
+      {
+        "p": "/auth/me",
+        "method": "GET",
+        "body": null
+      }
+    ]
+  }
+]

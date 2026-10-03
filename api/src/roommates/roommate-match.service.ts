@@ -25,9 +25,22 @@ export class RoommateMatchService {
     targetProfileId: string,
     action: RoommateActionDtoValue
   ) {
+    // Serialize visibility changes with actions. Lock both profiles in stable
+    // order so opposite-direction likes cannot deadlock on each other's row.
+    await transaction.$queryRaw`SELECT "id" FROM "RoommateProfile"
+      WHERE "id" = ${targetProfileId} OR "ownerId" = ${actorUserId}
+      ORDER BY "id" FOR NO KEY UPDATE`;
     const targetProfile = await transaction.roommateProfile.findUnique({ where: { id: targetProfileId } });
-    if (!targetProfile) throw new NotFoundException("Roommate profile not found");
+    if (!isDiscoverable(targetProfile) || (process.env.NODE_ENV === "production" && !targetProfile.ownerId)) {
+      throw new NotFoundException("Roommate profile not found");
+    }
     if (targetProfile.ownerId === actorUserId) throw new BadRequestException("Cannot match with yourself");
+    const actorProfile = await transaction.roommateProfile.findUnique({ where: { ownerId: actorUserId } });
+    // A persisted LIKE appears in the peer's inbound activity even without a
+    // conversation. Hidden actors must opt back in before publishing an action.
+    if (actorProfile && !isDiscoverable(actorProfile)) {
+      throw new BadRequestException("An active roommate profile is required to record actions");
+    }
 
     const recordedAction = await transaction.roommateAction.upsert({
       where: {
@@ -48,7 +61,6 @@ export class RoommateMatchService {
       return { action: recordedAction, match: null, conversation: null };
     }
 
-    const actorProfile = await transaction.roommateProfile.findUnique({ where: { ownerId: actorUserId } });
     if (!actorProfile) {
       return { action: recordedAction, match: null, conversation: null };
     }
@@ -101,6 +113,14 @@ export class RoommateMatchService {
   }
 }
 
+function isDiscoverable<T extends { status: string; archivedAt: Date | null }>(profile: T | null): profile is T {
+  return profile !== null && profile.status === "active" && profile.archivedAt === null;
+}
+
 function isTransactionConflict(error: unknown) {
-  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2034";
+  if (!(error instanceof Prisma.PrismaClientKnownRequestError)) return false;
+  // Raw row locks can surface PostgreSQL serialization/deadlock SQLSTATEs as
+  // P2010 rather than the model-operation transaction-conflict code P2034.
+  return error.code === "P2034" ||
+    (error.code === "P2010" && (error.meta?.code === "40001" || error.meta?.code === "40P01"));
 }

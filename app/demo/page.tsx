@@ -1,0 +1,34 @@
+import type { Metadata } from "next";
+import { LockKeyhole, Search, UsersRound } from "lucide-react";
+import Link from "next/link";
+import { notFound } from "next/navigation";
+
+import { PswLogo } from "@/components/brand/psw-logo";
+import { PublicShell } from "@/components/marketplace/public-shell";
+import { isWebsiteDemo } from "@/lib/website-demo";
+
+export const metadata: Metadata = { title: "演示版说明", robots: { index: false, follow: false } };
+
+export default function DemoNoticePage() {
+  if (!isWebsiteDemo()) notFound();
+  return <PublicShell active="discover"><main className="mx-auto min-h-[65dvh] max-w-[1120px] px-4 py-8 sm:px-6 sm:py-12 lg:px-8 lg:py-16">
+    <header className="max-w-2xl">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-3"><PswLogo className="h-10 w-auto max-w-full" /><span className="rounded-full bg-[#E9F2A9] px-3 py-1.5 text-xs font-semibold text-[#234B3B]">演示版</span></div>
+      <p className="mt-2 text-sm font-medium text-[#416F5A]">people spaces wellbeing</p>
+      <h1 className="mt-6 text-balance text-3xl font-semibold leading-tight tracking-[-0.025em] text-[#203C30] sm:text-[40px]">这个演示仅供浏览</h1>
+      <p className="mt-4 text-base leading-7 text-slate-600">这是 psw 面向留学生的转租与接租演示。</p>
+      <div className="mt-5 flex flex-wrap gap-3"><Link href="/search" className="primary-action"><Search className="size-4" aria-hidden="true" />浏览房源</Link><Link href="/roommates" className="secondary-action"><UsersRound className="size-4" aria-hidden="true" />查看室友示例</Link></div>
+    </header>
+    <div className="mt-8 grid gap-7 border-t border-[#234B3B]/15 pt-6 sm:mt-10 sm:grid-cols-2 sm:gap-10 sm:pt-8">
+      <section aria-labelledby="demo-browsing-title">
+        <h2 id="demo-browsing-title" className="text-lg font-semibold text-[#203C30]">现在可以体验</h2>
+        <p className="mt-3 max-w-md text-sm leading-7 text-slate-600">你可以搜索示例房源、查看详情、使用地图和在此设备上收藏。房源与室友均为虚构示例，价格与匹配分数只展示界面效果。</p>
+      </section>
+      <section aria-labelledby="demo-private-title">
+        <h2 id="demo-private-title" className="flex items-center gap-2 text-lg font-semibold text-[#203C30]"><LockKeyhole className="size-4 shrink-0 text-[#416F5A]" aria-hidden="true" />真实服务暂未开放</h2>
+        <p className="mt-3 max-w-md text-sm leading-7 text-slate-600">登录、申请、房东发布、聊天、上传和付款暂未开放。这里不会提交申请、建立真实匹配或处理款项。</p>
+        <p className="mt-4 border-l-2 border-[#416F5A]/40 pl-3 text-sm leading-6 text-[#234B3B]">请勿在收藏备注中填写个人或敏感信息。</p>
+      </section>
+    </div>
+  </main></PublicShell>;
+}

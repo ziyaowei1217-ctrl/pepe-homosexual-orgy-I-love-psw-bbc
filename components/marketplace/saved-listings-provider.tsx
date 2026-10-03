@@ -16,12 +16,13 @@ import { readStoredAuthSession } from "@/lib/auth-session";
 import { useAuthSessionToken } from "@/lib/use-auth-session-token";
 import {
   addSavedCollection,
+  applySavedCollectionsMutations,
+  getSavedCollectionNameError,
   getSavedCollectionsStorageKey,
   getSavedListingIds,
   mergeSavedCollectionsState,
   normalizeSavedCollectionsState,
-  setSavedListingNote,
-  toggleListingInCollection,
+  type SavedCollectionsMutation,
   type SavedCollectionsState
 } from "@/lib/saved-collections";
 import {
@@ -37,7 +38,7 @@ type SavedListingsContextValue = {
   accountLabel: string;
   toggleSaved: (listingId: string) => void;
   toggleInCollection: (listingId: string, collectionId: string) => void;
-  createCollection: (name: string) => void;
+  createCollection: (name: string) => string | null;
   setNote: (listingId: string, note: string) => void;
 };
 
@@ -53,6 +54,9 @@ function SessionSavedListingsProvider({ children, token }: { children: ReactNode
   const [storageKey, setStorageKey] = useState<string | null>(null);
   const [accountLabel, setAccountLabel] = useState("此设备上的访客收藏");
   const guestMigration = useRef<{ raw: string | null; legacyRaw: string | null } | null>(null);
+  const currentState = useRef(state);
+  const ready = useRef(false);
+  const pendingMutations = useRef<SavedCollectionsMutation[]>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -92,6 +96,10 @@ function SessionSavedListingsProvider({ children, token }: { children: ReactNode
         setAccountLabel("此设备上的访客收藏");
       }
 
+      next = applySavedCollectionsMutations(next, pendingMutations.current);
+      pendingMutations.current = [];
+      ready.current = true;
+      currentState.current = next;
       setState(next);
       setStorageKey(key);
     }
@@ -135,35 +143,38 @@ function SessionSavedListingsProvider({ children, token }: { children: ReactNode
 
   const savedIds = useMemo(() => new Set(getSavedListingIds(state)), [state]);
 
+  const mutate = useCallback((command: SavedCollectionsMutation) => {
+    if ((readStoredAuthSession()?.accessToken ?? null) !== token) return;
+    if (!ready.current) pendingMutations.current.push(command);
+    const next = applySavedCollectionsMutations(currentState.current, [command]);
+    currentState.current = next;
+    setState(next);
+  }, [token]);
+
   const toggleSaved = useCallback((listingId: string) => {
     if ((readStoredAuthSession()?.accessToken ?? null) !== token) return;
-    setState((current) => {
-      const isSaved = getSavedListingIds(current).includes(listingId);
-      if (!isSaved) return toggleListingInCollection(current, listingId);
-
-      return current.collections.reduce(
-        (next, collection) => collection.listingIds.includes(listingId)
-          ? toggleListingInCollection(next, listingId, collection.id)
-          : next,
-        current
-      );
-    });
-  }, [token]);
+    mutate({ kind: "saved", listingId, included: !getSavedListingIds(currentState.current).includes(listingId) });
+  }, [mutate, token]);
 
   const toggleInCollection = useCallback((listingId: string, collectionId: string) => {
     if ((readStoredAuthSession()?.accessToken ?? null) !== token) return;
-    setState((current) => toggleListingInCollection(current, listingId, collectionId));
-  }, [token]);
+    const included = currentState.current.collections.find((collection) => collection.id === collectionId)?.listingIds.includes(listingId) ?? false;
+    mutate({ kind: "membership", listingId, collectionId, included: !included });
+  }, [mutate, token]);
 
   const createCollection = useCallback((name: string) => {
-    if ((readStoredAuthSession()?.accessToken ?? null) !== token) return;
-    setState((current) => addSavedCollection(current, name));
-  }, [token]);
+    if ((readStoredAuthSession()?.accessToken ?? null) !== token) return "登录账号已变化，请重新打开清单。";
+    const error = getSavedCollectionNameError(currentState.current, name);
+    if (error) return error;
+    const created = addSavedCollection(currentState.current, name);
+    mutate({ kind: "collection", name: name.trim(), id: created.collections.at(-1)!.id });
+    return null;
+  }, [mutate, token]);
 
   const setNote = useCallback((listingId: string, note: string) => {
     if ((readStoredAuthSession()?.accessToken ?? null) !== token) return;
-    setState((current) => setSavedListingNote(current, listingId, note));
-  }, [token]);
+    mutate({ kind: "note", listingId, note });
+  }, [mutate, token]);
 
   const value = useMemo<SavedListingsContextValue>(() => ({
     state,

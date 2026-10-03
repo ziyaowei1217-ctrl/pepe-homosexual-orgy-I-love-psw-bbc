@@ -1,7 +1,9 @@
 import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
-import { describe, expect, it, vi } from "vitest";
+import { Readable } from "node:stream";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { getListingMediaStorageConfig } from "../src/config/env";
+import { MAX_LISTING_MEDIA_BYTES } from "../src/listing-media/listing-media.constants";
 import {
   ListingMediaStorageError,
   S3CompatibleListingMediaStorage
@@ -54,9 +56,32 @@ describe("listing media storage config", () => {
       getListingMediaStorageConfig({ nodeEnv: "development", uploadTtlSeconds: "601" })
     ).toThrow("LISTING_MEDIA_UPLOAD_TTL_SECONDS must be 600");
   });
+
+  it("requires encrypted production object storage and upload endpoints", () => {
+    const config = { nodeEnv: "production", endpoint: "https://objects.example.com", uploadEndpoint: "https://uploads.example.com",
+      region: "us-east-1", bucket: "private-media", accessKeyId: "key", secretAccessKey: "secret" };
+    expect(() => getListingMediaStorageConfig({ ...config, endpoint: "http://objects.example.com" }))
+      .toThrow("LISTING_MEDIA_STORAGE_ENDPOINT must use HTTPS in production");
+    expect(() => getListingMediaStorageConfig({ ...config, uploadEndpoint: "http://uploads.example.com" }))
+      .toThrow("LISTING_MEDIA_UPLOAD_ENDPOINT must use HTTPS in production");
+    expect(() => getListingMediaStorageConfig({ ...config, uploadEndpoint: "https://user:pass@uploads.example.com" }))
+      .toThrow("must not contain credentials");
+  });
 });
 
 describe("S3-compatible listing media storage", () => {
+  afterEach(() => vi.useRealTimers());
+
+  it("closes a stalled response stream at its deadline without retaining a finalization slot", async () => {
+    vi.useFakeTimers();
+    const body = new Readable({ read() {} });
+    const storage = createStorage(vi.fn(async () => ({ Body: body })));
+    const rejection = expect(storage.read("stalled")).rejects.toMatchObject({ code: "IMAGE_STORAGE_UNAVAILABLE" });
+    await vi.advanceTimersByTimeAsync(15_000);
+    await rejection;
+    expect(body.destroyed).toBe(true);
+    expect(vi.getTimerCount()).toBe(0);
+  });
   it("presigns a length- and content-type-bound private PUT for ten minutes", async () => {
     const send = vi.fn();
     const sign = vi.fn(async (_client: unknown, _command: unknown, _options: unknown) =>
@@ -100,11 +125,39 @@ describe("S3-compatible listing media storage", () => {
     const bytes = Uint8Array.from([1, 2, 3, 4]);
     const send = vi.fn(async (command: unknown) => {
       expect(command).toBeInstanceOf(GetObjectCommand);
-      return { Body: { transformToByteArray: async () => bytes } };
+      return { Body: Readable.from([bytes]) };
     });
     const storage = createStorage(send);
 
     await expect(storage.read("listing-media/listing-1/object-1")).resolves.toEqual(Buffer.from(bytes));
+  });
+
+  it("rejects an oversized declared body without consuming it and closes the stream", async () => {
+    const body = Readable.from([Buffer.from("must not be read")]);
+    const iterate = vi.spyOn(body, Symbol.asyncIterator);
+    const storage = createStorage(vi.fn(async () => ({ Body: body, ContentLength: MAX_LISTING_MEDIA_BYTES + 1 })));
+    await expect(storage.read("oversized")).rejects.toMatchObject({ code: "IMAGE_TOO_LARGE" });
+    expect(iterate).not.toHaveBeenCalled();
+    expect(body.destroyed).toBe(true);
+  });
+
+  it.each([undefined, 1])("stops a dishonest or missing declared length (%s) at the streaming ceiling", async (ContentLength) => {
+    let chunksConsumed = 0;
+    let closed = false;
+    async function* chunks() {
+      try {
+        chunksConsumed += 1;
+        yield Buffer.alloc(MAX_LISTING_MEDIA_BYTES);
+        chunksConsumed += 1;
+        yield Buffer.from([1]);
+        chunksConsumed += 1;
+        yield Buffer.from([2]);
+      } finally { closed = true; }
+    }
+    const storage = createStorage(vi.fn(async () => ({ Body: chunks(), ContentLength })));
+    await expect(storage.read("dishonest")).rejects.toMatchObject({ code: "IMAGE_TOO_LARGE" });
+    expect(chunksConsumed).toBe(2);
+    expect(closed).toBe(true);
   });
 
   it("normalizes missing objects and storage failures without leaking provider messages", async () => {

@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { webcrypto } from "node:crypto";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   MAX_LISTING_MEDIA_BYTES,
@@ -8,6 +9,8 @@ import {
   runMediaUploadQueue,
   sha256Hex
 } from "../lib/listing-media";
+
+afterEach(() => vi.unstubAllGlobals());
 
 describe("listing media browser workflow", () => {
   it("accepts JPEG, PNG, and WebP within 10 MB and rejects unsupported or oversized files", () => {
@@ -22,6 +25,31 @@ describe("listing media browser workflow", () => {
     await expect(sha256Hex(new Uint8Array([97, 98, 99]).buffer)).resolves.toBe(
       "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
     );
+  });
+
+  it("uses the SHA-256 fallback on plain HTTP phones without Web Crypto", async () => {
+    vi.stubGlobal("crypto", {});
+    await expect(sha256Hex(new Uint8Array([97, 98, 99]).buffer)).resolves.toBe(
+      "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+    );
+  });
+
+  it("handles a blocked subtle getter without skipping checksum validation", async () => {
+    vi.stubGlobal("crypto", Object.defineProperty({}, "subtle", { get() { throw new DOMException("Blocked", "SecurityError"); } }));
+    await expect(sha256Hex(new Uint8Array([97, 98, 99]).buffer)).resolves.toBe(
+      "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+    );
+  });
+
+  it("produces the same real PNG digest with Web Crypto and the mobile fallback", async () => {
+    const image = Uint8Array.from(Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=", "base64"));
+    const bytes = image.buffer;
+    const digest = vi.fn((algorithm: string, input: ArrayBuffer) => webcrypto.subtle.digest(algorithm, input));
+    vi.stubGlobal("crypto", { subtle: { digest } });
+    const fastPath = await sha256Hex(bytes);
+    expect(digest).toHaveBeenCalledOnce();
+    vi.stubGlobal("crypto", {});
+    expect(await sha256Hex(bytes)).toBe(fastPath);
   });
 
   it("derives submission counts from server states and pending browser mutations", () => {

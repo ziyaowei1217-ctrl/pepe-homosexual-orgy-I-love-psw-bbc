@@ -6,9 +6,11 @@ COPY api/package.json api/package.json
 RUN pnpm install --frozen-lockfile
 COPY . .
 ARG NEXT_PUBLIC_API_BASE_URL
+ARG NEXT_PUBLIC_MEDIA_UPLOAD_ORIGIN
 ARG NEXT_PUBLIC_MAP_TILE_URL_TEMPLATE
 ARG NEXT_PUBLIC_MAP_ATTRIBUTION
 ENV NEXT_PUBLIC_API_BASE_URL=$NEXT_PUBLIC_API_BASE_URL
+ENV NEXT_PUBLIC_MEDIA_UPLOAD_ORIGIN=$NEXT_PUBLIC_MEDIA_UPLOAD_ORIGIN
 ENV NEXT_PUBLIC_MAP_TILE_URL_TEMPLATE=$NEXT_PUBLIC_MAP_TILE_URL_TEMPLATE
 ENV NEXT_PUBLIC_MAP_ATTRIBUTION=$NEXT_PUBLIC_MAP_ATTRIBUTION
 RUN pnpm build
@@ -18,8 +20,10 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
-COPY --from=build /app/.next/standalone ./
-COPY --from=build /app/.next/static ./.next/static
+ENV NEXT_TELEMETRY_DISABLED=1
+COPY --from=build --chown=node:node /app/.next/standalone ./
+COPY --from=build --chown=node:node /app/.next/static ./.next/static
+RUN mkdir -p .next/cache && chown node:node .next/cache
 USER node
 EXPOSE 3000
 CMD ["node", "server.js"]

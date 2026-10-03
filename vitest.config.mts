@@ -1,4 +1,4 @@
-import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 
 const webStorageExecArgv = process.allowedNodeEnvironmentFlags.has(
@@ -8,21 +8,18 @@ const webStorageExecArgv = process.allowedNodeEnvironmentFlags.has(
   : [];
 
 export default defineConfig({
-  esbuild: {
-    jsx: "automatic"
+  oxc: {
+    jsx: { runtime: "automatic" }
   },
   resolve: {
     alias: {
-      "@": path.resolve(__dirname)
+      "@": fileURLToPath(new URL(".", import.meta.url))
     }
   },
   test: {
     environment: "node",
     exclude: ["**/node_modules/**", "**/.next/**", "**/.tmp-tests/**", "api/**"],
     include: ["tests/**/*.test.{ts,tsx}"],
-    poolOptions: {
-      forks: { execArgv: webStorageExecArgv },
-      threads: { execArgv: webStorageExecArgv }
-    }
+    execArgv: webStorageExecArgv
   }
 });

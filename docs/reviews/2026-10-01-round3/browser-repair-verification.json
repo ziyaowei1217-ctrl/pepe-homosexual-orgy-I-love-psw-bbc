@@ -1,0 +1,257 @@
+[
+  {
+    "name": "chromium",
+    "checks": [
+      {
+        "name": "Collocated map list touch selection, Escape, close and focus return at320px and200% zoom",
+        "result": {
+          "choices": [
+            {
+              "href": "/listing/independent-round2-3",
+              "text": "长标题体验检查：带家具、可协商起租日期的共享公寓房间\n$1,600/月",
+              "rect": {
+                "x": 37.86000442504883,
+                "y": 364.77996826171875,
+                "width": 244.28001403808594,
+                "height": 84.71002197265625,
+                "top": 364.77996826171875,
+                "right": 282.14001846313477,
+                "bottom": 449.489990234375,
+                "left": 37.86000442504883
+              },
+              "hit": "/listing/independent-round2-3"
+            },
+            {
+              "href": "/listing/independent-round2-1",
+              "text": "安静的一居室，靠近学校和公共交通\n$850/月",
+              "rect": {
+                "x": 37.86000442504883,
+                "y": 457.3699951171875,
+                "width": 244.28001403808594,
+                "height": 65.010009765625,
+                "top": 457.3699951171875,
+                "right": 282.14001846313477,
+                "bottom": 522.3800048828125,
+                "left": 37.86000442504883
+              },
+              "hit": "/listing/independent-round2-1"
+            }
+          ],
+          "zoomBounds": {
+            "rect": {
+              "x": 275.9958801269531,
+              "y": 297.81903076171875,
+              "width": 888.00830078125,
+              "height": 428.1468505859375,
+              "top": 297.81903076171875,
+              "right": 1164.0041809082031,
+              "bottom": 725.9658813476562,
+              "left": 275.9958801269531
+            },
+            "width": 1440,
+            "height": 1000,
+            "documentWidth": 1440
+          }
+        },
+        "status": "pass"
+      },
+      {
+        "name": "WebKit-compatible search and new-collection opener focus return",
+        "result": true,
+        "status": "pass"
+      },
+      {
+        "name": "Likes slow read,503,and successful in-page retry keeps tab",
+        "result": {
+          "requests": 2,
+          "outboundSelected": true
+        },
+        "status": "pass"
+      },
+      {
+        "name": "Mobile inbox returns to list, opens another conversation and supports back history",
+        "status": "fail",
+        "error": "locator.waitFor: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByLabel('会话列表', { exact: true }) to be visible\u001b[22m\n\u001b[2m    64 × locator resolved to hidden <section aria-label=\"会话列表\" class=\"min-w-0 border-r border-slate-200 hidden lg:block\">…</section>\u001b[22m\n\n    at /private/tmp/sublet-round3-ux-evidence/repair-verify.cjs:7:1322\n    at async check (/private/tmp/sublet-round3-ux-evidence/repair-verify.cjs:2:333)\n    at async run (/private/tmp/sublet-round3-ux-evidence/repair-verify.cjs:7:2)\n    at async /private/tmp/sublet-round3-ux-evidence/repair-verify.cjs:10:110"
+      },
+      {
+        "name": "Narrow profile320px no document overflow after save/reload",
+        "result": {
+          "scrollWidth": 320,
+          "width": 320
+        },
+        "status": "pass"
+      }
+    ],
+    "pageErrors": []
+  },
+  {
+    "name": "firefox",
+    "checks": [
+      {
+        "name": "Collocated map list touch selection, Escape, close and focus return at320px and200% zoom",
+        "result": {
+          "choices": [
+            {
+              "href": "/listing/independent-round2-3",
+              "text": "长标题体验检查：带家具、可协商起租日期的共享公寓房间\n$1,600/月",
+              "rect": {
+                "x": 37.350006103515625,
+                "y": 361.83331298828125,
+                "width": 245.29998779296875,
+                "height": 85.06666564941406,
+                "top": 361.83331298828125,
+                "right": 282.6499938964844,
+                "bottom": 446.8999786376953,
+                "left": 37.350006103515625
+              },
+              "hit": "/listing/independent-round2-3"
+            },
+            {
+              "href": "/listing/independent-round2-1",
+              "text": "安静的一居室，靠近学校和公共交通\n$850/月",
+              "rect": {
+                "x": 37.350006103515625,
+                "y": 454.79998779296875,
+                "width": 245.29998779296875,
+                "height": 65.2833251953125,
+                "top": 454.79998779296875,
+                "right": 282.6499938964844,
+                "bottom": 520.0833129882812,
+                "left": 37.350006103515625
+              },
+              "hit": "/listing/independent-round2-1"
+            }
+          ],
+          "zoomBounds": {
+            "rect": {
+              "x": 274.5333251953125,
+              "y": 292.75,
+              "width": 890.933349609375,
+              "height": 429.566650390625,
+              "top": 292.75,
+              "right": 1165.4666748046875,
+              "bottom": 722.316650390625,
+              "left": 274.5333251953125
+            },
+            "width": 1440,
+            "height": 1000,
+            "documentWidth": 1440
+          }
+        },
+        "status": "pass"
+      },
+      {
+        "name": "WebKit-compatible search and new-collection opener focus return",
+        "result": true,
+        "status": "pass"
+      },
+      {
+        "name": "Likes slow read,503,and successful in-page retry keeps tab",
+        "result": {
+          "requests": 2,
+          "outboundSelected": true
+        },
+        "status": "pass"
+      },
+      {
+        "name": "Mobile inbox returns to list, opens another conversation and supports back history",
+        "status": "fail",
+        "error": "locator.waitFor: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByLabel('会话列表', { exact: true }) to be visible\u001b[22m\n\u001b[2m    63 × locator resolved to hidden <section aria-label=\"会话列表\" class=\"min-w-0 border-r border-slate-200 hidden lg:block\">…</section>\u001b[22m\n\n    at /private/tmp/sublet-round3-ux-evidence/repair-verify.cjs:7:1322\n    at async check (/private/tmp/sublet-round3-ux-evidence/repair-verify.cjs:2:333)\n    at async run (/private/tmp/sublet-round3-ux-evidence/repair-verify.cjs:7:2)\n    at async /private/tmp/sublet-round3-ux-evidence/repair-verify.cjs:10:110"
+      },
+      {
+        "name": "Narrow profile320px no document overflow after save/reload",
+        "result": {
+          "scrollWidth": 320,
+          "width": 320
+        },
+        "status": "pass"
+      }
+    ],
+    "pageErrors": []
+  },
+  {
+    "name": "webkit",
+    "checks": [
+      {
+        "name": "Collocated map list touch selection, Escape, close and focus return at320px and200% zoom",
+        "result": {
+          "choices": [
+            {
+              "href": "/listing/independent-round2-3",
+              "text": "长标题体验检查：带家具、可协商起租日期的共享公寓房间\n$1,600/月",
+              "rect": {
+                "x": 37.86000061035156,
+                "y": 364.7799987792969,
+                "width": 244.28001403808594,
+                "height": 84.70999145507812,
+                "top": 364.7799987792969,
+                "right": 282.1400146484375,
+                "bottom": 449.489990234375,
+                "left": 37.86000061035156
+              },
+              "hit": "/listing/independent-round2-3"
+            },
+            {
+              "href": "/listing/independent-round2-1",
+              "text": "安静的一居室，靠近学校和公共交通\n$850/月",
+              "rect": {
+                "x": 37.86000061035156,
+                "y": 457.3699951171875,
+                "width": 244.28001403808594,
+                "height": 65.010009765625,
+                "top": 457.3699951171875,
+                "right": 282.1400146484375,
+                "bottom": 522.3800048828125,
+                "left": 37.86000061035156
+              },
+              "hit": "/listing/independent-round2-1"
+            }
+          ],
+          "zoomBounds": {
+            "rect": {
+              "x": 278.7200012207031,
+              "y": 307.239990234375,
+              "width": 882.56005859375,
+              "height": 425.52001953125,
+              "top": 307.239990234375,
+              "right": 1161.2800598144531,
+              "bottom": 732.760009765625,
+              "left": 278.7200012207031
+            },
+            "width": 1440,
+            "height": 1000,
+            "documentWidth": 1440
+          }
+        },
+        "status": "pass"
+      },
+      {
+        "name": "WebKit-compatible search and new-collection opener focus return",
+        "result": true,
+        "status": "pass"
+      },
+      {
+        "name": "Likes slow read,503,and successful in-page retry keeps tab",
+        "result": {
+          "requests": 2,
+          "outboundSelected": true
+        },
+        "status": "pass"
+      },
+      {
+        "name": "Mobile inbox returns to list, opens another conversation and supports back history",
+        "status": "fail",
+        "error": "locator.waitFor: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByLabel('会话列表', { exact: true }) to be visible\u001b[22m\n\u001b[2m    64 × locator resolved to hidden <section aria-label=\"会话列表\" class=\"min-w-0 border-r border-slate-200 hidden lg:block\">…</section>\u001b[22m\n\n    at /private/tmp/sublet-round3-ux-evidence/repair-verify.cjs:7:1322\n    at async check (/private/tmp/sublet-round3-ux-evidence/repair-verify.cjs:2:333)\n    at async run (/private/tmp/sublet-round3-ux-evidence/repair-verify.cjs:7:2)\n    at async /private/tmp/sublet-round3-ux-evidence/repair-verify.cjs:10:110"
+      },
+      {
+        "name": "Narrow profile320px no document overflow after save/reload",
+        "result": {
+          "scrollWidth": 320,
+          "width": 320
+        },
+        "status": "pass"
+      }
+    ],
+    "pageErrors": []
+  }
+]

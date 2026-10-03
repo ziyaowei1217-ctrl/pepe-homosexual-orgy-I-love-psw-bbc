@@ -2,7 +2,7 @@ import "reflect-metadata";
 import { randomUUID } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import type { AddressInfo } from "node:net";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 import { type INestApplication, type Type, ValidationPipe } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
@@ -298,11 +298,12 @@ function runIsolatedValkeyRealtimeSmoke(databaseUrl: string): void {
   const result = spawnSync(
     process.execPath,
     [
-      require.resolve("vitest/vitest.mjs"),
+      join(dirname(require.resolve("vitest/package.json")), "vitest.mjs"),
       "run",
       "test/roommate-valkey-realtime-smoke.spec.ts",
       "--pool=threads",
-      "--poolOptions.threads.singleThread"
+      "--maxWorkers=1",
+      "--no-file-parallelism"
     ],
     {
       cwd: join(__dirname, ".."),

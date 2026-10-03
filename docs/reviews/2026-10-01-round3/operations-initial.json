@@ -1,0 +1,387 @@
+{
+  "review": "Independent round 3 delivery, runtime reliability, performance, operations security, portability and Render readiness",
+  "reviewedHead": "6e79733dbad38adb6800e462b62e18f3e6da7704",
+  "recordedAt": "2026-10-01T05:09:28.194Z",
+  "stage": "Independent initial conclusions recorded before coordination or access to earlier reviews",
+  "independence": {
+    "earlierAuditResultsRead": false,
+    "priorPRDescriptionsRead": false,
+    "priorRoundEvidenceRead": false,
+    "sourceMutations": [],
+    "permittedOperationalDocs": [
+      "docs/render-deployment.md",
+      "docs/production-launch-checklist.md",
+      "docs/platform-delivery.md",
+      "docs/external-integrations.md"
+    ]
+  },
+  "summary": "Three concrete operational issues found: realtime readiness can remain green through a blackholed publish connection, accepted PostgreSQL queries have no configured deadline, and anonymous roommate paging/candidate requests do unbounded synchronous work. Current Render blueprint passes current published JSON Schema; no blueprint contract mismatch found. Provider timeout checks pass. Deployment remains blocked by actual provider/budget/ingress/CI/restore acceptance, not YAML syntax.",
+  "findings": [
+    {
+      "id": "OPS3-1",
+      "priority": "P2",
+      "title": "Realtime readiness does not probe or bound the Pub/Sub connection",
+      "references": [
+        {
+          "file": "api/src/roommate-conversations/socket-adapter.ts",
+          "start": 91,
+          "end": 108
+        },
+        {
+          "file": "api/src/roommate-conversations/socket-adapter.ts",
+          "start": 159,
+          "end": 171
+        },
+        {
+          "file": "api/src/health/messaging-infrastructure-health.ts",
+          "start": 30,
+          "end": 35
+        },
+        {
+          "file": "api/src/health/health.service.ts",
+          "start": 35,
+          "end": 44
+        }
+      ],
+      "trigger": "A Pub/Sub TCP connection remains open and isReady=true, but PUBLISH replies or inbound messages stop while independent auth and messaging quota connections remain healthy.",
+      "impact": "containPublishFailures catches only rejection; pending publishes have no deadline and no realtime probe is registered. The API readiness endpoint returns status=ok and distributed realtime, preventing Render health recovery for this partial failure. Repeated publications also retain pending driver work. Durable HTTP history reduces data-loss impact but does not certify live event delivery.",
+      "freshEvidence": "/tmp/sublet-round3-operations-runtime-evidence.json",
+      "reproduction": "Actual redis@5 client connected to a local RESP fixture. Fixture deliberately stops PUBLISH responses, while answering PING and EVAL. After 250ms the publish promise is unresolved and isReady remains true; production HealthService.ready returns all checks ok. Source has no longer runtime publish deadline or Pub/Sub active probe.",
+      "recommendation": "Register a bounded probe of both Pub/Sub clients, bound pending publications, mark degraded on timeout, and discard/reset stale clients or otherwise ensure restart/recovery. Test recovery without relying on customer writes and preserve adapter subscription semantics."
+    },
+    {
+      "id": "OPS3-2",
+      "priority": "P2",
+      "title": "Readiness and payment recovery can retain accepted database queries indefinitely",
+      "references": [
+        {
+          "file": "api/src/health/health.service.ts",
+          "start": 22,
+          "end": 24
+        },
+        {
+          "file": "api/src/prisma/prisma.service.ts",
+          "start": 5,
+          "end": 13
+        },
+        {
+          "file": "api/src/payments/payment-operations.service.ts",
+          "start": 47,
+          "end": 61
+        },
+        {
+          "file": "docs/render-deployment.md",
+          "start": 51,
+          "end": 59
+        }
+      ],
+      "trigger": "PostgreSQL accepts an established connection/query but never completes it (network blackhole, stuck server query, lock wait). The documented URL has connection_limit and pool_timeout but no socket_timeout.",
+      "impact": "A health request has no application deadline and cannot reach the Valkey checks until SELECT 1 finishes. pool_timeout only bounds pool acquisition. Running payment recovery can likewise remain set forever, preventing later scans after dependency recovery; shutdown awaits it until Render SIGKILL. Render detects the health request as failed after five seconds, but each incoming health request can retain an unresolved promise/query until disconnect or process termination.",
+      "freshEvidence": "/tmp/sublet-round3-db-evidence.json",
+      "reproduction": "Installed Prisma 6.19.3 client connected to a fresh minimal PostgreSQL wire fixture with connect_timeout=1,pool_timeout=1,connection_limit=1. Fixture completed startup/prepare/describe/bind, accepted Execute SELECT 1, and withheld query completion. Client remained unresolved at 6200ms. This exercises the real client/engine; it is not a real PostgreSQL database or provider acceptance test.",
+      "primarySource": "https://www.prisma.io/docs/orm/v6/overview/databases/postgresql",
+      "renderSource": "https://render.com/docs/health-checks",
+      "recommendation": "Enforce a deliberate finite Prisma query/socket deadline and require it in the production configuration guidance/gate. Keep the readiness total deadline below Render’s five-second window, avoid duplicate accumulating probes, and verify a failed query releases or replaces its connection and permits a later recovery scan."
+    },
+    {
+      "id": "OPS3-3",
+      "priority": "P2",
+      "title": "Public roommate paging and candidate detail still load and rank every active profile",
+      "references": [
+        {
+          "file": "api/src/roommates/roommates.controller.ts",
+          "start": 12,
+          "end": 24
+        },
+        {
+          "file": "api/src/roommates/roommates.service.ts",
+          "start": 29,
+          "end": 53
+        },
+        {
+          "file": "api/src/roommates/roommates.service.ts",
+          "start": 172,
+          "end": 182
+        },
+        {
+          "file": "api/src/roommates/matching.ts",
+          "start": 176,
+          "end": 180
+        },
+        {
+          "file": "api/src/roommates/matching.ts",
+          "start": 209,
+          "end": 217
+        },
+        {
+          "file": "api/src/roommates/matching.ts",
+          "start": 339,
+          "end": 382
+        }
+      ],
+      "trigger": "Anonymous clients repeatedly request a one-item or empty page, or a nonexistent candidate ID, as active owned-profile count grows.",
+      "impact": "The 80-item response cap bounds response size only: the database query has no take, the entire set is scored and sorted twice synchronously, and candidate detail repeats the same process. On this Mac, 50,000 profiles returned an empty page but blocked the event loop for about 192ms and grew heap by 85MB (RSS 360MB including TS runtime). Repeated requests share the API event loop with health, authentication, and messaging. No route-specific quota was found on these anonymous routes. Similar full-collection public listing/profile reads remain capacity limitations.",
+      "freshEvidence": "/tmp/sublet-round3-operations-perf-evidence.json",
+      "recommendation": "Bound database candidate selection and detail lookup, preserve documented ranking/discovery behavior within a bounded working set, and/or enforce a reviewed low-volume demo capacity/ingress quota until full discovery scaling is deliberately designed. Verify timer lag and DB query bounds; do not claim scalable paging from slice alone.",
+      "limits": "Synthetic in-memory scoring microbenchmark on macOS Node 25.8.0; excludes database, JSON serialization, network, and Render CPU measurement. Exact production capacity is unproven."
+    }
+  ],
+  "verified": [
+    {
+      "check": "Render current published JSON Schema",
+      "result": "Passed current draft 2020-12 schema for two Docker web services, region virginia, 1c-2g and 0.5c-512mb, checksPass, health paths, 30s shutdown, migration preDeployCommand, previews off, sync false values.",
+      "evidence": "/tmp/sublet-round3-render-schema-evidence.json",
+      "schema": "/tmp/sublet-round3-render-schema.json",
+      "limitations": "AJV uri format not enabled; no configured uri field in blueprint. Does not establish provider-side Blueprint API valid:true or deployability."
+    },
+    {
+      "check": "Render official contract checks",
+      "result": "Docker env values become build args/runtime variables; public build args exist. Paid pre-deploy supported and included Prisma CLI path is consistent with Docker COPY/WORKDIR. checksPass handles success/neutral/skipped, requiring exact-commit actual CI review. External Postgres verified TLS and rediss Key Value follow documented provider connection protocols. Single API instance plus polling deploy acceptance caveat is correctly documented.",
+      "sources": [
+        "https://render.com/docs/docker",
+        "https://render.com/docs/blueprint-spec",
+        "https://render.com/docs/deploys",
+        "https://render.com/docs/health-checks",
+        "https://render.com/docs/postgresql-creating-connecting",
+        "https://render.com/docs/key-value",
+        "https://render.com/docs/websocket",
+        "https://render.com/docs/postgresql-backups"
+      ]
+    },
+    {
+      "check": "Provider stalled response body deadlines",
+      "result": {
+        "runtime": "v25.8.0",
+        "emailAttempts": 2,
+        "email": {
+          "ms": 5004,
+          "name": "EmailDeliveryUnavailableError",
+          "message": "Email delivery unavailable"
+        },
+        "payment": {
+          "ms": 8001,
+          "name": "ServiceUnavailableException",
+          "message": "Payment gateway is unavailable"
+        },
+        "storageRead": {
+          "ms": 15001,
+          "name": "ListingMediaStorageError",
+          "code": "IMAGE_STORAGE_UNAVAILABLE",
+          "message": "IMAGE_STORAGE_UNAVAILABLE"
+        }
+      },
+      "evidence": "/tmp/sublet-round3-provider-harness.cjs",
+      "limitations": "Actual local HTTP streams used. Email/payment fetch wrappers preserve their real signal but redirect to local fixtures. S3 uses actual installed SDK. No external provider calls or credentials."
+    },
+    {
+      "check": "Valkey timeout/fallback/recovery",
+      "result": {
+        "runtime": "v25.8.0",
+        "platform": "darwin",
+        "head": "6e79733dbad38adb6800e462b62e18f3e6da7704",
+        "authTimeout": {
+          "ms": 100,
+          "error": "AuthValkeyTimeoutError",
+          "clientOpen": false
+        },
+        "authRecovery": {
+          "allowed": true,
+          "retryAfterSeconds": 0
+        },
+        "messageFallback": {
+          "ms": 101,
+          "snapshot": {
+            "realtime": {
+              "status": "ok",
+              "mode": "single-instance"
+            },
+            "messageRateLimit": {
+              "status": "degraded",
+              "mode": "local-fallback",
+              "reason": "timeout",
+              "changedAt": "2026-10-01T05:06:30.217Z"
+            }
+          }
+        },
+        "messageRecovery": {
+          "realtime": {
+            "status": "ok",
+            "mode": "single-instance"
+          },
+          "messageRateLimit": {
+            "status": "ok",
+            "mode": "distributed"
+          }
+        },
+        "realtimeBlackhole": {
+          "settledAfter250ms": false,
+          "publicationClientReady": true,
+          "ready": {
+            "status": "ok",
+            "checks": {
+              "database": "ok",
+              "realtime": {
+                "status": "ok",
+                "mode": "distributed"
+              },
+              "messageRateLimit": {
+                "status": "ok",
+                "mode": "distributed"
+              },
+              "authRateLimit": {
+                "status": "ok",
+                "mode": "distributed"
+              }
+            }
+          },
+          "commands": [
+            "CLIENT",
+            "EVAL",
+            "CLIENT",
+            "CLIENT",
+            "EVAL",
+            "CLIENT",
+            "CLIENT",
+            "CLIENT",
+            "CLIENT",
+            "PUBLISH",
+            "EVAL",
+            "PING"
+          ]
+        },
+        "databaseUnboundedProbe": {
+          "settledAfter120ms": false
+        }
+      },
+      "evidence": "/tmp/sublet-round3-operations-harness.cjs",
+      "limitations": "Real redis TCP client with synthetic RESP fixture; not real Lua/Valkey persistence or multi-instance fan-out acceptance."
+    },
+    {
+      "check": "Production config rejection checks",
+      "result": {
+        "validFixtureErrors": [],
+        "tlsBypassErrors": [
+          "NODE_TLS_REJECT_UNAUTHORIZED must not disable TLS verification"
+        ],
+        "duplicateDbTlsErrors": [
+          "DATABASE_URL must use one sslmode=require setting supported by Prisma 6"
+        ],
+        "changedTimerErrors": [
+          "AUTH_CODE_TTL_SECONDS must be 600 in production"
+        ],
+        "runtimeOverrideErrors": []
+      },
+      "note": "Gate correctly rejects TLS disable, duplicate sslmode, timer drift. It is syntactic only and does not validate API_INTERNAL_BASE_URL; Render’s required same-public-HTTPS relationship needs operator verification. Private HTTP Compose override is intentional."
+    },
+    {
+      "check": "Portable process runner",
+      "result": {
+        "simulationOnly": true,
+        "windowsCanonicalEnvironment": {
+          "PATH": "fixtureC",
+          "NPM_EXECPATH": "C:\\pnpm\\pnpm.cjs"
+        },
+        "windowsViaNode": {
+          "command": "/opt/homebrew/Cellar/node/25.8.0/bin/node",
+          "prefix": [
+            "C:\\pnpm\\pnpm.cjs"
+          ],
+          "shell": false
+        },
+        "windowsFallback": {
+          "command": "pnpm.cmd",
+          "prefix": [],
+          "shell": true
+        },
+        "linuxViaNode": {
+          "command": "/opt/homebrew/Cellar/node/25.8.0/bin/node",
+          "prefix": [
+            "/fixture/pnpm.cjs"
+          ],
+          "shell": false
+        }
+      },
+      "note": "Windows simulation canonicalizes environment names, invokes pnpm JS entry with shell=false, fallback pnpm.cmd shell=true is fixed repo args. Linux invocation simulation passed. Remote/production local-setup and missing Valkey smoke env both exit nonzero before operations. No actual Windows/Linux execution in this review."
+    },
+    {
+      "check": "Production dependency advisory audit",
+      "command": "npx --yes pnpm@9.15.4 audit --prod --json",
+      "result": "0 high, 0 critical, 1 moderate. Audit exits 1 for moderate.",
+      "evidence": "/tmp/sublet-round3-operations-audit.json",
+      "advisory": {
+        "package": "@nestjs/core@10.4.22",
+        "id": "GHSA-36xv-jgw5-4q75",
+        "primarySource": "https://github.com/nestjs/nest/security/advisories/GHSA-36xv-jgw5-4q75",
+        "precondition": "User-influenced type/id fields routed through Nest SseStream",
+        "reachability": "No @Sse, EventSource, SseStream, or text/event-stream bridge found in API/client source. Current Socket.IO and JSON routes do not invoke that vulnerable path. Record a bounded exception; a coordinated Nest major upgrade is separate scope."
+      }
+    },
+    {
+      "check": "Build and container gate wiring",
+      "result": "Frozen pnpm lockfile, Node >=22.13, API build generates Prisma then Nest dist, API image contains Prisma CLI/migrations/built operator CLI, web uses Next standalone. verify.yml defines four portable jobs and one service/container job, requires non-skipped commands. Hardened container smoke explicitly uses development API config and disposable fixtures; production providers and Render TLS acceptance remain operator checks.",
+      "limitations": "No Next build/typegen/dev executed (root owns those). No Docker/container/service CI success claimed."
+    },
+    {
+      "check": "Externally exposed operational inputs",
+      "result": "Provider URLs are operator env values; payment IDs are URI encoded, HTTP redirects rejected, JWT limited/validated. Image input limited to 10MiB, 40MP, supported decoded formats, metadata removed/2560 edge output, streamed hard ceiling/deadline. Local setup refuses production/remote seed; CLI failures sanitize raw database exceptions. Public discovery work remains the concrete unbounded-input concern above."
+    },
+    {
+      "check": "CLI operational output sanitization and invalid-input ordering",
+      "result": {
+        "invalid": 1,
+        "connect": 1,
+        "databaseCreatedAfterInvalidArguments": false,
+        "output": [],
+        "errors": [
+          "COMMAND_FAILED: Fixture operation failed",
+          "COMMAND_FAILED: Fixture operation failed"
+        ],
+        "rawSecretLeaked": false
+      },
+      "evidence": "/tmp/sublet-round3-cli-evidence.json",
+      "note": "Fresh isolated fixtures show invalid parse and credential-bearing database connection exceptions both produce exit 1 with generic output; database is not constructed after invalid parsing."
+    }
+  ],
+  "deploymentBlockers": [
+    {
+      "blocker": "No approved monthly spending ceiling or actual provisioned Render resources",
+      "type": "operator decision",
+      "required": "Approve current all-in quote including apps/datastores/provider/adapter/backup/bandwidth/monitoring before any provisioning."
+    },
+    {
+      "blocker": "No actual S3/private media, verified email sender, sandbox payment adapter, map provider config",
+      "type": "external integration",
+      "required": "Provide reachable maintained providers and validate their exact contracts, durable adapter idempotency/fencing, S3 upload CORS/private denial, delivered login and map attribution/origin restrictions."
+    },
+    {
+      "blocker": "Database/Valkey TLS, allowlists and recovery untested",
+      "type": "external acceptance",
+      "required": "Validate actual client in API image with strict TLS/full hostnames; outbound CIDR allowlists, noeviction/persistence, Lua/PubSub, migration access and restore drill."
+    },
+    {
+      "blocker": "Exact release commit service-backed CI result not verified by this reviewer",
+      "type": "delivery evidence",
+      "required": "Root must obtain non-skipped success of all verify.yml jobs at release SHA. Configuration alone is not evidence."
+    },
+    {
+      "blocker": "Public ingress and real device/deploy acceptance not executed",
+      "type": "public acceptance",
+      "required": "Verify trust-proxy chain/spoof test, CORS, HTTPS/WSS, delivered email, upload/read, authenticated journeys, refund recovery, polling-only sessions and WebSocket reconnect through a Render deploy; mobile touch/keyboard/background recovery with actual target devices."
+    },
+    {
+      "blocker": "Three concrete operational findings need disposition",
+      "type": "source reliability",
+      "required": "Repair or explicitly bound the launch use case with evidence. Realtime and accepted-database-query hangs cannot be certified from green startup tests."
+    }
+  ],
+  "limits": [
+    "Initially read-only source; only /tmp harness/evidence writes. No deployment, provisioning, spending, provider configuration or credentials requested/accessed.",
+    "Local runtime is macOS Node 25.8.0; pnpm invoked only through npx pnpm@9.15.4. Reproduction on supported Node22/24 and Docker remains required root/CI evidence.",
+    "No real Docker/Postgres/Valkey binaries or provider services available locally; protocol fixtures are fresh adversarial harnesses and labeled as such.",
+    "No earlier audit/report/PR description read; no reviewer coordination before this JSON was written.",
+    "Current primary sources were retrieved 2026-10-01. No Render CLI/provider-side validation or account access used.",
+    "No actual mobile device, Windows, Linux, or native app packaging execution; browser responsive checks are configured in CI but separate from actual auth/provider/mobile acceptance."
+  ],
+  "initialConclusionsReportedToRoot": true,
+  "sourceMutations": []
+}

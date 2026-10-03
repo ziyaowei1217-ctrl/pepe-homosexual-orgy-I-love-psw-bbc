@@ -20,3 +20,11 @@ test-results
 *.log
 **/.env
 **/.env.*
+coverage
+.tmp-tests
+**/*.tsbuildinfo
+**/.DS_Store
+**/*.pem
+**/*.key
+**/*.p12
+**/*.pfx

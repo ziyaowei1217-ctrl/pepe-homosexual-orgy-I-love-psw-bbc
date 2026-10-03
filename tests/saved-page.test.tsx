@@ -56,7 +56,7 @@ describe("saved page", () => {
 
     expect(html).toContain("tile.openstreetmap.de");
     expect(html).toContain("© OpenStreetMap contributors");
-    expect(html).toContain("$995");
+    expect(html).toContain("2 套收藏房源");
   });
 
   it("offers a list return action after opening the saved map and keeps listing navigation available", () => {
@@ -66,7 +66,7 @@ describe("saved page", () => {
     const returnToList = screen.getByRole("button", { name: "列表" });
     expect(returnToList.getAttribute("aria-pressed")).toBe("true");
     const map = screen.getByRole("complementary", { name: "收藏房源地图" });
-    expect(within(map).getByRole("link", { name: `$${listing.price.toLocaleString()}` }).getAttribute("href"))
+    expect(within(map).getByRole("link", { name: `查看 ${listing.title} $${listing.price.toLocaleString()} / 月` }).getAttribute("href"))
       .toBe(`/listing/${encodeURIComponent(listing.id)}`);
 
     fireEvent.click(returnToList);
@@ -86,11 +86,11 @@ describe("saved page", () => {
       disconnect() {}
     });
     const listings = createPreviewListings().slice(0, 2).map((listing, index) => ({
-      ...listing, latitude: 0, longitude: index === 0 ? -0.01 : 0.01
+      ...listing, latitude: 0, longitude: index === 0 ? -0.04 : 0.04
     }));
     render(<SavedMap listings={listings} />);
     const map = screen.getByRole("complementary", { name: "收藏房源地图" });
-    const westernMarker = within(map).getByRole("link", { name: "$995" });
+    const westernMarker = within(map).getByRole("link", { name: /\$995/ });
     function setMapSize(width: number, height: number) {
       act(() => resize([{
         target: map,
@@ -99,13 +99,13 @@ describe("saved page", () => {
       }]));
     }
 
-    // At zoom 11, 0.01° longitude spans approximately 14.56 pixels.
+    // At zoom 11, 0.04° longitude spans approximately 58.25 pixels; these targets stay separate.
     setMapSize(358, 480);
-    expect(westernMarker.style.left).toBe("164px");
+    expect(westernMarker.style.left).toBe("121px");
     expect(westernMarker.style.top).toBe("240px");
 
     setMapSize(720, 620);
-    expect(westernMarker.style.left).toBe("345px");
+    expect(westernMarker.style.left).toBe("302px");
     expect(westernMarker.style.top).toBe("310px");
   });
 

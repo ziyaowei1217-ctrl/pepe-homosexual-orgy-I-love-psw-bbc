@@ -181,3 +181,19 @@ it('renders descending roommate pages chronologically and marks the newest peer 
   const [, readInit] = fetchMock.mock.calls.find(([url]) => String(url).endsWith('/read'))!;
   expect(JSON.parse(String(readInit?.body))).toEqual({ lastReadMessageId: 'message-3' });
 });
+
+it('keeps the most recently updated active viewing actionable when newer historical viewings are returned', async () => {
+  writeStoredAuthSession('host-token');
+  const base = { threadId: 'thread-A', revision: 1, requesterId: 'renter-A', listingId: 'shared-listing', listingTitle: 'One shared listing', area: 'Westwood', iso: '2099-06-01T09:00:00.000Z', mode: 'in-person' as const, participantNames: ['Applicant A'] };
+  const viewings = [
+    { ...base, id: 'active-older', status: 'CONFIRMED' as const, timeLabel: 'Older active viewing', createdAt: '2026-09-01T00:00:00.000Z', updatedAt: '2026-09-02T00:00:00.000Z' },
+    { ...base, id: 'active-latest', status: 'REQUESTED' as const, timeLabel: 'Latest active viewing', createdAt: '2026-09-02T00:00:00.000Z', updatedAt: '2026-09-10T00:00:00.000Z' },
+    { ...base, id: 'cancelled-newer', status: 'CANCELLED' as const, timeLabel: 'Newer cancelled viewing', createdAt: '2026-09-03T00:00:00.000Z', updatedAt: '2026-09-12T00:00:00.000Z' }
+  ];
+  mockThreads([{ ...thread('A'), viewingRequests: viewings }]);
+  render(<InboxExperience initialConversationId='thread-A' />);
+  await screen.findByText('Latest active viewing');
+  expect(screen.getByRole('button', { name: '确认预约' })).toBeTruthy();
+  expect(screen.queryByText('Newer cancelled viewing')).toBeNull();
+  expect(screen.queryByText('Older active viewing')).toBeNull();
+});

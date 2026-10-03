@@ -1,0 +1,177 @@
+{
+  "review": "Independent third/final frontend usability review",
+  "initialHead": "6e79733dbad38adb6800e462b62e18f3e6da7704",
+  "independence": "Initial conclusions formed only from current source and newly authored browser scripts/screenshots. No docs/reviews, prior reports, prior browser scripts, or old /tmp evidence read.",
+  "status": "complete: five independent frontend defects repaired; final production verification passed with stated limitations",
+  "evidenceDirectory": "/tmp/sublet-round3-ux-evidence",
+  "confirmedIssues": [
+    {
+      "id": "UX3-1",
+      "priority": "P2",
+      "title": "Saved map overlays colocated listing links without a usable choice",
+      "file": "components/marketplace/saved-page-experience.tsx",
+      "lines": [
+        166,
+        189
+      ],
+      "precondition": "Two saved listings map to the same approximate area coordinates; this is routine because geocoding is by neighborhood text.",
+      "reproduction": "At width 375, save the quiet one-bedroom and long-title shared-room listing from search, open /saved, select 地图.",
+      "actual": "Map claims 2 saved locations but both links occupy the same center. The $850 link paints over the $1,600 link; a tap at either link center resolves to the $850 listing. The lower listing only has approximately five-pixel slivers on either side, and mobile map hides the alternative cards.",
+      "impact": "Guests cannot reliably choose the saved home they see at that location using touch. Equal-price colocated homes would fully hide earlier link hit targets.",
+      "evidence": [
+        "first-journeys.json: map link rectangles and elementFromPoint",
+        "saved-collocated-map.png"
+      ]
+    },
+    {
+      "id": "UX3-2",
+      "priority": "P2",
+      "title": "Likes/matches load has no loading state and no in-page recovery after a read failure",
+      "file": "components/marketplace/roommate-experiences.tsx",
+      "lines": [
+        139,
+        157
+      ],
+      "precondition": "Stored session and slow or transiently failing /roommates/activity GET.",
+      "reproduction": "Own browser fixture holds activity GET for 1.8 seconds then returns 503. Open /roommates/likes.",
+      "actual": "While pending the result region is blank, with zero status nodes. After failure only the service-unavailable alert and three tab buttons are present. No reload/retry control is available and switching tabs does not perform another request.",
+      "impact": "Users cannot distinguish loading from an empty page and cannot recover a transient failure within the screen.",
+      "evidence": [
+        "first-journeys.json: likesLoading/likesFailure",
+        "likes-loading.png",
+        "likes-failure.png"
+      ]
+    },
+    {
+      "id": "UX3-3",
+      "priority": "P1",
+      "title": "Mobile inbox back-to-list reopens the first conversation so other conversations cannot be chosen",
+      "file": "components/marketplace/inbox-experience.tsx",
+      "lines": [
+        126,
+        127,
+        480
+      ],
+      "precondition": "375px viewport; authenticated synthetic user with at least two conversations",
+      "reproduction": "Own two-conversation browser fixture. Open /inbox/r3-mobile-2, click 返回会话列表, wait for /inbox to finish loading.",
+      "actual": "URL changes to /inbox but the list stays hidden and Conversation 1 opens automatically. The back link cannot lead to a stable list on a fresh /inbox mount.",
+      "impact": "Phone users cannot select another conversation or use list search/filter after opening one.",
+      "evidence": [
+        "inbox-mobile-back.json",
+        "inbox-mobile-back.png"
+      ]
+    },
+    {
+      "id": "UX3-4",
+      "priority": "P2",
+      "title": "Firefox narrow profile expands the document to350px at320px viewport",
+      "file": "components/marketplace/account-experience.tsx",
+      "lines": [
+        110,
+        236
+      ],
+      "precondition": "Firefox browser engine; authenticated account profile at320px viewport",
+      "reproduction": "Own synthetic profile/session browser fixture. Open /account/profile at320px and reload after saving.",
+      "actual": "Document scrollWidth350px; account nav and profile section both334px wide with x16. DOM evidence traces expansion to the implicit grid tracks and textarea native minimum sizing.",
+      "impact": "Profile and logout controls extend offscreen horizontally on narrow Firefox devices or equivalent zoom reflow.",
+      "evidence": [
+        "firefox-profile-320.png",
+        "private-and-engines.json: Firefox profile overflow rectangles"
+      ]
+    },
+    {
+      "id": "UX3-5",
+      "priority": "P2",
+      "title": "WebKit modal Escape does not return focus to a mouse-clicked opener",
+      "file": "components/marketplace/search-experience.tsx",
+      "lines": [
+        107,
+        110
+      ],
+      "precondition": "WebKit native default: mouse-clicked buttons are not automatically focused",
+      "reproduction": "Own fresh WebKit browser journey: load /search?view=list, mouse click 筛选, press Escape.",
+      "actual": "Dialog focus enters close button correctly but closing restores the previously focused DIV rather than 筛选. The focus hook can only restore the element active before dialog mount; WebKit did not focus the opener on click.",
+      "impact": "Keyboard use after mouse/touch dismissal loses the expected trigger position. The new saved-map picker would share this issue without explicitly focusing its trigger.",
+      "evidence": [
+        "webkit-focus-return.json",
+        "private-and-engines.json: WebKit focus return assertion"
+      ]
+    }
+  ],
+  "initialPositiveChecks": [
+    "No page errors in eight guest routes at 1440, 768, 375 and 320 widths.",
+    "No document horizontal overflow on those routes; offscreen rows are intentionally scrollable/clipped.",
+    "Budget filter 1500–2200 produces two listings and persists in URL.",
+    "Browser back after sort change restores prior sort and filtered results.",
+    "Guest gates for host publish, applications and inbox remain visible and readable at narrow widths."
+  ],
+  "limitations": [
+    "Public listings and images came from root-provided synthetic API fixture at localhost:4599; no production provider verified.",
+    "Private likes failure proof uses own synthetic route mock, not a real account.",
+    "Real touchscreen, hardware keyboard, screen-reader, and provider delivery checks remain unverified.",
+    "No real email-code delivery, uploads, remote provider outage, production geocoding, authenticated backend, or socket/reconnect integration verified by these mocked browser journeys.",
+    "Browser tests use synthetic mouse/keyboard events and CSS zoom; no hardware touchscreen, mobile soft keyboard, screen reader, real OS browser zoom, or Safari full keyboard access setting verified.",
+    "WebKit default button-skipping Tab behavior is captured separately; no background interactive element received focus.",
+    "Aesthetics inspected using current screenshots but root public image fixtures are flat synthetic assets; no claim of final media visual quality."
+  ],
+  "broaderChecksInProgress": [
+    "Chromium/Firefox/WebKit private browser journeys: application expected navigation and duplicate message locator being corrected in the harness; no product defect claimed from these failures.",
+    "Firefox authenticated profile at320px has scrollWidth350; screenshot confirms layout extends beyond viewport. DOM root cause pending."
+  ],
+  "baselineBrowserChecks": [
+    "Chromium,Firefox,WebKit: guest application handoff through synthetic email-code login retains contact name/email and selected dates; single create and submit reach application confirmation.",
+    "All three engines: profile save/reload persisted display name; deck LIKE then PASS advances to correct next candidate and ends empty.",
+    "All three engines: inbox prepends older18messages, retains scroll anchor (top2654,scroll5552,client463), keeps failed send draft and retries with identical command ID.",
+    "All three engines: publish empty-basic validation focuses title; completed basic/pricing step saves exactly one draft and shows uploader; no publish-page horizontal overflow at320px.",
+    "Chromium andFirefox filter modal25Tab steps stay inside dialog; Escape returns opener;200% CSS zoom gives no document overflow.",
+    "WebKit default tabs skip buttons and pass briefly through document/browser focus; no background interactive control receives focus. Hardware/full keyboard access remains unverified."
+  ],
+  "repairs": [
+    {
+      "id": "UX3-1",
+      "change": "Reuse current map collision groups. Group target opens modal list containing each home title and price with44px minimum touch targets, keyboard trap, close and Escape; opener explicitly focused for Safari restoration."
+    },
+    {
+      "id": "UX3-2",
+      "change": "Explicit likes loading status; real retry increments load attempt, keeps tab, clears error and ignores stale account response."
+    },
+    {
+      "id": "UX3-3",
+      "change": "Base mobile inbox leaves selection empty so list remains stable; explicit targets and desktop default selection preserved. Follow-up browserBack proof found cached route selection was changed by optimistic link handlers; route/back links now defer selection to route props while preserving existing recipient-change draft clearing."
+    },
+    {
+      "id": "UX3-4",
+      "change": "Explicit minmax0 single-column grid tracks for account/profile form plus minimum-width and full-width textarea sizing."
+    },
+    {
+      "id": "UX3-5",
+      "change": "Existing search, collection and map dialog openers explicitly focus themselves before opening so Safari Escape returns to correct trigger."
+    }
+  ],
+  "unitValidation": {
+    "newRegressionTests": 6,
+    "affectedSuiteResults": "15files91tests pass; after opener focus changes3files17tests pass",
+    "lint": "Scoped ESLint passed with zero warnings",
+    "diffCheck": "passed",
+    "finalRefinement": "7files44tests passed and scoped ESLint clean after removing cached route-selection mutations"
+  },
+  "zoomEvidence": "All document.documentElement.style.zoom checks are CSS zoom. They are not native browser zoom and do not certify browser media-query behavior under native zoom. Actual320/375/768/1440 viewport tests are independent reflow evidence.",
+  "repairVerificationFirstBuild": "repair-verification.json: all engines passed grouped-map selection/focus/320px andCSS200%bounds, search/collection opener focus restoration, likes503retry, repaired profile320px. Inbox browserBack surfaced cached-selection refinement, now applied and pending next production build.",
+  "offlineAndRaceVerification": "offline-and-race.json: Chromium/Firefox/WebKit actual browser offline profile write failure retains draft, online mocked API retry saves; late old-session likes response ignored; each saved home reached by synthetic touch event.",
+  "webKitConsoleNote": "One WebKit cancelled Next prefetch access-control console event was captured while navigating between fixture pages in offline-and-race.json. Its requested Page navigation succeeded; not evidence of backend or provider permission failure.",
+  "finalProductionVerification": {
+    "server": "http://127.0.0.1:4411",
+    "build": "Root second production rebuild including full UX3-3 refinement; root reported739tests/typecheck/build pass. This reviewer did not run Next build/typegen.",
+    "history": "inbox-history-final.json: Chromium,Firefox,WebKit all pass explicit second conversation → back-arrow stable list → select first → browserBack stable list → browserForward first conversation → list and select second. No page errors in these final journeys.",
+    "composerGeometry": "At375×812 across all engines, message textbox bottom724px, mobile navigation top approximately746.6px; computed bottom nav padding6.4px in default zero-inset emulation. No real device safe-area or soft-keyboard claim.",
+    "otherRepairs": "repair-verification.json contains first rebuilt browser proofs for map selection/focus,bounds,likes503retry,profile320px and explicitly retained inbox refinement failure; final inbox-history-final.json supersedes that failure. offline-and-race.json proves retained offline profile draft/online mocked retry,session race exclusion,and synthetic touch navigation to both saved homes across all engines."
+  },
+  "visibleFinalEvidence": {
+    "mapDialog": "{chromium,firefox,webkit}-final-map-dialog-320.png (captured after opening animation completed; both title/price links visible)",
+    "stableInbox": "{chromium,firefox,webkit}-final-inbox-stable-list.png",
+    "profile": "{chromium,firefox,webkit}-repaired-profile-320.png"
+  },
+  "initialFindingsPreserved": true,
+  "remainingConfirmedFrontendBlockers": [],
+  "aestheticAndEfficiencyConclusion": "Current screenshots show coherent hierarchy, legible forms and usable bottom navigation at actual narrow widths; synthetic listing images limit media-quality conclusions. Application guest handoff,single create/submit and identical command ID on message retry avoid duplicated work in fixtures. No new product features or visual redesign introduced."
+}

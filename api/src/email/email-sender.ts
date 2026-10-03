@@ -73,7 +73,8 @@ export class ResendEmailSender implements EmailSender {
           text: `Your verification code is ${input.code}. It expires soon.`,
           html: `<p>Your verification code is <strong>${input.code}</strong>.</p><p>It expires soon.</p>`
         }),
-        signal
+        signal,
+        redirect: "error"
       });
 
     const deadline = this.now() + this.timeoutMs;

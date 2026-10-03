@@ -13,13 +13,15 @@ const request = require("supertest") as (server: unknown) => any;
 
 describe("two-sided deal thread HTTP API", () => {
   let app: INestApplication;
+  let prisma: ReturnType<typeof createLaunchPrismaMock>;
 
   beforeEach(async () => {
     process.env.NODE_ENV = "development";
     process.env.JWT_SECRET = "test-secret";
+    prisma = createLaunchPrismaMock();
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
       .overrideProvider(PrismaService)
-      .useValue(createLaunchPrismaMock())
+      .useValue(prisma)
       .compile();
     app = moduleRef.createNestApplication();
     app.setGlobalPrefix("api/v1");
@@ -127,6 +129,40 @@ describe("two-sided deal thread HTTP API", () => {
       .set("Authorization", `Bearer ${renter.token}`)
       .send({ listingId: "listing-1", listingTitle: "Forged title", contactName: "Forged host" })
       .expect(400);
+  });
+
+  it("returns bounded previews and participant-only cursor pages across tied timestamps", async () => {
+    const http = request(app.getHttpServer());
+    const host = await signIn(app, "host@example.com");
+    const admin = await signInAsAdmin(app, "admin@example.com");
+    const renter = await signIn(app, "renter@example.com");
+    const outsider = await signIn(app, "outsider@example.com");
+    await completePublisherProfile(app, host.token);
+    const listing = await createApprovedListing(http, host, admin);
+    const created = await http.post("/api/v1/deal-threads").set("Authorization", `Bearer ${renter.token}`)
+      .send({ listingId: listing.id }).expect(201);
+    const threadId = created.body.id;
+    for (let index = 0; index < 125; index += 1) {
+      await prisma.dealMessage.create({ data: { threadId, senderId: renter.user.id, senderName: "Renter",
+        body: String(index), align: "right", status: "sent" } });
+    }
+    const previews = await http.get("/api/v1/deal-threads").set("Authorization", `Bearer ${host.token}`).expect(200);
+    expect(previews.body[0].messages).toHaveLength(1);
+    expect(previews.body[0].messagePageInfo).toMatchObject({ hasMore: true, nextCursor: expect.any(String) });
+    const historyUrl = `/api/v1/deal-threads/${threadId}/messages`;
+    await http.get(historyUrl).query({ cursor: "invalid", limit: "101" }).set("Authorization", `Bearer ${outsider.token}`).expect(404);
+    await http.get(historyUrl).query({ cursor: "invalid" }).set("Authorization", `Bearer ${renter.token}`).expect(400);
+    await http.get(historyUrl).query({ limit: "101" }).set("Authorization", `Bearer ${renter.token}`).expect(400);
+    const first = await http.get(historyUrl).set("Authorization", `Bearer ${host.token}`).expect(200);
+    const second = await http.get(historyUrl).query({ cursor: first.body.nextCursor }).set("Authorization", `Bearer ${host.token}`).expect(200);
+    const third = await http.get(historyUrl).query({ cursor: second.body.nextCursor }).set("Authorization", `Bearer ${host.token}`).expect(200);
+    expect(first.body.messages).toHaveLength(50);
+    expect(second.body.messages).toHaveLength(50);
+    expect(third.body.messages).toHaveLength(25);
+    expect(third.body.nextCursor).toBeNull();
+    const ids = [...first.body.messages, ...second.body.messages, ...third.body.messages].map((message: { id: string }) => message.id);
+    expect(new Set(ids).size).toBe(125);
+    expect(first.body.messages.every((message: { align: string }) => message.align === "left")).toBe(true);
   });
 });
 

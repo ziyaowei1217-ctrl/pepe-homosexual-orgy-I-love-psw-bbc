@@ -56,11 +56,6 @@ import type {
 } from "../lib/api";
 import { writeStoredAuthSession } from "../lib/auth-session";
 
-const reactActEnvironment = globalThis as typeof globalThis & {
-  IS_REACT_ACT_ENVIRONMENT: boolean;
-};
-reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true;
-
 class MemoryStorage implements Storage {
   private readonly values = new Map<string, string>();
 
@@ -115,6 +110,7 @@ Object.defineProperty(window, "matchMedia", {
 });
 Object.defineProperty(window, "requestAnimationFrame", {
   configurable: true,
+  writable: true,
   value: (callback: FrameRequestCallback) => {
     callback(0);
     return 1;
@@ -584,15 +580,18 @@ describe("SubletApp roommate chat", () => {
           payload: { conversationId: conversation.id, message: realtimeMessage }
         });
       });
-      reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = false;
-      try {
+      await act(async () => {
         newestRefresh.resolve({ messages: [newerHttpMessage], nextCursor: "cursor-new" });
+        await newestRefresh.promise;
+      });
+      expect(renderedText(renderer.root)).toContain(realtimeMessage.body);
+      expect(renderedText(renderer.root)).toContain(newerHttpMessage.body);
+      expect(renderedText(renderer.root)).toContain("加载更早消息");
+
+      await act(async () => {
         staleRefresh.resolve({ messages: [staleMessage], nextCursor: null });
-        await flushMicrotasks();
-        await new Promise((resolve) => setTimeout(resolve, 0));
-      } finally {
-        reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true;
-      }
+        await staleRefresh.promise;
+      });
 
       expect(renderedText(renderer.root)).toContain(realtimeMessage.body);
       expect(renderedText(renderer.root)).toContain(newerHttpMessage.body);

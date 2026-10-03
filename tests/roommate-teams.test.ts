@@ -9,6 +9,8 @@ import {
   type ApiRoommateTeamInvite
 } from "../lib/roommate-teams";
 
+const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000/api/v1";
+
 const activeTeam: ApiRoommateTeam = {
   id: "team-1",
   status: "ACTIVE",
@@ -79,10 +81,10 @@ describe("deriveRoommateTeamAction", () => {
     await acceptRoommateTeamInvite("token-1", "invite-1");
 
     expect(fetchMock.mock.calls.map(([url, init]) => [String(url), (init as RequestInit).method])).toEqual([
-      ["http://localhost:4000/api/v1/roommate-teams/current", "GET"],
-      ["http://localhost:4000/api/v1/roommate-teams/invites", "GET"],
-      ["http://localhost:4000/api/v1/roommate-teams/invites", "POST"],
-      ["http://localhost:4000/api/v1/roommate-teams/invites/invite-1/accept", "POST"]
+      [`${apiBaseUrl}/roommate-teams/current`, "GET"],
+      [`${apiBaseUrl}/roommate-teams/invites`, "GET"],
+      [`${apiBaseUrl}/roommate-teams/invites`, "POST"],
+      [`${apiBaseUrl}/roommate-teams/invites/invite-1/accept`, "POST"]
     ]);
   });
 });

@@ -344,9 +344,9 @@ describe("SubletApp auth state flow", () => {
       authIntent: "messages"
     });
 
-    expect(renderedText(renderer.root)).toContain("登录 Sublet Pipeline");
+    expect(renderedText(renderer.root)).toContain("登录 psw");
     expect(renderedText(renderer.root)).toContain("登录后即可查看房东与室友消息");
-    expect(renderedText(renderer.root)).not.toContain("查找适合你的短租");
+    expect(renderedText(renderer.root)).not.toContain("查找适合你的转租");
     expect(renderedText(renderer.root)).not.toContain("房东发布");
     expect(api.apiGet).not.toHaveBeenCalledWith(expect.stringMatching(/^\/listings/));
     expect(api.apiGet).not.toHaveBeenCalledWith("/roommates");
@@ -746,7 +746,7 @@ describe("SubletApp auth state flow", () => {
       });
 
       await act(async () => {
-        clickButton(activeRenderer.root, "找房");
+        clickButton(activeRenderer.root, "转租");
         await flushMicrotasks();
       });
 

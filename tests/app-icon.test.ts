@@ -7,6 +7,6 @@ describe("app icon", () => {
     const icon = readFileSync("app/icon.svg", "utf8");
 
     expect(icon).toContain("<svg");
-    expect(icon).toContain("Sublet Pipeline");
+    expect(icon).toContain("psw — people spaces wellbeing");
   });
 });

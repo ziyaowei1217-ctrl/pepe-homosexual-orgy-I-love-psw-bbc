@@ -1,8 +1,12 @@
 # Production launch checklist
 
-The repository can verify the application and its PostgreSQL/MinIO journey locally. A public
+The repository can verify the application and its PostgreSQL/MinIO journey locally. Public
 deployment still requires operator-owned infrastructure and credentials. Never commit a populated
 `.env` file.
+
+Public deployment must use a maintained private S3-compatible service. The archived source-built local
+MinIO server has known high severity upstream advisories and is restricted to loopback synthetic
+demos; it is not a production storage option. See [the storage maintenance limit](demo-and-operations.md#demo-storage-maintenance-limit).
 
 ## 1. Complete the four integrations
 
@@ -17,6 +21,11 @@ example API and map hosts. `NEXT_PUBLIC_API_BASE_URL` must be the public HTTPS A
 `/api/v1`. Public map settings and the API URL are embedded in the browser bundle, so rebuild the web
 application after changing them.
 
+Set `NEXT_PUBLIC_MEDIA_UPLOAD_ORIGIN` to the HTTPS origin of `LISTING_MEDIA_UPLOAD_ENDPOINT`.
+The production gate checks that they match so the browser Content Security Policy permits
+presigned uploads. Private provider credentials must never be a `NEXT_PUBLIC_*` value; any public
+map token embedded in the tile URL must be restricted appropriately by the map provider.
+
 Compose separately supplies `API_INTERNAL_BASE_URL=http://api:4000/api/v1` to the web server at
 runtime. Server-rendered pages use that container-network address; browsers use
 `NEXT_PUBLIC_API_BASE_URL`. Other hosting platforms should set the server-only internal variable to
@@ -29,7 +38,15 @@ deployment provider's secret manager rather than writing a populated file into t
 production:
 
 - set `NODE_ENV=production`;
-- use a dedicated PostgreSQL database with TLS and backups;
+- use a dedicated PostgreSQL database with verified TLS and backups. Set exactly one each of
+  `sslmode=require`, `sslaccept=strict`, `connect_timeout=2`, `pool_timeout=2`, and `socket_timeout=3`
+  in `DATABASE_URL`. Optional supported keys are `schema` (a literal nonempty identifier) and
+  `connection_limit` (1–10). Unknown/duplicate settings, SSL aliases/certificate overrides, and
+  arbitrary `options` fail the gate. The API uses the official Prisma 6 PostgreSQL adapter with
+  two-second connection/acquisition and three-second actual socket-close query deadlines, strict
+  platform CA-chain verification, and exact URL-host identity. The provider certificate must chain
+  to the platform trust store; private CA/client-certificate support requires a reviewed extension.
+  Native `socket_timeout` alone is not proof of accepted query cancellation;
 - generate distinct high-entropy values for `JWT_SECRET`, `OTP_HASH_SECRET`, and
   `SECURITY_IDENTIFIER_HASH_SECRET`;
 - set `EMAIL_SENDER=resend`, a verified `EMAIL_FROM`, and a valid `RESEND_API_KEY`;
@@ -43,14 +60,16 @@ production:
   and rate limiting work across instances.
 
 Apply checked-in migrations with `pnpm -C api prisma migrate deploy`; do not use `db push` against a
-production database.
+production database. The migration CLI uses a separate native schema engine rather than the
+application's bounded driver. Configure reviewed finite server statement/lock and process deadlines,
+monitor cancellation, and confirm migration success; do not weaken app deadlines for a long migration.
 
 ## 4. Release gates
 
 Start the local PostgreSQL and MinIO services, then run the complete gate from the repository root:
 
 ```bash
-docker compose up -d db minio minio-init
+docker compose up -d --build db minio minio-init
 pnpm release:check
 ```
 
@@ -81,6 +100,12 @@ copy the local-development `.env.example` for a production deployment.
 
 The migration job must finish successfully before the API starts, and the API must become ready
 before the web container starts.
+
+Production host bindings default to `127.0.0.1`; use HTTPS ingress in front of the application.
+Containers drop all capabilities, prevent privilege escalation and mount their root filesystem
+read-only, with bounded temporary storage and an ephemeral web image cache. See
+[`demo-and-operations.md`](demo-and-operations.md) for proxy/network setup, immutable image
+references, database/object recovery, readiness alerts and schema-aware rollback.
 
 ## 5. Operator-owned gates
 

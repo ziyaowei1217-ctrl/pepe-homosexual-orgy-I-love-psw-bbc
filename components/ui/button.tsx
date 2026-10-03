@@ -14,15 +14,15 @@ const buttonVariants = cva(
         outline: "border border-input bg-card text-foreground hover:border-foreground/20 hover:bg-muted/55",
         ghost: "text-foreground hover:bg-muted/70",
         destructive: "bg-destructive text-destructive-foreground hover:bg-destructive/90",
-        trust: "bg-accent text-accent-foreground hover:bg-trust-blue",
+        trust: "bg-accent text-accent-foreground hover:bg-brand hover:text-white",
         reject: "border border-trust-red/25 bg-card text-trust-red hover:bg-trust-red hover:text-white",
         accept: "border border-trust-green/25 bg-card text-trust-green hover:bg-trust-green hover:text-white"
       },
       size: {
-        default: "h-10 px-4 py-2",
-        sm: "h-8 rounded-[10px] px-3 text-xs",
+        default: "h-11 px-4 py-2",
+        sm: "h-11 rounded-[10px] px-3 text-xs sm:h-8",
         lg: "h-11 px-5",
-        icon: "size-10",
+        icon: "size-11",
         iconLg: "size-12"
       }
     },

@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -27,8 +27,10 @@ describeBuildSmoke("compiled operations CLI entrypoints", () => {
     ]
   ])("starts %s from its built artifact without CLI development dependencies", (script, argv, artifact, fallback) => {
     expect(existsSync(join(apiDirectory, artifact))).toBe(true);
+    const manifest = JSON.parse(readFileSync(join(apiDirectory, "package.json"), "utf8"));
+    expect(manifest.scripts[script]).toBe(`node ${artifact}`);
 
-    const result = spawnSync("pnpm", ["--silent", "run", script, ...argv], {
+    const result = spawnSync(process.execPath, [artifact, ...argv], {
       cwd: apiDirectory,
       encoding: "utf8",
       env: {

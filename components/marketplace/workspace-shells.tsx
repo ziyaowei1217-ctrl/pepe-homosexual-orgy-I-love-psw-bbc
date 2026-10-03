@@ -12,6 +12,7 @@ import {
 import Link from "next/link";
 import type { ReactNode } from "react";
 
+import { PswLogo } from "@/components/brand/psw-logo";
 import { cn } from "@/lib/utils";
 
 type HostNavKey = "overview" | "listings" | "applications" | "inbox";
@@ -70,11 +71,11 @@ function WorkspaceShell<Key extends string>({ title, eyebrow, active, items, acc
   children: ReactNode;
 }) {
   return (
-    <div className="min-h-dvh bg-[#f4f6f9] text-slate-950 lg:grid lg:grid-cols-[252px_minmax(0,1fr)]">
-      <aside className={cn("hidden min-h-dvh flex-col border-r px-4 py-5 text-white lg:sticky lg:top-0 lg:flex lg:h-dvh", accent === "blue" ? "border-blue-900/20 bg-[#071b35]" : "border-slate-800 bg-[#0d1624]")}>
+    <div className="marketplace-shell min-h-dvh bg-[#F5F8F5] text-slate-950 lg:grid lg:grid-cols-[252px_minmax(0,1fr)]">
+      <aside className={cn("hidden min-h-dvh flex-col border-r px-4 py-5 text-white lg:sticky lg:top-0 lg:flex lg:h-dvh", accent === "blue" ? "border-white/10 bg-[#234B3B]" : "border-white/10 bg-[#142B23]")}>
         <Link href="/" className="flex items-center gap-3 rounded-[18px] px-2 py-2">
-          <span className="grid size-10 place-items-center rounded-[14px] bg-[#0668e1] shadow-lg"><Home className="size-5" /></span>
-          <span><span className="block text-sm font-black">{title}</span><span className="mt-0.5 block text-[9px] font-black uppercase tracking-[0.16em] text-slate-400">{eyebrow}</span></span>
+          <PswLogo variant="mark" inverse className="h-10 w-10" />
+          <span><span className="block text-sm font-bold">{title}</span><span className="mt-0.5 block text-[10px] font-medium text-white/70">{eyebrow}</span></span>
         </Link>
         <nav className="mt-8 space-y-1" aria-label={`${title}导航`}>
           {items.map((item) => {
@@ -90,7 +91,7 @@ function WorkspaceShell<Key extends string>({ title, eyebrow, active, items, acc
 
       <div className="min-w-0">
         <header className="sticky top-0 z-40 border-b border-slate-200 bg-white lg:hidden">
-          <div className="flex h-[60px] items-center justify-between px-4"><Link href="/" className="flex items-center gap-2"><span className="grid size-9 place-items-center rounded-[12px] bg-[#0668e1] text-white"><Home className="size-4" /></span><span className="text-sm font-black">{title}</span></Link><Link href="/account" className="grid size-11 place-items-center rounded-full border border-slate-200" aria-label="打开账户"><UserRound className="size-4" /></Link></div>
+          <div className="flex h-[60px] items-center justify-between px-4"><Link href="/" className="flex items-center gap-2"><PswLogo variant="mark" className="h-9 w-9" /><span className="text-sm font-bold">{title}</span></Link><Link href="/account" className="grid size-11 place-items-center rounded-full border border-slate-200" aria-label="打开账户"><UserRound className="size-4" /></Link></div>
           <nav className="flex gap-1 overflow-x-auto px-3 pb-2 [scrollbar-width:none]" aria-label={`${title}手机导航`}>{items.map((item) => { const Icon = item.icon; return <Link key={item.key} href={item.href} aria-current={active === item.key ? "page" : undefined} className={cn("flex min-h-11 shrink-0 items-center gap-1.5 rounded-full px-3 py-2 text-sm font-bold text-slate-600", active === item.key && "bg-slate-950 text-white")}><Icon className="size-4" />{item.label}</Link>; })}</nav>
         </header>
         {children}

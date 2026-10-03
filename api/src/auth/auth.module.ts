@@ -1,6 +1,8 @@
 import { Module } from "@nestjs/common";
 
 import { AuditModule } from "../audit/audit.module";
+import { HealthModule } from "../health/health.module";
+import { AuthInfrastructureHealth } from "../health/auth-infrastructure-health";
 import { getAuthSecurityConfig, type AuthSecurityConfig } from "../config/env";
 import { createEmailSender, EMAIL_PROVIDER_TOTAL_TIMEOUT_MS } from "../email/email-sender";
 import { AdminStepUpGuard } from "./admin-step-up.guard";
@@ -50,7 +52,7 @@ export function createAuthServiceOptions(
 }
 
 @Module({
-  imports: [AuditModule],
+  imports: [AuditModule, HealthModule],
   controllers: [AuthController],
   providers: [
     {
@@ -59,7 +61,8 @@ export function createAuthServiceOptions(
     },
     {
       provide: AUTH_RATE_LIMIT_STORE,
-      useFactory: () => createRateLimitStore()
+      inject: [AuthInfrastructureHealth],
+      useFactory: (health: AuthInfrastructureHealth) => createRateLimitStore({ health })
     },
     {
       provide: EMAIL_SENDER,

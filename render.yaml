@@ -1,0 +1,104 @@
+# yaml-language-server: $schema=https://render.com/schema/render.yaml.json
+# Reviewed against Render documentation on 2026-10-01.
+# Creating this Blueprint provisions paid resources. Complete docs/render-deployment.md first.
+# Datastores and providers are provisioned separately; their verified TLS URLs are required.
+previews:
+  generation: off
+
+services:
+  - type: web
+    name: sublet-pipeline-api
+    runtime: docker
+    branch: main
+    region: virginia
+    plan: 1c-2g
+    dockerfilePath: ./Dockerfile.api
+    dockerContext: .
+    numInstances: 1
+    autoDeployTrigger: checksPass
+    healthCheckPath: /api/v1/ready
+    maxShutdownDelaySeconds: 30
+    preDeployCommand: ./api/node_modules/.bin/prisma migrate deploy --schema api/prisma/schema.prisma
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "4000"
+      - key: EMAIL_SENDER
+        value: resend
+      - key: LOCAL_ADMIN_EMAILS
+        value: ""
+      - key: AUTH_CODE_TTL_SECONDS
+        value: "600"
+      - key: AUTH_CODE_MAX_ATTEMPTS
+        value: "5"
+      - key: AUTH_CODE_COOLDOWN_SECONDS
+        value: "60"
+      - key: LISTING_MEDIA_UPLOAD_TTL_SECONDS
+        value: "600"
+      - key: DATABASE_URL
+        sync: false
+      - key: VALKEY_URL
+        sync: false
+      - key: WEB_ORIGIN
+        sync: false
+      - key: TRUSTED_PROXY_HOPS
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: OTP_HASH_SECRET
+        sync: false
+      - key: SECURITY_IDENTIFIER_HASH_SECRET
+        sync: false
+      - key: EMAIL_FROM
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: PAYMENT_SERVICE_URL
+        sync: false
+      - key: PAYMENT_SERVICE_API_KEY
+        sync: false
+      - key: LISTING_MEDIA_STORAGE_ENDPOINT
+        sync: false
+      - key: LISTING_MEDIA_UPLOAD_ENDPOINT
+        sync: false
+      - key: LISTING_MEDIA_STORAGE_REGION
+        sync: false
+      - key: LISTING_MEDIA_STORAGE_BUCKET
+        sync: false
+      - key: LISTING_MEDIA_STORAGE_ACCESS_KEY_ID
+        sync: false
+      - key: LISTING_MEDIA_STORAGE_SECRET_ACCESS_KEY
+        sync: false
+
+  - type: web
+    name: sublet-pipeline-web
+    runtime: docker
+    branch: main
+    region: virginia
+    plan: 0.5c-512mb
+    dockerfilePath: ./Dockerfile.web
+    dockerContext: .
+    numInstances: 1
+    autoDeployTrigger: checksPass
+    healthCheckPath: /api/health
+    maxShutdownDelaySeconds: 30
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "3000"
+      - key: HOSTNAME
+        value: 0.0.0.0
+      - key: NEXT_TELEMETRY_DISABLED
+        value: "1"
+      - key: NEXT_PUBLIC_API_BASE_URL
+        sync: false
+      - key: API_INTERNAL_BASE_URL
+        sync: false
+      - key: NEXT_PUBLIC_MEDIA_UPLOAD_ORIGIN
+        sync: false
+      - key: NEXT_PUBLIC_MAP_TILE_URL_TEMPLATE
+        sync: false
+      - key: NEXT_PUBLIC_MAP_ATTRIBUTION
+        sync: false

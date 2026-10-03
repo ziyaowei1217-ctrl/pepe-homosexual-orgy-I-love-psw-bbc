@@ -2,7 +2,7 @@ import "reflect-metadata";
 
 import { createHash, randomUUID } from "node:crypto";
 import { spawnSync } from "node:child_process";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 import { type INestApplication, ValidationPipe } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
@@ -369,11 +369,12 @@ function runMarketplaceChild(databaseUrl: string) {
   const result = spawnSync(
     process.execPath,
     [
-      require.resolve("vitest/vitest.mjs"),
+      join(dirname(require.resolve("vitest/package.json")), "vitest.mjs"),
       "run",
       "test/marketplace-demo-journey.smoke.spec.ts",
       "--pool=threads",
-      "--poolOptions.threads.singleThread"
+      "--maxWorkers=1",
+      "--no-file-parallelism"
     ],
     {
       cwd: join(__dirname, ".."),

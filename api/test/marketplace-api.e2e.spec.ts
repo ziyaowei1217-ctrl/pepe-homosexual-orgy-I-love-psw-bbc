@@ -1,5 +1,6 @@
 import "reflect-metadata";
 import { INestApplication, ValidationPipe } from "@nestjs/common";
+import { JwtService } from "@nestjs/jwt";
 import { Test } from "@nestjs/testing";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
@@ -13,16 +14,18 @@ const request = require("supertest") as (server: unknown) => any;
 describe("marketplace database API", () => {
   let app: INestApplication;
   let token: string;
+  let prisma: ReturnType<typeof createLaunchPrismaMock>;
 
   beforeEach(async () => {
     process.env.NODE_ENV = "development";
     process.env.JWT_SECRET = "test-secret";
+    prisma = createLaunchPrismaMock();
 
     const moduleRef = await Test.createTestingModule({
       imports: [AppModule]
     })
       .overrideProvider(PrismaService)
-      .useValue(createLaunchPrismaMock())
+      .useValue(prisma)
       .compile();
 
     app = moduleRef.createNestApplication();
@@ -174,6 +177,63 @@ describe("marketplace database API", () => {
       .send({ role: null }).expect(400);
     const result = await http.get("/api/v1/profiles/me").set("Authorization", `Bearer ${token}`).expect(200);
     expect(result.body.role).toBe("both");
+  });
+
+  it("reuses the authenticated owner's profile ID on repeat POST and cannot republish a hidden singleton", async () => {
+    const http = request(app.getHttpServer());
+    const first = await http.post("/api/v1/roommate-profiles").set("Authorization", `Bearer ${token}`)
+      .send({ ...roommateProfilePayload(), intro: "Previous facts" }).expect(201);
+    const updated = await http.post("/api/v1/roommate-profiles").set("Authorization", `Bearer ${token}`)
+      .send({ ...roommateProfilePayload(), city: "SF", intro: "Current facts" }).expect(201);
+    expect(updated.body.id).toBe(first.body.id);
+    await http.get("/api/v1/roommate-profiles").expect(200)
+      .expect((response: any) => expect(response.body).toEqual([expect.objectContaining({ id: first.body.id, city: "SF", intro: "Current facts" })]));
+    await http.patch(`/api/v1/roommate-profiles/${first.body.id}`).set("Authorization", `Bearer ${token}`)
+      .send({ status: "hidden" }).expect(200);
+    await http.post("/api/v1/roommate-profiles").set("Authorization", `Bearer ${token}`)
+      .send(roommateProfilePayload()).expect(409);
+    await http.get("/api/v1/roommate-profiles").expect(200).expect([]);
+    await http.get("/api/v1/roommates").expect(200).expect([]);
+    await http.patch(`/api/v1/roommate-profiles/${first.body.id}`).set("Authorization", `Bearer ${token}`)
+      .send({ status: "active" }).expect(200);
+    await http.get("/api/v1/roommate-profiles").expect(200)
+      .expect((response: any) => expect(response.body).toHaveLength(1));
+    await http.get("/api/v1/roommates").expect(200)
+      .expect((response: any) => expect(response.body).toHaveLength(1));
+  });
+
+  it("keeps archived roommate preferences private on both public endpoints even for inconsistent historical rows", async () => {
+    const http = request(app.getHttpServer());
+    const created = await http.post("/api/v1/roommate-profiles").set("Authorization", `Bearer ${token}`)
+      .send({ ...roommateProfilePayload(), intro: "Archived member introduction" }).expect(201);
+    const cards = await http.get("/api/v1/roommates").expect(200);
+    await http.get("/api/v1/roommate-profiles").expect(200).expect((response: any) => expect(response.body).toHaveLength(1));
+    const jwt = app.get(JwtService);
+    const adminSession = await signIn(app, "admin@example.com");
+    const admin = await jwt.verifyAsync(adminSession);
+    const adminToken = await jwt.signAsync({ sub: admin.sub, email: admin.email, role: "ADMIN", adminReauthenticatedAt: Math.floor(Date.now() / 1000) });
+    await http.post(`/api/v1/admin/roommates/${cards.body[0].id}/archive`).set("Authorization", `Bearer ${adminToken}`).expect(201);
+    for (const patch of [{ intro: "Owner edit after archive" }, { status: "active" }, { status: "hidden" }, { status: "matched" }]) {
+      await http.patch(`/api/v1/roommate-profiles/${created.body.id}`).set("Authorization", `Bearer ${token}`)
+        .send(patch).expect(409);
+    }
+    // This is the persisted mismatch that existed before the fix: archive
+    // changes the owned card while the raw matching profile remains active.
+    const raw = await prisma.roommateMatchingProfile.findMany();
+    expect(raw.find(profile => profile.id === created.body.id)).toMatchObject({ status: "active", intro: "Archived member introduction" });
+    await http.get("/api/v1/roommates").expect(200).expect([]);
+    await http.get("/api/v1/roommate-profiles").expect(200).expect([]);
+    await http.get("/api/v1/roommate-profiles").query({ city: "LA", school: "USC" }).expect(200).expect([]);
+    await http.get("/api/v1/roommate-profiles").query({ city: "LA' OR 1=1 --" }).expect(200).expect([]);
+    await prisma.roommateProfile.update({ where: { id: cards.body[0].id }, data: { status: "active" } });
+    await http.get("/api/v1/roommates").expect(200).expect([]);
+    await http.get("/api/v1/roommate-profiles").expect(200).expect([]);
+    await http.patch(`/api/v1/admin/roommates/${cards.body[0].id}`).set("Authorization", `Bearer ${adminToken}`)
+      .send({ status: "active" }).expect(200);
+    await http.patch(`/api/v1/roommate-profiles/${created.body.id}`).set("Authorization", `Bearer ${token}`)
+      .send({ intro: "Edit after administrator restore" }).expect(200);
+    await http.get("/api/v1/roommate-profiles").expect(200)
+      .expect((response: any) => expect(response.body).toEqual([expect.objectContaining({ id: created.body.id, intro: "Edit after administrator restore" })]));
   });
 
   it("retires every legacy housing-listing collection and item operation", async () => {
