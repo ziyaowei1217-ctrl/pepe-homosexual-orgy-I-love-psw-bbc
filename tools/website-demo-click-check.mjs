@@ -323,8 +323,9 @@ async function runProfile(profile) {
       await hit(saved, "Saved navigation", { scroll: false }); await atPath("/saved"); await visibleHeading("收藏清单"); await page.getByRole("heading", { level: 3, name: listingTitle, exact: true }).waitFor({ state: "visible" });
     });
     await step("Reload retains only current-device synthetic Saved", async () => {
-      // Wait for the current page's visible card and icon/asset work before the
-      // intentional reload, so it tests persistence rather than cancel timing.
+      // Bring the Saved photo into view before reload. A short screen can leave
+      // it below the fold, so a visible-image check alone would miss its lazy load.
+      await page.getByRole("img", { name: listingTitle, exact: true }).evaluate((element) => element.scrollIntoView({ block: "center", inline: "nearest", behavior: "instant" }));
       await decodedVisibleImages(); await page.waitForLoadState("networkidle", { timeout: 12_000 });
       const favicon = new URL(await page.locator('link[rel="icon"]').getAttribute("href"), origin).href;
       assert.ok(canonicalFavicon(favicon, origin), "Exact canonical Saved favicon");
@@ -335,6 +336,7 @@ async function runProfile(profile) {
       try {
         await page.reload({ waitUntil: "domcontentloaded" }); await visibleHeading("收藏清单");
         await page.getByRole("heading", { level: 3, name: listingTitle, exact: true }).waitFor({ state: "visible" });
+        await page.getByRole("img", { name: listingTitle, exact: true }).evaluate((element) => element.scrollIntoView({ block: "center", inline: "nearest", behavior: "instant" }));
         await decodedVisibleImages();
         savedReload.newDocument = await page.evaluate(() => window.__demoClickDocument);
         assert.notEqual(savedReload.newDocument, savedReload.oldDocument, "Reload creates a fresh document");
