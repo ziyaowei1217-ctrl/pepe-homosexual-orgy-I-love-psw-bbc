@@ -38,6 +38,26 @@ describe("listing to application journey", () => {
     expect(screen.getAllByRole("link", { name: "申请租住" })[0].getAttribute("href")).toContain("moveOut=2027-02-01");
   });
 
+  it.each([
+    { name: "编辑租期", initialStay: stay },
+    { name: "选择租期", initialStay: { ...stay, moveOut: "2027-07-01" } }
+  ])("restores the clicked date opener without relying on pointer focus ($name)", ({ name, initialStay }) => {
+    render(<SavedListingsProvider><ListingDetailExperience listing={listing} initialStay={initialStay} /></SavedListingsProvider>);
+    const previous = screen.getByRole("button", { name: "查看图片 1" });
+    previous.focus();
+    const trigger = screen.getByRole("button", { name });
+    // Safari may leave the previously focused control active on a pointer click.
+    fireEvent.click(trigger);
+    const dialog = screen.getByRole("dialog", { name: "选择租期" });
+    fireEvent.change(within(dialog).getByLabelText("退租日期"), { target: { value: "2027-03-01" } });
+    fireEvent.keyDown(dialog, { key: "Tab" });
+    expect(dialog.contains(document.activeElement)).toBe(true);
+    fireEvent.keyDown(dialog, { key: "Escape" });
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+    expect(screen.getByLabelText("退租日期").getAttribute("value")).toBe(initialStay.moveOut);
+  });
+
   it("opens the clicked photo, navigates with arrows and traps then restores focus", () => {
     render(<SavedListingsProvider><ListingDetailExperience listing={listing} /></SavedListingsProvider>);
     const trigger = screen.getByRole("button", { name: "查看图片 2" });

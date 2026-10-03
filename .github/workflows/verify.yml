@@ -74,6 +74,13 @@ jobs:
           VALKEY_URL: redis://127.0.0.1:6379
       - name: Build and exercise the hardened application images
         run: node tools/container-smoke.mjs
+      - name: Build and click through the isolated fictional website demo
+        env:
+          NEXT_PUBLIC_WEBSITE_DEMO: "true"
+          NEXT_PUBLIC_API_BASE_URL: https://demo.invalid/api/v1
+        run: |
+          pnpm build
+          pnpm test:browser:demo -- http://127.0.0.1:3100 --start-local --output .tmp-tests/website-demo-click-ci
       - name: Clean up the isolated runner services
         if: always()
         run: docker compose --profile realtime down --volumes

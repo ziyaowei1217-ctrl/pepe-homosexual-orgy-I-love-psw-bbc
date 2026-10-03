@@ -50,12 +50,21 @@ cover SSR or edge responses.
 2. Run the normal `pnpm check` with the demo flag unset and the focused demo boundary tests.
 3. Build a separate demo with the exact public values in `netlify.toml`. Run it in production
    mode locally, then verify public/private paths, no upstream transports and browser journeys.
+   `pnpm test:browser:demo -- http://127.0.0.1:3100 --start-local` starts and cleans up its
+   own production server after that demo build. It checks actual navigation, same-route
+   search reset, sequential gallery/date focus, Saved persistence, map targets and history
+   in six desktop/phone browser profiles. It refuses connected-service requests and
+   preserves failing evidence in a fresh `.tmp-tests/website-demo-click-*` directory.
+   The normal GitHub integration job also builds and runs this isolated demo check.
 4. Deploy only the committed revision with the single build-and-upload operation above.
    Keep the Netlify site ID in untracked `.netlify/state.json`
    and record the deployed source revision and URL in the handoff outside the source tree.
 5. Confirm the actual Netlify deployment preserves CSP nonce/hydration, `private, no-store`
    HTML, security headers, blocked writes, the demo warning and mobile layout. A successful
    local Next build does not certify Netlify adapter behavior.
+   Run `pnpm test:browser:demo -- https://THE-EXACT-PREVIEW.netlify.app` before publication,
+   and repeat it on the stable URL after promoting that exact accepted deploy. Retain the
+   source revision, all five GitHub job results and preview/stable evidence together.
 
 Update the same Netlify project from later reviewed commits; keep prior deploys available for
 rollback. A manual CLI deployment does not by itself configure Git-triggered continuous

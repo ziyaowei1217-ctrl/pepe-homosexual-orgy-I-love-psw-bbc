@@ -3,6 +3,7 @@
 import { ArrowLeft, ArrowRight, Bath, BedDouble, CalendarDays, Check, ChevronDown, Heart, LayoutGrid, List, Map, MapPin, Search, SlidersHorizontal, Star, TrainFront, X } from "lucide-react";
 import Image from "@/components/ui/app-image";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { LocationAutocomplete } from "@/components/marketplace/location-autocomplete";
@@ -18,7 +19,8 @@ import { cn } from "@/lib/utils";
 export function SearchExperience({ listings, initialQuery, initialMoveIn, initialMoveOut, initialState }: {
   listings: PreviewListing[]; initialQuery: string; initialMoveIn: string; initialMoveOut: string; initialState?: SearchState;
 }) {
-  const [state, setState] = useState<SearchState>(() => typeof window !== "undefined" && window.location.pathname === "/search" ? parseSearchState(new URLSearchParams(window.location.search)) : initialState ?? { ...defaultSearch, query: initialQuery, moveIn: initialMoveIn, moveOut: initialMoveOut });
+  const routerQuery = useSearchParams()?.toString();
+  const [state, setState] = useState<SearchState>(() => initialState ?? (typeof window !== "undefined" && window.location.pathname === "/search" ? parseSearchState(new URLSearchParams(window.location.search)) : { ...defaultSearch, query: initialQuery, moveIn: initialMoveIn, moveOut: initialMoveOut }));
   const [filterOpen, setFilterOpen] = useState<SearchFilterSection | null>(null);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
@@ -31,12 +33,30 @@ export function SearchExperience({ listings, initialQuery, initialMoveIn, initia
   const filterCount = state.amenities.length + Number(Boolean(state.priceMin || state.priceMax)) + Number(Boolean(state.beds));
 
   useEffect(() => {
-    if (window.matchMedia?.("(max-width: 1023px)").matches) {
-      setState((current) => current.view === "split" ? { ...current, view: "list" } : current);
-    }
+    const narrowViewport = window.matchMedia?.("(max-width: 1023px)");
+    const normalizeView = () => {
+      if (narrowViewport?.matches) setState((current) => current.view === "split" ? { ...current, view: "list" } : current);
+    };
+    normalizeView();
+    narrowViewport?.addEventListener?.("change", normalizeView);
     const selected = initialState?.selected;
     if (selected) cards.current.get(selected)?.scrollIntoView?.({ block: "nearest", behavior: "instant" });
+    return () => narrowViewport?.removeEventListener?.("change", normalizeView);
   }, [initialState?.selected]);
+
+  useEffect(() => {
+    if (routerQuery === undefined || window.location.pathname !== "/search") return;
+    // App Router links can reuse this page without firing popstate. Ignore an
+    // older router snapshot while a native history update is still settling.
+    if (new URLSearchParams(window.location.search).toString() !== routerQuery) return;
+    const restored = parseSearchState(new URLSearchParams(routerQuery));
+    if (restored.view === "split" && window.matchMedia?.("(max-width: 1023px)").matches) restored.view = "list";
+    // Native edits already committed equivalent criteria. Preserve in-progress
+    // input text (including spaces) instead of normalizing it on every keystroke.
+    setState((current) => searchHref(current) === searchHref(restored) ? current : restored);
+    setHoveredId(null);
+    setFilterOpen(null);
+  }, [routerQuery]);
 
   useEffect(() => {
     const onBack = () => {
@@ -94,20 +114,23 @@ export function SearchExperience({ listings, initialQuery, initialMoveIn, initia
   ];
 
   return <main className="search-workspace min-h-[calc(100dvh-72px)] bg-white">
-    <section className="search-toolbar sticky top-[72px] z-40 border-b border-slate-200 bg-white/95 backdrop-blur-xl">
-      <div className="mx-auto flex max-w-[1760px] flex-col gap-3 px-4 py-3 sm:px-6 lg:flex-row lg:items-center lg:gap-4 lg:px-8 lg:py-4">
-        <form action="/search" aria-label="修改搜索" onSubmit={(event) => { event.preventDefault(); update({}, "replace"); }} className="flex min-w-0 items-center gap-2 rounded-full border border-brand/25 bg-white p-1.5 pl-4 shadow-sm focus-within:border-brand-moss lg:w-[370px] lg:shrink-0">
+    <section className="search-toolbar sticky top-[72px] z-40 border-b border-slate-200 bg-white">
+      <div className="search-toolbar-content mx-auto flex max-w-[1760px] flex-col gap-3 px-4 py-3 sm:px-6 lg:flex-row lg:items-center lg:gap-4 lg:px-8 lg:py-4">
+        <form action="/search" aria-label="修改搜索" onSubmit={(event) => { event.preventDefault(); update({}, "replace"); }} className="search-location-form flex min-w-0 items-center gap-2 rounded-full border border-brand/25 bg-white p-1.5 pl-4 shadow-sm focus-within:border-brand-moss lg:w-[370px] lg:shrink-0">
           <MapPin className="size-4 shrink-0 text-[#234B3B]" aria-hidden="true" />
           <div className="min-w-0 flex-1"><LocationAutocomplete name="q" value={state.query} onValueChange={(query) => update({ query }, "replace")} inputClassName="min-h-11 text-base font-semibold sm:text-sm" ariaLabel="地点或学校" placeholder="城市、学校或公司" /></div>
           {state.query ? <button type="button" onClick={() => update({ query: "" })} aria-label="清除地点" className="grid size-11 shrink-0 place-items-center rounded-full hover:bg-slate-100"><X className="size-3.5" /></button> : null}
           <button type="submit" aria-label="更新搜索" className="grid size-11 shrink-0 place-items-center rounded-full bg-[#234B3B] text-white"><Search className="size-4" /></button>
         </form>
         <div className="flex min-w-0 items-center gap-2 overflow-x-auto [scrollbar-width:none]">
-          <button type="button" onClick={(event) => { event.currentTarget.focus(); setFilterOpen("budget"); }} className={cn("search-pill", (state.priceMin || state.priceMax) && "search-pill-active")}>{budgetLabel}<ChevronDown className="size-3.5" /></button>
-          <button type="button" onClick={(event) => { event.currentTarget.focus(); setFilterOpen("beds"); }} className={cn("search-pill", state.beds && "search-pill-active")}><BedDouble className="size-4" />{state.beds ? `${state.beds}+ 卧室` : "卧室"}<ChevronDown className="size-3.5" /></button>
-          <button type="button" onClick={(event) => { event.currentTarget.focus(); setFilterOpen("dates"); }} className={cn("search-pill", (state.moveIn || state.moveOut) && "search-pill-active")}><CalendarDays className="size-4" />{dateLabel}<ChevronDown className="size-3.5" /></button>
-          <button type="button" onClick={(event) => { event.currentTarget.focus(); setFilterOpen("budget"); }} aria-label="筛选" className={cn("search-pill order-first lg:order-none", filterCount && "search-pill-active")}><SlidersHorizontal className="size-4" /><span>筛选</span>{filterCount ? <span className="grid size-5 place-items-center rounded-full bg-[#234B3B] text-[10px] text-white">{filterCount}</span> : null}</button>
+          <button type="button" onClick={(event) => { event.currentTarget.focus(); setFilterOpen("budget"); }} className={cn("search-filter-summary search-pill", (state.priceMin || state.priceMax) && "search-pill-active")}>{budgetLabel}<ChevronDown className="size-3.5" /></button>
+          <button type="button" onClick={(event) => { event.currentTarget.focus(); setFilterOpen("beds"); }} className={cn("search-filter-summary search-pill", state.beds && "search-pill-active")}><BedDouble className="size-4" />{state.beds ? `${state.beds}+ 卧室` : "卧室"}<ChevronDown className="size-3.5" /></button>
+          <button type="button" onClick={(event) => { event.currentTarget.focus(); setFilterOpen("dates"); }} className={cn("search-filter-summary search-pill", (state.moveIn || state.moveOut) && "search-pill-active")}><CalendarDays className="size-4" />{dateLabel}<ChevronDown className="size-3.5" /></button>
+          <button type="button" onClick={(event) => { event.currentTarget.focus(); setFilterOpen("budget"); }} aria-label="筛选" className={cn("search-filter-shortcut search-pill order-first lg:order-none", filterCount && "search-pill-active")}><SlidersHorizontal className="size-4" /><span>筛选</span>{filterCount ? <span className="grid size-5 place-items-center rounded-full bg-[#234B3B] text-[10px] text-white">{filterCount}</span> : null}</button>
         </div>
+    <div className="search-view-controls fixed bottom-[82px] left-1/2 z-40 flex max-w-[calc(100vw-32px)] -translate-x-1/2 rounded-full bg-brand p-1 text-white shadow-lg md:bottom-6" aria-label="浏览方式">
+      {([["split", "分屏", LayoutGrid], ["list", "列表", List], ["map", "地图", Map]] as const).map(([view, label, Icon]) => <button key={view} type="button" onClick={() => update({ view, page: state.page, selected: state.selected })} aria-pressed={state.view === view} className={cn("flex min-h-11 shrink-0 items-center gap-2 whitespace-nowrap rounded-full px-4 py-2.5 text-xs font-semibold", state.view === view ? "bg-white text-slate-950" : "text-white hover:bg-brand-moss", view === "split" && "hidden lg:flex")}><Icon className="size-3.5" />{label}</button>)}
+    </div>
         <Link href="/saved" className="ml-auto hidden shrink-0 items-center gap-2 text-sm font-semibold text-slate-700 xl:flex"><Heart className="size-4" />我的收藏{savedIds.size ? ` (${savedIds.size})` : ""}</Link>
       </div>
     </section>
@@ -145,9 +168,6 @@ export function SearchExperience({ listings, initialQuery, initialMoveIn, initia
         {catalog.pageCount > 1 ? <nav aria-label="房源分页" className="mt-10 flex items-center justify-center gap-5"><button type="button" disabled={catalog.page <= 1} onClick={() => { update({ page: catalog.page - 1 }); window.scrollTo({ top: 0 }); }} aria-label="上一页" className="grid size-11 place-items-center rounded-full border border-slate-200 disabled:opacity-30"><ArrowLeft className="size-4" /></button><span className="text-sm text-slate-600">第 {catalog.page} / {catalog.pageCount} 页</span><button type="button" disabled={catalog.page >= catalog.pageCount} onClick={() => { update({ page: catalog.page + 1 }); window.scrollTo({ top: 0 }); }} aria-label="下一页" className="grid size-11 place-items-center rounded-full border border-slate-200 disabled:opacity-30"><ArrowRight className="size-4" /></button></nav> : null}
       </section>
       <SearchResultsMap key={`${catalog.items.map((item) => item.id).join(",")}:${state.view}`} listings={catalog.items} activeListing={activeListing} stay={state} view={state.view} onSelect={(id) => selectListing(id, state.view === "split")} onOpen={rememberSearch} onClose={() => update({ selected: "", page: state.page }, "replace")} page={catalog.page} pageCount={catalog.pageCount} onPageChange={(page) => update({ page })} />
-    </div>
-    <div className="fixed bottom-[82px] left-1/2 z-40 flex max-w-[calc(100vw-32px)] -translate-x-1/2 rounded-full bg-brand p-1 text-white shadow-lg md:bottom-6" aria-label="浏览方式">
-      {([["split", "分屏", LayoutGrid], ["list", "列表", List], ["map", "地图", Map]] as const).map(([view, label, Icon]) => <button key={view} type="button" onClick={() => update({ view, page: state.page, selected: state.selected })} aria-pressed={state.view === view} className={cn("flex min-h-11 shrink-0 items-center gap-2 whitespace-nowrap rounded-full px-4 py-2.5 text-xs font-semibold", state.view === view ? "bg-white text-slate-950" : "text-white hover:bg-brand-moss", view === "split" && "hidden lg:flex")}><Icon className="size-3.5" />{label}</button>)}
     </div>
     {notice ? <div role="status" className="fixed bottom-[144px] left-1/2 z-[70] flex -translate-x-1/2 items-center gap-2 whitespace-nowrap rounded-xl bg-slate-950 px-5 py-3 text-sm text-white shadow-xl md:bottom-24"><Check className="size-4 text-emerald-300" />{notice}<Link href="/saved" className="ml-2 underline">查看</Link></div> : null}
     {filterOpen ? <SearchFiltersDialog initialSection={filterOpen} initial={state} prices={searchCatalog(listings, { ...state, ...emptyFilters, page: 1 }, Number.MAX_SAFE_INTEGER).items.map((listing) => listing.price)} getCount={(draft) => searchCatalog(listings, draft).total} onApply={(draft) => { update({ ...draft, page: 1, selected: "" }); setFilterOpen(null); }} onClose={() => setFilterOpen(null)} /> : null}
