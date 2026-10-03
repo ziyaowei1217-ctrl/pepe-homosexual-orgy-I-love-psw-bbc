@@ -55,6 +55,33 @@ function publicImage(url) {
 function mapTile(url) {
   return publicImage(url) && url.hostname === "tile.openstreetmap.de";
 }
+function canonicalFavicon(value, expectedOrigin) {
+  try {
+    const url = new URL(value);
+    return url.href === value && !url.username && !url.password && url.origin === expectedOrigin && url.pathname === "/icon.svg" && !url.hash &&
+      /^(?:\?[a-f0-9]{16})?$/.test(url.search);
+  } catch { return false; }
+}
+function oldReloadFaviconCancellation(failure, requestDocument, reload, expectedOrigin) {
+  return reload?.active === true && canonicalFavicon(reload.url, expectedOrigin) &&
+    failure.url === reload.url && failure.type === "image" && failure.error === "NS_BINDING_ABORTED" &&
+    typeof requestDocument === "string" && requestDocument.length > 0 && requestDocument === reload.oldDocument;
+}
+function replacementReloadFavicon(response, reload) {
+  return reload?.active === true && typeof reload.newDocument === "string" && reload.newDocument.length > 0 && reload.newDocument !== reload.oldDocument &&
+    response.document === reload.newDocument && response.url === reload.url && response.type === "image" &&
+    response.status === 200 && /^image\/svg\+xml(?:;|$)/i.test(response.contentType);
+}
+async function waitReloadFaviconReplacement(reload, responses, checkRuntime) {
+  if (!reload.cancellations.length) return;
+  const deadline = Date.now() + 12_000;
+  while (Date.now() < deadline && !reload.replacement) {
+    checkRuntime();
+    reload.replacement = responses.find((response) => replacementReloadFavicon(response, reload));
+    if (!reload.replacement) await sleep(25);
+  }
+  assert.ok(reload.replacement, "Canceled old favicon requires same SVG200 response in new document within12s");
+}
 
 let ownedServer;
 let serverLog = "";
@@ -116,13 +143,27 @@ for (const [signal, handler] of signalHandlers) process.once(signal, handler);
 async function runProfile(profile) {
   const result = { name: profile.name, viewport: { width: profile.width, height: profile.height }, startedAt: new Date().toISOString(), demoValidated: false,
     steps: [], hits: [], pageErrors: [], consoleErrors: [], rscFaults: [], cspViolations: [], forbiddenRequests: [], assetFailures: [],
-    requestFailures: [], speculativePrefetchCancellations: [], canceledRscRequests: [], canceledMapTiles: [], cleanupCancellations: [], rscResponses: [], assetResponses: [], settledMapTiles: [], pass: false };
+    requestFailures: [], speculativePrefetchCancellations: [], canceledRscRequests: [], canceledMapTiles: [], canceledReloadFavicons: [],
+    documentTransitions: [], savedReloads: [], faviconResponses: [], cleanupCancellations: [], rscResponses: [], assetResponses: [], settledMapTiles: [], pass: false };
   report.profiles.push(result);
   const browser = await profile.engine.launch(); activeBrowsers.add(browser); result.browserVersion = browser.version();
   let context; let cleaning = false;
   try {
   context = await browser.newContext({ viewport: result.viewport, isMobile: profile.width < 768, hasTouch: profile.width < 768, serviceWorkers: "block" });
   const page = await context.newPage(); page.setDefaultTimeout(12_000); let phase = "initial demo guard";
+  const requestDocuments = new WeakMap(); let currentDocument; let savedReload;
+  await page.exposeFunction("__recordDemoClickDocument", (document) => {
+    currentDocument = document; result.documentTransitions.push({ document, phase, at: new Date().toISOString() });
+    if (savedReload?.active && document !== savedReload.oldDocument) savedReload.newDocument = document;
+  });
+  await page.addInitScript(() => {
+    if (window !== window.top) return;
+    window.__demoClickDocument = crypto.randomUUID();
+    window.__recordDemoClickDocument(window.__demoClickDocument);
+  });
+  page.on("request", (request) => {
+    try { if (request.frame() === page.mainFrame()) requestDocuments.set(request, currentDocument); } catch { /* Unknown owners cannot qualify. */ }
+  });
   const assertRuntime = () => {
     for (const name of ["pageErrors", "consoleErrors", "rscFaults", "cspViolations", "forbiddenRequests", "assetFailures"]) assert.deepEqual(result[name], [], `${profile.name} ${phase}: ${name}`);
   };
@@ -167,12 +208,20 @@ async function runProfile(profile) {
     // Navigation/unmount and zoom replace old tile requests. Verify the current
     // fitted map's visible tiles below; non-cancelled/HTTP errors stay fatal.
     else if (canceled && failure.type === "image" && mapTile(new URL(request.url()))) result.canceledMapTiles.push(failure);
+    // Firefox can start a favicon for the old Saved document just as reload
+    // begins. Accept only this exact cancellation, contingent on a200 SVG
+    // response from the replacement document below, with all evidence retained.
+    else if (oldReloadFaviconCancellation({ ...failure, url: request.url() }, requestDocuments.get(request), savedReload, origin)) {
+      const evidence = { ...failure, url: request.url(), document: requestDocuments.get(request), reloadStartedAt: savedReload.startedAt };
+      result.canceledReloadFavicons.push(evidence); savedReload.cancellations.push(evidence);
+    }
     else if (["script", "stylesheet", "image", "font"].includes(failure.type)) result.assetFailures.push(failure);
     else if (headers.rsc === "1") result.rscFaults.push(failure);
   });
   page.on("response", (response) => {
     const request = response.request(), type = request.resourceType(), url = new URL(response.url());
     const data = { phase, url: diagnosticUrl(response.url()), status: response.status(), type, contentType: response.headers()["content-type"] ?? "" };
+    if (canonicalFavicon(response.url(), origin)) result.faviconResponses.push({ ...data, url: response.url(), document: requestDocuments.get(request) });
     if (request.headers().rsc === "1") { result.rscResponses.push(data); if (response.status() >= 400) result.rscFaults.push(data); }
     if (["script", "stylesheet", "image", "font"].includes(type)) { result.assetResponses.push(data); if (response.status() >= 400) result.assetFailures.push(data); }
     if (url.origin !== origin && type !== "image") result.forbiddenRequests.push(data);
@@ -277,9 +326,22 @@ async function runProfile(profile) {
       // Wait for the current page's visible card and icon/asset work before the
       // intentional reload, so it tests persistence rather than cancel timing.
       await decodedVisibleImages(); await page.waitForLoadState("networkidle", { timeout: 12_000 });
-      await page.reload({ waitUntil: "domcontentloaded" }); await visibleHeading("收藏清单");
-      await page.getByRole("heading", { level: 3, name: listingTitle, exact: true }).waitFor({ state: "visible" });
-      await decodedVisibleImages();
+      const favicon = new URL(await page.locator('link[rel="icon"]').getAttribute("href"), origin).href;
+      assert.ok(canonicalFavicon(favicon, origin), "Exact canonical Saved favicon");
+      currentDocument = await page.evaluate(() => window.__demoClickDocument);
+      assert.equal(typeof currentDocument, "string", "Known old Saved document identity");
+      savedReload = { active: true, startedAt: new Date().toISOString(), oldDocument: currentDocument, url: favicon, cancellations: [] };
+      result.savedReloads.push(savedReload);
+      try {
+        await page.reload({ waitUntil: "domcontentloaded" }); await visibleHeading("收藏清单");
+        await page.getByRole("heading", { level: 3, name: listingTitle, exact: true }).waitFor({ state: "visible" });
+        await decodedVisibleImages();
+        savedReload.newDocument = await page.evaluate(() => window.__demoClickDocument);
+        assert.notEqual(savedReload.newDocument, savedReload.oldDocument, "Reload creates a fresh document");
+        // With no cancellation, close the reload window synchronously; yielding
+        // could admit a late cancellation without ever requiring replacement.
+        if (savedReload.cancellations.length) await waitReloadFaviconReplacement(savedReload, result.faviconResponses, assertRuntime);
+      } finally { savedReload.active = false; }
     });
     await step("Saved listing click opens its detail", async () => { await hit(page.locator('article a[href^="/listing/"]').filter({ has: page.locator("img") }).first(), "Saved listing image card", { fully: false }); await atPath(listingPath); await visibleHeading(listingTitle); });
     await step("Detail return restores actual search", async () => { await hit(page.getByRole("link", { name: "返回搜索", exact: true }), "Return search"); await atPath("/search"); await search(); });
