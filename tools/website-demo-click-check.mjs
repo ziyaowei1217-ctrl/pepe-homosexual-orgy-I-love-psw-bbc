@@ -233,8 +233,45 @@ async function runProfile(profile) {
   const decodedVisibleImages = () => wait(() => [...document.images].filter((image) => {
     const box = image.getBoundingClientRect(); return box.width > 0 && box.height > 0 && box.top < innerHeight && box.bottom > 0;
   }).every((image) => image.complete && image.naturalWidth > 0));
-  const nav = (name) => page.getByRole("navigation", { name: profile.width >= 768 ? "主导航" : "手机导航", exact: true }).getByRole("link", { name, exact: true });
+  const navigation = () => page.getByRole("navigation", { name: profile.width >= 768 ? "主导航" : "手机导航", exact: true });
+  const nav = (name) => navigation().getByRole("link", { name, exact: true });
   const logo = () => page.getByRole("link", { name: "psw 首页", exact: true });
+  async function currentNavigation(name) {
+    await navigation().waitFor({ state: "visible" });
+    const selected = navigation().locator('a[aria-current="page"]');
+    assert.equal(await selected.count(), name ? 1 : 0, "Exactly the intended destination may be selected");
+    if (name) assert.equal(await nav(name).getAttribute("aria-current"), "page", `${name} must remain the current destination`);
+  }
+  async function privateNotice(heading, name) {
+    await visibleHeading(heading);
+    const title = page.getByRole("heading", { level: 1 });
+    assert.equal(await title.innerText(), heading, "Private section heading matches its route");
+    await currentNavigation(name);
+    assert.equal(await page.locator("form, input, textarea").count(), 0, "Closed demo section must not collect credentials or private data");
+    assert.match(await page.locator("main").innerText(), /暂未开放/, "Closed section explicitly explains availability");
+    // Inspect the actual arrival position. Scrolling the title into view here
+    // would hide a short-screen layout or restored-history overlap defect.
+    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    const geometry = await title.evaluate((element) => {
+      const box = element.getBoundingClientRect(), center = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+      const header = document.querySelector(".marketplace-shell > header")?.getBoundingClientRect();
+      const mobile = document.querySelector('nav[aria-label="手机导航"]')?.getBoundingClientRect();
+      const target = document.elementFromPoint(center.x, center.y);
+      return { path: location.pathname, scrollY, x: box.x, y: box.y, width: box.width, height: box.height,
+        viewportWidth: innerWidth, viewportHeight: innerHeight, headerBottom: header?.bottom ?? 0,
+        bottomNavigationTop: mobile && mobile.width > 0 && mobile.height > 0 ? mobile.top : innerHeight,
+        center, centerHits: target === element || element.contains(target), hitTag: target?.tagName,
+        hitLabel: target?.getAttribute("aria-label") };
+    });
+    result.noticeHeadings ??= [];
+    result.noticeHeadings.push({ phase, heading, ...geometry });
+    assert.ok(geometry.width > 0 && geometry.height > 0, "Closed section title has visible dimensions");
+    assert.ok(geometry.x >= -0.5 && geometry.x + geometry.width <= geometry.viewportWidth + 0.5 &&
+      geometry.y >= Math.max(0, geometry.headerBottom) - 0.5 &&
+      geometry.y + geometry.height <= Math.min(geometry.viewportHeight, geometry.bottomNavigationTop) + 0.5,
+    `Closed section title must initially fit between the header and bottom navigation: ${JSON.stringify(geometry)}`);
+    assert.ok(geometry.centerHits, `Closed section title is initially covered: ${JSON.stringify(geometry)}`);
+  }
   async function hit(control, label, { scroll = true, fully = true } = {}) {
     await control.waitFor({ state: "visible" });
     if (scroll) await control.evaluate((element) => element.scrollIntoView({ block: "center", inline: "nearest", behavior: "instant" }));
@@ -259,6 +296,7 @@ async function runProfile(profile) {
     await action(); assertRuntime();
     entry.state = await page.evaluate(() => ({ path: location.pathname, query: location.search, heading: document.querySelector("h1")?.innerText,
       searchInput: document.querySelector("input[name=q]")?.value, gallery: document.querySelector('[role="dialog"] [role="status"]')?.textContent,
+      currentNavigation: [...document.querySelectorAll('nav a[aria-current="page"]')].map((link) => ({ href: link.getAttribute("href"), label: link.textContent?.trim() })),
       focused: document.activeElement?.getAttribute("aria-label") || document.activeElement?.textContent?.slice(0, 100) }));
     entry.pass = true; entry.finishedAt = new Date().toISOString(); await persist();
   }
@@ -287,9 +325,58 @@ async function runProfile(profile) {
       await hit(nav("转租"), "Global 转租", { scroll: false });
       await wait(() => location.pathname === "/search" && !location.search && document.querySelector("input[name=q]")?.value === "" && document.querySelector("#result-heading")?.innerText === "全部地区的可租房源");
       assert.ok(await page.locator("article").count() > 6, "Global search must restore more than Boston's6results");
+      await currentNavigation("转租");
     });
-    for (const [name, pathname, heading] of [["室友", "/roommates", "找到合拍的室友"], ["收藏", "/saved", "收藏清单"], ["消息", "/inbox", "这个演示仅供浏览"], ["我的", "/account", "这个演示仅供浏览"]]) {
-      await step(`Navigation ${name} changes visible UI`, async () => { await hit(nav(name), `Navigation ${name}`, { scroll: false }); await atPath(pathname); await visibleHeading(heading); });
+    for (const [name, pathname, heading] of [["室友", "/roommates", "找到合拍的室友"], ["收藏", "/saved", "收藏清单"], ["消息", "/inbox", "消息"], ["我的", "/account", "我的账户"]]) {
+      await step(`Navigation ${name} changes visible UI`, async () => {
+        await hit(nav(name), `Navigation ${name}`, { scroll: false }); await atPath(pathname); await visibleHeading(heading);
+        await currentNavigation(name);
+        if (name === "消息" || name === "我的") await privateNotice(heading, name);
+      });
+      if (name === "室友") await step("Actual roommate demo action preserves Roommates context", async () => {
+        await decodedVisibleImages(); await page.waitForLoadState("networkidle", { timeout: 12_000 });
+        await hit(page.getByRole("button", { name: "演示说明", exact: true }), "Roommate demo action");
+        await atPath("/roommates/likes"); await privateNotice("室友互动", "室友");
+        await page.goBack({ waitUntil: "domcontentloaded" }); await atPath("/roommates"); await visibleHeading("找到合拍的室友");
+        await currentNavigation("室友"); await decodedVisibleImages(); await page.waitForLoadState("networkidle", { timeout: 12_000 });
+      });
+    }
+    await step("Repeated Messages Account Messages and same-tab navigation", async () => {
+      for (const [name, pathname, heading] of [["消息", "/inbox", "消息"], ["我的", "/account", "我的账户"], ["消息", "/inbox", "消息"], ["消息", "/inbox", "消息"]]) {
+        await hit(nav(name), `Repeat navigation ${name}`, { scroll: false }); await atPath(pathname); await privateNotice(heading, name);
+      }
+    });
+    await step("Messages reload preserves route heading and current tab", async () => {
+      await page.waitForLoadState("networkidle", { timeout: 12_000 });
+      await page.reload({ waitUntil: "domcontentloaded" }); await atPath("/inbox"); await privateNotice("消息", "消息");
+      await page.waitForLoadState("networkidle", { timeout: 12_000 });
+    });
+    await step("Account icon opens its own closed account section", async () => {
+      await hit(page.locator("header").getByRole("link", { name: "打开账户", exact: true }), "Account icon", { scroll: false });
+      await atPath("/account"); await privateNotice("我的账户", "我的");
+    });
+    await step("Back Forward preserve Messages and Account section identity", async () => {
+      await page.goBack({ waitUntil: "domcontentloaded" }); await atPath("/inbox"); await privateNotice("消息", "消息");
+      await page.goForward({ waitUntil: "domcontentloaded" }); await atPath("/account"); await privateNotice("我的账户", "我的");
+    });
+    const privateMarker = "demo-navigation-query-marker";
+    for (const [href, heading, name] of [
+      [`/inbox/demo-conversation?section=account&text=${privateMarker}`, "消息", "消息"],
+      [`/account/profile?section=inbox&email=${privateMarker}`, "我的账户", "我的"],
+      [`/messages?conversationId=${privateMarker}`, "消息", "消息"],
+      [`/roommates/likes?section=account&note=${privateMarker}`, "室友互动", "室友"],
+      [`/host/listings/new?section=inbox&note=${privateMarker}`, "房东中心", "我的"],
+      [`/applications/new?section=inbox&listingId=${privateMarker}`, "转租申请", "我的"],
+      ["/demo", "这个演示仅供浏览", undefined],
+      ["/unknown-demo-section", "这个演示仅供浏览", undefined]
+    ]) {
+      await step(`Direct closed route ${new URL(href, origin).pathname} keeps its context`, async () => {
+        const response = await page.goto(new URL(href, origin).href, { waitUntil: "domcontentloaded" });
+        assert.equal(response?.status(), 200, "Closed route serves its inert notice");
+        await atPath(new URL(href, origin).pathname); await privateNotice(heading, name);
+        assert.ok(!(await page.locator("main").innerText()).includes(privateMarker), "Original private query values must not appear in notice content");
+        await page.waitForLoadState("networkidle", { timeout: 12_000 });
+      });
     }
     await step("Demo recovery clicks back to search", async () => { await hit(page.getByRole("link", { name: "浏览房源", exact: true }), "Demo recovery"); await atPath("/search"); await search(); });
     let listingTitle; let listingPath;
@@ -317,6 +404,20 @@ async function runProfile(profile) {
       await page.keyboard.press("Tab"); await page.keyboard.press("Escape"); await dialog.waitFor({ state: "hidden" });
       assert.ok(await editor.evaluate((element) => element === document.activeElement), "Date Escape restores its pointer opener, not previous photo");
     });
+    for (const [label, pathname, heading, name] of [["联系房东", "/inbox", "消息", "消息"], ["申请租住", "/applications/new", "转租申请", "我的"]]) {
+      await step(`Actual listing ${label} keeps its destination and returns to original detail`, async () => {
+        await decodedVisibleImages(); await page.waitForLoadState("networkidle", { timeout: 12_000 });
+        const detail = new URL(page.url());
+        const action = page.getByRole("link", { name: label, exact: true });
+        const destination = new URL(await action.getAttribute("href"), origin);
+        assert.equal(destination.pathname, pathname, "Listing action points to its intended closed section");
+        await hit(action, `Listing ${label}`); await atPath(pathname); await privateNotice(heading, name);
+        assert.equal(new URL(page.url()).search, destination.search, "Listing action preserves its intended URL query");
+        await page.goBack({ waitUntil: "domcontentloaded" }); await atPath(listingPath); await visibleHeading(listingTitle);
+        assert.equal(new URL(page.url()).search, detail.search, "Back restores the original listing dates and URL");
+        await decodedVisibleImages(); await page.waitForLoadState("networkidle", { timeout: 12_000 });
+      });
+    }
     await step("Synthetic device Saved toggles visibly", async () => { await hit(page.getByRole("button", { name: "收藏房源", exact: true }), "Save fictional listing"); await page.getByRole("button", { name: "取消收藏房源", exact: true }).waitFor({ state: "visible" }); });
     await step("Saved navigation preserves synthetic listing", async () => {
       const saved = profile.width < 768 ? page.getByRole("navigation", { name: "手机快捷导航", exact: true }).getByRole("link", { name: "收藏房源", exact: true }) : nav("收藏");

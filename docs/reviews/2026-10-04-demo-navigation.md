@@ -1,0 +1,19 @@
+# Demo destination identity review — 2026-10-04
+
+## Problem and correction
+
+Selecting 消息 or 我的 preserved `/inbox` or `/account` in the address bar, but the private-page demo rewrite displayed one generic notice with 转租 selected. The previous browser gate checked the address and generic notice without checking which destination the interface identified. A fresh browser check against the published baseline `e215fdc` reproduces this mismatch.
+
+Private routes still render inert notices. The middleware clears the incoming query and passes only a fixed section derived from the canonical pathname to `/demo`. Each section supplies a fixed heading, an explicit unavailable status and the matching navigation state. Messages, account, landlord, applications and roommate interactions keep their destination identity. The `/messages` alias, child routes and canonical encoded private route names follow the same rule. Generic/unknown notices select no unrelated navigation tab. Unrecognized, duplicate and prototype-like section values render neutral static copy.
+
+The notice leads with its destination heading instead of repeating the global brand, so a short landscape screen shows the heading above the fixed phone navigation. The demo-only roommate Like button follows the same closed likes destination as its list link instead of losing context at a generic notice. Actual booking actions exposed 38px desktop contact/appointment targets and a 566.5px sticky card pinned below the reachable area on 400/500px-high screens. Those targets now have a 44px minimum height and the card follows normal page scrolling below 801px viewport height; tall desktops retain sticky positioning.
+
+This does not enable authentication, messaging, applications, publishing, uploads, payments or private API access. Original query values, IDs and return URLs are not forwarded into notice copy or links. Normal routing with the demo flag off is preserved. API/method/static-path guards, CSP generation, auth/session and network isolation remain unchanged.
+
+## Verification
+
+Focused rendering and boundary tests cover every section, independent desktop/phone navigation, aliases, children, spoofed queries, ambiguous encodings and invalid/array sections. The expanded six-profile browser gate checks selected tabs and exact destination headings on every navigation, repeated and same-tab clicks, account-icon navigation, reload, Back/Forward and direct private links. Existing gallery, date, Saved, map, asset and runtime/security failure rules remain in place.
+
+Release acceptance requires the normal lint/types/full test/build check, a separate production demo build with actual pointer/browser journeys, independent source and hosted security reviews, all five actual release workflow jobs on the committed source, immutable Netlify acceptance, then fresh acceptance at the stable address. Counts and exact source/deploy identities are recorded in the PR and delivery evidence after these runs complete. Failed baseline evidence is retained independently; browser profiles do not certify physical devices or future live services.
+
+The existing review branch and Netlify project are reused. Publication promotes the accepted immutable deployment. Main remains unmerged and the previous accepted deployment remains available for rollback.

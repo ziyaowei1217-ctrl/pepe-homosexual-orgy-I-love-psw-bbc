@@ -181,7 +181,7 @@ export function ListingDetailExperience({ listing, initialStay }: { listing: Pre
           </div>
 
           <aside className="hidden lg:block">
-            <div className="sticky top-[148px] rounded-[20px] border border-brand/15 bg-white p-6 shadow-[0_8px_24px_rgba(35,75,59,0.05)]">
+            <div className="listing-booking-card sticky top-[148px] rounded-[20px] border border-brand/15 bg-white p-6 shadow-[0_8px_24px_rgba(35,75,59,0.05)]">
               <div className="flex items-end justify-between gap-4"><p><span className="text-3xl font-semibold tabular-nums tracking-[-0.025em] text-brand-ink">${listing.price.toLocaleString()}</span><span className="text-sm text-brand-moss"> / 月</span></p><span className="flex items-center gap-1 text-sm font-bold"><Star className="size-4 fill-amber-400 text-amber-400" />{listing.score}</span></div>
               <div className="mt-5"><ListingStayFields listing={listing} stay={stay} onChange={updateStay} /></div>
               {stayError ? <p role="alert" className="mt-3 text-sm leading-6 text-red-700">{stayError}</p> : <p className="mt-3 flex items-center gap-1.5 text-xs text-emerald-700"><Check className="size-3.5" />所选租期可申请</p>}
@@ -192,8 +192,8 @@ export function ListingDetailExperience({ listing, initialStay }: { listing: Pre
                 <dl className="mt-4 space-y-3 text-sm tabular-nums"><div className="flex justify-between text-slate-600"><dt>月租</dt><dd>${listing.price.toLocaleString()}</dd></div><div className="flex justify-between text-slate-600"><dt>平台服务</dt><dd>申请接受后确认</dd></div><div className="flex justify-between border-t border-slate-200 pt-3 font-semibold"><dt>申请时支付</dt><dd>$0</dd></div></dl>
               </div>
               <div className="mt-5 grid grid-cols-2 gap-2">
-                <Link href={`${inboxHref}&tour=1`} className="flex items-center justify-center gap-1.5 rounded-full border border-slate-200 px-3 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"><CalendarDays className="size-4" />预约看房</Link>
-                <Link href={inboxHref} className="flex items-center justify-center gap-1.5 rounded-full border border-slate-200 px-3 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"><MessageCircle className="size-4" />联系房东</Link>
+                <Link href={`${inboxHref}&tour=1`} className="flex min-h-11 items-center justify-center gap-1.5 rounded-full border border-slate-200 px-3 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"><CalendarDays className="size-4" />预约看房</Link>
+                <Link href={inboxHref} className="flex min-h-11 items-center justify-center gap-1.5 rounded-full border border-slate-200 px-3 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"><MessageCircle className="size-4" />联系房东</Link>
               </div>
               <p className="mt-4 text-center text-[11px] leading-5 text-slate-400">{accountLabel}</p>
             </div>

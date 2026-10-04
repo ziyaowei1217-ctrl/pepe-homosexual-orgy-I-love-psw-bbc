@@ -43,7 +43,7 @@ describe("opt-in website demo boundaries", () => {
     vi.stubEnv("NEXT_PUBLIC_WEBSITE_DEMO", "true");
     vi.stubEnv("NODE_ENV", environment);
     const result = middleware(new NextRequest("https://demo.example/account?email=example@example.invalid"));
-    expect(result.headers.get("x-middleware-rewrite")).toBe("https://demo.example/demo");
+    expect(result.headers.get("x-middleware-rewrite")).toBe("https://demo.example/demo?section=account");
     expect(result.headers.get("X-Robots-Tag")).toBe("noindex, nofollow, noarchive");
     if (environment === "production") {
       expect(result.headers.get("Content-Security-Policy")).toContain("connect-src 'self';");

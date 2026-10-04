@@ -82,7 +82,7 @@ describe("canonical framework asset boundary", () => {
     vi.stubEnv("NEXT_PUBLIC_WEBSITE_DEMO", "true");
     vi.stubEnv("NODE_ENV", "production");
     const result = middleware(rawPathRequest(path));
-    expect(result.headers.get("x-middleware-rewrite")).toBe("https://demo.example/demo");
+    expect(result.headers.get("x-middleware-rewrite")).toBe(path === "/account" ? "https://demo.example/demo?section=account" : "https://demo.example/demo");
     expect(result.headers.get("Content-Security-Policy")).toContain("connect-src 'self';");
     expect(result.headers.get("Content-Security-Policy")).toMatch(/'nonce-[^']+'/);
     expect(result.headers.get("Cache-Control")).toBe("private, no-store");
@@ -111,7 +111,7 @@ describe("canonical framework asset boundary", () => {
     vi.stubEnv("NEXT_PUBLIC_WEBSITE_DEMO", "true");
     vi.stubEnv("NODE_ENV", "production");
     const page = middleware(new NextRequest("https://demo.example/_next/static/%2e%2e/%2e%2e/account"));
-    expect(page.headers.get("x-middleware-rewrite")).toBe("https://demo.example/demo");
+    expect(page.headers.get("x-middleware-rewrite")).toBe("https://demo.example/demo?section=account");
     expect(page.headers.get("Content-Security-Policy")).toMatch(/'nonce-[^']+'/);
     const asset = middleware(new NextRequest("https://demo.example/_next/static/chunks/./page.js"));
     expect(asset.headers.get("x-middleware-next")).toBe("1");

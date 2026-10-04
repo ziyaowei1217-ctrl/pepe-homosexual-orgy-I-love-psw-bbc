@@ -90,7 +90,7 @@ function RoommatesSessionExperience({ token }: { token: string | null }) {
     if (!actionTargetId || actionBusy.current || loading) return;
     if (isWebsiteDemo()) {
       if (action === "PASS") setIndex((current) => (current + 1) % roommates.length);
-      else window.location.assign("/demo");
+      else window.location.assign("/roommates/likes");
       return;
     }
     if (!token) {

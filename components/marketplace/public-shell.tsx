@@ -21,7 +21,7 @@ const publicNav = [
   { key: "account", label: "我的", href: "/account", icon: UserRound }
 ] as const;
 
-export function PublicShell({ active, mobileNavigation = "bottom", children }: { active: PublicNavKey; mobileNavigation?: "bottom" | "header"; children: ReactNode }) {
+export function PublicShell({ active, mobileNavigation = "bottom", children }: { active?: PublicNavKey; mobileNavigation?: "bottom" | "header"; children: ReactNode }) {
   return (
     <div className="marketplace-shell min-h-dvh bg-[#F5F8F5] text-[#203C30]">
       <a

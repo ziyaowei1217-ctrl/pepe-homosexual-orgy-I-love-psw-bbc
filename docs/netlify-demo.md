@@ -15,7 +15,9 @@ providers, with map attribution preserved. Those providers and Netlify receive o
 web requests; this is not a promise that hosting has no request logs.
 
 Login, application, host/admin, messaging, uploads and payments are unavailable. Private
-pages show the explanatory demo page. All non-GET/HEAD application requests are rejected;
+pages show a fixed, destination-specific demo notice with the correct selected tab;
+generic and unknown notices select no unrelated tab. Private queries and IDs are not
+forwarded into notice content or links. All non-GET/HEAD application requests are rejected;
 public data reads use an allowlisted in-process synthetic dispatcher rather than an upstream
 API. The API client, moderator downloads, upload transport and realtime transport refuse
 real service access. Stored authentication is neither read nor written. CSP keeps script

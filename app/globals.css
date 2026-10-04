@@ -232,6 +232,11 @@
   }
 }
 
+@media (min-width: 1024px) and (max-height: 800px) {
+  /* A tall booking card must remain reachable on short desktop screens. */
+  .listing-booking-card { position: static; }
+}
+
 @media (max-width: 767px), (hover: none) and (pointer: coarse) {
   /* Keep iOS from zooming the whole page when a form field receives focus. */
   .marketplace-shell :is(input, select, textarea) {

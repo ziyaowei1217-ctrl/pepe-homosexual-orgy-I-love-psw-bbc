@@ -3,20 +3,20 @@ import { LockKeyhole, Search, UsersRound } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { PswLogo } from "@/components/brand/psw-logo";
 import { PublicShell } from "@/components/marketplace/public-shell";
 import { isWebsiteDemo } from "@/lib/website-demo";
+import { websiteDemoNotice } from "@/lib/website-demo-navigation";
 
 export const metadata: Metadata = { title: "演示版说明", robots: { index: false, follow: false } };
 
-export default function DemoNoticePage() {
+export default async function DemoNoticePage({ searchParams }: { searchParams?: Promise<{ section?: string | string[] }> }) {
   if (!isWebsiteDemo()) notFound();
-  return <PublicShell active="discover"><main className="mx-auto min-h-[65dvh] max-w-[1120px] px-4 py-8 sm:px-6 sm:py-12 lg:px-8 lg:py-16">
+  const notice = websiteDemoNotice((await searchParams)?.section);
+  return <PublicShell active={notice.active}><main className="mx-auto min-h-[65dvh] max-w-[1120px] px-4 py-8 sm:px-6 sm:py-12 lg:px-8 lg:py-16">
     <header className="max-w-2xl">
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-3"><PswLogo className="h-10 w-auto max-w-full" /><span className="rounded-full bg-[#E9F2A9] px-3 py-1.5 text-xs font-semibold text-[#234B3B]">演示版</span></div>
-      <p className="mt-2 text-sm font-medium text-[#416F5A]">people spaces wellbeing</p>
-      <h1 className="mt-6 text-balance text-3xl font-semibold leading-tight tracking-[-0.025em] text-[#203C30] sm:text-[40px]">这个演示仅供浏览</h1>
-      <p className="mt-4 text-base leading-7 text-slate-600">这是 psw 面向留学生的转租与接租演示。</p>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-3"><h1 className="text-balance text-3xl font-semibold leading-tight tracking-[-0.025em] text-[#203C30] sm:text-[40px]">{notice.title}</h1><span className="rounded-full bg-[#E9F2A9] px-3 py-1.5 text-xs font-semibold text-[#234B3B]">演示版</span></div>
+      <p className="mt-4 flex items-center gap-2 text-base font-medium leading-7 text-[#234B3B]"><LockKeyhole className="size-4 shrink-0" aria-hidden="true" />{notice.status}</p>
+      <p className="mt-2 text-base leading-7 text-slate-600">{notice.description}</p>
       <div className="mt-5 flex flex-wrap gap-3"><Link href="/search" className="primary-action"><Search className="size-4" aria-hidden="true" />浏览房源</Link><Link href="/roommates" className="secondary-action"><UsersRound className="size-4" aria-hidden="true" />查看室友示例</Link></div>
     </header>
     <div className="mt-8 grid gap-7 border-t border-[#234B3B]/15 pt-6 sm:mt-10 sm:grid-cols-2 sm:gap-10 sm:pt-8">

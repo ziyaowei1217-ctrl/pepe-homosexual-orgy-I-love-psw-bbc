@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { buildContentSecurityPolicy, isHttpLoopbackRequest } from "./lib/content-security-policy";
 import { canBrowseWebsiteDemo, isWebsiteDemo } from "./lib/website-demo";
+import { websiteDemoSectionForPath } from "./lib/website-demo-navigation";
 import { isCanonicalWebsiteStaticPath } from "./lib/website-static-path";
 
 export function middleware(request: NextRequest) {
@@ -26,6 +27,8 @@ export function middleware(request: NextRequest) {
   const destination = request.nextUrl.clone();
   destination.pathname = "/demo";
   destination.search = "";
+  const section = unavailable ? websiteDemoSectionForPath(request.nextUrl.pathname) : null;
+  if (section) destination.searchParams.set("section", section);
   if (process.env.NODE_ENV !== "production") {
     return unavailable ? NextResponse.rewrite(destination, { headers: demoHeaders }) : NextResponse.next({ headers: demoHeaders });
   }
