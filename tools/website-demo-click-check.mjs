@@ -335,7 +335,7 @@ async function runProfile(profile) {
       });
       if (name === "室友") await step("Actual roommate demo action preserves Roommates context", async () => {
         await decodedVisibleImages(); await page.waitForLoadState("networkidle", { timeout: 12_000 });
-        await hit(page.getByRole("button", { name: "演示说明", exact: true }), "Roommate demo action");
+        await hit(page.getByRole("link", { name: "演示说明", exact: true }), "Roommate demo action");
         await atPath("/roommates/likes"); await privateNotice("室友互动", "室友");
         await page.goBack({ waitUntil: "domcontentloaded" }); await atPath("/roommates"); await visibleHeading("找到合拍的室友");
         await currentNavigation("室友"); await decodedVisibleImages(); await page.waitForLoadState("networkidle", { timeout: 12_000 });

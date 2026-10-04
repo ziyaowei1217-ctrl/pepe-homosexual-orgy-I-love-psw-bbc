@@ -8,7 +8,7 @@ Private routes still render inert notices. The middleware clears the incoming qu
 
 The notice leads with its destination heading instead of repeating the global brand, so a short landscape screen shows the heading above the fixed phone navigation. The demo-only roommate Like button follows the same closed likes destination as its list link instead of losing context at a generic notice. Actual booking actions exposed 38px desktop contact/appointment targets and a 566.5px sticky card pinned below the reachable area on 400/500px-high screens. Those targets now have a 44px minimum height and the card follows normal page scrolling below 801px viewport height; tall desktops retain sticky positioning.
 
-This does not enable authentication, messaging, applications, publishing, uploads, payments or private API access. Original query values, IDs and return URLs are not forwarded into notice copy or links. Normal routing with the demo flag off is preserved. API/method/static-path guards, CSP generation, auth/session and network isolation remain unchanged.
+The demo roommate notice is an internal link, preserving client navigation and history. Its former full-page navigation produced Firefox route-loading errors when returning to a page with pending prefetches; the failed hosted gate remains retained. The real roommate Like button and authenticated action logic are unchanged. This does not enable authentication, messaging, applications, publishing, uploads, payments or private API access. Original query values, IDs and return URLs are not forwarded into notice copy or links. Normal routing with the demo flag off is preserved. API/method/static-path guards, CSP generation, auth/session and network isolation remain unchanged.
 
 ## Verification
 
