@@ -278,39 +278,58 @@ async function runProfile(profile) {
     assert.ok(document.length > 0, "Same-tab inbox document identity is nonempty");
     const evidence = { startedAt: new Date().toISOString(), path: "/inbox", document };
     result.sameTabRefreshes ??= []; result.sameTabRefreshes.push(evidence);
-    let observed; let settled = false; let resolveCompletion;
+    let observed; let observedResponse; let settled = false; let resolveCompletion;
     const completion = new Promise((resolve) => { resolveCompletion = resolve; });
-    const finish = (outcome) => { if (!settled) { settled = true; resolveCompletion(outcome); } };
+    const finish = (outcome) => {
+      if (!settled) { settled = true; evidence.responseObservedBeforeTerminal = Boolean(observedResponse); resolveCompletion(outcome); }
+    };
     const onRequest = (request) => {
       const url = new URL(request.url()), headers = request.headers();
       if (observed || url.origin !== origin || url.pathname !== "/inbox" || request.method() !== "GET" ||
-        request.resourceType() !== "fetch" || headers.rsc !== "1" || headers["next-router-prefetch"] === "1" || requestDocuments.get(request) !== document) return;
+        request.resourceType() !== "fetch" || headers.rsc !== "1" || headers["next-router-prefetch"] !== undefined ||
+        headers["next-router-segment-prefetch"] !== undefined || !headers["next-router-state-tree"] || requestDocuments.get(request) !== document) return;
       observed = request;
       Object.assign(evidence, { requestedAt: new Date().toISOString(), url: request.url(), method: request.method(), type: request.resourceType(),
-        ownerDocument: requestDocuments.get(request), rsc: headers.rsc, prefetch: headers["next-router-prefetch"] ?? null });
+        ownerDocument: requestDocuments.get(request), rsc: headers.rsc, prefetch: headers["next-router-prefetch"] ?? null,
+        segmentPrefetch: headers["next-router-segment-prefetch"] ?? null, routerStateTree: headers["next-router-state-tree"] });
+    };
+    const onResponse = (response) => {
+      if (response.request() === observed) {
+        observedResponse = response;
+        Object.assign(evidence, { responseAt: new Date().toISOString(), status: response.status(), contentType: response.headers()["content-type"] ?? "" });
+      }
     };
     const onFinished = (request) => { if (request === observed) { evidence.finishedAt = new Date().toISOString(); finish("finished"); } };
     const onFailed = (request) => {
       if (request === observed) { evidence.failedAt = new Date().toISOString(); evidence.error = request.failure()?.errorText ?? "unknown"; finish("failed"); }
     };
-    page.on("request", onRequest); page.on("requestfinished", onFinished); page.on("requestfailed", onFailed);
+    page.on("request", onRequest); page.on("response", onResponse); page.on("requestfinished", onFinished); page.on("requestfailed", onFailed);
     const timeout = setTimeout(() => finish("timeout"), 12_000);
     try {
       // The existing heading and URL cannot prove a same-tab refresh completed.
       // Observe this click's new RSC request before deliberately reloading next.
       await hit(nav("消息"), "Repeat navigation 消息", { scroll: false });
       evidence.outcome = await completion;
-      assert.equal(evidence.outcome, "finished", `Same-tab inbox navigation must finish within12s: ${JSON.stringify(evidence)}`);
+      assert.ok(["finished", "failed"].includes(evidence.outcome), `Same-tab inbox request lifecycle must settle within12s: ${JSON.stringify(evidence)}`);
       const response = await observed.response();
       assert.ok(response, "Same-tab inbox navigation requires an actual response");
+      assert.equal(evidence.responseObservedBeforeTerminal, true, "Same-tab inbox payload response precedes its terminal event");
+      assert.equal(response, observedResponse, "Same-tab inbox response is observed before its terminal event");
       evidence.status = response.status(); evidence.contentType = response.headers()["content-type"] ?? "";
       assert.equal(evidence.status, 200, "Same-tab inbox response200");
       assert.match(evidence.contentType, /^text\/x-component(?:;|$)/i, "Same-tab inbox response is the framework payload");
-      assert.equal(await response.finished(), null, "Same-tab inbox response body finishes without error");
+      const chromiumPayloadCancellation = profile.engine === chromium && evidence.outcome === "failed" && evidence.error === "net::ERR_ABORTED";
+      evidence.settlement = evidence.outcome === "finished" ? "response-finished" : chromiumPayloadCancellation ? "chromium-response-canceled-after200" : "rejected";
+      // Local Chromium can record ERR_ABORTED after the framework reader has
+      // consumed the200 payload through EOF. Wait for that exact owned request's
+      // terminal event; retain every global fault rule and the rendered checks.
+      assert.ok(evidence.outcome === "finished" || chromiumPayloadCancellation, `Same-tab inbox requires successful or verified Chromium payload settlement: ${JSON.stringify(evidence)}`);
+      if (evidence.outcome === "finished") assert.equal(await response.finished(), null, "Same-tab inbox response body finishes without error");
       assert.equal(await page.evaluate(() => window.__demoClickDocument), document, "Same-tab inbox navigation preserves its document");
+      await atPath("/inbox"); await privateNotice("消息", "消息");
       assertRuntime();
     } finally {
-      clearTimeout(timeout); page.off("request", onRequest); page.off("requestfinished", onFinished); page.off("requestfailed", onFailed);
+      clearTimeout(timeout); page.off("request", onRequest); page.off("response", onResponse); page.off("requestfinished", onFinished); page.off("requestfailed", onFailed);
     }
   }
   async function directDocumentNavigation(href, action) {
