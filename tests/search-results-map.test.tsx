@@ -1,0 +1,68 @@
+// @vitest-environment jsdom
+import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { SearchResultsMap } from "../components/marketplace/search-results-map";
+import { createPreviewListings } from "../lib/preview-data";
+const engine = vi.hoisted(() => ({ setView: vi.fn(), fitBounds: vi.fn(), panBy: vi.fn(), mounts: 0, center: { lat: 34.05, lng: -118.4 }, zoom: 11 }));
+vi.mock("../components/marketplace/interactive-map-surface", () => ({ InteractiveMapSurface: forwardRef(function Surface({ onViewportChange, onStatusChange }: { onViewportChange: (v: unknown) => void; onStatusChange: (s: string) => void }, ref) {
+  useImperativeHandle(ref, () => ({ setView: engine.setView, fitBounds: engine.fitBounds, panBy: engine.panBy, getViewport: () => ({ center: engine.center, zoom: engine.zoom }) }), []);
+  useEffect(() => { engine.mounts++; onViewportChange({ center: engine.center, zoom: engine.zoom }); onStatusChange("ready"); }, [onViewportChange, onStatusChange]);
+  return <div data-testid="native-map" />;
+}) }));
+const listings = createPreviewListings().slice(0, 24);
+const props = { listings, view: "map" as const, page: 1, pageCount: 2, onSelect: vi.fn(), onOpen: vi.fn(), onClose: vi.fn(), onPageChange: vi.fn() };
+beforeEach(() => { vi.clearAllMocks(); engine.mounts = 0; vi.stubGlobal("requestAnimationFrame", (fn: FrameRequestCallback) => { fn(0); return 1; }); vi.stubGlobal("cancelAnimationFrame", vi.fn()); vi.stubGlobal("scrollTo", vi.fn()); vi.stubGlobal("matchMedia", vi.fn(() => ({ matches: false }))); });
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
+describe("student sublease map interactions", () => {
+  it("fits once, preserves the engine and manual camera across list/map switches", () => {
+    const page = render(<SearchResultsMap {...props} />);
+    expect(engine.fitBounds).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole("button", { name: "放大地图" }));
+    expect(engine.setView).toHaveBeenLastCalledWith({ center: engine.center, zoom: 12 });
+    page.rerender(<SearchResultsMap {...props} view="list" />);
+    page.rerender(<SearchResultsMap {...props} view="map" />);
+    expect(engine.mounts).toBe(1);
+    expect(engine.fitBounds).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole("button", { name: "显示本页全部房源" }));
+    expect(engine.fitBounds).toHaveBeenCalledTimes(2);
+  });
+  it("keeps date-bearing preview navigation and closes with Escape without hijacking button arrow keys", () => {
+    render(<SearchResultsMap {...props} activeListing={listings[0]} selectedListingId={listings[0].id} stay={{ moveIn: "2026-10-10", moveOut: "2026-11-10" }} />);
+    const link = screen.getByRole("link", { name: /查看房源/ });
+    expect(link.getAttribute("href")).toContain("moveIn=2026-10-10&moveOut=2026-11-10");
+    expect(screen.getByText(`租期 ${listings[0].availableFrom} — ${listings[0].availableTo}`)).toBeTruthy();
+    fireEvent.keyDown(screen.getByRole("button", { name: "放大地图" }), { key: "ArrowRight" });
+    expect(engine.panBy).not.toHaveBeenCalled();
+    fireEvent.keyDown(screen.getByRole("region", { name: "房源地图" }), { key: "ArrowRight" });
+    expect(engine.panBy).toHaveBeenCalledWith([80, 0]);
+    fireEvent.keyDown(link, { key: "Escape" });
+    expect(props.onClose).toHaveBeenCalledOnce();
+  });
+  it("moves keyboard focus from a removed cluster row to its matching preview and back to the opener", () => {
+    const samePlace = listings.slice(0, 2).map((listing) => ({ ...listing, latitude: engine.center.lat, longitude: engine.center.lng }));
+    function Controlled() {
+      const [selected, setSelected] = useState("");
+      return <SearchResultsMap {...props} listings={samePlace} selectedListingId={selected} activeListing={samePlace.find((listing) => listing.id === selected)} onSelect={setSelected} onClose={() => setSelected("")} />;
+    }
+    render(<Controlled />);
+    const opener = screen.getByRole("button", { name: "查看此区域 2 套房源" });
+    fireEvent.click(opener);
+    const row = screen.getByRole("button", { name: new RegExp(samePlace[0].title) });
+    row.focus(); fireEvent.click(row);
+    const preview = screen.getByRole("link", { name: /查看房源/ });
+    expect(document.activeElement).toBe(preview);
+    fireEvent.keyDown(preview, { key: "Escape" });
+    expect(document.activeElement).toBe(opener);
+  });
+
+  it("city focus changes only the camera and retains every current-page listing", () => {
+    const mixed = [listings[0], { ...listings[1], area: "Boston · Back Bay" }];
+    render(<SearchResultsMap {...props} listings={mixed} />);
+    fireEvent.change(screen.getByRole("combobox", { name: "聚焦地图城市" }), { target: { value: "Boston" } });
+    expect(engine.fitBounds.mock.calls.at(-1)?.[0]).toHaveLength(1);
+    expect(screen.getByText(/本页 2/)).toBeTruthy();
+    expect(props.onSelect).not.toHaveBeenCalled();
+    expect(props.onPageChange).not.toHaveBeenCalled();
+  });
+});

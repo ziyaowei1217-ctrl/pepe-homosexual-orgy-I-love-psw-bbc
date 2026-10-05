@@ -553,21 +553,60 @@ async function runProfile(profile) {
         await existingPreview.waitFor({ state: "hidden" }); await wait(() => !new URL(location.href).searchParams.has("selected"));
       }
       await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-      const tile = map.locator('[style*="background-image"]').first();
-      const initialZoom = await tile.evaluate((element) => Number(/openstreetmap\.de\/(\d+)\//.exec(element.style.backgroundImage)?.[1]));
+      // The default city focus is useful at street scale. This original
+      // all-results control and cluster journey deliberately fits the full page.
+      await hit(map.getByRole("button", { name: "显示本页全部房源", exact: true }), "Fit full page before existing map control journey", { scroll: false });
+      await wait(() => {
+        const element = document.querySelector('section[aria-label="房源地图"][data-view="map"]');
+        return element?.querySelector('[style*="background-image"]') || element?.dataset.mapReady === "true";
+      });
+      const nativeTiles = await map.locator("img.leaflet-tile").count() > 0;
+      const initialZoom = await map.evaluate((element) => {
+        const background = element.querySelector('[style*="background-image"]');
+        if (background) return Number(/openstreetmap\.de\/(\d+)\//.exec(background.style.backgroundImage)?.[1]);
+        const zoom = Math.round(Number(element.dataset.mapZoom));
+        const tile = [...element.querySelectorAll("img.leaflet-tile")].find((image) => Number(image.dataset.pswMapTileZoom) === zoom);
+        return Number(/openstreetmap\.de\/(\d+)\//.exec(tile?.currentSrc || tile?.src || "")?.[1]);
+      });
       assert.ok(Number.isInteger(initialZoom) && initialZoom >= 2, "Initial fitted map zoom");
       for (const [label, expectedZoom] of [["放大地图", initialZoom + 1], ["缩小地图", initialZoom], ["显示本页全部房源", initialZoom]]) {
         await hit(map.getByRole("button", { name: label, exact: true }), label, { scroll: false });
-        await wait((expected) => document.querySelector('section[aria-label="房源地图"][data-view="map"] [style*="background-image"]')?.style.backgroundImage.includes(`openstreetmap.de/${expected}/`), expectedZoom);
+        if (!nativeTiles) await wait((expected) => document.querySelector('section[aria-label="房源地图"][data-view="map"] [style*="background-image"]')?.style.backgroundImage.includes(`openstreetmap.de/${expected}/`), expectedZoom);
+        else await wait((expected) => {
+          const element = document.querySelector('section[aria-label="房源地图"][data-view="map"]');
+          if (!element || Number(element.dataset.mapZoom) !== expected || element.dataset.mapReady !== "true") return false;
+          const frame = element.getBoundingClientRect();
+          const current = [...element.querySelectorAll("img.leaflet-tile")].filter((image) => {
+            const box = image.getBoundingClientRect();
+            return Number(image.dataset.pswMapTileZoom) === expected && box.width > 0 && box.height > 0 && box.right > frame.left && box.left < frame.right && box.bottom > frame.top && box.top < frame.bottom;
+          });
+          return current.length > 0 && current.every((image) => image.complete && image.naturalWidth > 0 && image.naturalHeight > 0 && (image.currentSrc || image.src).includes(`openstreetmap.de/${expected}/`));
+        }, expectedZoom);
       }
       result.settledMapTiles = await map.evaluate(async (element) => {
         const frame = element.getBoundingClientRect();
-        const urls = [...new Set([...element.querySelectorAll('[style*="background-image"]')].flatMap((tile) => {
+        const backgroundUrls = [...element.querySelectorAll('[style*="background-image"]')].flatMap((tile) => {
           const box = tile.getBoundingClientRect();
           if (box.right <= frame.left || box.left >= frame.right || box.bottom <= frame.top || box.top >= frame.bottom) return [];
           const match = /^url\(["']?(.*?)["']?\)$/.exec(tile.style.backgroundImage);
           return match ? [match[1]] : [];
-        }))];
+        });
+        const currentZoom = Math.round(Number(element.dataset.mapZoom));
+        const nativeUrls = [...element.querySelectorAll("img.leaflet-tile")].flatMap((tile) => {
+          const box = tile.getBoundingClientRect();
+          if (box.width <= 0 || box.height <= 0 || box.right <= frame.left || box.left >= frame.right || box.bottom <= frame.top || box.top >= frame.bottom) return [];
+          const value = tile.currentSrc || tile.src;
+          // A retiring grid is excluded only when BOTH native tile coordinates
+          // and its approved provider URL prove the same different integer z.
+          // Unknown URLs, missing metadata and failed current tiles are retained.
+          const url = new URL(value, location.href);
+          const parsedZoom = Number(/^\/(\d+)\/\d+\/\d+\.png$/.exec(url.pathname)?.[1]);
+          const recordedZoom = Number(tile.dataset.pswMapTileZoom);
+          if (url.protocol === "https:" && !url.port && !url.username && !url.password && !url.search && !url.hash && url.hostname === "tile.openstreetmap.de" &&
+              Number.isInteger(recordedZoom) && recordedZoom === parsedZoom && Number.isInteger(currentZoom) && recordedZoom !== currentZoom) return [];
+          return [value];
+        });
+        const urls = [...new Set([...backgroundUrls, ...nativeUrls])];
         if (!urls.length) throw new Error("Settled active map has no visible tile backgrounds");
         return Promise.all(urls.map((url) => new Promise((resolve, reject) => {
           const image = new Image();

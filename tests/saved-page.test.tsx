@@ -52,11 +52,28 @@ describe("saved page", () => {
   });
 
   it("renders saved homes on the configured map instead of an illustration", () => {
-    const html = renderToStaticMarkup(<SavedMap listings={createPreviewListings().slice(0, 2)} />);
+    const listings = createPreviewListings().slice(0, 2).map((listing) => ({
+      ...listing, latitude: 34.0635, longitude: -118.4455
+    }));
+    const html = renderToStaticMarkup(<SavedMap listings={listings} />);
 
     expect(html).toContain("tile.openstreetmap.de");
     expect(html).toContain("© OpenStreetMap contributors");
     expect(html).toContain("2 套收藏房源");
+  });
+
+  it("keeps actual Westwood and Koreatown homes individually selectable at their distinct positions", () => {
+    const listings = createPreviewListings().slice(0, 2);
+    render(<SavedMap listings={listings} />);
+    const map = screen.getByRole("complementary", { name: "收藏房源地图" });
+    const links = within(map).getAllByRole("link");
+    expect(links).toHaveLength(2);
+    for (const listing of listings) {
+      expect(within(map).getByRole("link", { name: `查看 ${listing.title} $${listing.price.toLocaleString()} / 月` }).getAttribute("href"))
+        .toBe(`/listing/${encodeURIComponent(listing.id)}`);
+    }
+    expect(within(map).queryByRole("button", { name: /此区域.*收藏房源/ })).toBeNull();
+    expect(links[0].style.left).not.toBe(links[1].style.left);
   });
 
   it("offers a list return action after opening the saved map and keeps listing navigation available", () => {

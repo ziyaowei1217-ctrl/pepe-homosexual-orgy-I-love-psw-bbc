@@ -1,4 +1,5 @@
 import { getMarketNeighborhoodCoordinates, usMarkets } from "./us-market-catalog";
+import { getListingCoordinates } from "./listing-map";
 
 export type PreviewListing = {
   id: string;
@@ -99,6 +100,7 @@ export function createPreviewListings(): PreviewListing[] {
     const availableDay = 1 + index;
     const endMonth = 11 + Math.floor(index / 12);
     const price = 995 + index * 97;
+    const coordinates = getListingCoordinates(`Los Angeles · ${neighborhood}`);
 
     return {
       id: `preview-${String(index + 1).padStart(2, "0")}`,
@@ -116,8 +118,8 @@ export function createPreviewListings(): PreviewListing[] {
       score: Number((4.51 + index * 0.019).toFixed(2)),
       availableFrom: `2026-${String(availableMonth).padStart(2, "0")}-${String(availableDay).padStart(2, "0")}`,
       availableTo: `2026-${String(endMonth).padStart(2, "0")}-${String(28 - (index % 5)).padStart(2, "0")}`,
-      latitude: Number((33.9 + index * 0.011).toFixed(4)),
-      longitude: Number((-118.52 + index * 0.013).toFixed(4))
+      latitude: coordinates.lat,
+      longitude: coordinates.lng
     };
   });
 
