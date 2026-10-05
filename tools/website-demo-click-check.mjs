@@ -272,6 +272,66 @@ async function runProfile(profile) {
     `Closed section title must initially fit between the header and bottom navigation: ${JSON.stringify(geometry)}`);
     assert.ok(geometry.centerHits, `Closed section title is initially covered: ${JSON.stringify(geometry)}`);
   }
+  async function finishSameTabInboxNavigation() {
+    const document = await page.evaluate(() => window.__demoClickDocument);
+    assert.equal(typeof document, "string", "Known same-tab inbox document identity");
+    assert.ok(document.length > 0, "Same-tab inbox document identity is nonempty");
+    const evidence = { startedAt: new Date().toISOString(), path: "/inbox", document };
+    result.sameTabRefreshes ??= []; result.sameTabRefreshes.push(evidence);
+    let observed; let settled = false; let resolveCompletion;
+    const completion = new Promise((resolve) => { resolveCompletion = resolve; });
+    const finish = (outcome) => { if (!settled) { settled = true; resolveCompletion(outcome); } };
+    const onRequest = (request) => {
+      const url = new URL(request.url()), headers = request.headers();
+      if (observed || url.origin !== origin || url.pathname !== "/inbox" || request.method() !== "GET" ||
+        request.resourceType() !== "fetch" || headers.rsc !== "1" || headers["next-router-prefetch"] === "1" || requestDocuments.get(request) !== document) return;
+      observed = request;
+      Object.assign(evidence, { requestedAt: new Date().toISOString(), url: request.url(), method: request.method(), type: request.resourceType(),
+        ownerDocument: requestDocuments.get(request), rsc: headers.rsc, prefetch: headers["next-router-prefetch"] ?? null });
+    };
+    const onFinished = (request) => { if (request === observed) { evidence.finishedAt = new Date().toISOString(); finish("finished"); } };
+    const onFailed = (request) => {
+      if (request === observed) { evidence.failedAt = new Date().toISOString(); evidence.error = request.failure()?.errorText ?? "unknown"; finish("failed"); }
+    };
+    page.on("request", onRequest); page.on("requestfinished", onFinished); page.on("requestfailed", onFailed);
+    const timeout = setTimeout(() => finish("timeout"), 12_000);
+    try {
+      // The existing heading and URL cannot prove a same-tab refresh completed.
+      // Observe this click's new RSC request before deliberately reloading next.
+      await hit(nav("消息"), "Repeat navigation 消息", { scroll: false });
+      evidence.outcome = await completion;
+      assert.equal(evidence.outcome, "finished", `Same-tab inbox navigation must finish within12s: ${JSON.stringify(evidence)}`);
+      const response = await observed.response();
+      assert.ok(response, "Same-tab inbox navigation requires an actual response");
+      evidence.status = response.status(); evidence.contentType = response.headers()["content-type"] ?? "";
+      assert.equal(evidence.status, 200, "Same-tab inbox response200");
+      assert.match(evidence.contentType, /^text\/x-component(?:;|$)/i, "Same-tab inbox response is the framework payload");
+      assert.equal(await response.finished(), null, "Same-tab inbox response body finishes without error");
+      assert.equal(await page.evaluate(() => window.__demoClickDocument), document, "Same-tab inbox navigation preserves its document");
+      assertRuntime();
+    } finally {
+      clearTimeout(timeout); page.off("request", onRequest); page.off("requestfinished", onFinished); page.off("requestfailed", onFailed);
+    }
+  }
+  async function directDocumentNavigation(href, action) {
+    const favicon = new URL(await page.locator('link[rel="icon"]').getAttribute("href"), origin).href;
+    assert.ok(canonicalFavicon(favicon, origin), "Direct navigation requires the exact canonical favicon");
+    currentDocument = await page.evaluate(() => window.__demoClickDocument);
+    assert.equal(typeof currentDocument, "string", "Known old direct-navigation document identity");
+    assert.ok(currentDocument.length > 0, "Direct-navigation document identity is nonempty");
+    const transition = { active: true, startedAt: new Date().toISOString(), oldDocument: currentDocument, url: favicon,
+      destination: new URL(href, origin).pathname, cancellations: [] };
+    savedReload = transition;
+    result.directDocumentNavigations ??= []; result.directDocumentNavigations.push(transition);
+    try {
+      // Every new direct-document case uses the existing strict old-favicon
+      // ownership and replacement proof, without admitting other asset faults.
+      await action();
+      transition.newDocument = await page.evaluate(() => window.__demoClickDocument);
+      assert.notEqual(transition.newDocument, transition.oldDocument, "Direct navigation creates a fresh document");
+      if (transition.cancellations.length) await waitReloadFaviconReplacement(transition, result.faviconResponses, assertRuntime);
+    } finally { transition.active = false; }
+  }
   async function hit(control, label, { scroll = true, fully = true } = {}) {
     await control.waitFor({ state: "visible" });
     if (scroll) await control.evaluate((element) => element.scrollIntoView({ block: "center", inline: "nearest", behavior: "instant" }));
@@ -342,14 +402,28 @@ async function runProfile(profile) {
       });
     }
     await step("Repeated Messages Account Messages and same-tab navigation", async () => {
+      let index = 0;
       for (const [name, pathname, heading] of [["消息", "/inbox", "消息"], ["我的", "/account", "我的账户"], ["消息", "/inbox", "消息"], ["消息", "/inbox", "消息"]]) {
-        await hit(nav(name), `Repeat navigation ${name}`, { scroll: false }); await atPath(pathname); await privateNotice(heading, name);
+        if (index === 3) await finishSameTabInboxNavigation();
+        else await hit(nav(name), `Repeat navigation ${name}`, { scroll: false });
+        await atPath(pathname); await privateNotice(heading, name); index += 1;
       }
     });
     await step("Messages reload preserves route heading and current tab", async () => {
       await page.waitForLoadState("networkidle", { timeout: 12_000 });
-      await page.reload({ waitUntil: "domcontentloaded" }); await atPath("/inbox"); await privateNotice("消息", "消息");
-      await page.waitForLoadState("networkidle", { timeout: 12_000 });
+      const favicon = new URL(await page.locator('link[rel="icon"]').getAttribute("href"), origin).href;
+      assert.ok(canonicalFavicon(favicon, origin), "Exact canonical Messages favicon");
+      currentDocument = await page.evaluate(() => window.__demoClickDocument);
+      assert.equal(typeof currentDocument, "string", "Known old Messages document identity");
+      savedReload = { active: true, startedAt: new Date().toISOString(), oldDocument: currentDocument, url: favicon, cancellations: [] };
+      result.messagesReloads ??= []; result.messagesReloads.push(savedReload);
+      try {
+        await page.reload({ waitUntil: "domcontentloaded" }); await atPath("/inbox"); await privateNotice("消息", "消息");
+        await page.waitForLoadState("networkidle", { timeout: 12_000 });
+        savedReload.newDocument = await page.evaluate(() => window.__demoClickDocument);
+        assert.notEqual(savedReload.newDocument, savedReload.oldDocument, "Messages reload creates a fresh document");
+        if (savedReload.cancellations.length) await waitReloadFaviconReplacement(savedReload, result.faviconResponses, assertRuntime);
+      } finally { savedReload.active = false; }
     });
     await step("Account icon opens its own closed account section", async () => {
       await hit(page.locator("header").getByRole("link", { name: "打开账户", exact: true }), "Account icon", { scroll: false });
@@ -371,11 +445,13 @@ async function runProfile(profile) {
       ["/unknown-demo-section", "这个演示仅供浏览", undefined]
     ]) {
       await step(`Direct closed route ${new URL(href, origin).pathname} keeps its context`, async () => {
-        const response = await page.goto(new URL(href, origin).href, { waitUntil: "domcontentloaded" });
-        assert.equal(response?.status(), 200, "Closed route serves its inert notice");
-        await atPath(new URL(href, origin).pathname); await privateNotice(heading, name);
-        assert.ok(!(await page.locator("main").innerText()).includes(privateMarker), "Original private query values must not appear in notice content");
-        await page.waitForLoadState("networkidle", { timeout: 12_000 });
+        await directDocumentNavigation(href, async () => {
+          const response = await page.goto(new URL(href, origin).href, { waitUntil: "domcontentloaded" });
+          assert.equal(response?.status(), 200, "Closed route serves its inert notice");
+          await atPath(new URL(href, origin).pathname); await privateNotice(heading, name);
+          assert.ok(!(await page.locator("main").innerText()).includes(privateMarker), "Original private query values must not appear in notice content");
+          await page.waitForLoadState("networkidle", { timeout: 12_000 });
+        });
       });
     }
     await step("Demo recovery clicks back to search", async () => { await hit(page.getByRole("link", { name: "浏览房源", exact: true }), "Demo recovery"); await atPath("/search"); await search(); });
