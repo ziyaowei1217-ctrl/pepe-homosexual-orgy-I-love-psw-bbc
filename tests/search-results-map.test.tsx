@@ -13,7 +13,7 @@ vi.mock("../components/marketplace/interactive-map-surface", () => ({ Interactiv
 const listings = createPreviewListings().slice(0, 24);
 const props = { listings, view: "map" as const, page: 1, pageCount: 2, onSelect: vi.fn(), onOpen: vi.fn(), onClose: vi.fn(), onPageChange: vi.fn() };
 beforeEach(() => { vi.clearAllMocks(); engine.mounts = 0; vi.stubGlobal("requestAnimationFrame", (fn: FrameRequestCallback) => { fn(0); return 1; }); vi.stubGlobal("cancelAnimationFrame", vi.fn()); vi.stubGlobal("scrollTo", vi.fn()); vi.stubGlobal("matchMedia", vi.fn(() => ({ matches: false }))); });
-afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
+afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 describe("student sublease map interactions", () => {
   it("fits once, preserves the engine and manual camera across list/map switches", () => {
     const page = render(<SearchResultsMap {...props} />);
@@ -54,6 +54,24 @@ describe("student sublease map interactions", () => {
     expect(document.activeElement).toBe(preview);
     fireEvent.keyDown(preview, { key: "Escape" });
     expect(document.activeElement).toBe(opener);
+  });
+
+  it("keeps the selected rent pill above the actual preview on a 104px landscape canvas", () => {
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      const card = this.classList.contains("search-map-preview");
+      return { x: 0, y: card ? 196 : 144, top: card ? 196 : 144, bottom: card ? 248 : 248, left: 0, right: 568, width: 568, height: card ? 52 : 104, toJSON() {} } as DOMRect;
+    });
+    vi.stubGlobal("ResizeObserver", class {
+      constructor(private callback: (entries: { contentRect: { width: number; height: number } }[]) => void) {}
+      observe() { this.callback([{ contentRect: { width: 568, height: 104 } }]); }
+      disconnect() {}
+    });
+    const listing = { ...listings[0], latitude: engine.center.lat, longitude: engine.center.lng };
+    const page = render(<SearchResultsMap {...props} listings={[listing]} />);
+    engine.panBy.mockClear();
+    page.rerender(<SearchResultsMap {...props} listings={[listing]} activeListing={listing} selectedListingId={listing.id} />);
+    expect(engine.setView).toHaveBeenLastCalledWith({ center: engine.center, zoom: 12 });
+    expect(engine.panBy).toHaveBeenLastCalledWith([0, 26]);
   });
 
   it("city focus changes only the camera and retains every current-page listing", () => {

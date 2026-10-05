@@ -85,9 +85,18 @@ export function SearchResultsMap({ listings, activeListing, selectedListingId, s
     if (!listing || !current) return;
     revealedSelection.current = selectedListingId;
     const marker = getMapMarkers([listing], current.center, current.zoom, size, false)[0];
-    if (marker.x < 60 || marker.x > size.width - 60 || marker.y < 70 || marker.y > size.height - 140) {
+    const frame = canvas.current?.getBoundingClientRect();
+    const preview = previewPanel.current?.getBoundingClientRect();
+    const previewTop = frame && preview && preview.height > 0 ? preview.top - frame.top : size.height;
+    const topLimit = size.height < 300 ? 24 : 70;
+    // Keep the full 44px selected pill above the actual card, including short
+    // landscape canvases where a fixed bottom inset exceeds the map height.
+    const bottomLimit = Math.max(24, Math.min(size.height - 24, previewTop - 26));
+    if (marker.x < 60 || marker.x > size.width - 60 || marker.y < topLimit || marker.y > bottomLimit) {
       manualView.current = true;
       surface.current?.setView({ center: getListingPoint(listing), zoom: Math.max(12, current.zoom) });
+      const targetY = Math.min(size.height / 2, bottomLimit);
+      if (targetY < size.height / 2) surface.current?.panBy([0, size.height / 2 - targetY]);
     }
   }, [selectedListingId, listings, size, view, status, viewport]);
 
