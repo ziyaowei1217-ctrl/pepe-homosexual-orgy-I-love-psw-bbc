@@ -61,15 +61,10 @@ describe("student sublease map interactions", () => {
       const card = this.classList.contains("search-map-preview");
       return { x: 0, y: card ? 196 : 144, top: card ? 196 : 144, bottom: card ? 248 : 248, left: 0, right: 568, width: 568, height: card ? 52 : 104, toJSON() {} } as DOMRect;
     });
-    vi.stubGlobal("ResizeObserver", class {
-      constructor(private callback: (entries: { contentRect: { width: number; height: number } }[]) => void) {}
-      observe() { this.callback([{ contentRect: { width: 568, height: 104 } }]); }
-      disconnect() {}
-    });
+    // Native callbacks may precede ResizeObserver; actual measured geometry
+    // must win over the component's initial 720x640 placeholder.
     const listing = { ...listings[0], latitude: engine.center.lat, longitude: engine.center.lng };
-    const page = render(<SearchResultsMap {...props} listings={[listing]} />);
-    engine.panBy.mockClear();
-    page.rerender(<SearchResultsMap {...props} listings={[listing]} activeListing={listing} selectedListingId={listing.id} />);
+    render(<SearchResultsMap {...props} listings={[listing]} activeListing={listing} selectedListingId={listing.id} />);
     expect(engine.setView).toHaveBeenLastCalledWith({ center: engine.center, zoom: 12 });
     expect(engine.panBy).toHaveBeenLastCalledWith([0, 26]);
   });

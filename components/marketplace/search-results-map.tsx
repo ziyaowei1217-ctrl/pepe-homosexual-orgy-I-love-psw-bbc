@@ -84,19 +84,20 @@ export function SearchResultsMap({ listings, activeListing, selectedListingId, s
     const current = surface.current?.getViewport();
     if (!listing || !current) return;
     revealedSelection.current = selectedListingId;
-    const marker = getMapMarkers([listing], current.center, current.zoom, size, false)[0];
     const frame = canvas.current?.getBoundingClientRect();
+    const measuredSize = frame && frame.width > 0 && frame.height > 0 ? { width: frame.width, height: frame.height } : size;
+    const marker = getMapMarkers([listing], current.center, current.zoom, measuredSize, false)[0];
     const preview = previewPanel.current?.getBoundingClientRect();
-    const previewTop = frame && preview && preview.height > 0 ? preview.top - frame.top : size.height;
-    const topLimit = size.height < 300 ? 24 : 70;
+    const previewTop = frame && preview && preview.height > 0 ? preview.top - frame.top : measuredSize.height;
+    const topLimit = measuredSize.height < 300 ? 24 : 70;
     // Keep the full 44px selected pill above the actual card, including short
     // landscape canvases where a fixed bottom inset exceeds the map height.
-    const bottomLimit = Math.max(24, Math.min(size.height - 24, previewTop - 26));
-    if (marker.x < 60 || marker.x > size.width - 60 || marker.y < topLimit || marker.y > bottomLimit) {
+    const bottomLimit = Math.max(24, Math.min(measuredSize.height - 24, previewTop - 26));
+    if (marker.x < 60 || marker.x > measuredSize.width - 60 || marker.y < topLimit || marker.y > bottomLimit) {
       manualView.current = true;
       surface.current?.setView({ center: getListingPoint(listing), zoom: Math.max(12, current.zoom) });
-      const targetY = Math.min(size.height / 2, bottomLimit);
-      if (targetY < size.height / 2) surface.current?.panBy([0, size.height / 2 - targetY]);
+      const targetY = Math.min(measuredSize.height / 2, bottomLimit);
+      if (targetY < measuredSize.height / 2) surface.current?.panBy([0, measuredSize.height / 2 - targetY]);
     }
   }, [selectedListingId, listings, size, view, status, viewport]);
 
