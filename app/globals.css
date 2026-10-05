@@ -164,6 +164,12 @@
 .psw-map-surface { isolation: isolate; }
 .psw-map-surface.leaflet-container { background: #e8ede8; font: inherit; }
 .psw-map-surface img.leaflet-tile { max-width: none; }
+/* Quiet the standard tile palette without blurring street/place labels or
+   filtering interactive pins. Operators' custom cartography keeps its colors. */
+.search-map[data-map-palette="calm"] .leaflet-tile-pane {
+  filter: saturate(0.38) contrast(0.94) brightness(1.06);
+}
+.search-map-price:focus-visible { outline-offset: 5px; }
 
 @media (min-width: 1024px) {
   .search-map[data-view="map"] { height: max(96px, calc(100dvh - var(--search-map-top, 205px))); }
@@ -190,7 +196,7 @@
   .search-filter-shortcut > span:first-of-type { display: none; }
   .search-view-controls { position: static; flex-shrink: 0; transform: none; padding: 2px; box-shadow: none; }
   .search-view-controls button { padding-left: 10px; padding-right: 10px; }
-  .search-map-count, .search-map-hint, .search-map-city, .search-map-status { display: none; }
+  .search-map-count, .search-map-hint, .search-map-city, .search-map-status, .search-map-campus-control, .search-map-campuses { display: none; }
   .search-map-attribution { top: 0; right: auto; bottom: auto; left: 50%; transform: translateX(-50%); }
   .search-map-pagination { top: 8px !important; left: 8px; }
   .search-map-zoom { top: 8px; right: 8px; flex-direction: row; gap: 8px; }
@@ -202,7 +208,9 @@
   .search-map-preview-text { display: flex; min-width: 0; flex: 1; flex-direction: column; padding-top: 0; padding-bottom: 0; }
   .search-map-preview-text > p:first-child { font-size: 14px; line-height: 20px; }
   .search-map-preview-text > p:nth-child(2) { margin-top: 0; font-size: 12px; line-height: 16px; }
+  .search-map-preview-text > p:nth-child(2) { -webkit-line-clamp: 1; padding-right: 44px; }
   .search-map-preview-text > p:nth-child(3), .search-map-preview-lease, .search-map-preview-text > span { display: none; }
+  .search-map-cluster-detail { display: none; }
   .search-map-cluster { bottom: 72px; display: flex; max-height: max(88px, calc(100dvh - var(--search-map-top, 141px) - 80px)); flex-direction: column; padding: 4px; }
   .search-map-cluster-header { gap: 4px; margin-bottom: 4px; }
   .search-map-cluster-header h2 { min-width: 0; padding-right: 44px; font-size: 12px; }

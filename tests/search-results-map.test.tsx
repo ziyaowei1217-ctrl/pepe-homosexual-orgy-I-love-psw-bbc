@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SearchResultsMap } from "../components/marketplace/search-results-map";
 import { createPreviewListings } from "../lib/preview-data";
+import { mapCampusLandmarks } from "../lib/map-campus-landmarks";
 const engine = vi.hoisted(() => ({ setView: vi.fn(), fitBounds: vi.fn(), panBy: vi.fn(), mounts: 0, center: { lat: 34.05, lng: -118.4 }, zoom: 11 }));
 vi.mock("../components/marketplace/interactive-map-surface", () => ({ InteractiveMapSurface: forwardRef(function Surface({ onViewportChange, onStatusChange }: { onViewportChange: (v: unknown) => void; onStatusChange: (s: string) => void }, ref) {
   useImperativeHandle(ref, () => ({ setView: engine.setView, fitBounds: engine.fitBounds, panBy: engine.panBy, getViewport: () => ({ center: engine.center, zoom: engine.zoom }) }), []);
@@ -52,8 +53,15 @@ describe("student sublease map interactions", () => {
     row.focus(); fireEvent.click(row);
     const preview = screen.getByRole("link", { name: /查看房源/ });
     expect(document.activeElement).toBe(preview);
+    // The selected price and its neighbours share one honest geographic pin.
+    expect(opener.isConnected).toBe(true);
+    expect(opener.textContent).toContain(`$${samePlace[0].price.toLocaleString()}`);
+    expect(opener.textContent).toContain("/月");
+    expect(screen.getAllByRole("button", { name: /此区域.*套房源/ })).toHaveLength(1);
     fireEvent.keyDown(preview, { key: "Escape" });
     expect(document.activeElement).toBe(opener);
+    fireEvent.click(opener);
+    expect(screen.getByRole("button", { name: new RegExp(samePlace[1].title) })).toBeTruthy();
   });
 
   it("keeps the selected rent pill above the actual preview on a 104px landscape canvas", () => {
@@ -77,5 +85,28 @@ describe("student sublease map interactions", () => {
     expect(screen.getByText(/本页 2/)).toBeTruthy();
     expect(props.onSelect).not.toHaveBeenCalled();
     expect(props.onPageChange).not.toHaveBeenCalled();
+  });
+
+  it("campus references move only the camera and can be chosen again after a manual pan", () => {
+    const mixed = [listings[0], { ...listings[1], area: "Boston · Back Bay" }];
+    render(<SearchResultsMap {...props} listings={mixed} stay={{ moveIn: "2026-10-10", moveOut: "2026-11-10" }} />);
+    const picker = screen.getByRole("combobox", { name: "定位校园参照点" });
+    const mit = mapCampusLandmarks.find((campus) => campus.id === "mit")!;
+    expect(screen.getAllByRole("option", { name: /^(UCLA|MIT)$/ })).toHaveLength(2);
+    fireEvent.change(picker, { target: { value: mit.id } });
+    expect(engine.setView).toHaveBeenLastCalledWith({ center: { lat: mit.lat, lng: mit.lng }, zoom: 14 });
+    expect((picker as HTMLSelectElement).value).toBe("");
+    fireEvent.keyDown(screen.getByRole("region", { name: "房源地图" }), { key: "ArrowRight" });
+    fireEvent.change(picker, { target: { value: mit.id } });
+    expect(engine.setView).toHaveBeenCalledTimes(2);
+    expect(screen.getByText(/本页 2/)).toBeTruthy();
+    expect(props.onSelect).not.toHaveBeenCalled();
+    expect(props.onOpen).not.toHaveBeenCalled();
+    expect(props.onClose).not.toHaveBeenCalled();
+    expect(props.onPageChange).not.toHaveBeenCalled();
+    fireEvent.change(picker, { target: { value: "__proto__" } });
+    expect(engine.setView).toHaveBeenCalledTimes(2);
+    fireEvent.click(screen.getByRole("button", { name: "显示本页全部房源" }));
+    expect(engine.fitBounds.mock.calls.at(-1)?.[0]).toHaveLength(2);
   });
 });
