@@ -77,6 +77,22 @@ describe("student sublease map interactions", () => {
     expect(engine.panBy).toHaveBeenLastCalledWith([0, 26]);
   });
 
+  it("reveals a wide selected pin whose edge overlaps a phone control despite its centre being clear", () => {
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      const frame = this.classList.contains("search-map");
+      const pin = this.classList.contains("search-map-price");
+      const rail = this.classList.contains("search-map-zoom");
+      const card = this.classList.contains("search-map-preview");
+      const width = frame || card ? 320 : pin ? 128.8 : rail ? 44 : 0;
+      const height = frame ? 529 : card ? 156 : pin ? 48.4 : rail ? 144 : 0;
+      const left = rail ? 259 : 0, top = rail ? 293 : card ? 550 : 211;
+      return { x: left, y: top, top, bottom: top + height, left, right: left + width, width, height, toJSON() {} } as DOMRect;
+    });
+    const listing = { ...listings[0], latitude: engine.center.lat + .048, longitude: engine.center.lng + .03 };
+    render(<SearchResultsMap {...props} listings={[listing]} activeListing={listing} selectedListingId={listing.id} />);
+    expect(engine.setView).toHaveBeenLastCalledWith({ center: { lat: listing.latitude, lng: listing.longitude }, zoom: 12 });
+  });
+
   it("city focus changes only the camera and retains every current-page listing", () => {
     const mixed = [listings[0], { ...listings[1], area: "Boston · Back Bay" }];
     render(<SearchResultsMap {...props} listings={mixed} />);

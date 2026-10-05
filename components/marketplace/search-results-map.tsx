@@ -96,11 +96,21 @@ export function SearchResultsMap({ listings, activeListing, selectedListingId, s
     const marker = getMapMarkers([listing], current.center, current.zoom, measuredSize, false)[0];
     const preview = previewPanel.current?.getBoundingClientRect();
     const previewTop = frame && preview && preview.height > 0 ? preview.top - frame.top : measuredSize.height;
+    const pin = canvas.current?.querySelector<HTMLElement>('[data-map-selected="true"]')?.getBoundingClientRect();
+    const pinWidth = pin && pin.width > 0 && pin.width < measuredSize.width ? pin.width : 88;
+    const pinHeight = pin && pin.height > 0 && pin.height < measuredSize.height ? pin.height : 44;
+    const coveredByControl = frame && [...(canvas.current?.querySelectorAll<HTMLElement>(".search-map-zoom, .search-map-city, .search-map-campus-control, .search-map-pagination") ?? [])].some((control) => {
+      const box = control.getBoundingClientRect();
+      if (!box.width || !box.height || box.width >= measuredSize.width || box.height >= measuredSize.height) return false;
+      return marker.x + pinWidth / 2 + 8 > box.left - frame.left && marker.x - pinWidth / 2 - 8 < box.right - frame.left &&
+        marker.y + pinHeight / 2 + 8 > box.top - frame.top && marker.y - pinHeight / 2 - 8 < box.bottom - frame.top;
+    });
     const topLimit = measuredSize.height < 300 ? 24 : 70;
     // Keep the full 44px selected pill above the actual card, including short
     // landscape canvases where a fixed bottom inset exceeds the map height.
     const bottomLimit = Math.max(24, Math.min(measuredSize.height - 24, previewTop - 26));
-    if (marker.x < 60 || marker.x > measuredSize.width - 60 || marker.y < topLimit || marker.y > bottomLimit) {
+    const horizontalInset = Math.max(60, pinWidth / 2 + 8);
+    if (marker.x < horizontalInset || marker.x > measuredSize.width - horizontalInset || marker.y < topLimit || marker.y > bottomLimit || coveredByControl) {
       manualView.current = true;
       surface.current?.setView({ center: getListingPoint(listing), zoom: Math.max(12, current.zoom) });
       const targetY = Math.min(measuredSize.height / 2, bottomLimit);
@@ -195,7 +205,7 @@ export function SearchResultsMap({ listings, activeListing, selectedListingId, s
       const selection = selectedMarker && cluster.items.some((item) => item.id === selectedMarker.id) ? selectedMarker : undefined;
       const marker = selection ?? cluster.items[0];
       const active = cluster.items.some((item) => item.id === activeListing?.id);
-      return <button key={cluster.items.map((item) => item.id).sort().join(",")} type="button" aria-label={cluster.items.length > 1 ? `查看此区域 ${cluster.items.length} 套房源` : `选择 ${marker.title ?? marker.area} ${marker.label}`} aria-pressed={active} onClick={(event) => { lastTrigger.current = event.currentTarget; if (cluster.items.length > 1) setClusterIds(cluster.items.map((item) => item.id)); else { setClusterIds([]); onSelect(marker.id); } }} style={{ left: selection?.x ?? cluster.x, top: selection?.y ?? cluster.y, zIndex: active ? 30 : 10 }} className={cn("search-map-price absolute -translate-x-1/2 -translate-y-1/2 min-h-11 whitespace-nowrap rounded-full border px-3.5 py-2 text-xs font-bold transition-[color,background-color,transform] hover:scale-110", active ? "scale-110 border-[#234B3B] bg-[#234B3B] text-white shadow-[0_4px_16px_rgba(35,75,59,0.3)]" : "border-white bg-white text-[#183F32] shadow-[0_2px_8px_rgba(24,63,50,0.15)]")}>
+      return <button key={cluster.items.map((item) => item.id).sort().join(",")} type="button" data-map-selected={Boolean(selection)} aria-label={cluster.items.length > 1 ? `查看此区域 ${cluster.items.length} 套房源` : `选择 ${marker.title ?? marker.area} ${marker.label}`} aria-pressed={active} onClick={(event) => { lastTrigger.current = event.currentTarget; if (cluster.items.length > 1) setClusterIds(cluster.items.map((item) => item.id)); else { setClusterIds([]); onSelect(marker.id); } }} style={{ left: selection?.x ?? cluster.x, top: selection?.y ?? cluster.y, zIndex: active ? 30 : 10 }} className={cn("search-map-price absolute -translate-x-1/2 -translate-y-1/2 min-h-11 whitespace-nowrap rounded-full border px-3.5 py-2 text-xs font-bold transition-[color,background-color,transform] hover:scale-110", active ? "scale-110 border-[#234B3B] bg-[#234B3B] text-white shadow-[0_4px_16px_rgba(35,75,59,0.3)]" : "border-white bg-white text-[#183F32] shadow-[0_2px_8px_rgba(24,63,50,0.15)]")}>
         <span className="flex items-center gap-1.5">{cluster.items.length > 1 ? <span className="grid size-5 place-items-center rounded-full bg-brand-soft text-[10px] text-[#234B3B]">{cluster.items.length}</span> : null}{cluster.items.length > 1 && !selection ? "套房源" : <span>{marker.label}<span className="ml-0.5 font-normal opacity-70">/月</span></span>}</span>
       </button>;
     })}
