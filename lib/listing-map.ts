@@ -43,6 +43,11 @@ export type MapSummary = {
 };
 
 const tileSize = 256;
+export const minMapZoom = 2;
+export const maxMapZoom = 18;
+export const maxMercatorLatitude = 85.0511287798066;
+const maxViewportDimension = 8192;
+const maxViewportTiles = 1024;
 const laCenter: MapPoint = { lat: 34.0522, lng: -118.2437 };
 const markerInset = {
   x: 64,
@@ -70,6 +75,10 @@ const neighborhoodCoordinates: Record<string, MapPoint> = {
   "Brentwood": { lat: 34.0521, lng: -118.473 },
   "Arts District": { lat: 34.0415, lng: -118.2356 },
   "El Segundo": { lat: 33.9192, lng: -118.4165 },
+  "Palms": { lat: 34.0234, lng: -118.407 },
+  "Venice": { lat: 33.9925, lng: -118.4695 },
+  "Century City": { lat: 34.0555, lng: -118.4179 },
+  "Highland Park": { lat: 34.1119, lng: -118.1986 },
   "Boston": { lat: 42.3601, lng: -71.0589 },
   "Back Bay": { lat: 42.3503, lng: -71.081 },
   "Fenway": { lat: 42.3467, lng: -71.0972 },
@@ -81,7 +90,7 @@ const neighborhoodCoordinates: Record<string, MapPoint> = {
 
 export function getListingCoordinates(area: string): MapPoint {
   const neighborhood = area.split("·").at(1)?.trim() ?? area.trim();
-  const knownNeighborhood = neighborhoodCoordinates[neighborhood];
+  const knownNeighborhood = Object.hasOwn(neighborhoodCoordinates, neighborhood) ? neighborhoodCoordinates[neighborhood] : undefined;
   if (knownNeighborhood) return knownNeighborhood;
 
   const market = findUSMarketByArea(area);
@@ -91,12 +100,12 @@ export function getListingCoordinates(area: string): MapPoint {
 }
 
 export function getMapCenterForListings(listings: MappableListing[], fallback: MapPoint = laCenter): MapPoint {
-  if (listings.length === 0) return fallback;
+  if (listings.length === 0) return safeMapPoint(fallback);
 
   const points = listings.map(getListingPoint);
   return {
     lat: average(points.map((point) => point.lat)),
-    lng: average(points.map((point) => point.lng))
+    lng: averageWrappedLongitude(points.map((point) => point.lng))
   };
 }
 
@@ -107,48 +116,60 @@ export function getMapMarkers(
   size: MapSize,
   clampToViewport = true
 ): MapMarkerPosition[] {
+  validateMapZoom(zoom);
+  validateMapSize(size);
   const centerPixel = lngLatToWorldPixel(center, zoom);
+  const worldWidth = tileSize * 2 ** zoom;
 
   return listings.map((listing) => {
     const point = getListingPoint(listing);
     const markerPixel = lngLatToWorldPixel(point, zoom);
+    // Use the nearest copy of the world, including homes across the dateline.
+    const offsetX = wrapWorldOffset(markerPixel.x - centerPixel.x, worldWidth);
 
     return {
       ...listing,
       ...point,
       label: `$${listing.price.toLocaleString("en-US")}`,
-      x: Math.round(clampToViewport ? keepInsideViewport(markerPixel.x - centerPixel.x + size.width / 2, size.width, markerInset.x) : markerPixel.x - centerPixel.x + size.width / 2),
+      x: Math.round(clampToViewport ? keepInsideViewport(offsetX + size.width / 2, size.width, markerInset.x) : offsetX + size.width / 2),
       y: Math.round(clampToViewport ? keepInsideViewport(markerPixel.y - centerPixel.y + size.height / 2, size.height, markerInset.y) : markerPixel.y - centerPixel.y + size.height / 2)
     };
   });
 }
 
 export function panMapCenter(center: MapPoint, zoom: number, dx: number, dy: number): MapPoint {
+  validateMapZoom(zoom);
+  if (!Number.isFinite(dx) || !Number.isFinite(dy)) throw new RangeError("Map pan offsets must be finite");
   const pixel = lngLatToWorldPixel(center, zoom);
   const scale = tileSize * 2 ** zoom;
   const lng = (pixel.x - dx) / scale * 360 - 180;
   const n = Math.PI - 2 * Math.PI * (pixel.y - dy) / scale;
-  return { lat: Math.max(-80, Math.min(80, 180 / Math.PI * Math.atan(Math.sinh(n)))), lng: Math.max(-179, Math.min(179, lng)) };
+  return { lat: Math.max(-maxMercatorLatitude, Math.min(maxMercatorLatitude, 180 / Math.PI * Math.atan(Math.sinh(n)))), lng: wrapLongitude(lng) };
 }
 
-function getListingPoint(listing: MappableListing): MapPoint {
-  if (Number.isFinite(listing.latitude) && Number.isFinite(listing.longitude)) {
+export function getListingPoint(listing: MappableListing): MapPoint {
+  if (isMapPoint({ lat: listing.latitude as number, lng: listing.longitude as number })) {
     return { lat: listing.latitude as number, lng: listing.longitude as number };
   }
   return getListingCoordinates(listing.area);
 }
 
 export function getMapTiles(center: MapPoint, zoom: number, size: MapSize): MapTile[] {
+  validateMapZoom(zoom, true);
+  validateMapSize(size);
   const centerPixel = lngLatToWorldPixel(center, zoom);
   const startX = Math.floor((centerPixel.x - size.width / 2) / tileSize);
   const endX = Math.floor((centerPixel.x + size.width / 2) / tileSize);
   const startY = Math.floor((centerPixel.y - size.height / 2) / tileSize);
   const endY = Math.floor((centerPixel.y + size.height / 2) / tileSize);
+  if ((endX - startX + 1) * (endY - startY + 1) > maxViewportTiles) {
+    throw new RangeError("Map viewport exceeds the tile budget");
+  }
   const tiles: MapTile[] = [];
+  const worldTileCount = 2 ** zoom;
 
   for (let xTile = startX; xTile <= endX; xTile += 1) {
     for (let yTile = startY; yTile <= endY; yTile += 1) {
-      const worldTileCount = 2 ** zoom;
       if (yTile < 0 || yTile >= worldTileCount) continue;
       const wrappedX = ((xTile % worldTileCount) + worldTileCount) % worldTileCount;
       tiles.push({
@@ -196,24 +217,85 @@ export function mapTileUrl(
   zoom: number,
   template = process.env.NEXT_PUBLIC_MAP_TILE_URL_TEMPLATE
 ) {
+  validateMapZoom(zoom, true);
+  const worldTileCount = 2 ** zoom;
+  if (!Number.isInteger(xTile) || !Number.isInteger(yTile) || xTile < 0 || yTile < 0 || xTile >= worldTileCount || yTile >= worldTileCount) {
+    throw new RangeError("Map tile coordinates must be inside the zoom level");
+  }
   if (!template) return defaultMapTileUrl(xTile, yTile, zoom);
   if (!["{x}", "{y}", "{z}"].every((token) => template.includes(token))) {
     throw new Error("NEXT_PUBLIC_MAP_TILE_URL_TEMPLATE must contain {z}, {x}, and {y}");
   }
-  return template
+  if (/[\\\u0000-\u0020\u007f]/.test(template) || /[{}]/.test(template.replace(/\{[xyz]\}/g, ""))) {
+    throw new Error("Map tile template contains unsupported characters or placeholders");
+  }
+  const result = template
     .replaceAll("{z}", String(zoom))
     .replaceAll("{x}", String(xTile))
     .replaceAll("{y}", String(yTile));
+  let url: URL;
+  try { url = new URL(result); } catch { throw new Error("Map tile template must be an absolute HTTPS URL"); }
+  // Public deployment templates may use public query keys; credentials and
+  // fragments are never part of an image request. Tokens cannot change origin.
+  const templateOrigin = template.match(/^https:\/\/([^/?#]+)/i)?.[1];
+  if (url.protocol !== "https:" || !url.hostname || url.username || url.password || url.hash || !templateOrigin || /[{}]/.test(templateOrigin)) {
+    throw new Error("Map tile template must use credential-free HTTPS with a fixed origin and no fragment");
+  }
+  return result;
 }
 
 function lngLatToWorldPixel(point: MapPoint, zoom: number) {
-  const sinLat = Math.sin((point.lat * Math.PI) / 180);
+  const safePoint = safeMapPoint(point);
+  const sinLat = Math.sin((safePoint.lat * Math.PI) / 180);
   const scale = tileSize * 2 ** zoom;
 
   return {
-    x: ((point.lng + 180) / 360) * scale,
+    x: ((safePoint.lng + 180) / 360) * scale,
     y: (0.5 - Math.log((1 + sinLat) / (1 - sinLat)) / (4 * Math.PI)) * scale
   };
+}
+
+export function isMapPoint(point: MapPoint) {
+  return Number.isFinite(point.lat) && Math.abs(point.lat) <= maxMercatorLatitude &&
+    Number.isFinite(point.lng) && Math.abs(point.lng) <= 180;
+}
+
+function safeMapPoint(point: MapPoint): MapPoint {
+  return isMapPoint(point) ? point : laCenter;
+}
+
+function validateMapZoom(zoom: number, integer = false) {
+  if (!Number.isFinite(zoom) || zoom < minMapZoom || zoom > maxMapZoom || (integer && !Number.isInteger(zoom))) {
+    throw new RangeError(`Map zoom must be ${integer ? "an integer" : "finite"} from ${minMapZoom} to ${maxMapZoom}`);
+  }
+}
+
+function validateMapSize(size: MapSize) {
+  if (![size.width, size.height].every((dimension) => Number.isFinite(dimension) && dimension > 0 && dimension <= maxViewportDimension)) {
+    throw new RangeError(`Map viewport dimensions must be positive and at most ${maxViewportDimension}`);
+  }
+}
+
+function wrapLongitude(lng: number) {
+  return ((lng + 180) % 360 + 360) % 360 - 180;
+}
+
+function wrapWorldOffset(offset: number, width: number) {
+  return ((offset + width / 2) % width + width) % width - width / 2;
+}
+
+function averageWrappedLongitude(longitudes: number[]) {
+  if (longitudes.length === 1) return longitudes[0];
+  const sorted = longitudes.map(wrapLongitude).sort((left, right) => left - right);
+  let largestGap = -1;
+  let arcStart = sorted[0];
+  for (let index = 0; index < sorted.length; index++) {
+    const next = sorted[(index + 1) % sorted.length];
+    const gap = (index === sorted.length - 1 ? next + 360 : next) - sorted[index];
+    if (gap > largestGap) { largestGap = gap; arcStart = next; }
+  }
+  const offsets = sorted.map((lng) => ((lng - arcStart) % 360 + 360) % 360);
+  return wrapLongitude(arcStart + average(offsets));
 }
 
 function average(values: number[]) {

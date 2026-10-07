@@ -11,8 +11,8 @@ import {
   MessageCircle,
   ShieldCheck
 } from "lucide-react";
-import { SmartImage } from "@/components/ui/smart-image";
-import Link from "next/link";
+import { SmartImage as Image } from "@/components/ui/smart-image";
+import Link from "@/components/ui/app-link";
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 
 import { ApplicationCancellation } from "@/components/application-cancellation";
@@ -57,6 +57,7 @@ function ApplicationFormSession({ listing, initialStay, selectionId }: Applicati
   const [email, setEmail] = useState("");
   const [draft, setDraft] = useState<RentalApplicationDraft>(() => initialApplicationDraft(listing, initialStay));
   const [draftReady, setDraftReady] = useState(false);
+  const [draftStorageAvailable, setDraftStorageAvailable] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [submitted, setSubmitted] = useState<ApiRentalApplication | null>(null);
@@ -100,7 +101,7 @@ function ApplicationFormSession({ listing, initialStay, selectionId }: Applicati
 
   useEffect(() => {
     if (!draftReady || submitted) return;
-    writeApplicationDraft(listing.id, token, { step, name, email, draft, staySource: staySource.current });
+    setDraftStorageAvailable(writeApplicationDraft(listing.id, token, { step, name, email, draft, staySource: staySource.current }));
   }, [draft, draftReady, email, listing.id, name, step, submitted, token]);
 
   function nextStep() {
@@ -146,7 +147,10 @@ function ApplicationFormSession({ listing, initialStay, selectionId }: Applicati
     if (step < applicationSteps.length - 1) { nextStep(); return; }
     if (!validateThroughStep(step)) return;
     if (!token) {
-      markApplicationDraftHandoff(listing.id);
+      if (!draftStorageAvailable || !markApplicationDraftHandoff(listing.id)) {
+        setError("浏览器无法保存申请资料。请先登录，再返回填写申请。");
+        return;
+      }
       window.location.assign(authRoute({ returnTo: `/applications/new?listingId=${encodeURIComponent(listing.id)}`, intent: "application" }));
       return;
     }
@@ -185,6 +189,7 @@ function ApplicationFormSession({ listing, initialStay, selectionId }: Applicati
               <h1 className="text-2xl font-black tracking-[-0.045em] sm:mt-2 sm:text-4xl">申请租住</h1>
               <p className="mt-2 hidden text-sm text-slate-500 lg:block">{listing.title}</p>
               {draftReady && !token ? <p className="mt-3 rounded-xl bg-blue-50 px-3 py-2 text-xs leading-5 text-blue-900">提交前需要登录，目前仅支持受邀邮箱或已有账户。</p> : null}
+              {!draftStorageAvailable ? <p role="status" className="mt-3 rounded-xl bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900">浏览器无法保存草稿，关闭或刷新页面会丢失当前填写。{!token ? <Link href={authRoute({ returnTo: `/applications/new?listingId=${encodeURIComponent(listing.id)}`, intent: "application" })} className="ml-1 underline">先登录</Link> : null}</p> : null}
               <ol className="mt-4 grid grid-cols-4 gap-2 sm:mt-7" aria-label="申请进度">
                 {applicationSteps.map((label, index) => <li key={label} aria-current={index === step ? "step" : undefined} className="min-w-0"><div className={cn("h-1.5 rounded-full transition-colors duration-200", index <= step ? "bg-[#2453ff]" : "bg-slate-200")} /><p className={cn("mt-2 text-xs font-bold", index === step ? "text-[#2453ff]" : "text-slate-500")}>{label}</p></li>)}
               </ol>
@@ -206,7 +211,7 @@ function ApplicationFormSession({ listing, initialStay, selectionId }: Applicati
 
           <aside aria-label="申请房源摘要" className="order-first rounded-[22px] border border-slate-200 bg-white p-4 shadow-sm lg:sticky lg:top-[96px] lg:order-last">
             <div className="flex items-center gap-3 lg:block">
-              <div className="relative size-16 shrink-0 overflow-hidden rounded-2xl bg-slate-200 lg:aspect-[4/3] lg:h-auto lg:w-full"><SmartImage src={listing.image} alt={listing.title} fill sizes="(max-width: 1023px) 64px, 340px" className="object-cover" /></div>
+              <div className="relative size-16 shrink-0 overflow-hidden rounded-2xl bg-slate-200 lg:aspect-[4/3] lg:h-auto lg:w-full"><Image src={listing.image} alt={listing.title} fill sizes="(max-width: 1023px) 64px, 340px" className="object-cover" /></div>
               <div className="min-w-0 flex-1"><h2 className="line-clamp-2 text-sm font-bold leading-snug lg:mt-4 lg:text-base">{listing.title}</h2><p className="mt-1 hidden text-xs text-slate-500 lg:block">{listing.area}</p>
                 <p className="mt-2 text-lg font-black lg:mt-4 lg:border-t lg:border-slate-200 lg:pt-4 lg:text-xl">${listing.price.toLocaleString("en-US")} <span className="text-xs font-medium text-slate-500">/ 月</span></p>
                 <p className="mt-3 hidden text-xs leading-5 text-slate-500 lg:block">所选租期<br /><span className="font-semibold text-slate-700">{draft.moveIn || "待选择"} 至 {draft.moveOut || "待选择"}</span></p>
@@ -344,17 +349,22 @@ function applicationDraftHandoffKey(listingId: string) {
 }
 
 function writeApplicationDraft(listingId: string, token: string | null, value: SavedApplicationDraft) {
-  if (typeof window === "undefined") return;
-  window.sessionStorage.setItem(applicationDraftKey(listingId, token), JSON.stringify({ version: applicationDraftVersion, ...value }));
+  if (typeof window === "undefined") return false;
+  try {
+    window.sessionStorage.setItem(applicationDraftKey(listingId, token), JSON.stringify({ version: applicationDraftVersion, ...value }));
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function readApplicationDraft(listingId: string, token: string | null): SavedApplicationDraft | null {
   if (typeof window === "undefined") return null;
-  const raw = window.sessionStorage.getItem(applicationDraftKey(listingId, token));
-  if (!raw) return null;
   try {
+    const raw = window.sessionStorage.getItem(applicationDraftKey(listingId, token));
+    if (!raw) return null;
     const value = JSON.parse(raw) as Partial<SavedApplicationDraft> & { version?: number };
-    if (value.version !== applicationDraftVersion || typeof value.step !== "number" || value.step < 0 || value.step >= applicationSteps.length || typeof value.name !== "string" || typeof value.email !== "string" || !isRentalApplicationDraft(value.draft)) return null;
+    if (value.version !== applicationDraftVersion || typeof value.step !== "number" || !Number.isInteger(value.step) || value.step < 0 || value.step >= applicationSteps.length || typeof value.name !== "string" || typeof value.email !== "string" || !isRentalApplicationDraft(value.draft)) return null;
     return { step: value.step, name: value.name, email: value.email, draft: value.draft, staySource: typeof value.staySource === "string" ? value.staySource : undefined };
   } catch {
     return null;
@@ -362,29 +372,35 @@ function readApplicationDraft(listingId: string, token: string | null): SavedApp
 }
 
 function clearApplicationDraft(listingId: string, token: string | null) {
-  if (typeof window !== "undefined") window.sessionStorage.removeItem(applicationDraftKey(listingId, token));
+  try { if (typeof window !== "undefined") window.sessionStorage.removeItem(applicationDraftKey(listingId, token)); } catch { /* Optional cleanup must not hide a successful submission. */ }
 }
 
 function markApplicationDraftHandoff(listingId: string) {
-  if (typeof window !== "undefined") window.sessionStorage.setItem(applicationDraftHandoffKey(listingId), "1");
+  if (typeof window === "undefined") return false;
+  try {
+    window.sessionStorage.setItem(applicationDraftHandoffKey(listingId), "1");
+    return true;
+  } catch { return false; }
 }
 
 function consumeApplicationDraftHandoff(listingId: string) {
   if (typeof window === "undefined") return false;
-  const key = applicationDraftHandoffKey(listingId);
-  const exists = window.sessionStorage.getItem(key) === "1";
-  if (exists) window.sessionStorage.removeItem(key);
-  return exists;
+  try {
+    const key = applicationDraftHandoffKey(listingId);
+    const exists = window.sessionStorage.getItem(key) === "1";
+    if (exists) window.sessionStorage.removeItem(key);
+    return exists;
+  } catch { return false; }
 }
 
 function clearApplicationDraftHandoff(listingId: string) {
-  if (typeof window !== "undefined") window.sessionStorage.removeItem(applicationDraftHandoffKey(listingId));
+  try { if (typeof window !== "undefined") window.sessionStorage.removeItem(applicationDraftHandoffKey(listingId)); } catch { /* Optional cleanup. */ }
 }
 
 function isRentalApplicationDraft(value: unknown): value is RentalApplicationDraft {
   if (!value || typeof value !== "object") return false;
   const draft = value as Partial<RentalApplicationDraft>;
-  return draft.scope === "SOLO" && [draft.moveIn, draft.moveOut, draft.schoolOrOccupation, draft.note].every((item) => typeof item === "string") && typeof draft.incomeBand === "string" && typeof draft.guarantorStatus === "string";
+  return draft.scope === "SOLO" && [draft.moveIn, draft.moveOut, draft.schoolOrOccupation, draft.note].every((item) => typeof item === "string") && ["BELOW_2X", "TWO_TO_THREE_X", "THREE_TO_FOUR_X", "ABOVE_FOUR_X", "PREFER_NOT_TO_SAY"].includes(draft.incomeBand ?? "") && ["AVAILABLE", "NOT_AVAILABLE", "NOT_NEEDED"].includes(draft.guarantorStatus ?? "");
 }
 
 function initialApplicationDraft(listing: PreviewListing, stay?: Partial<ListingStay>): RentalApplicationDraft {

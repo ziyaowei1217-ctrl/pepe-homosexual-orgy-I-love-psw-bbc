@@ -1,7 +1,7 @@
 "use client";
 
 import { ArrowRight, CheckCircle2, CreditCard, FileSignature, Home, MessageCircle } from "lucide-react";
-import Link from "next/link";
+import Link from "@/components/ui/app-link";
 import { useEffect, useState } from "react";
 
 import { useAuthSessionToken } from "@/lib/use-auth-session-token";

@@ -10,6 +10,13 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
+        brand: {
+          DEFAULT: "#2453ff",
+          moss: "#1a3dd6",
+          soft: "#eef2ff",
+          citrus: "#fbbf24",
+          ink: "#0b1026"
+        },
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",
@@ -43,6 +50,7 @@ const config: Config = {
           navy: "#002244",
           blue: "#0D4599",
           sky: "#006AFF",
+          green: "#4338CA",
           verified: "#4338CA",
           amber: "#B45309",
           red: "#D9381E",

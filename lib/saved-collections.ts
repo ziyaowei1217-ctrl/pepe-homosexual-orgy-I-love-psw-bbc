@@ -10,6 +10,8 @@ export type SavedCollectionsState = {
   version: 1;
   collections: SavedCollection[];
   notes: Record<string, string>;
+  /** Oldest to newest, independent of collection membership or catalog order. */
+  savedOrder?: string[];
 };
 
 export function normalizeSavedCollectionsState(
@@ -26,16 +28,15 @@ export function normalizeSavedCollectionsState(
   ]);
   const otherCollections = parsedCollections.filter((collection) => collection.id !== DEFAULT_SAVED_COLLECTION_ID);
 
+  const collections = [
+    { id: DEFAULT_SAVED_COLLECTION_ID, name: "全部收藏", listingIds: migratedIds },
+    ...dedupeCollections(otherCollections)
+  ];
+  const activeIds = uniqueStrings(collections.flatMap((collection) => collection.listingIds));
   return {
     version: 1,
-    collections: [
-      {
-        id: DEFAULT_SAVED_COLLECTION_ID,
-        name: "全部收藏",
-        listingIds: migratedIds
-      },
-      ...dedupeCollections(otherCollections)
-    ],
+    collections,
+    savedOrder: uniqueStrings([...(isRecord(value) ? uniqueStrings(value.savedOrder) : []), ...activeIds]).filter((id) => activeIds.includes(id)),
     notes: isRecord(value) && isRecord(value.notes)
       ? Object.fromEntries(
           Object.entries(value.notes).filter(
@@ -48,7 +49,8 @@ export function normalizeSavedCollectionsState(
 }
 
 export function getSavedListingIds(state: SavedCollectionsState) {
-  return uniqueStrings(state.collections.flatMap((collection) => collection.listingIds));
+  const activeIds = uniqueStrings(state.collections.flatMap((collection) => collection.listingIds));
+  return uniqueStrings([...(state.savedOrder ?? []), ...activeIds]).filter((id) => activeIds.includes(id));
 }
 
 /** Merge a retained guest snapshot again safely if its storage cleanup was interrupted. */
@@ -75,7 +77,7 @@ export function mergeSavedCollectionsState(account: SavedCollectionsState, guest
       notes.set(listingId, `${existing}\n\n${note}`);
     }
   }
-  return { version: 1, collections, notes: Object.fromEntries(notes) };
+  return { version: 1, collections, notes: Object.fromEntries(notes), savedOrder: uniqueStrings([...getSavedListingIds(account), ...getSavedListingIds(guest)]) };
 }
 
 export function addSavedCollection(
@@ -84,10 +86,13 @@ export function addSavedCollection(
   id = createCollectionId(name)
 ) {
   const normalizedName = name.trim();
-  const normalizedId = id.trim();
-  if (!normalizedName || !normalizedId || state.collections.some((collection) => collection.id === normalizedId)) {
+  let normalizedId = id.trim();
+  if (getSavedCollectionNameError(state, normalizedName) || !normalizedId) {
     return state;
   }
+  const baseId = normalizedId;
+  let suffix = 2;
+  while (state.collections.some((collection) => collection.id === normalizedId)) normalizedId = `${baseId}-${suffix++}`;
 
   return {
     ...state,
@@ -117,7 +122,8 @@ export function toggleListingInCollection(
   });
 
   if (!foundCollection) return state;
-  return { ...state, collections };
+  const activeIds = uniqueStrings(collections.flatMap((collection) => collection.listingIds));
+  return { ...state, collections, savedOrder: uniqueStrings([...getSavedListingIds(state), normalizedListingId]).filter((id) => activeIds.includes(id)) };
 }
 
 export function setSavedListingNote(
@@ -163,8 +169,49 @@ function uniqueStrings(value: unknown) {
 }
 
 function createCollectionId(name: string) {
-  const slug = name.trim().toLowerCase().replace(/[^a-z0-9\u4e00-\u9fff]+/g, "-").replace(/^-|-$/g, "");
+  const slug = name.trim().normalize("NFC").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "-").replace(/^-|-$/g, "");
   return slug ? `collection-${slug}` : "";
+}
+
+export function getSavedCollectionNameError(state: SavedCollectionsState, name: string) {
+  const normalizedName = name.trim().normalize("NFC");
+  if (!normalizedName || !createCollectionId(normalizedName)) return "清单名称需要包含文字或数字。";
+  if (state.collections.some((collection) => collection.name.normalize("NFC").toLowerCase() === normalizedName.toLowerCase())) return "同名清单已存在，请使用其他名称。";
+  return null;
+}
+
+export type SavedCollectionsMutation =
+  | { kind: "saved"; listingId: string; included: boolean }
+  | { kind: "membership"; listingId: string; collectionId: string; included: boolean }
+  | { kind: "collection"; name: string; id: string }
+  | { kind: "note"; listingId: string; note: string };
+
+/** Replay user intentions after asynchronous hydration, including collection-ID collisions. */
+export function applySavedCollectionsMutations(state: SavedCollectionsState, commands: SavedCollectionsMutation[]) {
+  const collectionIds = new Map<string, string>();
+  let next = state;
+  for (const command of commands) {
+    if (command.kind === "collection") {
+      const existing = next.collections.find((collection) => collection.name.normalize("NFC").toLowerCase() === command.name.normalize("NFC").toLowerCase());
+      if (existing) collectionIds.set(command.id, existing.id);
+      else {
+        const created = addSavedCollection(next, command.name, command.id);
+        const collection = created.collections.at(-1);
+        if (created !== next && collection) collectionIds.set(command.id, collection.id);
+        next = created;
+      }
+    } else if (command.kind === "note") next = setSavedListingNote(next, command.listingId, command.note);
+    else if (command.kind === "membership") {
+      const collectionId = collectionIds.get(command.collectionId) ?? command.collectionId;
+      const included = next.collections.find((collection) => collection.id === collectionId)?.listingIds.includes(command.listingId) ?? false;
+      if (included !== command.included) next = toggleListingInCollection(next, command.listingId, collectionId);
+    } else if (command.included) {
+      if (!getSavedListingIds(next).includes(command.listingId)) next = toggleListingInCollection(next, command.listingId);
+    } else {
+      next = next.collections.reduce((current, collection) => collection.listingIds.includes(command.listingId) ? toggleListingInCollection(current, command.listingId, collection.id) : current, next);
+    }
+  }
+  return next;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

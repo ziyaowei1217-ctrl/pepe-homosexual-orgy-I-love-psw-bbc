@@ -48,7 +48,7 @@ function buildShowcase({ outputDir, entries }) {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Sublet Pipeline 产品展示</title>
+  <title>psw 产品展示</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='18' fill='%23006aff'/%3E%3Cpath d='M18 31 32 19l14 12v15H36V35h-8v11H18Z' fill='white'/%3E%3C/svg%3E">
   <style>
     :root { color-scheme: light; --ink:#10233f; --blue:#006aff; --line:#dce8f8; --muted:#60708a; --paper:#f5f9ff; }
@@ -90,7 +90,7 @@ function buildShowcase({ outputDir, entries }) {
 </head>
 <body>
   <header class="hero">
-    <div class="brand"><span class="brand-mark">⌂</span><span>Sublet Pipeline</span></div>
+    <div class="brand"><span class="brand-mark">⌂</span><span>psw</span></div>
     <div class="eyebrow">Product experience archive · 2026</div>
     <h1>从找房到入住，完整看见每一步。</h1>
     <p class="lede">覆盖找房、收藏、申请、消息、租住进度与室友匹配，并将房东运营和管理员审核拆成独立工作台；同时包含桌面端、移动端与关键交互面板。</p>

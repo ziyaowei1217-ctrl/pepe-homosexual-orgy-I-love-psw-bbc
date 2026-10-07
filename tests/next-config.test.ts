@@ -1,4 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { IncomingMessage } from "node:http";
+import { Socket } from "node:net";
+import { defaultConfig, type NextConfigComplete } from "next/dist/server/config-shared";
+import { ImageOptimizerCache } from "next/dist/server/image-optimizer";
 
 // @ts-expect-error Next.js loads its JavaScript configuration directly.
 import rawNextConfig from "../next.config.mjs";
@@ -34,5 +38,26 @@ describe("production web configuration", () => {
     expect(config.images.unoptimized).toBe(true);
     expect(imageRule).toContain("http://localhost:4100");
     expect(csp).not.toContain("private-api");
+  });
+
+  it("rejects direct optimizer requests for API photos while retaining Unsplash resizing", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("NEXT_PUBLIC_API_BASE_URL", "https://api.example.com/api/v1");
+    vi.resetModules();
+    // @ts-expect-error Next.js loads its JavaScript configuration directly.
+    const { default: config } = await import("../next.config.mjs");
+    const completeConfig: NextConfigComplete = {
+      ...defaultConfig,
+      ...config,
+      images: { ...defaultConfig.images, ...config.images }
+    };
+    const request = new IncomingMessage(new Socket());
+    const validate = (url: string) => ImageOptimizerCache.validateParams(request, { url, w: "640", q: "75" }, completeConfig, false);
+
+    expect(config.images.unoptimized).toBe(false);
+    expect(validate("https://api.example.com/api/v1/listing-media/media-a/content")).toEqual({ errorMessage: '"url" parameter is not allowed' });
+    expect(validate("/api/v1/listing-media/media-a/content")).toEqual({ errorMessage: '"url" parameter is not allowed' });
+    expect(validate("https://images.unsplash.com/photo-example?auto=format&w=1200")).toMatchObject({ isAbsolute: true, width: 640, quality: 75 });
+    request.destroy();
   });
 });

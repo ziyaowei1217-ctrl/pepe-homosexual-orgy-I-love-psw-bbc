@@ -1,9 +1,20 @@
-# Sublet Pipeline
+# psw — people spaces wellbeing
 
-Frontend + backend MVP for a high-trust sublet marketplace and co-living matching product.
+Frontend + backend MVP for an international-student sublease marketplace and roommate matching product.
+
+Product identity, reusable colors, and logo exports are documented in the
+[psw design system](docs/psw-design.md). The [public demonstration](https://sublet-pipeline-demo-zihao.netlify.app)
+uses fictional examples and device-local favorites.
 
 中文交接与体验说明见 [README_先看这里.md](README_先看这里.md)。无需运行服务即可打开
-[当前界面截图预览](output/handoff-preview/index.html)；完整交互以启动后的网页为准。
+[历史界面截图（旧品牌）](output/handoff-preview/index.html)；当前界面以运行后的网页为准。
+
+The September 30 hardening handoff includes the [security review](docs/security-review-2026-09-30.md),
+[validation record](docs/handoff-validation-2026-09-30.md) and [threat model](docs/sublet-pipeline-threat-model.md).
+Start with [demo and operations](docs/demo-and-operations.md) for setup and phone/LAN testing.
+Local MinIO is a source-built, archived dependency for loopback-only synthetic demos; phone uploads
+and public deployments require a maintained private S3-compatible service.
+Earlier files under `output/handoff` are historical review artifacts, not the current release source.
 
 ## Stack
 
@@ -24,14 +35,14 @@ Frontend + backend MVP for a high-trust sublet marketplace and co-living matchin
 The easiest beginner-friendly path is:
 
 ```bash
-docker compose up
+docker compose up --build
 ```
 
 Then open:
 
 - Web app: `http://localhost:3000`
 - API: `http://localhost:4000/api/v1`
-- Database UI: `http://localhost:8080`
+- Optional database UI: enable with `docker compose --profile admin up -d adminer`, then visit `http://localhost:8080`
 
 The Compose stack starts PostgreSQL and private MinIO, applies checked-in database migrations,
 starts the NestJS backend, and then starts the Next.js frontend. To add sample listings after the
@@ -171,6 +182,13 @@ DATABASE_URL='postgresql://sublet:sublet@localhost:5432/sublet_pipeline?schema=p
 
 ## Launch Readiness
 
+For portable demo setup, private-LAN phone testing, container hardening, backups and rollback,
+see [`docs/demo-and-operations.md`](docs/demo-and-operations.md). The GitHub Actions release
+workflow checks native Windows, macOS and Linux, plus Linux database/storage/realtime and container
+journeys; enable the resulting checks in branch protection after their first successful run.
+The current web deliverable and future iOS, Android and WeChat boundaries are detailed in
+[`docs/platform-delivery.md`](docs/platform-delivery.md).
+
 For the provider-independent production configuration and operator checklist, see
 [`docs/production-launch-checklist.md`](docs/production-launch-checklist.md). Run the complete local
 release gate with `pnpm release:check` after PostgreSQL and MinIO are available.
@@ -180,20 +198,28 @@ The four provider connection points are documented in
 realtime messages. Run `pnpm production:check-config` with production variables loaded before
 building deployment images.
 
-`GET /api/v1/health` is a process-liveness check and does not query PostgreSQL. `GET /api/v1/ready`
-queries PostgreSQL and reports the sanitized roommate-messaging infrastructure state. A database
-failure makes readiness fail; messaging fallback leaves the database-backed API available with
-`status: "degraded"`. Health responses and operational logs must never contain credentials, raw
-configuration values, message bodies, or caught-error text.
+`GET /api/v1/health` checks process liveness. `GET /api/v1/ready` shares one underlying dependency
+check across callers and responds within 3.5 seconds. In production, database failure, missing
+distributed quotas, or failed realtime delivery returns 503. Local development can report
+`status: "degraded"` while database-backed routes remain available. Health responses and logs
+must never contain credentials, raw configuration values, message bodies, or caught-error text.
 
-The `realtime` and `messageRateLimit` readiness components each report one of these modes:
+The `realtime` and `messageRateLimit` components report `single-instance` for local development,
+`distributed` after a successful active probe, or `local-fallback` after a failure. Production
+requires `distributed`. Realtime verifies an actual publisher-to-subscriber round trip. A failed
+adapter stays unhealthy until the process restarts and a fresh adapter passes its probe; reconnect
+uses durable PostgreSQL message history. See the [Render recovery runbook](docs/render-deployment.md).
 
-- `single-instance`: `VALKEY_URL` is empty; Socket.IO fan-out and message rate limiting are local to
-  one API process. This is a supported local and single-instance deployment mode.
-- `distributed`: `VALKEY_URL` is configured and that component is using Valkey successfully.
-- `local-fallback`: Valkey was configured but a connection, timeout, protocol, or runtime failure
-  caused a component to fall back to local behavior. The API remains usable, but cross-instance
-  realtime delivery or globally shared rate-limit accounting is degraded until recovery.
+The API uses the official PostgreSQL driver adapter, with Prisma client, CLI, and adapter pinned to
+6.19.3. Actual query deadlines close stalled sockets; subsequent queries use fresh connections.
+Local loopback development/test uses plaintext; the checked-in Compose `db` hostname requires an
+explicit non-production `sslmode=disable`. Production and other remote connections verify TLS.
+The migration CLI runs a separate native engine and needs a reviewed finite operational timeout;
+see the [Render deployment runbook](docs/render-deployment.md).
+
+Public roommate discovery supports up to 5,000 active owned profiles. An oversized catalog returns
+`503 DISCOVERY_CAPACITY_EXCEEDED`; results are complete below the cap. Configure public ingress
+rate/concurrency limits and measure the selected API size before opening anonymous traffic.
 
 Run the always-on release checks and real PostgreSQL 16 smoke tests from the repository root:
 
@@ -211,7 +237,7 @@ To prove the complete marketplace demo against PostgreSQL 16 and private MinIO s
 two external services and run the isolated journey:
 
 ```bash
-docker compose up -d db minio minio-init
+docker compose up -d --build db minio minio-init
 pnpm -C api launch:smoke:marketplace
 ```
 

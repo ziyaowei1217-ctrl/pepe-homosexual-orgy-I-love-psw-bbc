@@ -32,6 +32,8 @@ it('preserves guest saved notes and custom collection membership when logging in
   expect(JSON.parse(localStorage.getItem(guestKey)!).collections).toContainEqual({ id: 'collection-friday-visits', name: 'Friday visits', listingIds: [listing.id] });
   await act(async () => writeStoredAuthSession('new-user-token'));
   await screen.findByText('此设备上的账号收藏，暂不跨设备同步');
+  // Rendering the account label precedes the passive persistence/cleanup effect.
+  await waitFor(() => expect(localStorage.getItem(guestKey)).toBeNull());
   const migrated = JSON.parse(localStorage.getItem(userKey)!);
   expect(migrated.collections[0].listingIds).toContain(listing.id);
   expect(migrated.collections).toContainEqual({ id: 'collection-friday-visits', name: 'Friday visits', listingIds: [listing.id] });
@@ -79,6 +81,23 @@ async function hydratedState() {
   await waitFor(() => expect(screen.getByTestId('saved-state').textContent).not.toBe('loading'));
   return JSON.parse(screen.getByTestId('saved-state').textContent!);
 }
+async function persistedState(accountKey: string, state: unknown, removedGuestKey?: string) {
+  await waitFor(() => {
+    expect(JSON.parse(localStorage.getItem(accountKey)!)).toEqual(state);
+    if (removedGuestKey) expect(localStorage.getItem(removedGuestKey)).toBeNull();
+  });
+}
+function deferredResponse() {
+  let resolveResponse: ((response: Response) => void) | undefined;
+  const promise = new Promise<Response>((resolve) => { resolveResponse = resolve; });
+  return {
+    promise,
+    resolve() {
+      if (!resolveResponse) throw new Error('Deferred auth response was not initialized');
+      resolveResponse(Response.json({ id: 'renter', email: 'renter@example.com' }));
+    }
+  };
+}
 function expectMerged(state: typeof accountState) {
   expect(state.collections).toContainEqual({ id: 'same-id', name: 'Account shortlist', listingIds: ['account-home'] });
   expect(state.collections).toContainEqual({ id: 'same-id-guest', name: 'Existing distinct list', listingIds: ['other-home'] });
@@ -98,7 +117,9 @@ it('preserves both sides of ID and note collisions and persists the account befo
     originalRemove.call(this, key);
   });
   render(provider());
-  expectMerged(await hydratedState());
+  const merged = await hydratedState();
+  expectMerged(merged);
+  await persistedState(accountKey, merged, guestKey);
   expect(persistedAtRemoval).toHaveLength(1);
   expectMerged(persistedAtRemoval[0] as typeof accountState);
   expect(localStorage.getItem(guestKey)).toBeNull();
@@ -113,10 +134,13 @@ it('retries an incomplete source cleanup without duplicating collections or note
   const first = render(provider());
   const once = await hydratedState();
   expectMerged(once);
+  await persistedState(accountKey, once);
+  expect(JSON.parse(localStorage.getItem(guestKey)!)).toEqual(guestState);
   first.unmount();
   removal.mockRestore();
   render(provider());
   expect(await hydratedState()).toEqual(once);
+  await persistedState(accountKey, once, guestKey);
   expect(JSON.parse(localStorage.getItem(accountKey)!)).toEqual(once);
   expect(localStorage.getItem(guestKey)).toBeNull();
 });
@@ -128,6 +152,11 @@ class StorageErrorBoundary extends Component<{ children: ReactNode }, { failed: 
 }
 it('retains guest and previous account data when account storage fails, then recovers on retry', async () => {
   const { guestKey, accountKey } = installSignedInStorage();
+  const failedHydration = deferredResponse();
+  const retryHydration = deferredResponse();
+  vi.stubGlobal('fetch', vi.fn()
+    .mockReturnValueOnce(failedHydration.promise)
+    .mockReturnValueOnce(retryHydration.promise));
   const originalSet = Storage.prototype.setItem;
   const writes = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (this: Storage, key, value) {
     if (key === accountKey) throw new DOMException('Storage quota exceeded', 'QuotaExceededError');
@@ -135,13 +164,24 @@ it('retains guest and previous account data when account storage fails, then rec
   });
   vi.spyOn(console, 'error').mockImplementation(() => undefined);
   const first = render(<StorageErrorBoundary>{provider()}</StorageErrorBoundary>);
-  await waitFor(() => expect(writes.mock.calls.some(([key]) => key === accountKey)).toBe(true));
+  await act(async () => {
+    failedHydration.resolve();
+    await failedHydration.promise;
+  });
+  expect(writes.mock.calls.some(([key]) => key === accountKey)).toBe(true);
+  expectMerged(await hydratedState());
   expect(JSON.parse(localStorage.getItem(guestKey)!)).toEqual(guestState);
   expect(JSON.parse(localStorage.getItem(accountKey)!)).toEqual(accountState);
   first.unmount();
   writes.mockRestore();
   render(provider());
-  expectMerged(await hydratedState());
+  await act(async () => {
+    retryHydration.resolve();
+    await retryHydration.promise;
+  });
+  const merged = await hydratedState();
+  expectMerged(merged);
+  await persistedState(accountKey, merged, guestKey);
   expect(localStorage.getItem(guestKey)).toBeNull();
 });
 
@@ -152,6 +192,8 @@ it('clears migrated legacy favorites without removing unrelated guest notificati
   render(provider());
   const merged = await hydratedState();
   expect(merged.collections[0].listingIds).toContain('legacy-home');
+  await persistedState(accountKey, merged);
+  await waitFor(() => expect(JSON.parse(localStorage.getItem(getGuestUiStorageKey())!)).toEqual({ version: 2, favoriteListingIds: [], notifications: [notification] }));
   expect(JSON.parse(localStorage.getItem(accountKey)!).collections[0].listingIds).toContain('legacy-home');
   expect(JSON.parse(localStorage.getItem(getGuestUiStorageKey())!)).toEqual({ version: 2, favoriteListingIds: [], notifications: [notification] });
 });

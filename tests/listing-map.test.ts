@@ -2,11 +2,14 @@ import { describe, expect, it } from "vitest";
 
 import {
   getListingCoordinates,
+  getListingPoint,
   getMapCenterForListings,
   getMapMarkers,
   getMapSummary,
   getMapTiles,
-  mapTileUrl
+  mapTileUrl,
+  maxMercatorLatitude,
+  panMapCenter
 } from "../lib/listing-map";
 
 describe("listing map", () => {
@@ -15,6 +18,16 @@ describe("listing map", () => {
       lat: 34.0635,
       lng: -118.4455
     });
+  });
+
+  it.each(["__proto__", "constructor", "toString", "hasOwnProperty"])("does not interpret inherited object property %s as a neighborhood", (name) => {
+    const point = getListingCoordinates(`Los Angeles · ${name}`);
+    expect(Number.isFinite(point.lat)).toBe(true);
+    expect(Number.isFinite(point.lng)).toBe(true);
+    expect(point.lat).toBeGreaterThan(33.9);
+    expect(point.lat).toBeLessThan(34.2);
+    expect(point.lng).toBeGreaterThan(-118.5);
+    expect(point.lng).toBeLessThan(-118.1);
   });
 
   it("resolves Boston neighborhood coordinates instead of falling back to Los Angeles", () => {
@@ -98,6 +111,101 @@ describe("listing map", () => {
   it("supports a production map-provider tile template", () => {
     expect(mapTileUrl(4, 5, 6, "https://maps.example.com/{z}/{x}/{y}.png?key=public"))
       .toBe("https://maps.example.com/6/4/5.png?key=public");
+  });
+
+  it.each([
+    [90, -118.4], [-90, -118.4], [85.06, -118.4], [-85.06, -118.4],
+    [34, 181], [34, -181], [NaN, -118.4], [34, Infinity],
+    [34, undefined], [undefined, -118.4]
+  ])("uses the neighborhood fallback for a non-projectable coordinate pair (%s, %s)", (latitude, longitude) => {
+    const listing = { id: "invalid", area: "Los Angeles · Westwood", price: 1680, latitude, longitude };
+    const point = getListingCoordinates(listing.area);
+    expect(getListingPoint(listing)).toEqual(point);
+    expect(getMapCenterForListings([listing])).toEqual(point);
+    const [marker] = getMapMarkers([listing], point, 12, { width: 640, height: 320 }, false);
+    expect(marker).toMatchObject({ ...point, x: 320, y: 160 });
+  });
+
+  it("keeps Mercator boundary positions and dateline endpoints finite", () => {
+    for (const lat of [-maxMercatorLatitude, maxMercatorLatitude]) {
+      for (const lng of [-180, 180]) {
+        const point = { lat, lng };
+        const tiles = getMapTiles(point, 2, { width: 640, height: 360 });
+        expect(tiles.length).toBeGreaterThan(0);
+        expect(tiles.every((tile) => Number.isFinite(tile.x) && Number.isFinite(tile.y))).toBe(true);
+        expect(tiles.every((tile) => tile.yTile >= 0 && tile.yTile < 4)).toBe(true);
+        const [marker] = getMapMarkers([{ id: "edge", area: "unknown", price: 1000, latitude: lat, longitude: lng }], point, 18, { width: 640, height: 360 }, false);
+        expect(marker).toMatchObject({ lat, lng, x: 320, y: 180 });
+      }
+    }
+  });
+
+  it("replaces invalid map centers with a bounded fallback before generating tiles", () => {
+    const safeTiles = getMapTiles({ lat: 34.0522, lng: -118.2437 }, 11, { width: 640, height: 360 });
+    for (const center of [{ lat: 90, lng: 0 }, { lat: Infinity, lng: 0 }, { lat: 0, lng: NaN }, { lat: 0, lng: 1000 }]) {
+      expect(getMapTiles(center, 11, { width: 640, height: 360 })).toEqual(safeTiles);
+      expect(getMapCenterForListings([], center)).toEqual({ lat: 34.0522, lng: -118.2437 });
+    }
+  });
+
+  it.each([NaN, Infinity, -1, 0, 1, 19, Number.MAX_VALUE])("rejects an unsupported map zoom %s before projection", (zoom) => {
+    expect(() => getMapTiles({ lat: 34, lng: -118 }, zoom, { width: 640, height: 360 })).toThrow(RangeError);
+    expect(() => getMapMarkers([], { lat: 34, lng: -118 }, zoom, { width: 640, height: 360 })).toThrow(RangeError);
+    expect(() => panMapCenter({ lat: 34, lng: -118 }, zoom, 80, 0)).toThrow(RangeError);
+  });
+
+  it("accepts fractional zoom for moving markers while requesting only integer tile levels", () => {
+    const point = { lat: 34, lng: -118 };
+    const [marker] = getMapMarkers([{ id: "pinch", area: "LA", price: 1000, latitude: point.lat, longitude: point.lng }], point, 12.5, { width: 640.5, height: 320.5 }, false);
+    expect(marker).toMatchObject({ x: 320, y: 160 });
+    expect(Object.values(panMapCenter(point, 12.5, 80, 0)).every(Number.isFinite)).toBe(true);
+    expect(() => getMapTiles(point, 12.5, { width: 640, height: 360 })).toThrow(RangeError);
+    expect(() => mapTileUrl(1, 1, 12.5)).toThrow(RangeError);
+    expect(getMapTiles(point, 18, { width: 640.5, height: 320.5 }).length).toBeGreaterThan(0);
+  });
+
+  it.each([
+    { width: 0, height: 360 }, { width: -1, height: 360 },
+    { width: 640, height: Infinity }, { width: NaN, height: 360 },
+    { width: 8193, height: 360 }, { width: 640, height: Number.MAX_VALUE }
+  ])("rejects invalid or excessive viewport dimensions %s", (size) => {
+    expect(() => getMapTiles({ lat: 34, lng: -118 }, 11, size)).toThrow(RangeError);
+    expect(() => getMapMarkers([], { lat: 34, lng: -118 }, 11, size)).toThrow(RangeError);
+  });
+
+  it("bounds tile work even when each viewport dimension is individually allowed", () => {
+    expect(() => getMapTiles({ lat: 34, lng: -118 }, 11, { width: 8192, height: 8192 })).toThrow("tile budget");
+    expect(getMapTiles({ lat: 34, lng: -118 }, 11, { width: 7680, height: 4320 }).length).toBeLessThanOrEqual(1024);
+  });
+
+  it.each([
+    [-1, 1, 2], [1, -1, 2], [4, 1, 2], [1, 4, 2],
+    [1.5, 1, 2], [1, NaN, 2], [1, 1, 19], [1, 1, Infinity]
+  ])("rejects tile coordinates outside their finite integer zoom grid (%s,%s,%s)", (x, y, z) => {
+    expect(() => mapTileUrl(x, y, z)).toThrow(RangeError);
+  });
+
+  it.each([
+    "http://maps.example.com/{z}/{x}/{y}.png",
+    "https://user:password@maps.example.com/{z}/{x}/{y}.png",
+    "https://maps.example.com/{z}/{x}/{y}.png#secret",
+    "https://{z}.example.com/{x}/{y}.png",
+    "https://maps.example.com/{z}/{x}/{y}/{token}.png",
+    "https://maps.example.com/{z}/{x}/{y}.png\n",
+    "https://maps.example.com\\evil.example/{z}/{x}/{y}.png",
+    "data:image/svg+xml,{z}/{x}/{y}",
+    "//maps.example.com/{z}/{x}/{y}.png"
+  ])("rejects an unsafe public tile URL template %s", (template) => {
+    expect(() => mapTileUrl(1, 1, 2, template)).toThrow();
+  });
+
+  it("rejects nonfinite pan offsets and wraps valid pans across the dateline", () => {
+    expect(() => panMapCenter({ lat: 34, lng: -118 }, 11, NaN, 0)).toThrow(RangeError);
+    expect(() => panMapCenter({ lat: 34, lng: -118 }, 11, 0, Infinity)).toThrow(RangeError);
+    const point = panMapCenter({ lat: 0, lng: 179.9 }, 2, -80, 0);
+    expect(point.lng).toBeLessThan(0);
+    expect(point.lng).toBeGreaterThanOrEqual(-180);
+    expect(Math.abs(point.lat)).toBeLessThanOrEqual(maxMercatorLatitude);
   });
 
   it("summarizes visible listing prices for the map header", () => {

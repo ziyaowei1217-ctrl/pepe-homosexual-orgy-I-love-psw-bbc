@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import { renderToStaticMarkup } from "react-dom/server";
+import { waitFor } from "@testing-library/react";
 import TestRenderer, { act } from "./support/dom-test-renderer";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -13,6 +14,7 @@ import { writeStoredAuthSession } from "../lib/auth-session";
 afterEach(() => {
   localStorage.clear();
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
 });
 
 describe("roommate channel", () => {
@@ -34,6 +36,24 @@ describe("roommate channel", () => {
     expect(html).toContain("我喜欢的");
     expect(html).toContain("已匹配");
     expect(html).toContain("合租小组");
+  });
+
+  it("uses a real internal link for the closed demo notice without making a roommate action", async () => {
+    vi.stubEnv("NEXT_PUBLIC_WEBSITE_DEMO", "true");
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    let renderer!: TestRenderer.ReactTestRenderer;
+    await act(async () => { renderer = TestRenderer.create(<RoommatesExperience />); });
+    await waitFor(() => expect(renderer.root.findAllByType("a").some(link => nodeText(link) === "演示说明")).toBe(true));
+    const notice = renderer.root.findAllByType("a").find(link => nodeText(link) === "演示说明");
+    expect(notice).toBeDefined();
+    expect(typeof notice!.props.href).toBe("string");
+    const destination = new URL(String(notice!.props.href), window.location.href);
+    expect(destination.origin).toBe(window.location.origin);
+    expect(destination.pathname).toBe("/roommates/likes");
+    expect(destination.search).toBe("");
+    expect(renderer.root.findAllByType("button").some(button => nodeText(button) === "演示说明")).toBe(false);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("uses the real action target for expanded roommate candidates", async () => {

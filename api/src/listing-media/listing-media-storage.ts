@@ -9,9 +9,10 @@ import {
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 import type { ListingMediaStorageConfig } from "../config/env";
-import type {
-  ListingMediaSecurityCode,
-  SupportedListingMediaMimeType
+import {
+  MAX_LISTING_MEDIA_BYTES,
+  type ListingMediaSecurityCode,
+  type SupportedListingMediaMimeType
 } from "./listing-media.constants";
 
 export const LISTING_MEDIA_STORAGE = Symbol("LISTING_MEDIA_STORAGE");
@@ -34,7 +35,7 @@ export interface ListingMediaStorage {
 
 type StorageSecurityCode = Extract<
   ListingMediaSecurityCode,
-  "IMAGE_OBJECT_MISSING" | "IMAGE_STORAGE_UNAVAILABLE"
+  "IMAGE_OBJECT_MISSING" | "IMAGE_STORAGE_UNAVAILABLE" | "IMAGE_TOO_LARGE"
 >;
 
 export class ListingMediaStorageError extends Error {
@@ -47,7 +48,7 @@ export class ListingMediaStorageError extends Error {
 type StorageCommand = GetObjectCommand | DeleteObjectCommand | PutObjectCommand;
 type StorageResponse = GetObjectCommandOutput | DeleteObjectCommandOutput;
 type StorageClient = {
-  send(command: StorageCommand): Promise<StorageResponse>;
+  send(command: StorageCommand, options?: { abortSignal?: AbortSignal }): Promise<StorageResponse>;
 };
 type UploadSigner = (
   client: S3Client,
@@ -126,32 +127,64 @@ export class S3CompatibleListingMediaStorage implements ListingMediaStorage {
         ContentType: mimeType,
         ContentLength: bytes.length,
         IfNoneMatch: "*"
-      }));
+      }), { abortSignal: AbortSignal.timeout(15_000) });
     } catch {
       throw new ListingMediaStorageError("IMAGE_STORAGE_UNAVAILABLE");
     }
   }
 
   async read(key: string): Promise<Buffer> {
+    const controller = new AbortController();
+    let body: (AsyncIterable<Uint8Array> & { destroy?: () => void }) | undefined;
+    const timeout = setTimeout(() => {
+      controller.abort();
+      body?.destroy?.();
+    }, 15_000);
+    timeout.unref();
     try {
       const response = (await this.client.send(
-        new GetObjectCommand({ Bucket: this.config.bucket, Key: key })
+        new GetObjectCommand({ Bucket: this.config.bucket, Key: key }),
+        { abortSignal: controller.signal }
       )) as GetObjectCommandOutput;
       if (!response.Body) throw new ListingMediaStorageError("IMAGE_OBJECT_MISSING");
-      return Buffer.from(await response.Body.transformToByteArray());
+      body = response.Body as AsyncIterable<Uint8Array> & { destroy?: () => void };
+      if (controller.signal.aborted) throw new ListingMediaStorageError("IMAGE_STORAGE_UNAVAILABLE");
+      if (response.ContentLength !== undefined && response.ContentLength > MAX_LISTING_MEDIA_BYTES) {
+        body.destroy?.();
+        throw new ListingMediaStorageError("IMAGE_TOO_LARGE");
+      }
+      // Stream with a hard ceiling: checking only after buffering trusts an upload's length header.
+      const chunks: Buffer[] = [];
+      let totalBytes = 0;
+      try {
+        for await (const chunk of body) {
+          totalBytes += chunk.byteLength;
+          if (totalBytes > MAX_LISTING_MEDIA_BYTES) throw new ListingMediaStorageError("IMAGE_TOO_LARGE");
+          chunks.push(Buffer.from(chunk));
+        }
+        if (controller.signal.aborted) throw new ListingMediaStorageError("IMAGE_STORAGE_UNAVAILABLE");
+        return Buffer.concat(chunks, totalBytes);
+      } catch (error) {
+        body.destroy?.();
+        throw error;
+      }
     } catch (error) {
       if (error instanceof ListingMediaStorageError) throw error;
       if (isMissingObject(error)) {
         throw new ListingMediaStorageError("IMAGE_OBJECT_MISSING");
       }
       throw new ListingMediaStorageError("IMAGE_STORAGE_UNAVAILABLE");
+    } finally {
+      if (controller.signal.aborted) body?.destroy?.();
+      clearTimeout(timeout);
     }
   }
 
   async delete(key: string): Promise<void> {
     try {
       await this.client.send(
-        new DeleteObjectCommand({ Bucket: this.config.bucket, Key: key })
+        new DeleteObjectCommand({ Bucket: this.config.bucket, Key: key }),
+        { abortSignal: AbortSignal.timeout(15_000) }
       );
     } catch (error) {
       if (isMissingObject(error)) return;

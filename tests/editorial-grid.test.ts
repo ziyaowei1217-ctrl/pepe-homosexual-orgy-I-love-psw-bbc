@@ -35,7 +35,7 @@ describe("editorial grid redesign", () => {
   it("applies the editorial language to the global shell and Stay", () => {
     const source = readFileSync("components/sublet-app.tsx", "utf8");
 
-    expect(source).toContain("01 / 短租");
+    expect(source).toContain("01 / 转租");
     expect(source).toContain("02 / 找房");
     expect(source).toContain("editorial-context-strip");
     expect(source).toContain("xl:col-span-7");

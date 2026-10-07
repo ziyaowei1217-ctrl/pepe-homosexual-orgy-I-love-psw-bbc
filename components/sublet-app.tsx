@@ -47,6 +47,7 @@ import { AdminRoommatesScreen } from "@/components/admin-roommates-screen";
 import { AdminStepUpPanel } from "@/components/admin-step-up-panel";
 import { AdminTrustScreen } from "@/components/admin-trust-screen";
 import { ApplicationStatusPanel } from "@/components/application-status-panel";
+import { PswLogo } from "@/components/brand/psw-logo";
 import { HostApplicationInbox } from "@/components/host-application-inbox";
 import { ListingMediaUploader } from "@/components/listing-media-uploader";
 import { RentalApplicationPanel } from "@/components/rental-application-panel";
@@ -89,6 +90,8 @@ import {
   type VerifyEmailResponse,
   type CreateViewingRequestInput
 } from "@/lib/api";
+import { getBrowserStorage } from "@/lib/browser-storage";
+import { newBrowserCommandId } from "@/lib/browser-id";
 import { getListingCoverUrl } from "@/lib/listing-media";
 import { sendDealMessage } from "@/lib/deal-message-commands";
 import { useWindowFocusRefresh } from "@/lib/use-window-focus-refresh";
@@ -497,7 +500,7 @@ const listings = previewListings;
 const roommates = previewDataEnabled ? createRoommates() : [];
 
 const navItems: Array<{ label: string; section: AppSection }> = [
-  { label: "找房", section: "Discover" },
+  { label: "转租", section: "Discover" },
   { label: "找室友", section: "Roommates" },
   { label: "消息", section: "Messages" },
   { label: "看房", section: "Trips" },
@@ -847,8 +850,8 @@ export default function HomePage({
     if (adminStepUpIdentityRef.current === adminStepUpIdentityKey) return;
     adminStepUpIdentityRef.current = adminStepUpIdentityKey;
     setAdminStepUpSession(
-      adminStepUpIdentity && window.sessionStorage
-        ? readStoredAdminStepUpSession(window.sessionStorage, adminStepUpIdentity)
+      adminStepUpIdentity && getBrowserStorage("sessionStorage")
+        ? readStoredAdminStepUpSession(getBrowserStorage("sessionStorage"), adminStepUpIdentity)
         : null
     );
     setAdminStepUpOpen(false);
@@ -857,7 +860,7 @@ export default function HomePage({
   useEffect(() => {
     if (!adminStepUpSession) return;
     if (!getActiveAdminStepUpToken(adminStepUpSession)) {
-      clearStoredAdminStepUpSession(window.sessionStorage);
+      clearStoredAdminStepUpSession(getBrowserStorage("sessionStorage"));
       setAdminStepUpSession(null);
       return;
     }
@@ -868,7 +871,7 @@ export default function HomePage({
           ? null
           : current
       );
-      clearStoredAdminStepUpSession(window.sessionStorage);
+      clearStoredAdminStepUpSession(getBrowserStorage("sessionStorage"));
     }, delay);
     return () => window.clearTimeout(timer);
   }, [adminStepUpSession]);
@@ -876,7 +879,7 @@ export default function HomePage({
   useEffect(() => {
     const storedSession = readStoredAuthSession();
     if (storedSession) setToken(storedSession.accessToken);
-    clearLegacyProductStorage(window.localStorage);
+    clearLegacyProductStorage(getBrowserStorage("localStorage"));
     setAuthSessionHydrated(true);
   }, []);
 
@@ -959,7 +962,11 @@ export default function HomePage({
       favoriteListingIds: Array.from(favoriteIds),
       notifications: user ? notifications : []
     };
-    window.localStorage.setItem(storageKey, JSON.stringify(state));
+    try {
+      window.localStorage.setItem(storageKey, JSON.stringify(state));
+    } catch {
+      // Favorites and reminders remain usable in memory when optional storage is denied.
+    }
   }, [favoriteIds, notifications, user, userUiHydratedFor]);
 
   useEffect(() => {
@@ -1069,7 +1076,7 @@ export default function HomePage({
             const productError = toProductApiError(error);
             if (shouldClearAuthSession(productError)) {
               clearStoredAuthSession();
-              clearStoredAdminStepUpSession(window.sessionStorage);
+              clearStoredAdminStepUpSession(getBrowserStorage("sessionStorage"));
               setToken(null);
               setUser(null);
               setResolvedUserToken(null);
@@ -1097,7 +1104,7 @@ export default function HomePage({
     const productError = toProductApiError(error);
     if (!shouldClearAuthSession(productError)) return false;
     clearStoredAuthSession();
-    clearStoredAdminStepUpSession(window.sessionStorage);
+    clearStoredAdminStepUpSession(getBrowserStorage("sessionStorage"));
     invalidateLatestRequests(profileRequestGuard);
     setAdminStepUpSession(null);
     setAdminStepUpOpen(false);
@@ -1136,7 +1143,7 @@ export default function HomePage({
     const productError = toProductApiError(error);
     if (shouldClearAuthSession(productError)) {
       clearStoredAuthSession();
-      clearStoredAdminStepUpSession(window.sessionStorage);
+      clearStoredAdminStepUpSession(getBrowserStorage("sessionStorage"));
       setToken(null);
       setUser(null);
       setProfile(null);
@@ -1838,7 +1845,7 @@ export default function HomePage({
 
     const optimistic = createOptimisticRoommateMessage({
       conversationId: conversation.id,
-      clientMessageId: crypto.randomUUID(),
+      clientMessageId: newBrowserCommandId(),
       body: trimmedBody,
       createdAt: new Date().toISOString()
     });
@@ -2548,7 +2555,7 @@ export default function HomePage({
     const shouldReturnFromAuthPage =
       pathname.startsWith("/account") && Boolean(authReturnTo) && !shouldOpenOnboarding;
     writeStoredAuthSession(response.accessToken);
-    clearStoredAdminStepUpSession(window.sessionStorage);
+    clearStoredAdminStepUpSession(getBrowserStorage("sessionStorage"));
     setAdminStepUpSession(null);
     setAdminStepUpOpen(false);
     setToken(response.accessToken);
@@ -2563,7 +2570,7 @@ export default function HomePage({
 
   function handleLogout() {
     clearStoredAuthSession();
-    clearStoredAdminStepUpSession(window.sessionStorage);
+    clearStoredAdminStepUpSession(getBrowserStorage("sessionStorage"));
     invalidateLatestRequests(profileRequestGuard);
     setAdminStepUpSession(null);
     setAdminStepUpOpen(false);
@@ -2739,7 +2746,7 @@ export default function HomePage({
         email={user?.email ?? ""}
         onVerified={(session) => {
           if (adminStepUpIdentity) {
-            writeStoredAdminStepUpSession(window.sessionStorage, adminStepUpIdentity, session);
+            writeStoredAdminStepUpSession(getBrowserStorage("sessionStorage"), adminStepUpIdentity, session);
           }
           setAdminStepUpSession(session);
           setAdminStepUpOpen(false);
@@ -3023,15 +3030,12 @@ function StandaloneAuthScreen({
   toast: string;
 }) {
   return (
-    <main className="min-h-screen bg-[radial-gradient(circle_at_top_left,rgba(0,106,255,0.12),transparent_34%),linear-gradient(180deg,#f8fbff_0%,#ffffff_58%)]">
+    <main className="min-h-screen bg-[#f7f8fb]">
       <header className="app-shell flex items-center justify-between gap-4 py-5 md:py-7">
         <div className="flex items-center gap-3">
-          <div className="flex size-11 items-center justify-center rounded-[22px] bg-[linear-gradient(135deg,#006AFF,#0D4599)] text-white shadow-[0_16px_40px_rgba(0,106,255,0.28)]">
-            <Home className="size-5" aria-hidden="true" />
-          </div>
           <div>
-            <div className="text-lg font-black text-primary">Sublet Pipeline</div>
-            <div className="text-xs font-bold text-[#006AFF]">可信赖的短租与室友平台</div>
+            <PswLogo className="h-9 w-auto max-w-full" />
+            <div className="mt-1 text-xs font-bold text-[#1a3dd6]">留学生转租与室友平台</div>
           </div>
         </div>
         <Button type="button" variant="ghost" size="sm" onClick={onClose}>
@@ -3043,13 +3047,13 @@ function StandaloneAuthScreen({
         <div className="mx-auto max-w-2xl text-center">
           <span className="editorial-kicker">账户与安全</span>
           <h1 className="mt-3 text-3xl font-black tracking-[-0.035em] text-primary md:text-5xl">
-            登录 Sublet Pipeline
+            登录 psw
           </h1>
           <p className="mx-auto mt-3 max-w-xl text-sm font-semibold leading-6 text-muted-foreground md:text-base">
             {contextMessage}
           </p>
         </div>
-        <div className="mx-auto mt-6 max-w-3xl overflow-hidden rounded-[28px] border border-blue-100 bg-white shadow-panel md:mt-8">
+        <div className="mx-auto mt-6 max-w-3xl overflow-hidden rounded-[28px] border border-[#1a3dd6]/20 bg-white shadow-panel md:mt-8">
           <AuthFlowPanel
             token={token}
             user={user}
@@ -3115,12 +3119,9 @@ function AppHeader({
     <header className="sticky top-0 z-30 border-b border-border bg-background/92 backdrop-blur-xl">
       <div className="app-shell grid min-h-[72px] grid-cols-[minmax(0,1fr)_auto] items-center gap-3 py-3 md:grid-cols-8 md:gap-5 xl:grid-cols-12 xl:gap-6">
         <div className="flex min-w-0 items-center gap-3 md:col-span-2 xl:col-span-3">
-          <div className="flex size-11 items-center justify-center rounded-[22px] bg-[linear-gradient(135deg,#006AFF,#0D4599)] text-white shadow-[0_16px_40px_rgba(0,106,255,0.28)]">
-            <Home className="size-5" aria-hidden="true" />
-          </div>
           <div className="min-w-0 leading-tight">
-            <div className="truncate text-lg font-black text-primary">Sublet Pipeline</div>
-            <div className="hidden text-xs font-bold text-[#006AFF] xl:block">可信赖的短租与室友平台</div>
+            <PswLogo className="h-9 w-auto max-w-full" />
+            <div className="mt-1 hidden text-xs font-bold text-[#1a3dd6] xl:block">留学生转租与室友平台</div>
           </div>
         </div>
 
@@ -4610,9 +4611,9 @@ function SearchHero({
       <Card className="rounded-[18px] border-border bg-card shadow-panel">
         <CardContent className="grid grid-cols-4 gap-4 p-4 md:grid-cols-8 md:gap-5 md:p-5 xl:grid-cols-12 xl:items-end xl:gap-6 xl:p-6">
           <div className="col-span-4 min-w-0 md:col-span-8 xl:col-span-3">
-            <span className="editorial-kicker">01 / 短租</span>
+            <span className="editorial-kicker">01 / 转租</span>
             <h2 className="mt-2 text-2xl font-black leading-tight tracking-[-0.035em] text-foreground">
-              查找适合你的短租
+              查找适合你的转租
             </h2>
             {previewDataEnabled ? <Badge className="mt-2" variant="warning">开发预览数据</Badge> : null}
           </div>
@@ -4626,7 +4627,7 @@ function SearchHero({
                 onChange={(event) =>
                   onFiltersChange({ ...filters, query: event.target.value, page: 1 })
                 }
-                placeholder="学校、公司、街区"
+                placeholder="学校、城市或街区"
               />
             </div>
           </label>

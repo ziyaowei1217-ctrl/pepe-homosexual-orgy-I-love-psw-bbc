@@ -1,9 +1,9 @@
 "use client";
 
 import { ArrowLeft, Check, Heart, MessageCircle, Settings2, Sparkles, UsersRound, X } from "lucide-react";
-import { SmartImage } from "@/components/ui/smart-image";
-import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { SmartImage as Image } from "@/components/ui/smart-image";
+import Link from "@/components/ui/app-link";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { apiGet, apiPost } from "@/lib/api";
 import type { ApiRoommate, ApiRoommateActionResponse, ApiRoommateActivity, ApiRoommateDeckResponse } from "@/lib/api";
@@ -12,6 +12,7 @@ import { assertCurrentAuthSession, readStoredAuthSession } from "@/lib/auth-sess
 import { getRoommateActionTargetId } from "@/lib/roommate-deck-client";
 import { cn } from "@/lib/utils";
 import { useAuthSessionToken } from "@/lib/use-auth-session-token";
+import { isWebsiteDemo } from "@/lib/website-demo";
 
 export function RoommatesExperience() {
   const token = useAuthSessionToken();
@@ -25,48 +26,105 @@ function RoommatesSessionExperience({ token }: { token: string | null }) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const active = roommates[index] ?? null;
-
+  const [nextCursor, setNextCursor] = useState<number | null>(null);
+  const [loadAttempt, setLoadAttempt] = useState(0);
+  const actedTargets = useRef(new Set<string>());
+  const actionBusy = useRef(false);
+  const mounted = useRef(true);
+  const loadVersion = useRef(0);
+  const [deckFilters] = useState(() => {
+    const params = new URLSearchParams(typeof window === "undefined" ? "" : window.location.search);
+    const filters = new URLSearchParams();
+    for (const key of ["budgetMin", "budgetMax", "school", "schools", "hobby", "hobbies", "city", "gender", "strategy"]) {
+      const value = params.get(key);
+      if (value) filters.set(key, value);
+    }
+    return filters.toString();
+  });
   useEffect(() => {
-    let cancelled = false;
-    const isCurrent = () => !cancelled && (readStoredAuthSession()?.accessToken ?? null) === token;
-    apiGet<ApiRoommateDeckResponse>("/roommates/deck?limit=24", token ?? undefined)
-      .then((deck) => { if (isCurrent()) setRoommates(deck.items); })
-      .catch((caught) => { if (isCurrent()) setError(caught instanceof Error ? caught.message : "室友推荐暂时无法加载。"); })
-      .finally(() => { if (isCurrent()) setLoading(false); });
-    return () => { cancelled = true; };
-  }, [token]);
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
+  const loadDeck = useCallback(async () => {
+    const version = ++loadVersion.current;
+    const isCurrent = () => mounted.current && version === loadVersion.current && (readStoredAuthSession()?.accessToken ?? null) === token;
+    setLoading(true);
+    setError(null);
+    try {
+      // Actions remove profiles server-side, so offsets shift. Start with the
+      // first eligible page and use its cursor only when deduplication empties it.
+      let cursor = 0;
+      const visited = new Set<number>();
+      while (!visited.has(cursor)) {
+        visited.add(cursor);
+        const params = new URLSearchParams(deckFilters);
+        params.set("limit", "24");
+        if (cursor) params.set("cursor", String(cursor));
+        const deck = await apiGet<ApiRoommateDeckResponse>(`/roommates/deck?${params}`, token ?? undefined);
+        if (!isCurrent()) return;
+        const targets = new Set<string>();
+        const items = deck.items.filter((item) => {
+          const id = getRoommateActionTargetId(item) ?? item.id ?? item.name;
+          if (actedTargets.current.has(id) || targets.has(id)) return false;
+          targets.add(id);
+          return true;
+        });
+        const next = typeof deck.pageInfo?.nextCursor === "number" ? deck.pageInfo.nextCursor : null;
+        if (items.length || next === null || visited.has(next)) {
+          setRoommates(items); setIndex(0); setNextCursor(next);
+          break;
+        }
+        cursor = next;
+      }
+    } catch (caught) {
+      if (isCurrent()) setError(caught instanceof Error ? caught.message : "室友推荐暂时无法加载。");
+    } finally {
+      if (isCurrent()) setLoading(false);
+    }
+  }, [deckFilters, token]);
+
+  useEffect(() => { void loadDeck(); }, [loadDeck, loadAttempt]);
 
   async function decide(action: "LIKE" | "PASS") {
     const actionTargetId = active ? getRoommateActionTargetId(active) : undefined;
-    if (!actionTargetId || pending) return;
-    if (!token) {
-      window.location.assign(authRoute({ returnTo: "/roommates", intent: "roommate-action" }));
+    if (!actionTargetId || actionBusy.current || loading) return;
+    if (isWebsiteDemo()) {
+      if (action === "PASS") setIndex((current) => (current + 1) % roommates.length);
       return;
     }
+    if (!token) {
+      window.location.assign(authRoute({ returnTo: deckFilters ? `/roommates?${deckFilters}` : "/roommates", intent: "roommate-action" }));
+      return;
+    }
+    actionBusy.current = true;
     setPending(true);
     setError(null);
     try {
       assertCurrentAuthSession(token);
       const result = await apiPost<ApiRoommateActionResponse>(`/roommates/${encodeURIComponent(actionTargetId)}/actions`, { action }, token);
       assertCurrentAuthSession(token);
-      setRoommates((current) => current.filter((item) => getRoommateActionTargetId(item) !== actionTargetId));
+      if (!mounted.current) return;
+      actedTargets.current.add(actionTargetId);
+      const remaining = roommates.filter((item) => getRoommateActionTargetId(item) !== actionTargetId);
+      setRoommates(remaining);
       setIndex(0);
       if (result.conversation) window.location.assign(`/inbox/${encodeURIComponent(result.conversation.id)}`);
+      else if (!remaining.length && nextCursor !== null) await loadDeck();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "操作失败，请重试。");
-    } finally { setPending(false); }
+    } finally { actionBusy.current = false; if (mounted.current) setPending(false); }
   }
 
   return <main className="min-h-[calc(100dvh-72px)] bg-[#f7f8fb]">
-    <section className="border-b border-slate-200 bg-white"><div className="mx-auto flex max-w-[1320px] flex-col justify-between gap-4 px-4 py-5 sm:px-6 sm:py-9 lg:flex-row lg:items-end lg:px-8"><div><p className="hidden items-center gap-2 text-xs font-black uppercase tracking-[0.15em] lg:flex text-[#2453ff]"><UsersRound className="size-4" />Roommate match</p><h1 className="text-3xl font-black tracking-[-0.055em] sm:text-6xl lg:mt-3">找到合拍的室友</h1><p className="mt-2 text-sm leading-6 text-slate-500 sm:mt-4">浏览室友资料，互相喜欢后即可开始聊天。</p></div><div className="flex gap-2"><Link href="/roommates/likes" className="secondary-action"><Heart className="size-4" />喜欢列表</Link><Link href="/account/profile" className="secondary-action" aria-label="编辑个人资料"><Settings2 className="size-4" /></Link></div></div></section>
+    <section className="border-b border-slate-200 bg-white"><div className="mx-auto flex max-w-[1320px] flex-col justify-between gap-4 px-4 py-5 sm:px-6 sm:py-9 lg:flex-row lg:items-end lg:px-8"><div><p className="hidden items-center gap-2 text-sm font-medium lg:flex text-brand-moss"><UsersRound className="size-4" />Roommate match</p><h1 className="text-3xl font-semibold tracking-[-0.025em] text-brand-ink sm:text-[40px] lg:mt-3">找到合拍的室友</h1><p className="mt-2 text-sm leading-6 text-slate-500 sm:mt-4">留学合租，先比较预算、学校通勤和作息；互相喜欢后再聊细节。</p></div><div className="flex gap-2"><Link href="/roommates/likes" className="secondary-action"><Heart className="size-4" />喜欢列表</Link><Link href="/account/profile" className="secondary-action" aria-label="编辑个人资料"><Settings2 className="size-4" /></Link></div></div></section>
     <div className="mx-auto grid max-w-[1320px] gap-6 px-4 py-5 sm:px-6 sm:py-8 lg:grid-cols-[290px_minmax(0,1fr)] lg:px-8">
-      <aside className="order-last h-fit rounded-[24px] border border-slate-200 bg-white p-5 lg:order-first"><p className="text-xs font-black uppercase tracking-[.13em] text-[#2453ff]">你的个人资料</p><h2 className="mt-2 text-xl font-black">让室友认识你</h2><p className="mt-3 text-sm leading-6 text-slate-500">补充城市、学校和个人简介，方便彼此了解。</p><Link href="/account/profile" className="mt-5 inline-flex text-xs font-black text-[#2453ff]">编辑资料 →</Link></aside>
+      <aside className="order-last h-fit rounded-[20px] border border-slate-200 bg-white p-5 lg:order-first"><p className="text-sm font-medium text-brand-moss">你的个人资料</p><h2 className="mt-2 text-xl font-semibold">让室友认识你</h2><p className="mt-3 text-sm leading-6 text-slate-500">补充城市、学校和个人简介，方便彼此了解。</p><Link href="/account/profile" className="mt-5 inline-flex text-xs font-semibold text-[#2453ff]">编辑资料 →</Link></aside>
       <section className="min-w-0">
         <p className="sr-only">为什么适合你</p>
         {loading ? <StatusCard text="正在加载室友推荐…" /> : null}
-        {error ? <StatusCard text={error} error /> : null}
+        {error ? <><StatusCard text={error} error />{!active ? <button type="button" onClick={() => setLoadAttempt((attempt) => attempt + 1)} className="primary-action mt-4">重新加载推荐</button> : null}</> : null}
         {!loading && !error && !active ? <StatusCard text="当前没有新的推荐，稍后再来看看。" /> : null}
-        {active ? <article className="overflow-hidden rounded-[30px] border border-slate-200 bg-white shadow-xl"><div className="relative h-[240px] bg-slate-100 sm:h-[420px] lg:h-[560px]"><SmartImage src={active.image} alt={active.name} fill priority sizes="(max-width:1024px) 100vw, 65vw" className="object-cover object-[50%_20%]" /><div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-transparent to-transparent" /><div className="absolute left-5 top-5 rounded-full bg-white px-3 py-1.5 text-xs font-black text-[#2453ff]">{active.compatibilityScore ?? active.match}% 匹配</div><div className="absolute inset-x-6 bottom-6 text-white"><h2 className="text-4xl font-black">{active.name}, {active.age}</h2><p className="mt-2 text-sm text-slate-200">{active.role}</p></div></div><div className="grid gap-4 p-4 sm:gap-6 sm:p-6 md:grid-cols-2"><div><p className="text-xs font-black text-slate-400">预算与地点</p><p className="mt-2 text-sm font-black">{active.budget} · {active.commute}</p><div className="mt-4 flex flex-wrap gap-2">{active.tags.map((tag) => <span key={tag} className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-600">{tag}</span>)}</div></div><div className="hidden rounded-[20px] bg-blue-50 p-5 md:block"><h3 className="flex items-center gap-2 text-sm font-black"><Sparkles className="size-4 text-[#2453ff]" />为什么适合你</h3><ul className="mt-4 space-y-2">{(active.reasons ?? active.recommendation?.primarySignals ?? []).map((reason) => <li key={reason} className="flex gap-2 text-xs text-blue-900"><Check className="size-3.5 shrink-0" />{reason}</li>)}</ul></div><details className="rounded-2xl bg-blue-50 p-4 md:hidden"><summary className="cursor-pointer text-sm font-bold text-blue-900">为什么适合你</summary><ul className="mt-3 space-y-2">{(active.reasons ?? active.recommendation?.primarySignals ?? []).map((reason) => <li key={reason} className="flex gap-2 text-xs leading-5 text-blue-900"><Check className="mt-0.5 size-3.5 shrink-0" />{reason}</li>)}</ul></details></div><div className="flex justify-center gap-2 border-t border-slate-200 p-4 sm:gap-4 sm:p-5"><button disabled={pending} onClick={() => void decide("PASS")} className="grid size-14 place-items-center rounded-full border border-slate-200" aria-label={`跳过 ${active.name}`}><X className="size-5" /></button><button disabled={pending} onClick={() => void decide("LIKE")} className="primary-action px-4 sm:px-8"><Heart className="size-5" />感兴趣</button>{active.id ? <Link href={`/roommates/${encodeURIComponent(active.id)}`} className="secondary-action">查看资料</Link> : null}</div></article> : null}
+        {active ? <article className="overflow-hidden rounded-[20px] border border-slate-200 bg-white shadow-sm"><div className="relative h-[240px] bg-slate-100 sm:h-[340px] lg:h-[400px]"><Image src={active.image} alt={active.name} fill priority sizes="(max-width:1024px) 100vw, 65vw" className="object-cover object-[50%_20%]" /><div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-transparent to-transparent" /><div className="absolute left-5 top-5 rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-[#2453ff]">{isWebsiteDemo() ? "室友示例" : `${active.compatibilityScore ?? active.match}% 匹配`}</div><div className="absolute inset-x-6 bottom-6 text-white"><h2 className="text-[28px] font-semibold leading-tight tracking-[-0.025em] sm:text-4xl">{active.name}, {active.age}</h2><p className="mt-2 text-sm text-slate-200">{active.role}</p></div></div><div className="grid gap-4 p-4 sm:gap-6 sm:p-6 md:grid-cols-2"><div><p className="text-xs font-medium text-brand-moss">预算与地点</p><p className="mt-2 text-sm font-medium leading-6 text-brand-ink">{active.budget} · {active.commute}</p><div className="mt-4 flex flex-wrap gap-2">{active.tags.map((tag) => <span key={tag} className="rounded-full bg-[#f7f8fb] px-3 py-1.5 text-xs font-medium text-brand-moss">{tag}</span>)}</div></div><div className="hidden rounded-[20px] bg-brand-soft p-5 md:block"><h3 className="flex items-center gap-2 text-sm font-semibold"><Sparkles className="size-4 text-[#2453ff]" />为什么适合你</h3><ul className="mt-4 space-y-2">{(active.reasons ?? active.recommendation?.primarySignals ?? []).map((reason) => <li key={reason} className="flex gap-2 text-xs text-brand-ink"><Check className="size-3.5 shrink-0" />{reason}</li>)}</ul></div><details className="rounded-2xl bg-brand-soft p-4 md:hidden"><summary className="cursor-pointer text-sm font-bold text-brand-ink">为什么适合你</summary><ul className="mt-3 space-y-2">{(active.reasons ?? active.recommendation?.primarySignals ?? []).map((reason) => <li key={reason} className="flex gap-2 text-xs leading-5 text-brand-ink"><Check className="mt-0.5 size-3.5 shrink-0" />{reason}</li>)}</ul></details></div><div className="flex flex-nowrap justify-center gap-2 border-t border-brand/15 p-4 sm:gap-4 sm:p-5"><button disabled={pending} onClick={() => void decide("PASS")} className="grid size-11 shrink-0 place-items-center rounded-full border border-brand/20 text-brand-moss sm:size-14" aria-label={isWebsiteDemo() ? "查看下一个室友示例" : `跳过 ${active.name}`}><X className="size-5" /></button>{isWebsiteDemo() ? <Link href="/roommates/likes" className="primary-action min-w-0 whitespace-nowrap px-3 text-[13px] sm:px-8 sm:text-sm"><Heart className="size-5" />演示说明</Link> : <button disabled={pending} onClick={() => void decide("LIKE")} className="primary-action min-w-0 whitespace-nowrap px-3 text-[13px] sm:px-8 sm:text-sm"><Heart className="size-5" />感兴趣</button>}{active.id ? <Link href={`/roommates/${encodeURIComponent(active.id)}`} className="secondary-action min-w-0 whitespace-nowrap px-3 text-[13px] sm:px-5 sm:text-sm">查看资料</Link> : null}</div></article> : null}
       </section>
     </div>
   </main>;
@@ -80,38 +138,23 @@ export function RoommateLikesExperience() {
 function RoommateLikesSessionExperience({ token }: { token: string | null }) {
   const [tab, setTab] = useState<"inbound" | "outbound" | "matched">("inbound");
   const [activity, setActivity] = useState<ApiRoommateActivity | null>(null);
-  const [authenticated, setAuthenticated] = useState(false);
+  const authenticated = Boolean(token);
+  const [loading, setLoading] = useState(Boolean(token));
+  const [loadAttempt, setLoadAttempt] = useState(0);
   const [error, setError] = useState<string | null>(null);
-  const [likingId, setLikingId] = useState<string | null>(null);
-  const [reloadKey, setReloadKey] = useState(0);
-
-  async function likeBack(profile: ApiRoommate) {
-    const actionTargetId = getRoommateActionTargetId(profile);
-    if (!token || !actionTargetId || likingId) return;
-    setLikingId(actionTargetId);
-    setError(null);
-    try {
-      assertCurrentAuthSession(token);
-      await apiPost<ApiRoommateActionResponse>(`/roommates/${encodeURIComponent(actionTargetId)}/actions`, { action: "LIKE" }, token);
-      assertCurrentAuthSession(token);
-      setReloadKey((key) => key + 1);
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "回应失败，请稍后再试。");
-    } finally {
-      setLikingId(null);
-    }
-  }
 
   useEffect(() => {
     if (!token) return;
-    setAuthenticated(true);
+    setLoading(true);
+    setError(null);
     let cancelled = false;
     const isCurrent = () => !cancelled && readStoredAuthSession()?.accessToken === token;
     apiGet<ApiRoommateActivity>("/roommates/activity", token)
       .then((next) => { if (isCurrent()) setActivity(next); })
-      .catch((caught) => { if (isCurrent()) setError(caught instanceof Error ? caught.message : "喜欢列表暂时无法加载。"); });
+      .catch((caught) => { if (isCurrent()) setError(caught instanceof Error ? caught.message : "喜欢列表暂时无法加载。"); })
+      .finally(() => { if (isCurrent()) setLoading(false); });
     return () => { cancelled = true; };
-  }, [reloadKey, token]);
+  }, [token, loadAttempt]);
 
   const items = useMemo(() => {
     if (!activity) return [];
@@ -120,8 +163,8 @@ function RoommateLikesSessionExperience({ token }: { token: string | null }) {
     return activity.outbound.map((item) => item.profile).filter((profile) => profile.id && activity.matchedProfileIds.includes(profile.id));
   }, [activity, tab]);
 
-  return <main className="min-h-[calc(100dvh-72px)] bg-[#f7f8fb]"><div className="mx-auto max-w-[1220px] px-4 py-10 sm:px-6 lg:px-8"><header className="border-b border-slate-200 pb-7"><Link href="/roommates" className="flex items-center gap-1 text-xs font-black text-slate-500"><ArrowLeft className="size-3.5" />返回匹配</Link><h1 className="mt-4 text-4xl font-black tracking-[-0.055em] sm:text-6xl">喜欢与匹配</h1><p className="mt-3 text-sm text-slate-500">单向兴趣和双方匹配分别展示。</p><Link href="/roommates/teams" className="secondary-action mt-5"><UsersRound className="size-4" />合租小组</Link></header><div className="mt-7 flex gap-2">{[["inbound","喜欢我的"],["outbound","我喜欢的"],["matched","已匹配"]].map(([value,label]) => <button key={value} onClick={() => setTab(value as typeof tab)} className={cn("rounded-full border px-4 py-2.5 text-sm font-black", tab === value ? "border-slate-950 bg-slate-950 text-white" : "border-slate-200 bg-white")}>{label}</button>)}</div>{!authenticated ? <div className="mt-7"><StatusCard text="登录后查看真实喜欢与匹配" /><Link href={authRoute({ returnTo: "/roommates/likes" })} className="primary-action mx-auto mt-4 w-fit">登录</Link></div> : null}{error ? <StatusCard text={error} error /> : null}{authenticated && activity && items.length === 0 ? <StatusCard text="这里还没有记录。" /> : null}<div className="mt-7 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">{items.map((profile) => <ProfileCard key={profile.id ?? profile.name} profile={profile} matched={Boolean(profile.id && activity?.matchedProfileIds.includes(profile.id))} onLikeBack={tab === "inbound" ? () => void likeBack(profile) : undefined} liking={Boolean(likingId)} />)}</div></div></main>;
+  return <main className="min-h-[calc(100dvh-72px)] bg-[#f7f8fb]"><div className="mx-auto max-w-[1220px] px-4 py-10 sm:px-6 lg:px-8"><header className="border-b border-slate-200 pb-7"><Link href="/roommates" className="flex items-center gap-1 text-xs font-black text-slate-500"><ArrowLeft className="size-3.5" />返回匹配</Link><h1 className="mt-4 text-4xl font-black tracking-[-0.055em] sm:text-6xl">喜欢与匹配</h1><p className="mt-3 text-sm text-slate-500">单向兴趣和双方匹配分别展示。</p><Link href="/roommates/teams" className="secondary-action mt-5"><UsersRound className="size-4" />合租小组</Link></header><div className="mt-7 flex gap-2">{[["inbound","喜欢我的"],["outbound","我喜欢的"],["matched","已匹配"]].map(([value,label]) => <button key={value} onClick={() => setTab(value as typeof tab)} className={cn("rounded-full border px-4 py-2.5 text-sm font-black", tab === value ? "border-slate-950 bg-slate-950 text-white" : "border-slate-200 bg-white")}>{label}</button>)}</div>{!authenticated ? <div className="mt-7"><StatusCard text="登录后查看真实喜欢与匹配" /><Link href={authRoute({ returnTo: "/roommates/likes" })} className="primary-action mx-auto mt-4 w-fit">登录</Link></div> : null}{loading ? <StatusCard text="正在加载喜欢与匹配…" loading /> : null}{error ? <><StatusCard text={error} error /><button type="button" onClick={() => setLoadAttempt((attempt) => attempt + 1)} className="primary-action mt-4">重新加载喜欢与匹配</button></> : null}{authenticated && !loading && !error && activity && items.length === 0 ? <StatusCard text="这里还没有记录。" /> : null}<div className="mt-7 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">{items.map((profile) => <ProfileCard key={profile.id ?? profile.name} profile={profile} matched={Boolean(profile.id && activity?.matchedProfileIds.includes(profile.id))} />)}</div></div></main>;
 }
 
-function ProfileCard({ profile, matched, onLikeBack, liking = false }: { profile: ApiRoommate; matched: boolean; onLikeBack?: () => void; liking?: boolean }) { return <article className="overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-sm"><Link href={`/roommates/${encodeURIComponent(profile.id ?? "")}`} className="relative block aspect-[4/3] bg-slate-100"><SmartImage src={profile.image} alt={profile.name} fill sizes="(max-width:768px) 100vw, 33vw" className="object-cover" /></Link><div className="p-5"><h2 className="text-lg font-black">{profile.name}, {profile.age}</h2><p className="mt-1 text-xs text-slate-500">{profile.role}</p><div className="mt-4 flex gap-2">{matched ? <Link href={`/inbox?roommateId=${encodeURIComponent(profile.id ?? "")}`} className="primary-action"><MessageCircle className="size-4" />开始聊天</Link> : onLikeBack ? <button type="button" disabled={liking} onClick={onLikeBack} className="primary-action"><Heart className="size-4" />也喜欢 TA</button> : <span className="rounded-full bg-blue-50 px-3 py-2 text-xs font-black text-blue-700">等待回应</span>}</div></div></article>; }
-function StatusCard({ text, error = false }: { text: string; error?: boolean }) { return <div role={error ? "alert" : undefined} className={cn("mt-6 rounded-[24px] border border-dashed bg-white p-10 text-center text-sm font-bold", error ? "border-red-200 text-red-700" : "border-slate-300 text-slate-500")}>{text}</div>; }
+function ProfileCard({ profile, matched }: { profile: ApiRoommate; matched: boolean }) { return <article className="overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-sm"><Link href={`/roommates/${encodeURIComponent(profile.id ?? "")}`} className="relative block aspect-[4/3] bg-slate-100"><Image src={profile.image} alt={profile.name} fill sizes="(max-width:768px) 100vw, 33vw" className="object-cover" /></Link><div className="p-5"><h2 className="text-lg font-black">{profile.name}, {profile.age}</h2><p className="mt-1 text-xs text-slate-500">{profile.role}</p><div className="mt-4 flex gap-2">{matched ? <Link href={`/inbox?roommateId=${encodeURIComponent(profile.id ?? "")}`} className="primary-action"><MessageCircle className="size-4" />开始聊天</Link> : <span className="rounded-full bg-blue-50 px-3 py-2 text-xs font-black text-blue-700">等待回应</span>}</div></div></article>; }
+function StatusCard({ text, error = false, loading = false }: { text: string; error?: boolean; loading?: boolean }) { return <div role={error ? "alert" : loading ? "status" : undefined} className={cn("mt-6 rounded-[24px] border border-dashed bg-white p-10 text-center text-sm font-bold", error ? "border-red-200 text-red-700" : "border-slate-300 text-slate-500")}>{text}</div>; }

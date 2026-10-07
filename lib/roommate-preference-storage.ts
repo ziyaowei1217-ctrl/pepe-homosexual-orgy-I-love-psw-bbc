@@ -4,7 +4,7 @@ const roommatePreferenceStorageKey = "sublet_roommate_preference_v1";
 const genderPreferences = new Set<SharedLivingGenderPreference>(["Open", "Women", "Men", "Non-binary"]);
 
 export function readStoredRoommatePreference(fallback: RoommatePreference): RoommatePreference {
-  if (typeof window === "undefined" || typeof window.localStorage === "undefined") return fallback;
+  if (typeof window === "undefined") return fallback;
 
   try {
     const stored = window.localStorage.getItem(roommatePreferenceStorageKey);
@@ -17,7 +17,7 @@ export function readStoredRoommatePreference(fallback: RoommatePreference): Room
 }
 
 export function writeStoredRoommatePreference(preference: RoommatePreference) {
-  if (typeof window === "undefined" || typeof window.localStorage === "undefined") return;
+  if (typeof window === "undefined") return;
 
   try {
     window.localStorage.setItem(roommatePreferenceStorageKey, JSON.stringify(preference));

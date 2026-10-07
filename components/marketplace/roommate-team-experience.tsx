@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import Link from "@/components/ui/app-link";
 import { useCallback, useEffect, useState } from "react";
 
 import { useAuthSessionToken } from "@/lib/use-auth-session-token";

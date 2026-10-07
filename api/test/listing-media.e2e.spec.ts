@@ -170,17 +170,27 @@ describe("listing media HTTP API", () => {
     }
   });
 
-  it("delivers published bytes with immutable and nosniff headers", async () => {
+  it("delivers published bytes with revalidation and nosniff headers", async () => {
     await request(app.getHttpServer())
       .get("/api/v1/listing-media/media-1/content")
       .expect(200)
       .expect("Content-Type", "image/png")
       .expect("Content-Length", "4")
-      .expect("Cache-Control", "public, max-age=31536000, immutable")
+      .expect("Cache-Control", "public, max-age=0, must-revalidate")
       .expect("X-Content-Type-Options", "nosniff")
+      .expect("ETag", '"public-checksum"')
       .expect(({ body }: { body: Buffer }) => {
         expect(body).toEqual(Buffer.from([1, 2, 3, 4]));
       });
+  });
+
+  it("returns an empty 304 after the service confirms public cache visibility", async () => {
+    service.readPublished.mockResolvedValueOnce({ notModified: true, etag: '"public-checksum"' } as never);
+    const response = await request(app.getHttpServer()).get("/api/v1/listing-media/media-1/content")
+      .set("If-None-Match", '"public-checksum"').expect(304)
+      .expect("Cache-Control", "public, max-age=0, must-revalidate");
+    expect(response.text ?? "").toBe("");
+    expect(service.readPublished).toHaveBeenCalledWith("media-1", '"public-checksum"');
   });
 
   it("delivers ready media through the protected administrator review route", async () => {
@@ -247,7 +257,7 @@ function createService() {
           message: "Listing media not available"
         });
       }
-      return { bytes: Buffer.from([1, 2, 3, 4]), mimeType: "image/png" };
+      return { bytes: Buffer.from([1, 2, 3, 4]), mimeType: "image/png", etag: '"public-checksum"' };
     }),
     readForReview: vi.fn(async () => ({
       bytes: Buffer.from([1, 2, 3, 4]),

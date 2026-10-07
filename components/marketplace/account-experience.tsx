@@ -13,7 +13,7 @@ import {
   ShieldCheck,
   UserRound
 } from "lucide-react";
-import Link from "next/link";
+import Link from "@/components/ui/app-link";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 
 import {
@@ -106,7 +106,7 @@ function AccountSessionExperience({ mode, returnTo = null, authIntent = "account
         <p className="mt-2 text-sm leading-6 text-slate-600 lg:mt-3 lg:text-slate-500"><span className="lg:hidden">管理资料，查看认证与通知方式。</span><span className="hidden lg:inline">更新个人资料，查看认证状态、申请和消息。</span></p>
       </header>
       {notice ? <div className="mt-5 rounded-[16px] bg-indigo-50 px-4 py-3 text-sm font-bold text-indigo-800">{notice}</div> : null}
-      <div className="mt-5 grid items-start gap-4 lg:mt-8 lg:grid-cols-[250px_minmax(0,1fr)] lg:gap-6">
+      <div className="mt-5 grid grid-cols-1 items-start gap-4 lg:mt-8 lg:grid-cols-[250px_minmax(0,1fr)] lg:gap-6">
         <aside className="flex min-w-0 items-center overflow-hidden rounded-[18px] border border-slate-200 bg-white p-1 shadow-sm lg:block lg:rounded-[24px] lg:p-2">
           <div className="hidden items-center gap-3 p-3 lg:flex"><span className="grid size-11 place-items-center rounded-full bg-blue-50 text-blue-700"><UserRound className="size-5" /></span><span className="min-w-0"><span className="block truncate text-sm font-black">{user?.email ?? "访客账户"}</span><span className="mt-0.5 block text-xs text-slate-500">{authenticated ? "账户已连接" : loading ? "正在检查登录状态" : "登录后同步进度"}</span></span></div>
           <nav className="grid min-w-0 flex-1 grid-cols-4 lg:mt-2 lg:block lg:space-y-1" aria-label="账户导航">
@@ -234,7 +234,7 @@ function ProfileEditor({ token, profile, onProfileChange, onNotice }: { token: s
       setSaving(false);
     }
   }
-  return <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm sm:p-8"><h2 className="text-2xl font-black">个人资料</h2><p className="mt-2 text-sm text-slate-500">更新账户名称、所在地和个人简介。租房申请的联系人信息请在提交时核对。</p><form className="mt-7 grid gap-5 sm:grid-cols-2" onSubmit={save}><Field label="显示名称" value={draft.displayName ?? ""} onChange={(value) => { setDraft({ ...draft, displayName: value }); setError(null); }} /><Field label="学校或公司" value={draft.school ?? ""} onChange={(value) => { setDraft({ ...draft, school: value }); setError(null); }} /><Field label="城市" value={draft.city ?? ""} onChange={(value) => { setDraft({ ...draft, city: value }); setError(null); }} /><label className="grid gap-2 text-sm font-black">身份<select className="application-input" value={draft.role} onChange={(event) => { setDraft({ ...draft, role: event.target.value as UpdateProfileInput["role"] }); setError(null); }}><option value="renter">租客</option><option value="lister">房东</option><option value="both">租客兼房东</option></select></label><label className="grid gap-2 text-sm font-black sm:col-span-2">个人简介<textarea className="min-h-28 rounded-[16px] border border-slate-200 p-4 text-sm outline-none focus:border-blue-400" value={draft.bio ?? ""} onChange={(event) => { setDraft({ ...draft, bio: event.target.value }); setError(null); }} /></label>{error ? <p role="alert" className="rounded-[16px] bg-red-50 px-4 py-3 text-sm font-bold text-red-700 sm:col-span-2">{error}</p> : null}<button disabled={saving} className="w-fit rounded-full bg-[#2453ff] px-6 py-3 text-sm font-black text-white">{saving ? "保存中…" : "保存资料"}</button></form></section>;
+  return <section className="min-w-0 rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm sm:p-8"><h2 className="text-2xl font-black">个人资料</h2><p className="mt-2 text-sm text-slate-500">更新账户名称、所在地和个人简介。租房申请的联系人信息请在提交时核对。</p><form className="mt-7 grid grid-cols-1 gap-5 sm:grid-cols-2" onSubmit={save}><Field label="显示名称" value={draft.displayName ?? ""} onChange={(value) => { setDraft({ ...draft, displayName: value }); setError(null); }} /><Field label="学校或公司" value={draft.school ?? ""} onChange={(value) => { setDraft({ ...draft, school: value }); setError(null); }} /><Field label="城市" value={draft.city ?? ""} onChange={(value) => { setDraft({ ...draft, city: value }); setError(null); }} /><label className="grid gap-2 text-sm font-black">身份<select className="application-input" value={draft.role} onChange={(event) => { setDraft({ ...draft, role: event.target.value as UpdateProfileInput["role"] }); setError(null); }}><option value="renter">租客</option><option value="lister">房东</option><option value="both">租客兼房东</option></select></label><label className="grid gap-2 text-sm font-black sm:col-span-2">个人简介<textarea className="min-h-28 min-w-0 w-full rounded-[16px] border border-slate-200 p-4 text-sm outline-none focus:border-blue-400" value={draft.bio ?? ""} onChange={(event) => { setDraft({ ...draft, bio: event.target.value }); setError(null); }} /></label>{error ? <p role="alert" className="rounded-[16px] bg-red-50 px-4 py-3 text-sm font-bold text-red-700 sm:col-span-2">{error}</p> : null}<button disabled={saving} className="w-fit rounded-full bg-[#2453ff] px-6 py-3 text-sm font-black text-white">{saving ? "保存中…" : "保存资料"}</button></form></section>;
 }
 
 function VerificationPanel({ profile }: { profile: ApiProfile | null }) {

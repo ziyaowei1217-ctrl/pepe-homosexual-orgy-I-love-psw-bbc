@@ -21,6 +21,8 @@ import {
   type RoommateMessageView
 } from "../lib/roommate-conversations";
 
+const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000/api/v1";
+
 const conversation: ApiRoommateConversation = {
   id: "conversation-a-b",
   matchId: "match-a-b",
@@ -82,10 +84,10 @@ describe("roommate conversation API", () => {
 
     const calls = vi.mocked(fetch).mock.calls as Array<[string, RequestInit]>;
     expect(calls.map(([url]) => url)).toEqual([
-      "http://localhost:4000/api/v1/roommate-conversations",
-      "http://localhost:4000/api/v1/roommate-conversations/conversation%2Fa/messages?cursor=cursor%2F%2B%3D",
-      "http://localhost:4000/api/v1/roommate-conversations/conversation%2Fa/messages",
-      "http://localhost:4000/api/v1/roommate-conversations/conversation%2Fa/read"
+      `${apiBaseUrl}/roommate-conversations`,
+      `${apiBaseUrl}/roommate-conversations/conversation%2Fa/messages?cursor=cursor%2F%2B%3D`,
+      `${apiBaseUrl}/roommate-conversations/conversation%2Fa/messages`,
+      `${apiBaseUrl}/roommate-conversations/conversation%2Fa/read`
     ]);
     expect(calls.map(([, init]) => init.headers)).toEqual([
       expect.objectContaining({ Authorization: "Bearer token-a" }),
@@ -117,7 +119,7 @@ describe("roommate conversation API", () => {
     });
 
     expect(vi.mocked(fetch)).toHaveBeenCalledWith(
-      "http://localhost:4000/api/v1/roommate-conversations/conversation-a-b/messages",
+      `${apiBaseUrl}/roommate-conversations/conversation-a-b/messages`,
       expect.objectContaining({
         body: JSON.stringify({
           clientMessageId: "7e4ac8e6-21dc-4e68-961b-42b4ca33dc8b",

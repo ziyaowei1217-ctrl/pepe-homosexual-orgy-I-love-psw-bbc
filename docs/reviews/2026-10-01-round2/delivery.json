@@ -1,0 +1,175 @@
+{
+  "round": 2,
+  "independent": true,
+  "head": "4244856b8ca2093493bad0588bf0e6f5e617a498",
+  "source_modified": false,
+  "prior_reports_read": false,
+  "scope": "delivery, operations, performance, security, production public deployment",
+  "findings": [
+    {
+      "id": "R2-D1",
+      "severity": "P1",
+      "file": "api/src/auth/valkey-rate-limit-store.ts",
+      "line": 58,
+      "end_line": 71,
+      "title": "Bound authentication Valkey connect and command time before awaiting",
+      "impact": "A provider or network connection that accepts TCP/TLS but stops answering leaves code send/verify requests pending indefinitely instead of reaching AuthRateLimiter fail-closed 503. Redis default reconnects can also prolong connection failures. This can accumulate requests and prevents recovery/disposal of the stale client; quit on shutdown is also unbounded.",
+      "fix": "Apply a total deadline to connect and eval, destroy/invalidate the client on timeout, replace it for later attempts, and bound shutdown. Keep production auth failures fail closed. Reuse the deadline/invalidation pattern used by the roommate message limiter.",
+      "evidence": {
+        "execution": "Node with ts-node/register/transpile-only loaded the actual createRateLimitStore(nodeEnv=production) against a local silent TCP server; no external provider or secrets used.",
+        "result": {
+          "outcome": "still pending after 6500ms",
+          "elapsedMs": 6502,
+          "silentTcpConnections": 1
+        },
+        "limits": "Local failure harness, not a real TLS Valkey provider. No Docker executed."
+      }
+    },
+    {
+      "id": "R2-D2",
+      "severity": "P1",
+      "file": "api/src/roommates/roommates.service.ts",
+      "line": 55,
+      "end_line": 60,
+      "title": "Rank roommate candidates once per single-profile lookup",
+      "impact": "The unauthenticated /roommates/deck/:candidateId endpoint rebuilds and sorts the entire catalog once per 80-item page until it finds a match or returns 404. A nonexistent ID therefore amplifies a full-catalog ranking into quadratic work, blocking the API event loop for all users.",
+      "fix": "Extract the shared catalog ranking operation and compute it once, then find the requested candidate in that result while preserving candidate metadata and rank. Validate candidate IDs before expensive work where possible.",
+      "evidence": {
+        "execution": "Actual RoommatesService and actual ranking implementation executed with generated owned profiles supplied through a narrow Prisma findMany harness; no database or load generator.",
+        "result": [
+          {
+            "profiles": 1000,
+            "elapsedMs": 57
+          },
+          {
+            "profiles": 3000,
+            "elapsedMs": 384
+          },
+          {
+            "production": true,
+            "profiles": 10000,
+            "elapsedMs": 4022,
+            "result": "NotFoundException",
+            "10ms_event_loop_timer_fired_during_lookup": false
+          }
+        ],
+        "limits": "Synthetic data in local CPU run; no claim of measured production load. Query has no take bound."
+      }
+    },
+    {
+      "id": "R2-D3",
+      "severity": "P2",
+      "file": "api/src/auth/valkey-rate-limit-store.ts",
+      "line": 94,
+      "title": "Reject unusable production Valkey configuration instead of selecting memory",
+      "impact": "Both production config validators accept rediss://cache.example.invalid/not-a-db, but Redis client construction rejects its nonnumeric database path. The production factory then returns InMemoryRateLimitStore. Login and OTP abuse limits are split by instance rather than failing closed, even though production requires shared Valkey.",
+      "fix": "Validate the Redis URL database/port/options with the actual supported client parser and throw at production startup when construction fails. Permit memory fallback only outside production. Add a focused regression test that passes a syntactically valid HTTPS-style rediss URL with invalid Redis database semantics.",
+      "evidence": {
+        "execution": "Ran assertProductionRuntimeConfig on synthetic production env; validateProductionConfig on a complete synthetic production env; createRateLimitStore on invalid rediss URL. No endpoint contacted.",
+        "result": [
+          "runtime validation accepted",
+          "production-config validator errors: []",
+          "productionStore: InMemoryRateLimitStore"
+        ]
+      }
+    },
+    {
+      "id": "R2-D4",
+      "severity": "P2",
+      "file": "api/src/health/health.service.ts",
+      "line": 24,
+      "end_line": 32,
+      "title": "Make required distributed-service degradation fail production readiness",
+      "impact": "/ready returns HTTP 200 when realtime or message rate limiting is degraded to per-process fallback. Compose tests only response.ok, so an API unable to deliver cross-instance events remains healthy and a public multi-instance deployment continues routing users into split realtime behavior. Authentication Valkey health is not represented at all.",
+      "fix": "Keep liveness as process health, but in production have readiness return 503 for required distributed components and include auth rate-limit connectivity. Recover health when clients become usable again, so routing can resume. Make any permitted single-instance fallback an explicit deployment policy.",
+      "evidence": {
+        "execution": "Actual HealthService and MessagingInfrastructureHealth called with database SELECT 1 harness and realtime marked local-fallback.",
+        "result": "ready() returned normally with status=degraded; Nest controller therefore emits HTTP 200. compose.production.yml line 44 only checks r.ok.",
+        "source": "https://socket.io/docs/v4/redis-adapter/ states packets only reach clients on the current server while Redis is down."
+      }
+    }
+  ],
+  "dependency_evidence": {
+    "executed": "npx --yes pnpm@9.15.4 audit --prod --json",
+    "result": {
+      "production_dependencies": 301,
+      "high": 0,
+      "critical": 0,
+      "moderate": 1
+    },
+    "moderate": {
+      "package": "@nestjs/core 10.4.22",
+      "advisory": "GHSA-36xv-jgw5-4q75",
+      "primary_source": "https://github.com/nestjs/nest/security/advisories/GHSA-36xv-jgw5-4q75",
+      "reachability": "No @Sse, EventSource or SseStream usage found in application source. Advisory requires attacker-controlled SSE type/id fields. No current reachable exploit established. Upgrade requires aligned Nest 11 compatibility work, not a blind audit fix."
+    },
+    "next": "Next 15.5.27 matches primary maintainer September 30 2026 security release; primary source https://nextjs.org/blog.",
+    "all_dependencies_audit": {
+      "executed": "npx --yes pnpm@9.15.4 audit --json",
+      "packages": 920,
+      "high": 0,
+      "critical": 0,
+      "moderate": 1,
+      "result": "Same moderate Nest SSE advisory only."
+    }
+  },
+  "deployment_suitability": {
+    "current": "Not established as suitable for production public multi-instance rollout until runtime findings and external integration validation are addressed. The repository provides hardened web/API Compose containers but no public ingress or production providers.",
+    "required_external_infrastructure": [
+      "Public domain and HTTPS reverse proxy/ingress for web and API; correct trusted proxy hop count and WebSocket upgrade routing; sticky sessions when polling fallback is enabled across replicas",
+      "Production PostgreSQL with certificate validation, migrations, durable backups/PITR and tested restore; CPU/pool sizing for Prisma",
+      "TLS Valkey with suitable authentication/ACLs and separate deployment namespace/database, shared by API replicas",
+      "Private S3-compatible media bucket with HTTPS storage and browser upload endpoints, PUT CORS and lifecycle cleanup",
+      "Verified Resend sender domain and functioning API key",
+      "Payment adapter service implementing this repository application-scoped idempotency, order/status/checkout/cancellation contract and checkout fencing; production source contains only HTTP client contract",
+      "Licensed HTTPS map tile provider and public build-time configuration",
+      "Container host/orchestrator with resource budgets, health policy, logs, monitoring, recovery/restart ownership and migration release ordering"
+    ],
+    "validation_limits": [
+      "No Docker available; no containers executed, no production image runtime claims",
+      "CI container-smoke runs API NODE_ENV=development against disposable local providers; it does not validate real production TLS/services",
+      "No full pipelines or Next builds run by this independent audit",
+      "No production credentials inspected or changed, no external users contacted"
+    ]
+  },
+  "remediation": {
+    "status": "All four findings implemented; source remains uncommitted for parent integration.",
+    "changes": [
+      "Production auth Valkey uses one total1000ms budget for connect plus EVAL or PING, shares in-flight connections, strictly validates responses, destroys/invalidates failed clients, creates replacement clients and bounds legacy QUIT shutdown.",
+      "Runtime and release configuration validators reject nonnumeric/negative/unsafe Redis database paths, queries/fragments, malformed encoded credentials and invalid zero ports. Production auth construction throws sanitized errors rather than selecting memory.",
+      "HealthModule exports AuthInfrastructureHealth; AuthModule registers the real store bounded PING probe. Production /ready503 when auth probe fails, realtime/message limiter are degraded or either is single-instance. Development response shape/fallback retained.",
+      "Socket adapter restores distributed health only after both pub/sub clients report ready and retains degraded state after disposal.",
+      "Single-candidate roommate lookup ranks its eligible catalog once using shared existing scoring/ranking and returns unchanged candidate metadata.",
+      "Production readiness also refreshes message rate-limit health using a bounded, cooldown-aware EVAL return1 probe with no quota keys/arguments, permitting a drained replica to recover without traffic. Shared pending connections are reused. Production Socket.IO startup outages throw a sanitized error after client cleanup, allowing process restart; development local fallback remains."
+    ],
+    "execution_evidence": {
+      "silent_tcp_failure_after_fix": {
+        "http_equivalent_status": 503,
+        "elapsedMs": 1002,
+        "actual_redis_client_isOpen": false
+      },
+      "missing10000_owned_profile_after_fix": {
+        "elapsedMs": 59,
+        "inputProfileReads": 10000,
+        "error": "NotFoundException",
+        "baselineElapsedMs": 4022
+      },
+      "targeted_api_tests": {
+        "initial_run": "8 files83 tests passed",
+        "http_health_recovery_focused": "5 files45 tests passed",
+        "latest_changed_store_health_candidate_tests": "3 files28 tests passed"
+      },
+      "production_config_tests": "49 passed",
+      "scoped_eslint": "15 API source/test files pass with --no-ignore; repository ESLint otherwise intentionally ignores api/**; six late readiness/limiter source/test files also pass with --no-ignore.",
+      "git_diff_check": "passed",
+      "api_types_build": "Coordinated with security agent for one final settled API types/build; first attempt saw their in-progress DealHistoryCursor type error, now reported fixed. Do not claim final build until they return result.",
+      "readiness_integration_final_tests": "8 files79 tests passed including current security-agent actor quota tests, new no-quota recovery probes, production HTTP readiness, auth timeouts/recovery, socket recovery/startup policy, module wiring and development HTTP launch."
+    },
+    "new_files": [
+      "api/src/health/auth-infrastructure-health.ts",
+      "api/test/production-readiness.e2e.spec.ts",
+      "api/test/message-limiter-readiness.spec.ts"
+    ],
+    "source_ownership": "Cleared tools/production-config.mjs and tests/production-config.test.ts to parent; parent may adapt deployment configuration. Security agent owns roommate-message-rate-limit source/tests and all application/deal-thread fixes; untouched by this agent. Security agent explicitly authorized the narrow shared message-limiter readiness patch; ownership returned after its79-test run. All delivery source is now clear for parent integration."
+  }
+}

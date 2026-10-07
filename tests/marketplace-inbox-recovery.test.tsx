@@ -13,7 +13,7 @@ vi.mock('../lib/roommate-realtime', () => ({ createRoommateRealtimeClient: (opti
   return { connect() {}, disconnect() {} };
 } }));
 beforeEach(() => { writeStoredAuthSession('inbox-token'); });
-afterEach(() => { cleanup(); localStorage.clear(); vi.unstubAllGlobals(); realtime.options = null; });
+afterEach(() => { cleanup(); localStorage.clear(); vi.unstubAllGlobals(); vi.restoreAllMocks(); realtime.options = null; });
 function message(n: number, senderRole: 'self' | 'peer' = 'peer', body = `Message ${n}`): ApiRoommateMessage {
   return { id: `message-${n}`, conversationId: 'roommate-thread', clientMessageId: `client-${n}`, senderRole, body, createdAt: new Date(Date.UTC(2026, 8, 1, 0, 0, n)).toISOString() };
 }
@@ -27,11 +27,11 @@ function deferred<T>() {
   const promise = new Promise<T>((done) => { resolve = done; });
   return { promise, resolve };
 }
-function setup(options: { summary?: ApiRoommateConversation; page?: (cursor?: string) => Promise<Response> | Response; post?: (body: { body: string; clientMessageId: string }) => Promise<Response> | Response } = {}) {
+function setup(options: { summary?: ApiRoommateConversation; summaryResponse?: () => Promise<Response> | Response; page?: (cursor?: string) => Promise<Response> | Response; post?: (body: { body: string; clientMessageId: string }) => Promise<Response> | Response } = {}) {
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     if (url.endsWith('/deal-threads')) return Response.json([]);
-    if (url.endsWith('/roommate-conversations')) return Response.json([options.summary ?? conversation()]);
+    if (url.endsWith('/roommate-conversations')) return options.summaryResponse?.() ?? Response.json([options.summary ?? conversation()]);
     if (url.endsWith('/roommate-thread/messages') && init?.method === 'POST') return options.post!(JSON.parse(String(init.body)));
     if (url.includes('/roommate-thread/messages')) return options.page?.(new URL(url).searchParams.get('cursor') ?? undefined) ?? Response.json({ messages: [message(3), message(2), message(1)], nextCursor: null });
     if (url.endsWith('/roommate-thread/read')) return Response.json({});
@@ -138,4 +138,60 @@ it('retries a lost message response with the original client id and stores only 
   await content().findByText('Only once');
   expect(ids[1]).toBe(ids[0]);
   expect(committed.size).toBe(1);
+});
+
+it('marks a live peer message read only while its conversation is visible', async () => {
+  const fetchMock = setup();
+  await content().findByText('Message 1');
+  emit(message(4));
+  await waitFor(() => expect(fetchMock.mock.calls.some(([url, init]) => String(url).endsWith('/roommate-thread/read') &&
+    JSON.parse(String(init?.body)).lastReadMessageId === 'message-4')).toBe(true));
+});
+
+it('keeps background messages unread and synchronizes after returning to the tab', async () => {
+  let visible = false;
+  vi.spyOn(document, 'visibilityState', 'get').mockImplementation(() => visible ? 'visible' : 'hidden');
+  const fetchMock = setup();
+  await content().findByText('Message 1');
+  emit(message(4));
+  await act(async () => {});
+  expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith('/roommate-thread/read'))).toBe(false);
+  const initialDeals = fetchMock.mock.calls.filter(([url]) => String(url).endsWith('/deal-threads')).length;
+  fireEvent.focus(window);
+  expect(fetchMock.mock.calls.filter(([url]) => String(url).endsWith('/deal-threads'))).toHaveLength(initialDeals);
+  visible = true;
+  fireEvent(document, new Event('visibilitychange'));
+  await waitFor(() => expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith('/roommate-thread/read'))).toBe(true));
+});
+
+it('disables sending when an ended roommate conversation is read-only', async () => {
+  const fetchMock = setup({ summary: { ...conversation(), writable: false } });
+  await content().findByText('Message 1');
+  const draft = screen.getByRole('textbox', { name: '消息内容' }) as HTMLTextAreaElement;
+  expect(draft.disabled).toBe(true);
+  fireEvent.change(draft, { target: { value: 'Do not send' } });
+  fireEvent.submit(draft.closest('form')!);
+  expect(fetchMock.mock.calls.some(([url, init]) => String(url).endsWith('/messages') && init?.method === 'POST')).toBe(false);
+});
+
+it('refreshes unread summaries from realtime read and unread hints', async () => {
+  const fetchMock = setup();
+  await content().findByText('Message 1');
+  await act(async () => {
+    realtime.options!.onEvent({ name: 'roommate.unread.updated', payload: { conversationId: 'roommate-thread' } });
+  });
+  expect(fetchMock.mock.calls.filter(([url]) => String(url).endsWith('/roommate-conversations')).length).toBeGreaterThan(1);
+});
+
+it('coalesces a burst of realtime hints into one active refresh and one follow-up', async () => {
+  const pending = deferred<Response>();
+  let requests = 0;
+  setup({ summaryResponse: () => ++requests === 2 ? pending.promise : Response.json([conversation()]) });
+  await content().findByText('Message 1');
+  act(() => {
+    for (let index = 0; index < 10; index++) realtime.options!.onEvent({ name: 'roommate.unread.updated', payload: {} });
+  });
+  expect(requests).toBe(2);
+  await act(async () => { pending.resolve(Response.json([conversation()])); });
+  expect(requests).toBe(3);
 });

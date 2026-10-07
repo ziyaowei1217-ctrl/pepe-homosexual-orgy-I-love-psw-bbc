@@ -12,6 +12,7 @@ import * as api from "../lib/api";
 import { AdminStepUpPanel } from "../components/admin-step-up-panel";
 import {
   clearStoredAdminStepUpSession,
+  type AdminStepUpSession,
   getActiveAdminStepUpToken,
   readStoredAdminStepUpSession,
   writeStoredAdminStepUpSession
@@ -319,7 +320,7 @@ class MemoryStorage implements Storage {
 }
 
 async function renderPanel(
-  onVerified: ReturnType<typeof vi.fn>,
+  onVerified: (session: AdminStepUpSession) => void,
   onAuthenticationError?: (error: unknown) => boolean
 ) {
   let renderer: ReactTestRenderer | undefined;

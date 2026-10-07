@@ -13,7 +13,7 @@ describe("public marketplace shell", () => {
       </PublicShell>
     );
 
-    for (const label of ["找房", "室友", "收藏", "消息", "我的"]) {
+    for (const label of ["转租", "室友", "收藏", "消息", "我的"]) {
       expect(html).toContain(`>${label}<`);
     }
     expect(html).toContain('href="/saved"');
@@ -35,7 +35,7 @@ describe("public marketplace shell", () => {
     const header = container.querySelector("header")!;
     const quickNavigation = header.querySelector('nav[aria-label="手机快捷导航"]')!;
     expect(quickNavigation).not.toBeNull();
-    expect(quickNavigation.querySelector('a[href="/search"]')?.textContent).toContain("找房");
+    expect(quickNavigation.querySelector('a[href="/search"]')?.textContent).toContain("转租");
     expect(quickNavigation.querySelector('a[href="/saved"]')?.textContent).toContain("收藏");
     expect(header.querySelector('a[aria-label="打开账户"]')?.getAttribute("href")).toBe("/account");
     expect(container.textContent).toContain("房源详情");

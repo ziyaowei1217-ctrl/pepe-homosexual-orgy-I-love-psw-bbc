@@ -1,8 +1,23 @@
 import { describe, expect, it } from "vitest";
 import { clusterSearchMarkers } from "../lib/search-map-clusters";
-import { getMapMarkers, getMapTiles, panMapCenter } from "../lib/listing-map";
+import { getMapCenterForListings, getMapMarkers, getMapTiles, panMapCenter } from "../lib/listing-map";
 
 describe("search map positions", () => {
+  it("centers dateline neighbors on the short arc and keeps their pins together", () => {
+    const listings = [
+      { id: "east", area: "Pacific", price: 1500, latitude: 10, longitude: 179 },
+      { id: "west", area: "Pacific", price: 1800, latitude: 10, longitude: -179 }
+    ];
+    const center = getMapCenterForListings(listings);
+    expect(Math.abs(center.lng)).toBe(180);
+    expect(getMapCenterForListings([...listings].reverse())).toEqual(center);
+    const markers = getMapMarkers(listings, center, 2, { width: 800, height: 600 }, false);
+    expect(Math.abs(markers[0].x - markers[1].x)).toBeLessThan(10);
+    expect(markers.every((marker) => marker.x > 390 && marker.x < 410)).toBe(true);
+    const tiles = getMapTiles(center, 2, { width: 800, height: 600 });
+    expect(tiles.every((tile) => /^https:\/\/tile\.openstreetmap\.de\/2\/[0-3]\/[0-3]\.png$/.test(tile.url))).toBe(true);
+  });
+
   it("uses valid tile coordinates when zooming out beyond the world bounds", () => {
     const tiles = getMapTiles({ lat: 75, lng: -170 }, 2, { width: 1500, height: 1000 });
     expect(tiles.length).toBeGreaterThan(0);
@@ -24,6 +39,26 @@ describe("search map positions", () => {
     expect(clusters.map((cluster) => cluster.items.map((item) => item.id))).toEqual([["a", "b"], ["c"]]);
     expect(clusters[0].x).toBe(400);
     expect(clusters[0].y).toBe(300);
+  });
+
+  it("keeps cluster membership and centers stable under sorting while preserving picker order", () => {
+    const base = getMapMarkers([{ id: "base", area: "Westwood", price: 1500 }], { lat: 34.0635, lng: -118.4455 }, 11, { width: 800, height: 600 }, false)[0];
+    const markers = [
+      { ...base, id: "a", x: 0, y: 100, price: 1500 },
+      { ...base, id: "b", x: 80, y: 100, price: 1800 },
+      { ...base, id: "c", x: 160, y: 100, price: 2100 }
+    ];
+    const expected = [{ ids: ["a", "b"], x: 40, y: 100 }, { ids: ["c"], x: 160, y: 100 }];
+    for (const input of [markers, [...markers].reverse(), [markers[1], markers[2], markers[0]]]) {
+      const original = [...input];
+      const groups = clusterSearchMarkers(input);
+      expect(groups.map((group) => ({ ids: group.items.map((item) => item.id).sort(), x: group.x, y: group.y }))).toEqual(expected);
+      for (const group of groups) {
+        expect(group.items).toEqual(input.filter((item) => group.items.some((member) => member.id === item.id)));
+      }
+      expect(input).toEqual(original);
+      expect(groups.flatMap((group) => group.items).map((item) => item.id).sort()).toEqual(["a", "b", "c"]);
+    }
   });
 
   it("keeps offscreen homes at their projected locations rather than pinning them to the edge", () => {

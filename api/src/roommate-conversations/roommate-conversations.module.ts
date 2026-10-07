@@ -24,6 +24,6 @@ import { createRoommateMessageRateLimiter, RoommateMessageRateLimiter } from "./
         createRoommateMessageRateLimiter({ valkeyUrl: config.get<string>("VALKEY_URL"), health })
     }
   ],
-  exports: [RoommateConversationsService, ROOMMATE_CONVERSATION_EVENTS]
+  exports: [RoommateConversationsService, ROOMMATE_CONVERSATION_EVENTS, RoommateMessageRateLimiter]
 })
 export class RoommateConversationsModule {}

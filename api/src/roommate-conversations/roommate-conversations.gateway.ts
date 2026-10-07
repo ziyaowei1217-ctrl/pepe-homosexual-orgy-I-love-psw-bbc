@@ -25,8 +25,22 @@ export class RoommateConversationGateway implements OnGatewayConnection, Roommat
     }
 
     try {
-      const user = await this.authenticatedUsers.fromBearerToken(token);
+      const { user, expiresAt } = await this.authenticatedUsers.fromBearerTokenWithExpiry(token);
+      const remainingMs = expiresAt - Date.now();
+      if (remainingMs <= 0) {
+        client.disconnect(true);
+        return;
+      }
       await client.join(`user:${user.id}`);
+      const remainingAfterJoinMs = expiresAt - Date.now();
+      if (remainingAfterJoinMs <= 0 || client.connected === false) {
+        client.disconnect(true);
+        return;
+      }
+      // A live connection must not retain private message access after its JWT expires.
+      const expiryTimer = setTimeout(() => client.disconnect(true), remainingAfterJoinMs);
+      expiryTimer.unref();
+      client.once("disconnect", () => clearTimeout(expiryTimer));
     } catch {
       client.disconnect(true);
     }

@@ -72,8 +72,10 @@ export function markAllNotificationsRead(notifications: LocalReminder[]) {
   );
 }
 
-export function clearLegacyProductStorage(storage: Pick<Storage, "removeItem">) {
-  legacyProductStorageKeys.forEach((key) => storage.removeItem(key));
+export function clearLegacyProductStorage(storage: Pick<Storage, "removeItem"> | null) {
+  legacyProductStorageKeys.forEach((key) => {
+    try { storage?.removeItem(key); } catch { /* Optional local cleanup must not stop app startup. */ }
+  });
 }
 
 function isLocalReminder(value: unknown): value is LocalReminder {
@@ -83,10 +85,18 @@ function isLocalReminder(value: unknown): value is LocalReminder {
     typeof value.title === "string" &&
     typeof value.detail === "string" &&
     typeof value.createdAt === "number" &&
+    Number.isFinite(value.createdAt) &&
     typeof value.read === "boolean" &&
     typeof value.target === "string" &&
-    value.target.startsWith("/")
+    isLocalTarget(value.target)
   );
+}
+
+function isLocalTarget(target: string) {
+  if (!target.startsWith("/") || target.startsWith("//")) return false;
+  try {
+    return new URL(target, "https://sublet.local").origin === "https://sublet.local";
+  } catch { return false; }
 }
 
 function uniqueStrings(value: unknown) {

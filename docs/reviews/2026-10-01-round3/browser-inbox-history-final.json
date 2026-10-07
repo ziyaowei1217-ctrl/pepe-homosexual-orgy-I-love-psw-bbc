@@ -1,0 +1,191 @@
+[
+  {
+    "name": "chromium",
+    "status": "pass",
+    "trace": [
+      {
+        "step": "Explicit second thread",
+        "url": "http://127.0.0.1:4411/inbox/r3-mobile-2",
+        "listVisible": false,
+        "conversationVisible": true,
+        "body": "跳到主要内容\nC\nConversation 2\n\nStudent with a quiet schedule\n\n室友匹配\n关联事项 · Student with a quiet schedule\n\n发送第一条消息开始对话\n\n找房\n室友\n收藏\n消息\n我的"
+      },
+      {
+        "step": "Back arrow leaves stable list",
+        "url": "http://127.0.0.1:4411/inbox",
+        "listVisible": true,
+        "conversationVisible": false,
+        "body": "跳到主要内容\n\nMESSAGES\n\n收件箱\n全部\n房源申请\n预约看房\n室友匹配\nC\n\nConversation 1\n\n室友匹配\n\nStudent with a quiet schedule\n\n暂无消息\n\nC\n\nConversation 2\n\n室友匹配\n\nStudent with a quiet schedule\n\n暂无消息\n\n找房\n室友\n收藏\n消息\n我的"
+      },
+      {
+        "step": "Selected first thread",
+        "url": "http://127.0.0.1:4411/inbox/r3-mobile-1",
+        "listVisible": false,
+        "conversationVisible": true,
+        "body": "跳到主要内容\nC\nConversation 1\n\nStudent with a quiet schedule\n\n室友匹配\n关联事项 · Student with a quiet schedule\n\n发送第一条消息开始对话\n\n找房\n室友\n收藏\n消息\n我的"
+      },
+      {
+        "step": "Browser Back returns stable list",
+        "url": "http://127.0.0.1:4411/inbox",
+        "listVisible": true,
+        "conversationVisible": false,
+        "body": "跳到主要内容\n\nMESSAGES\n\n收件箱\n全部\n房源申请\n预约看房\n室友匹配\nC\n\nConversation 1\n\n室友匹配\n\nStudent with a quiet schedule\n\n暂无消息\n\nC\n\nConversation 2\n\n室友匹配\n\nStudent with a quiet schedule\n\n暂无消息\n\n找房\n室友\n收藏\n消息\n我的"
+      },
+      {
+        "step": "Browser Forward restores first thread",
+        "url": "http://127.0.0.1:4411/inbox/r3-mobile-1",
+        "listVisible": false,
+        "conversationVisible": true,
+        "body": "跳到主要内容\nC\nConversation 1\n\nStudent with a quiet schedule\n\n室友匹配\n关联事项 · Student with a quiet schedule\n\n发送第一条消息开始对话\n\n找房\n室友\n收藏\n消息\n我的"
+      },
+      {
+        "step": "Selected second thread from list",
+        "url": "http://127.0.0.1:4411/inbox/r3-mobile-2",
+        "listVisible": false,
+        "conversationVisible": true,
+        "body": "跳到主要内容\nC\nConversation 2\n\nStudent with a quiet schedule\n\n室友匹配\n关联事项 · Student with a quiet schedule\n\n发送第一条消息开始对话\n\n找房\n室友\n收藏\n消息\n我的"
+      }
+    ],
+    "geometry": {
+      "rect": {
+        "x": 33,
+        "y": 688,
+        "width": 269,
+        "height": 36,
+        "top": 688,
+        "right": 302,
+        "bottom": 724,
+        "left": 33
+      },
+      "mobileNavTop": 746.609375,
+      "safeAreaPadding": "6.4px"
+    },
+    "pageErrors": []
+  },
+  {
+    "name": "firefox",
+    "status": "pass",
+    "trace": [
+      {
+        "step": "Explicit second thread",
+        "url": "http://127.0.0.1:4411/inbox/r3-mobile-2",
+        "listVisible": false,
+        "conversationVisible": true,
+        "body": "跳到主要内容\nC\nConversation 2\n\nStudent with a quiet schedule\n\n室友匹配\n关联事项 · Student with a quiet schedule\n\n发送第一条消息开始对话\n\n找房\n室友\n收藏\n消息\n我的"
+      },
+      {
+        "step": "Back arrow leaves stable list",
+        "url": "http://127.0.0.1:4411/inbox",
+        "listVisible": true,
+        "conversationVisible": false,
+        "body": "跳到主要内容\n\nMESSAGES\n\n收件箱\n全部\n房源申请\n预约看房\n室友匹配\nC\n\nConversation 1\n\n室友匹配\n\nStudent with a quiet schedule\n\n暂无消息\n\nC\n\nConversation 2\n\n室友匹配\n\nStudent with a quiet schedule\n\n暂无消息\n\n找房\n室友\n收藏\n消息\n我的"
+      },
+      {
+        "step": "Selected first thread",
+        "url": "http://127.0.0.1:4411/inbox/r3-mobile-1",
+        "listVisible": false,
+        "conversationVisible": true,
+        "body": "跳到主要内容\nC\nConversation 1\n\nStudent with a quiet schedule\n\n室友匹配\n关联事项 · Student with a quiet schedule\n\n发送第一条消息开始对话\n\n找房\n室友\n收藏\n消息\n我的"
+      },
+      {
+        "step": "Browser Back returns stable list",
+        "url": "http://127.0.0.1:4411/inbox",
+        "listVisible": true,
+        "conversationVisible": false,
+        "body": "跳到主要内容\n\nMESSAGES\n\n收件箱\n全部\n房源申请\n预约看房\n室友匹配\nC\n\nConversation 1\n\n室友匹配\n\nStudent with a quiet schedule\n\n暂无消息\n\nC\n\nConversation 2\n\n室友匹配\n\nStudent with a quiet schedule\n\n暂无消息\n\n找房\n室友\n收藏\n消息\n我的"
+      },
+      {
+        "step": "Browser Forward restores first thread",
+        "url": "http://127.0.0.1:4411/inbox/r3-mobile-1",
+        "listVisible": false,
+        "conversationVisible": true,
+        "body": "跳到主要内容\nC\nConversation 1\n\nStudent with a quiet schedule\n\n室友匹配\n关联事项 · Student with a quiet schedule\n\n发送第一条消息开始对话\n\n找房\n室友\n收藏\n消息\n我的"
+      },
+      {
+        "step": "Selected second thread from list",
+        "url": "http://127.0.0.1:4411/inbox/r3-mobile-2",
+        "listVisible": false,
+        "conversationVisible": true,
+        "body": "跳到主要内容\nC\nConversation 2\n\nStudent with a quiet schedule\n\n室友匹配\n关联事项 · Student with a quiet schedule\n\n发送第一条消息开始对话\n\n找房\n室友\n收藏\n消息\n我的"
+      }
+    ],
+    "geometry": {
+      "rect": {
+        "x": 33,
+        "y": 688,
+        "width": 269,
+        "height": 36,
+        "top": 688,
+        "right": 302,
+        "bottom": 724,
+        "left": 33
+      },
+      "mobileNavTop": 746.5999755859375,
+      "safeAreaPadding": "6.4px"
+    },
+    "pageErrors": []
+  },
+  {
+    "name": "webkit",
+    "status": "pass",
+    "trace": [
+      {
+        "step": "Explicit second thread",
+        "url": "http://127.0.0.1:4411/inbox/r3-mobile-2",
+        "listVisible": false,
+        "conversationVisible": true,
+        "body": "跳到主要内容\nC\nConversation 2\n\nStudent with a quiet schedule\n\n室友匹配\n关联事项 · Student with a quiet schedule\n\n发送第一条消息开始对话\n\n找房\n室友\n收藏\n消息\n我的"
+      },
+      {
+        "step": "Back arrow leaves stable list",
+        "url": "http://127.0.0.1:4411/inbox",
+        "listVisible": true,
+        "conversationVisible": false,
+        "body": "跳到主要内容\n\nMESSAGES\n\n收件箱\n全部\n房源申请\n预约看房\n室友匹配\nC\n\nConversation 1\n\n室友匹配\n\nStudent with a quiet schedule\n\n暂无消息\n\nC\n\nConversation 2\n\n室友匹配\n\nStudent with a quiet schedule\n\n暂无消息\n\n找房\n室友\n收藏\n消息\n我的"
+      },
+      {
+        "step": "Selected first thread",
+        "url": "http://127.0.0.1:4411/inbox/r3-mobile-1",
+        "listVisible": false,
+        "conversationVisible": true,
+        "body": "跳到主要内容\nC\nConversation 1\n\nStudent with a quiet schedule\n\n室友匹配\n关联事项 · Student with a quiet schedule\n\n发送第一条消息开始对话\n\n找房\n室友\n收藏\n消息\n我的"
+      },
+      {
+        "step": "Browser Back returns stable list",
+        "url": "http://127.0.0.1:4411/inbox",
+        "listVisible": true,
+        "conversationVisible": false,
+        "body": "跳到主要内容\n\nMESSAGES\n\n收件箱\n全部\n房源申请\n预约看房\n室友匹配\nC\n\nConversation 1\n\n室友匹配\n\nStudent with a quiet schedule\n\n暂无消息\n\nC\n\nConversation 2\n\n室友匹配\n\nStudent with a quiet schedule\n\n暂无消息\n\n找房\n室友\n收藏\n消息\n我的"
+      },
+      {
+        "step": "Browser Forward restores first thread",
+        "url": "http://127.0.0.1:4411/inbox/r3-mobile-1",
+        "listVisible": false,
+        "conversationVisible": true,
+        "body": "跳到主要内容\nC\nConversation 1\n\nStudent with a quiet schedule\n\n室友匹配\n关联事项 · Student with a quiet schedule\n\n发送第一条消息开始对话\n\n找房\n室友\n收藏\n消息\n我的"
+      },
+      {
+        "step": "Selected second thread from list",
+        "url": "http://127.0.0.1:4411/inbox/r3-mobile-2",
+        "listVisible": false,
+        "conversationVisible": true,
+        "body": "跳到主要内容\nC\nConversation 2\n\nStudent with a quiet schedule\n\n室友匹配\n关联事项 · Student with a quiet schedule\n\n发送第一条消息开始对话\n\n找房\n室友\n收藏\n消息\n我的"
+      }
+    ],
+    "geometry": {
+      "rect": {
+        "x": 33,
+        "y": 688,
+        "width": 269,
+        "height": 36,
+        "top": 688,
+        "right": 302,
+        "bottom": 724,
+        "left": 33
+      },
+      "mobileNavTop": 746.609375,
+      "safeAreaPadding": "6.4px"
+    },
+    "pageErrors": []
+  }
+]

@@ -41,13 +41,17 @@ function RentalApplicationSession({
   const [step, setStep] = useState(0);
   const storageKey = `sublet_legacy_application_draft:${applicationDraftScope(token)}:${listing.id}`;
   const [draft, setDraft] = useState<RentalApplicationDraft>(() => {
-    const raw = typeof window !== "undefined" ? sessionStorage.getItem(storageKey) : null;
-    if (raw) {
-      try {
+    try {
+      const raw = typeof window !== "undefined" ? sessionStorage.getItem(storageKey) : null;
+      if (raw) {
         const saved = JSON.parse(raw);
-        if (saved && typeof saved.note === "string" && typeof saved.moveIn === "string" && typeof saved.schoolOrOccupation === "string") return saved;
-      } catch { /* Start from listing defaults if browser storage is invalid. */ }
-    }
+        if (saved && ["SOLO", "TEAM"].includes(saved.scope) &&
+          (saved.scope !== "TEAM" || typeof saved.teamId === "string") &&
+          [saved.note, saved.moveIn, saved.moveOut, saved.schoolOrOccupation].every((value) => typeof value === "string") &&
+          ["BELOW_2X", "TWO_TO_THREE_X", "THREE_TO_FOUR_X", "ABOVE_FOUR_X", "PREFER_NOT_TO_SAY"].includes(saved.incomeBand) &&
+          ["AVAILABLE", "NOT_AVAILABLE", "NOT_NEEDED"].includes(saved.guarantorStatus)) return saved;
+      }
+    } catch { /* Start from listing defaults if browser storage is invalid or unavailable. */ }
     return {
     scope: "SOLO",
     teamId: undefined,
@@ -59,7 +63,9 @@ function RentalApplicationSession({
     note: ""
     };
   });
-  useEffect(() => { sessionStorage.setItem(storageKey, JSON.stringify(draft)); }, [draft, storageKey]);
+  useEffect(() => {
+    try { sessionStorage.setItem(storageKey, JSON.stringify(draft)); } catch { /* The editable draft remains in memory. */ }
+  }, [draft, storageKey]);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const keys = useRef({ create: newIdempotencyKey("application-create"), submit: newIdempotencyKey("application-submit") });
@@ -85,7 +91,7 @@ function RentalApplicationSession({
     setError(null);
     try {
       const application = await createAndSubmitRentalApplication(token, listing.id, draft, keys.current);
-      sessionStorage.removeItem(storageKey);
+      try { sessionStorage.removeItem(storageKey); } catch { /* Keep a confirmed submission visible. */ }
       onSubmitted(application);
     } catch (caught) {
       setError(toProductApiError(caught).message);

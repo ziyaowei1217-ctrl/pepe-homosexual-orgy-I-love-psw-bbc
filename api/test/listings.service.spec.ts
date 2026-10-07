@@ -143,6 +143,40 @@ describe("ListingsService", () => {
     await expect(service.findAll()).resolves.toMatchObject([{ id: "approved" }]);
   });
 
+  it("keeps moderation metadata out of public reads while preserving owner and review reads", async () => {
+    const moderation = {
+      reviewerId: "admin-private-reviewer",
+      rejectionReason: "Private moderation notes",
+      suspendedAt: new Date("2026-08-01T12:00:00.000Z"),
+      suspendedBy: "admin-private-suspender",
+      suspensionReason: "Private suspension notes"
+    };
+    const prisma = createPrismaMock({
+      listings: [
+        { ...listingRecord({ id: "approved", ownerId: "owner-1", status: "APPROVED" }), ...moderation },
+        { ...listingRecord({ id: "submitted", ownerId: "owner-1", status: "SUBMITTED" }), ...moderation }
+      ]
+    });
+    const service = new ListingsService(prisma as never, new AuditService());
+    const catalog = await service.findAll();
+    expect(catalog).toHaveLength(1);
+    expect(catalog[0]).toMatchObject({ id: "approved", status: "APPROVED" });
+    const detail = await service.findOne("approved");
+    for (const publicListing of [catalog[0], detail]) {
+      for (const field of Object.keys(moderation)) expect(publicListing).not.toHaveProperty(field);
+    }
+    expect(prisma.listing.rows).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: "approved", ...moderation }),
+      expect.objectContaining({ id: "submitted", ...moderation })
+    ]));
+    expect(await service.findMine("owner-1")).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: "approved", ...moderation }),
+      expect.objectContaining({ id: "submitted", ...moderation })
+    ]));
+    expect(await service.findMine("owner-2")).toEqual([]);
+    expect(await service.findReviewQueue()).toMatchObject([{ id: "submitted", ...moderation }]);
+  });
+
   it("returns published media in cover order for public discovery", async () => {
     const prisma = createPrismaMock({
       listings: [listingRecord({ id: "approved", status: "APPROVED" })],

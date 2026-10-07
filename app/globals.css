@@ -1,16 +1,18 @@
+@import "leaflet/dist/leaflet.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
   :root {
-    --background: 40 20% 97%;
-    --foreground: 220 24% 9%;
+    --background: 230 38% 97%;
+    --foreground: 229 55% 10%;
     --card: 0 0% 100%;
-    --card-foreground: 220 24% 9%;
+    --card-foreground: 229 55% 10%;
     --popover: 0 0% 100%;
-    --popover-foreground: 220 24% 9%;
-    --primary: 220 24% 9%;
+    --popover-foreground: 229 55% 10%;
+    --primary: 229 100% 57%;
     --primary-foreground: 0 0% 100%;
     --secondary: 214 55% 95%;
     --secondary-foreground: 220 24% 12%;
@@ -41,7 +43,7 @@
 
   body {
     @apply bg-background text-foreground antialiased;
-    font-family: "Inter", "Geist", -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans CJK SC", sans-serif;
+    font-family: "Avenir Next", -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
     font-feature-settings: "cv02", "cv03", "cv04", "ss01";
     letter-spacing: 0;
     overflow-x: hidden;
@@ -62,7 +64,7 @@
   }
 
   .app-panel {
-    @apply rounded-[20px] border border-blue-100 bg-white p-4 shadow-panel md:p-5 xl:p-6;
+    @apply rounded-[20px] border border-border bg-white p-4 shadow-panel md:p-5 xl:p-6;
   }
 
   .app-card-grid {
@@ -94,7 +96,7 @@
   }
 
   .application-input {
-    @apply h-12 min-w-0 w-full rounded-[16px] border border-slate-200 bg-white px-4 text-base font-semibold text-slate-900 outline-none transition-colors placeholder:text-slate-400 focus:border-blue-400 focus:ring-4 focus:ring-blue-50 sm:text-sm;
+    @apply h-12 min-w-0 w-full rounded-[16px] border border-slate-200 bg-white px-4 text-base font-semibold text-slate-900 outline-none transition-colors placeholder:text-slate-400 focus:border-brand-moss focus:ring-4 focus:ring-brand-soft sm:text-sm;
   }
 
   .primary-action {
@@ -113,7 +115,7 @@
 
   .app-scrollbar {
     scrollbar-width: thin;
-    scrollbar-color: rgba(65, 116, 141, 0.35) transparent;
+    scrollbar-color: rgba(36, 83, 255, 0.35) transparent;
   }
 
   .app-scrollbar::-webkit-scrollbar {
@@ -122,12 +124,12 @@
   }
 
   .app-scrollbar::-webkit-scrollbar-thumb {
-    background: rgba(65, 116, 141, 0.35);
+    background: rgba(36, 83, 255, 0.35);
     border-radius: 999px;
   }
 
   .text-display {
-    font-family: "Inter", "Geist", -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", sans-serif;
+    font-family: "Avenir Next", -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
     letter-spacing: 0;
   }
 
@@ -151,6 +153,14 @@
 }
 
 @layer components {
+  .psw-numerals {
+    font-variant-numeric: tabular-nums;
+  }
+
+  .psw-home :is(h1, h2) {
+    text-wrap: balance;
+  }
+
   .search-pill {
     @apply inline-flex min-h-11 shrink-0 items-center gap-2 whitespace-nowrap rounded-full border border-[#cdd2e0] bg-white px-4 py-2.5 text-[13px] font-semibold text-[#0b1026] transition-colors hover:border-[#0b1026];
   }
@@ -166,6 +176,65 @@
     outline: 2px solid #2453ff;
     outline-offset: 4px;
   }
+}
+
+.psw-map-surface { isolation: isolate; }
+.psw-map-surface.leaflet-container { background: #e4e8f2; font: inherit; }
+.psw-map-surface img.leaflet-tile { max-width: none; }
+/* Quiet the standard tile palette without blurring street/place labels or
+   filtering interactive pins. Operators' custom cartography keeps its colors. */
+.search-map[data-map-palette="calm"] .leaflet-tile-pane {
+  filter: saturate(0.38) contrast(0.94) brightness(1.06);
+}
+.search-map-price:focus-visible { outline-offset: 5px; }
+
+@media (min-width: 1024px) {
+  .search-map[data-view="map"] { height: max(96px, calc(100dvh - var(--search-map-top, 205px))); }
+}
+
+@media (max-width: 1023px) {
+  .search-map[data-view="map"] {
+    height: max(96px, calc(100dvh - var(--search-map-top, 205px) - 72px));
+    min-height: 0;
+  }
+}
+
+@media (min-width: 768px) and (max-width: 1023px) {
+  .search-map[data-view="map"] { height: max(96px, calc(100dvh - var(--search-map-top, 205px))); }
+}
+
+/* A short viewport needs the existing view/filter controls in one toolbar row.
+   Keep the map's useful area above the phone navigation and its preview tappable. */
+@media (max-height: 500px) and (min-width: 500px) {
+  .search-toolbar-content { flex-direction: row; align-items: center; gap: 8px; padding-top: 6px; padding-bottom: 6px; }
+  .search-location-form { flex: 1; min-width: 0; }
+  .search-filter-summary { display: none; }
+  .search-filter-shortcut { padding-left: 10px; padding-right: 10px; }
+  .search-filter-shortcut > span:first-of-type { display: none; }
+  .search-view-controls { position: static; flex-shrink: 0; transform: none; padding: 2px; box-shadow: none; }
+  .search-view-controls button { padding-left: 10px; padding-right: 10px; }
+  .search-map-count, .search-map-hint, .search-map-city, .search-map-status, .search-map-campus-control, .search-map-campuses { display: none; }
+  .search-map-attribution { top: 0; right: auto; bottom: auto; left: 50%; transform: translateX(-50%); }
+  .search-map-pagination { top: 8px !important; left: 8px; }
+  .search-map-zoom { top: 8px; right: 8px; flex-direction: row; gap: 8px; }
+  .search-map-zoom-steps { display: flex; border: 0; }
+  .search-map-zoom-steps button:first-child { border-bottom: 0; border-right: 1px solid #e2e8f0; }
+  .search-map-preview { bottom: 72px; }
+  .search-map-preview > a { min-height: 52px; padding: 8px; }
+  .search-map-preview-image { display: none; }
+  .search-map-preview-text { display: flex; min-width: 0; flex: 1; flex-direction: column; padding-top: 0; padding-bottom: 0; }
+  .search-map-preview-text > p:first-child { font-size: 14px; line-height: 20px; }
+  .search-map-preview-text > p:nth-child(2) { margin-top: 0; font-size: 12px; line-height: 16px; }
+  .search-map-preview-text > p:nth-child(2) { -webkit-line-clamp: 1; padding-right: 44px; }
+  .search-map-preview-text > p:nth-child(3), .search-map-preview-lease, .search-map-preview-text > span { display: none; }
+  .search-map-cluster-detail { display: none; }
+  .search-map-cluster { bottom: 72px; display: flex; max-height: max(88px, calc(100dvh - var(--search-map-top, 141px) - 80px)); flex-direction: column; padding: 4px; }
+  .search-map-cluster-header { gap: 4px; margin-bottom: 4px; }
+  .search-map-cluster-header h2 { min-width: 0; padding-right: 44px; font-size: 12px; }
+  .search-map-cluster-list { min-height: 0; max-height: none; flex: 1; touch-action: pan-y; }
+  .search-map-cluster-fit { position: absolute; top: 4px; right: 52px; display: grid; width: 44px; height: 44px; margin: 0; padding: 0; place-items: center; }
+  .search-map-cluster-fit > span { display: none; }
+  .search-map-cluster-fit > svg { display: block; }
 }
 
 @keyframes marketplace-backdrop-in {
@@ -195,5 +264,17 @@
     scroll-behavior: auto !important;
     transition-duration: 0.01ms !important;
     animation: none !important;
+  }
+}
+
+@media (min-width: 1024px) and (max-height: 800px) {
+  /* A tall booking card must remain reachable on short desktop screens. */
+  .listing-booking-card { position: static; }
+}
+
+@media (max-width: 767px), (hover: none) and (pointer: coarse) {
+  /* Keep iOS from zooming the whole page when a form field receives focus. */
+  .marketplace-shell :is(input, select, textarea) {
+    font-size: 16px;
   }
 }

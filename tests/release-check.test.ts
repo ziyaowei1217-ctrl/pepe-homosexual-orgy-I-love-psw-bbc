@@ -1,8 +1,10 @@
-import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { afterEach, describe, expect, it } from "vitest";
+// @ts-expect-error JavaScript utility is executed directly by Node.
+import { mergeEnvironment } from "../tools/process-runner.mjs";
 
 const temporaryDirectories: string[] = [];
 
@@ -16,26 +18,26 @@ function runReleaseCheck(failingCommand?: string) {
   const directory = mkdtempSync(path.join(tmpdir(), "sublet-release-check-"));
   temporaryDirectories.push(directory);
   const logPath = path.join(directory, "commands.log");
-  const pnpmPath = path.join(directory, "pnpm");
+  const pnpmPath = path.join(directory, "pnpm.cjs");
   writeFileSync(
     pnpmPath,
     [
-      "#!/bin/sh",
-      'printf "%s\\n" "$*" >> "$RELEASE_TEST_LOG"',
-      'if [ "$*" = "$RELEASE_TEST_FAIL_COMMAND" ]; then exit 17; fi'
+      'const fs = require("node:fs");',
+      'const args = process.argv.slice(2).join(" ");',
+      'fs.appendFileSync(process.env.RELEASE_TEST_LOG, args + "\\n");',
+      'if (args === process.env.RELEASE_TEST_FAIL_COMMAND) process.exit(17);'
     ].join("\n")
   );
-  chmodSync(pnpmPath, 0o755);
 
   const result = spawnSync(process.execPath, ["tools/release-check.mjs"], {
     cwd: process.cwd(),
     encoding: "utf8",
-    env: {
-      ...process.env,
-      PATH: `${directory}:${process.env.PATH ?? ""}`,
+    env: mergeEnvironment(process.env, {
+      npm_execpath: pnpmPath,
       RELEASE_TEST_LOG: logPath,
       RELEASE_TEST_FAIL_COMMAND: failingCommand ?? ""
-    }
+    }),
+    timeout: 10_000
   });
 
   return {

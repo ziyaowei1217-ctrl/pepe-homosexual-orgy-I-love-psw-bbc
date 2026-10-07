@@ -755,6 +755,7 @@ model RoommateMatchingProfile {
   updatedAt              DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   @@index([userId, status])
+  @@index([userId, createdAt, id])
   @@index([city, school, status])
   @@index([budgetMin, budgetMax])
   @@map("roommate_profiles")

@@ -1,19 +1,32 @@
 "use client";
 
 import { ImageOff } from "lucide-react";
-import Image, { type ImageProps } from "next/image";
-import { useState } from "react";
+import type { ImageProps } from "next/image";
+import Image from "@/components/ui/app-image";
+import { useCallback, useState } from "react";
 
 import { cn } from "@/lib/utils";
-
 /**
- * next/image with a fade-in on load and a quiet placeholder when the source
- * is missing or fails, so cards never show a broken-image icon with raw alt text.
+ * The first-party media policy is preserved; a quiet placeholder appears when the source
+ * is missing or fails. Initial HTML keeps the image visible before hydration.
  */
 export function SmartImage({ className, alt, src, onLoad, onError, ...props }: ImageProps) {
   const [failedSrc, setFailedSrc] = useState<ImageProps["src"] | null>(null);
-  const [loadedSrc, setLoadedSrc] = useState<ImageProps["src"] | null>(null);
   const failed = !src || failedSrc === src;
+  const handleLoad = useCallback<NonNullable<ImageProps["onLoad"]>>((event) => {
+    // next/image replays onLoad for images that settled before hydration, including broken ones.
+    if (event.currentTarget.naturalWidth === 0) {
+      setFailedSrc(src);
+      return;
+    }
+    onLoad?.(event);
+  }, [src, onLoad]);
+  // Next Image reattaches its image ref when onError changes and resets src.
+  // Keep an unchanged photo's request intact during surrounding UI updates.
+  const handleError = useCallback<NonNullable<ImageProps["onError"]>>((event) => {
+    setFailedSrc(src);
+    onError?.(event);
+  }, [src, onError]);
 
   if (failed) {
     return (
@@ -21,7 +34,10 @@ export function SmartImage({ className, alt, src, onLoad, onError, ...props }: I
         role={alt ? "img" : undefined}
         aria-label={alt || undefined}
         aria-hidden={alt ? undefined : true}
-        className="photo-placeholder absolute inset-0 grid place-items-center text-[#6b7493]"
+        className={cn("photo-placeholder grid place-items-center text-[#6b7493]", props.fill ? "absolute inset-0" : "max-w-full", className)}
+        style={!props.fill && Number(props.width) > 0 && Number(props.height) > 0
+          ? { aspectRatio: `${Number(props.width)} / ${Number(props.height)}`, ...props.style }
+          : props.style}
       >
         <ImageOff className="size-7" aria-hidden="true" />
       </span>
@@ -33,20 +49,9 @@ export function SmartImage({ className, alt, src, onLoad, onError, ...props }: I
       {...props}
       src={src}
       alt={alt}
-      className={cn("transition-opacity duration-500", loadedSrc === src ? "opacity-100" : "opacity-0", className)}
-      onLoad={(event) => {
-        // next/image replays onLoad for images that settled before hydration, including broken ones.
-        if (event.currentTarget.naturalWidth === 0) {
-          setFailedSrc(src);
-          return;
-        }
-        setLoadedSrc(src);
-        onLoad?.(event);
-      }}
-      onError={(event) => {
-        setFailedSrc(src);
-        onError?.(event);
-      }}
+      className={className}
+      onLoad={handleLoad}
+      onError={handleError}
     />
   );
 }

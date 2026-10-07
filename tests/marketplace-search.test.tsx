@@ -29,7 +29,9 @@ describe("marketplace search", () => {
     expect(html).not.toContain("Westwood 的可租房源");
     expect(html).toContain("房源列表");
     expect(html).toContain('aria-label="房源地图"');
-    expect(html).toContain("tile.openstreetmap.de");
+    expect(html).toContain("psw-map-surface");
+    expect(html).not.toContain("leaflet-tile"); // Basemap loads after the visible client canvas exists.
+    expect(html).toContain("底图加载中");
     expect(html).toContain("© OpenStreetMap contributors");
     expect(html).not.toContain("示意地图");
     expect(html).toContain('href="/listing/preview-01"');
@@ -95,7 +97,7 @@ describe("marketplace search", () => {
     expect(pageText).toContain("Boston的可租房源");
     expect(pageText).toContain("Back Bay 阳光一居");
     expect(pageText).not.toContain(losAngelesListing.title);
-    expect(pageText).toContain("1 个地图结果");
+    expect(pageText).toContain("视野内 1 / 本页 1");
   });
 
   it("lets keyboard users choose a location suggestion with ArrowDown and Enter", async () => {
@@ -164,7 +166,7 @@ describe("marketplace search", () => {
     expect(pageText).toContain("Seattle的可租房源");
     expect(pageText).toContain("South Lake Union 科技通勤一居");
     expect(pageText).not.toContain(losAngelesListing.title);
-    expect(pageText).toContain("1 个地图结果");
+    expect(pageText).toContain("视野内 1 / 本页 1");
   });
 });
 

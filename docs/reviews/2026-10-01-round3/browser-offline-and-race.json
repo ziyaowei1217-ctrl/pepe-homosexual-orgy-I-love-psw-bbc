@@ -1,0 +1,387 @@
+[
+  {
+    "name": "chromium",
+    "checks": [
+      {
+        "name": "Real browser offline profile save retains draft and can retry online",
+        "result": {
+          "draftRetained": true,
+          "onlineRetrySaved": true
+        },
+        "status": "pass"
+      },
+      {
+        "name": "Likes late previous-account response ignored after session change",
+        "result": {
+          "oldResponseExcluded": true
+        },
+        "status": "pass"
+      },
+      {
+        "name": "Grouped saved map supports touch selection of each home",
+        "result": {
+          "selected": [
+            "http://127.0.0.1:4411/listing/independent-round2-1",
+            "http://127.0.0.1:4411/listing/independent-round2-3"
+          ]
+        },
+        "status": "pass"
+      }
+    ],
+    "pageErrors": [],
+    "requestsFailed": [
+      {
+        "url": "http://127.0.0.1:4411/?_rsc=PrG7GbeEkqOCRqmJ",
+        "reason": "net::ERR_ABORTED"
+      },
+      {
+        "url": "http://127.0.0.1:4411/account?_rsc=PrG7GbeEkqOCRqmJ",
+        "reason": "net::ERR_ABORTED"
+      },
+      {
+        "url": "http://127.0.0.1:4411/account/verification?_rsc=PrG7GbeEkqOCRqmJ",
+        "reason": "net::ERR_ABORTED"
+      },
+      {
+        "url": "http://127.0.0.1:4411/account/settings?_rsc=PrG7GbeEkqOCRqmJ",
+        "reason": "net::ERR_ABORTED"
+      },
+      {
+        "url": "http://127.0.0.1:4411/search?_rsc=PrG7GbeEkqOCRqmJ",
+        "reason": "net::ERR_ABORTED"
+      },
+      {
+        "url": "http://127.0.0.1:4411/roommates?_rsc=PrG7GbeEkqOCRqmJ",
+        "reason": "net::ERR_ABORTED"
+      },
+      {
+        "url": "http://127.0.0.1:4411/saved?_rsc=PrG7GbeEkqOCRqmJ",
+        "reason": "net::ERR_ABORTED"
+      },
+      {
+        "url": "http://127.0.0.1:4411/inbox?_rsc=PrG7GbeEkqOCRqmJ",
+        "reason": "net::ERR_ABORTED"
+      },
+      {
+        "url": "http://localhost:4000/api/v1/profiles/me",
+        "reason": "net::ERR_INTERNET_DISCONNECTED"
+      },
+      {
+        "url": "http://127.0.0.1:4411/?_rsc=FmlKm43uP8wZt6nF",
+        "reason": "net::ERR_ABORTED"
+      },
+      {
+        "url": "http://127.0.0.1:4411/account?_rsc=FmlKm43uP8wZt6nF",
+        "reason": "net::ERR_ABORTED"
+      },
+      {
+        "url": "http://127.0.0.1:4411/roommates?_rsc=FmlKm43uP8wZt6nF",
+        "reason": "net::ERR_ABORTED"
+      },
+      {
+        "url": "http://127.0.0.1:4411/roommates/teams?_rsc=FmlKm43uP8wZt6nF",
+        "reason": "net::ERR_ABORTED"
+      },
+      {
+        "url": "http://127.0.0.1:4411/search?_rsc=FmlKm43uP8wZt6nF",
+        "reason": "net::ERR_ABORTED"
+      },
+      {
+        "url": "http://127.0.0.1:4411/saved?_rsc=FmlKm43uP8wZt6nF",
+        "reason": "net::ERR_ABORTED"
+      },
+      {
+        "url": "http://127.0.0.1:4411/?_rsc=znyBdcYKFK2PO5sc",
+        "reason": "net::ERR_ABORTED"
+      },
+      {
+        "url": "http://127.0.0.1:4411/account?_rsc=znyBdcYKFK2PO5sc",
+        "reason": "net::ERR_ABORTED"
+      },
+      {
+        "url": "http://127.0.0.1:4411/listing/independent-round2-6?_rsc=znyBdcYKFK2PO5sc",
+        "reason": "net::ERR_ABORTED"
+      },
+      {
+        "url": "http://127.0.0.1:4411/listing/independent-round2-5?_rsc=znyBdcYKFK2PO5sc",
+        "reason": "net::ERR_ABORTED"
+      },
+      {
+        "url": "http://127.0.0.1:4411/roommates?_rsc=znyBdcYKFK2PO5sc",
+        "reason": "net::ERR_ABORTED"
+      },
+      {
+        "url": "http://127.0.0.1:4411/saved?_rsc=znyBdcYKFK2PO5sc",
+        "reason": "net::ERR_ABORTED"
+      },
+      {
+        "url": "http://127.0.0.1:4411/inbox?_rsc=znyBdcYKFK2PO5sc",
+        "reason": "net::ERR_ABORTED"
+      },
+      {
+        "url": "http://127.0.0.1:4411/listing/independent-round2-3?_rsc=znyBdcYKFK2PO5sc",
+        "reason": "net::ERR_ABORTED"
+      },
+      {
+        "url": "http://127.0.0.1:4411/listing/independent-round2-2?_rsc=znyBdcYKFK2PO5sc",
+        "reason": "net::ERR_ABORTED"
+      },
+      {
+        "url": "http://127.0.0.1:4411/?_rsc=b2wQYl5uE3Whe3mA",
+        "reason": "net::ERR_ABORTED"
+      },
+      {
+        "url": "http://127.0.0.1:4411/account?_rsc=b2wQYl5uE3Whe3mA",
+        "reason": "net::ERR_ABORTED"
+      },
+      {
+        "url": "http://127.0.0.1:4411/search?_rsc=b2wQYl5uE3Whe3mA",
+        "reason": "net::ERR_ABORTED"
+      },
+      {
+        "url": "http://127.0.0.1:4411/roommates?_rsc=b2wQYl5uE3Whe3mA",
+        "reason": "net::ERR_ABORTED"
+      },
+      {
+        "url": "http://127.0.0.1:4411/inbox?_rsc=b2wQYl5uE3Whe3mA",
+        "reason": "net::ERR_ABORTED"
+      },
+      {
+        "url": "http://127.0.0.1:4411/listing/independent-round2-3?_rsc=b2wQYl5uE3Whe3mA",
+        "reason": "net::ERR_ABORTED"
+      },
+      {
+        "url": "http://127.0.0.1:4411/listing/independent-round2-1?_rsc=b2wQYl5uE3Whe3mA",
+        "reason": "net::ERR_ABORTED"
+      },
+      {
+        "url": "http://127.0.0.1:4411/listing/independent-round2-1?_rsc=HjIIg2fZ_2veu86U",
+        "reason": "net::ERR_ABORTED"
+      },
+      {
+        "url": "http://127.0.0.1:4411/?_rsc=b2wQYl5uE3Whe3mA",
+        "reason": "net::ERR_ABORTED"
+      },
+      {
+        "url": "http://127.0.0.1:4411/account?_rsc=b2wQYl5uE3Whe3mA",
+        "reason": "net::ERR_ABORTED"
+      },
+      {
+        "url": "http://127.0.0.1:4411/search?_rsc=b2wQYl5uE3Whe3mA",
+        "reason": "net::ERR_ABORTED"
+      },
+      {
+        "url": "http://127.0.0.1:4411/roommates?_rsc=b2wQYl5uE3Whe3mA",
+        "reason": "net::ERR_ABORTED"
+      },
+      {
+        "url": "http://127.0.0.1:4411/inbox?_rsc=b2wQYl5uE3Whe3mA",
+        "reason": "net::ERR_ABORTED"
+      },
+      {
+        "url": "http://127.0.0.1:4411/listing/independent-round2-3?_rsc=b2wQYl5uE3Whe3mA",
+        "reason": "net::ERR_ABORTED"
+      },
+      {
+        "url": "http://127.0.0.1:4411/listing/independent-round2-1?_rsc=b2wQYl5uE3Whe3mA",
+        "reason": "net::ERR_ABORTED"
+      },
+      {
+        "url": "http://127.0.0.1:4411/listing/independent-round2-3?_rsc=g8tCSv5ggKWb2kpV",
+        "reason": "net::ERR_ABORTED"
+      }
+    ]
+  },
+  {
+    "name": "firefox",
+    "checks": [
+      {
+        "name": "Real browser offline profile save retains draft and can retry online",
+        "result": {
+          "draftRetained": true,
+          "onlineRetrySaved": true
+        },
+        "status": "pass"
+      },
+      {
+        "name": "Likes late previous-account response ignored after session change",
+        "result": {
+          "oldResponseExcluded": true
+        },
+        "status": "pass"
+      },
+      {
+        "name": "Grouped saved map supports touch selection of each home",
+        "result": {
+          "selected": [
+            "http://127.0.0.1:4411/listing/independent-round2-1",
+            "http://127.0.0.1:4411/listing/independent-round2-3"
+          ]
+        },
+        "status": "pass"
+      }
+    ],
+    "pageErrors": [],
+    "requestsFailed": [
+      {
+        "url": "http://localhost:4000/api/v1/profiles/me",
+        "reason": "NS_ERROR_OFFLINE"
+      },
+      {
+        "url": "http://127.0.0.1:4411/applications/new?listingId=independent-round2-1&moveIn=2026-10-01&moveOut=2027-08-31&_rsc=KvJdr3t9iWENMXIs",
+        "reason": "NS_BINDING_ABORTED"
+      }
+    ]
+  },
+  {
+    "name": "webkit",
+    "checks": [
+      {
+        "name": "Real browser offline profile save retains draft and can retry online",
+        "result": {
+          "draftRetained": true,
+          "onlineRetrySaved": true
+        },
+        "status": "pass"
+      },
+      {
+        "name": "Likes late previous-account response ignored after session change",
+        "result": {
+          "oldResponseExcluded": true
+        },
+        "status": "pass"
+      },
+      {
+        "name": "Grouped saved map supports touch selection of each home",
+        "result": {
+          "selected": [
+            "http://127.0.0.1:4411/listing/independent-round2-1",
+            "http://127.0.0.1:4411/listing/independent-round2-3"
+          ]
+        },
+        "status": "pass"
+      }
+    ],
+    "pageErrors": [
+      "/127.0.0.1:4411/applications/new?listingId=independent-round2-1&moveIn=2026-10-01&moveOut=2027-08-31&_rsc=KvJdr3t9iWENMXIs due to access control checks."
+    ],
+    "requestsFailed": [
+      {
+        "url": "http://localhost:4000/api/v1/profiles/me",
+        "reason": "WebKit encountered an internal error"
+      },
+      {
+        "url": "https://tile.openstreetmap.de/12/702/1636.png",
+        "reason": "cancelled"
+      },
+      {
+        "url": "https://tile.openstreetmap.de/12/700/1634.png",
+        "reason": "cancelled"
+      },
+      {
+        "url": "https://tile.openstreetmap.de/11/352/818.png",
+        "reason": "cancelled"
+      },
+      {
+        "url": "https://tile.openstreetmap.de/12/701/1636.png",
+        "reason": "cancelled"
+      },
+      {
+        "url": "https://tile.openstreetmap.de/12/703/1634.png",
+        "reason": "cancelled"
+      },
+      {
+        "url": "https://tile.openstreetmap.de/12/703/1635.png",
+        "reason": "cancelled"
+      },
+      {
+        "url": "https://tile.openstreetmap.de/12/704/1635.png",
+        "reason": "cancelled"
+      },
+      {
+        "url": "https://tile.openstreetmap.de/11/350/818.png",
+        "reason": "cancelled"
+      },
+      {
+        "url": "https://tile.openstreetmap.de/12/700/1635.png",
+        "reason": "cancelled"
+      },
+      {
+        "url": "https://tile.openstreetmap.de/11/349/817.png",
+        "reason": "cancelled"
+      },
+      {
+        "url": "https://tile.openstreetmap.de/11/351/817.png",
+        "reason": "cancelled"
+      },
+      {
+        "url": "http://127.0.0.1:4411/_next/image?url=http%3A%2F%2Flocalhost%3A4599%2Fapi%2Fv1%2Flisting-media%2F00000000-0000-4000-8000-000000000001%2Fcontent&w=640&q=75",
+        "reason": "cancelled"
+      },
+      {
+        "url": "https://tile.openstreetmap.de/12/700/1636.png",
+        "reason": "cancelled"
+      },
+      {
+        "url": "https://tile.openstreetmap.de/12/704/1636.png",
+        "reason": "cancelled"
+      },
+      {
+        "url": "https://tile.openstreetmap.de/12/702/1634.png",
+        "reason": "cancelled"
+      },
+      {
+        "url": "https://tile.openstreetmap.de/11/352/817.png",
+        "reason": "cancelled"
+      },
+      {
+        "url": "https://tile.openstreetmap.de/11/351/818.png",
+        "reason": "cancelled"
+      },
+      {
+        "url": "https://tile.openstreetmap.de/11/349/818.png",
+        "reason": "cancelled"
+      },
+      {
+        "url": "https://tile.openstreetmap.de/11/352/816.png",
+        "reason": "cancelled"
+      },
+      {
+        "url": "https://tile.openstreetmap.de/12/701/1635.png",
+        "reason": "cancelled"
+      },
+      {
+        "url": "https://tile.openstreetmap.de/11/350/816.png",
+        "reason": "cancelled"
+      },
+      {
+        "url": "https://tile.openstreetmap.de/12/702/1635.png",
+        "reason": "cancelled"
+      },
+      {
+        "url": "https://tile.openstreetmap.de/12/704/1634.png",
+        "reason": "cancelled"
+      },
+      {
+        "url": "https://tile.openstreetmap.de/11/351/816.png",
+        "reason": "cancelled"
+      },
+      {
+        "url": "https://tile.openstreetmap.de/12/703/1636.png",
+        "reason": "cancelled"
+      },
+      {
+        "url": "https://tile.openstreetmap.de/11/350/817.png",
+        "reason": "cancelled"
+      },
+      {
+        "url": "https://tile.openstreetmap.de/11/349/816.png",
+        "reason": "cancelled"
+      },
+      {
+        "url": "https://tile.openstreetmap.de/12/701/1634.png",
+        "reason": "cancelled"
+      }
+    ]
+  }
+]

@@ -1,8 +1,9 @@
 "use client";
 
 import { ArrowLeft, ArrowRight, Bath, BedDouble, CalendarDays, Check, ChevronDown, Heart, LayoutGrid, List, Map, MapPin, Search, SlidersHorizontal, Star, TrainFront, X } from "lucide-react";
-import { SmartImage } from "@/components/ui/smart-image";
-import Link from "next/link";
+import { SmartImage as Image } from "@/components/ui/smart-image";
+import Link from "@/components/ui/app-link";
+import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { LocationAutocomplete } from "@/components/marketplace/location-autocomplete";
@@ -18,7 +19,8 @@ import { cn } from "@/lib/utils";
 export function SearchExperience({ listings, initialQuery, initialMoveIn, initialMoveOut, initialState }: {
   listings: PreviewListing[]; initialQuery: string; initialMoveIn: string; initialMoveOut: string; initialState?: SearchState;
 }) {
-  const [state, setState] = useState<SearchState>(() => initialState ?? { ...defaultSearch, query: initialQuery, moveIn: initialMoveIn, moveOut: initialMoveOut });
+  const routerQuery = useSearchParams()?.toString();
+  const [state, setState] = useState<SearchState>(() => initialState ?? (typeof window !== "undefined" && window.location.pathname === "/search" ? parseSearchState(new URLSearchParams(window.location.search)) : { ...defaultSearch, query: initialQuery, moveIn: initialMoveIn, moveOut: initialMoveOut }));
   const [filterOpen, setFilterOpen] = useState<SearchFilterSection | null>(null);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
@@ -31,35 +33,41 @@ export function SearchExperience({ listings, initialQuery, initialMoveIn, initia
   const filterCount = state.amenities.length + Number(Boolean(state.priceMin || state.priceMax)) + Number(Boolean(state.beds));
 
   useEffect(() => {
-    // Read the address bar after commit, not during render: on a client navigation the router has not
-    // updated it yet during render, while a restored history entry may carry filters added via pushState.
-    if (window.location.pathname === "/search") {
-      const fromUrl = parseSearchState(new URLSearchParams(window.location.search));
-      setState((current) => searchHref(fromUrl) === searchHref(current) ? current : fromUrl);
-    }
-    if (window.matchMedia?.("(max-width: 1023px)").matches) {
-      setState((current) => current.view === "split" ? { ...current, view: "list" } : current);
-    }
+    const narrowViewport = window.matchMedia?.("(max-width: 1023px)");
+    const normalizeView = () => {
+      if (narrowViewport?.matches) setState((current) => current.view === "split" ? { ...current, view: "list" } : current);
+    };
+    normalizeView();
+    narrowViewport?.addEventListener?.("change", normalizeView);
     const selected = initialState?.selected;
     if (selected) cards.current.get(selected)?.scrollIntoView?.({ block: "nearest", behavior: "instant" });
+    return () => narrowViewport?.removeEventListener?.("change", normalizeView);
   }, [initialState?.selected]);
 
-  // Client-side navigation to a /search URL that matches the mounted key (e.g. the "找房" nav link
-  // after filters were pushed with history.pushState) re-renders with a fresh initialState but no remount.
-  const mountedInitialState = useRef(initialState);
   useEffect(() => {
-    if (mountedInitialState.current === initialState) return;
-    mountedInitialState.current = initialState;
-    if (initialState) {
-      const compact = window.matchMedia?.("(max-width: 1023px)").matches && initialState.view === "split";
-      setState(compact ? { ...initialState, view: "list" } : initialState);
-      setHoveredId(null);
-      setFilterOpen(null);
-    }
-  }, [initialState]);
+    if (routerQuery === undefined || window.location.pathname !== "/search") return;
+    // App Router links can reuse this page without firing popstate. Ignore an
+    // older router snapshot while a native history update is still settling.
+    if (new URLSearchParams(window.location.search).toString() !== routerQuery) return;
+    const restored = parseSearchState(new URLSearchParams(routerQuery));
+    if (restored.view === "split" && window.matchMedia?.("(max-width: 1023px)").matches) restored.view = "list";
+    // Native edits already committed equivalent criteria. Preserve in-progress
+    // input text (including spaces) instead of normalizing it on every keystroke.
+    setState((current) => searchHref(current) === searchHref(restored) ? current : restored);
+    setHoveredId(null);
+    setFilterOpen(null);
+  }, [routerQuery]);
 
   useEffect(() => {
-    const onBack = () => { setState(parseSearchState(new URLSearchParams(window.location.search))); setHoveredId(null); setFilterOpen(null); };
+    const onBack = () => {
+      const restored = parseSearchState(new URLSearchParams(window.location.search));
+      // Split has no visible control on small screens, including when restoring
+      // an older URL without an explicit view through Back or Forward.
+      if (restored.view === "split" && window.matchMedia?.("(max-width: 1023px)").matches) restored.view = "list";
+      setState(restored);
+      setHoveredId(null);
+      setFilterOpen(null);
+    };
     window.addEventListener("popstate", onBack);
     return () => window.removeEventListener("popstate", onBack);
   }, []);
@@ -106,60 +114,61 @@ export function SearchExperience({ listings, initialQuery, initialMoveIn, initia
   ];
 
   return <main className="search-workspace min-h-[calc(100dvh-72px)] bg-white">
-    <section className="search-toolbar sticky top-[72px] z-40 border-b border-slate-200 bg-white/95 backdrop-blur-xl">
-      <div className="mx-auto flex max-w-[1760px] flex-col gap-3 px-4 py-3 sm:px-6 lg:flex-row lg:items-center lg:gap-4 lg:px-8 lg:py-4">
-        <form action="/search" aria-label="修改搜索" onSubmit={(event) => { event.preventDefault(); update({}, "replace"); }} className="flex min-w-0 items-center gap-3 rounded-full border-[1.5px] border-[#0b1026] bg-white p-1.5 pl-4 lg:w-[380px] lg:shrink-0">
+    <section className="search-toolbar sticky top-[72px] z-40 border-b border-slate-200 bg-white">
+      <div className="search-toolbar-content mx-auto flex max-w-[1760px] flex-col gap-3 px-4 py-3 sm:px-6 lg:flex-row lg:items-center lg:gap-4 lg:px-8 lg:py-4">
+        <form action="/search" aria-label="修改搜索" onSubmit={(event) => { event.preventDefault(); update({}, "replace"); }} className="search-location-form flex min-w-0 items-center gap-2 rounded-full border-[1.5px] border-[#0b1026] bg-white p-1.5 pl-4 shadow-sm focus-within:border-[#2453ff] lg:w-[380px] lg:shrink-0">
           <MapPin className="size-4 shrink-0 text-[#2453ff]" aria-hidden="true" />
-          <div className="min-w-0 flex-1"><LocationAutocomplete name="q" value={state.query} onValueChange={(query) => update({ query }, "replace")} inputClassName="text-sm font-semibold" ariaLabel="地点或学校" placeholder="城市、学校或公司" /></div>
-          {state.query ? <button type="button" onClick={() => update({ query: "" })} aria-label="清除地点" className="grid size-7 shrink-0 place-items-center rounded-full hover:bg-slate-100"><X className="size-3.5" /></button> : null}
-          <button type="submit" aria-label="更新搜索" className="grid size-10 shrink-0 place-items-center rounded-full bg-[#2453ff] text-white transition-colors hover:bg-[#1a3dd6]"><Search className="size-4" /></button>
+          <div className="min-w-0 flex-1"><LocationAutocomplete name="q" value={state.query} onValueChange={(query) => update({ query }, "replace")} inputClassName="min-h-11 text-base font-semibold sm:text-sm" ariaLabel="地点或学校" placeholder="城市、学校或公司" /></div>
+          {state.query ? <button type="button" onClick={() => update({ query: "" })} aria-label="清除地点" className="grid size-11 shrink-0 place-items-center rounded-full hover:bg-slate-100"><X className="size-3.5" /></button> : null}
+          <button type="submit" aria-label="更新搜索" className="grid size-11 shrink-0 place-items-center rounded-full bg-[#2453ff] text-white transition-colors hover:bg-[#1a3dd6]"><Search className="size-4" /></button>
         </form>
         <div className="flex min-w-0 items-center gap-2 overflow-x-auto [scrollbar-width:none]">
-          <button type="button" onClick={() => setFilterOpen("budget")} className={cn("search-pill", (state.priceMin || state.priceMax) && "search-pill-active")}>{budgetLabel}<ChevronDown className="size-3.5" /></button>
-          <button type="button" onClick={() => setFilterOpen("beds")} className={cn("search-pill", state.beds && "search-pill-active")}><BedDouble className="size-4" />{state.beds ? `${state.beds}+ 卧室` : "卧室"}<ChevronDown className="size-3.5" /></button>
-          <button type="button" onClick={() => setFilterOpen("dates")} className={cn("search-pill", (state.moveIn || state.moveOut) && "search-pill-active")}><CalendarDays className="size-4" />{dateLabel}<ChevronDown className="size-3.5" /></button>
-          <button type="button" onClick={() => setFilterOpen("budget")} aria-label="筛选" className={cn("search-pill order-first lg:order-none", filterCount && "search-pill-active")}><SlidersHorizontal className="size-4" /><span>筛选</span>{filterCount ? <span className="grid size-5 place-items-center rounded-full bg-[#2453ff] text-[10px] text-white">{filterCount}</span> : null}</button>
+          <button type="button" onClick={(event) => { event.currentTarget.focus(); setFilterOpen("budget"); }} className={cn("search-filter-summary search-pill", (state.priceMin || state.priceMax) && "search-pill-active")}>{budgetLabel}<ChevronDown className="size-3.5" /></button>
+          <button type="button" onClick={(event) => { event.currentTarget.focus(); setFilterOpen("beds"); }} className={cn("search-filter-summary search-pill", state.beds && "search-pill-active")}><BedDouble className="size-4" />{state.beds ? `${state.beds}+ 卧室` : "卧室"}<ChevronDown className="size-3.5" /></button>
+          <button type="button" onClick={(event) => { event.currentTarget.focus(); setFilterOpen("dates"); }} className={cn("search-filter-summary search-pill", (state.moveIn || state.moveOut) && "search-pill-active")}><CalendarDays className="size-4" />{dateLabel}<ChevronDown className="size-3.5" /></button>
+          <button type="button" onClick={(event) => { event.currentTarget.focus(); setFilterOpen("budget"); }} aria-label="筛选" className={cn("search-filter-shortcut search-pill order-first lg:order-none", filterCount && "search-pill-active")}><SlidersHorizontal className="size-4" /><span>筛选</span>{filterCount ? <span className="grid size-5 place-items-center rounded-full bg-[#2453ff] text-[10px] text-white">{filterCount}</span> : null}</button>
         </div>
+    <div className="search-view-controls fixed bottom-[82px] left-1/2 z-40 flex max-w-[calc(100vw-32px)] -translate-x-1/2 rounded-full bg-[#0b1026] p-1 text-white shadow-lg md:bottom-6" aria-label="浏览方式">
+      {([["split", "分屏", LayoutGrid], ["list", "列表", List], ["map", "地图", Map]] as const).map(([view, label, Icon]) => <button key={view} type="button" onClick={() => update({ view, page: state.page, selected: state.selected })} aria-pressed={state.view === view} className={cn("flex min-h-11 shrink-0 items-center gap-2 whitespace-nowrap rounded-full px-4 py-2.5 text-xs font-semibold", state.view === view ? "bg-white text-slate-950" : "text-white hover:bg-white/15", view === "split" && "hidden lg:flex")}><Icon className="size-3.5" />{label}</button>)}
+    </div>
         <Link href="/saved" className="ml-auto hidden shrink-0 items-center gap-2 text-sm font-semibold text-slate-700 xl:flex"><Heart className="size-4" />我的收藏{savedIds.size ? ` (${savedIds.size})` : ""}</Link>
       </div>
     </section>
 
+    {state.view === "map" ? <h1 className="sr-only">{catalog.heading} · {catalog.total} 套转租房源</h1> : null}
     <div className={cn("mx-auto grid max-w-[1920px]", state.view === "split" && "lg:grid-cols-[minmax(480px,0.95fr)_minmax(0,1.05fr)]")}>
       <section className={cn("min-w-0 px-4 pb-28 pt-6 sm:px-6 lg:px-8", state.view === "map" && "hidden")} aria-labelledby="result-heading">
         <div className="flex items-center gap-2 text-xs text-slate-400"><Link href="/" className="hover:text-slate-950">首页</Link><span>/</span><span>房源列表</span>{state.query ? <><span>/</span><span className="truncate text-slate-600">{state.query}</span></> : null}</div>
         <div className="mt-4 flex items-start justify-between gap-3">
-          <div><h1 id="result-heading" className="text-[28px] font-black leading-tight tracking-[-0.02em] text-[#0b1026] sm:text-[36px]">{catalog.heading}</h1><p className="mt-2 text-sm text-[#5b6380]" role="status" aria-live="polite"><strong className="font-display text-base font-bold text-[#0b1026]">{catalog.total}</strong> 套符合条件 · 按月租住，自在安顿</p></div>
+          <div><h1 id="result-heading" className="font-display text-[28px] font-black leading-tight tracking-tight text-[#0b1026] sm:text-[36px]">{catalog.heading}</h1><p className="mt-2 text-sm text-slate-500" role="status" aria-live="polite"><strong className="font-display text-base font-bold text-[#0b1026]">{catalog.total} 套</strong>符合条件 · 按月租金与可租日期比较转租</p></div>
         </div>
         {dateError ? <p role="alert" className="mt-3 rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-800">{dateError}</p> : null}
-        {chips.length ? <div className="mt-4 flex flex-wrap gap-2" aria-label="已选条件">{chips.map((chip) => <button key={chip.label} type="button" aria-label={`移除 ${chip.label}`} onClick={chip.clear} className="flex min-h-9 items-center gap-1.5 rounded-full bg-[#0b1026] px-3.5 py-1.5 text-xs font-semibold text-white">{chip.label}<X className="size-3" /></button>)}<button type="button" onClick={() => update({ ...emptyFilters, moveIn: "", moveOut: "" })} className="px-2 text-xs font-semibold text-slate-600 underline">重置条件</button></div> : null}
+        {chips.length ? <div className="mt-4 flex flex-wrap gap-2" aria-label="已选条件">{chips.map((chip) => <button key={chip.label} type="button" aria-label={`移除 ${chip.label}`} onClick={chip.clear} className="flex items-center gap-1.5 min-h-11 rounded-full bg-[#0b1026] px-3 py-1.5 text-xs font-semibold text-white">{chip.label}<X className="size-3" /></button>)}<button type="button" onClick={() => update({ ...emptyFilters, moveIn: "", moveOut: "" })} className="min-h-11 px-2 text-xs font-semibold text-slate-600 underline">重置条件</button></div> : null}
         <div className="mt-5 flex items-center justify-between gap-3 border-b border-slate-200 pb-4">
-          <div className="flex items-center gap-2 text-xs text-[#5b6380]"><span className="size-1.5 rounded-full bg-[#2453ff]" />价格以美元 / 月显示</div>
-          <label className="flex items-center gap-1 text-xs text-slate-500">排序<select value={state.sort} onChange={(event) => update({ sort: event.target.value as CatalogSort })} aria-label="结果排序" className="max-w-[160px] rounded-[10px] border border-[#cdd2e0] bg-white px-2.5 py-2 font-bold text-[#0b1026] outline-none"><option value="recommended">推荐优先</option><option value="price-low">价格从低到高</option><option value="price-high">价格从高到低</option><option value="rating">评分优先</option></select></label>
+          <div className="flex items-center gap-2 text-xs text-slate-500"><span className="size-1.5 rounded-full bg-[#2453ff]" />价格以美元 / 月显示</div>
+          <label className="flex items-center gap-1 text-xs text-slate-500">排序<select value={state.sort} onChange={(event) => update({ sort: event.target.value as CatalogSort })} aria-label="结果排序" className="min-h-11 max-w-[140px] rounded-[10px] border border-[#cdd2e0] bg-white px-2.5 py-2 font-bold text-[#0b1026] outline-none"><option value="recommended">推荐优先</option><option value="price-low">价格从低到高</option><option value="price-high">价格从高到低</option><option value="rating">评分优先</option></select></label>
         </div>
         {catalog.items.length ? <div className={cn("mt-5 grid gap-x-5 gap-y-7", state.view === "list" ? "sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4" : "sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2")}>
           {catalog.items.map((listing, index) => <article key={listing.id} ref={(node) => { if (node) cards.current.set(listing.id, node); else cards.current.delete(listing.id); }} id={`result-${listing.id}`} className={cn("group min-w-0 scroll-mt-[210px] overflow-hidden rounded-[22px] border border-[#e3e6ef] bg-white transition-[border-color,box-shadow] duration-300 hover:border-[#0b1026] hover:shadow-[0_18px_40px_rgba(11,16,38,0.1)]", activeId === listing.id && "border-[#2453ff] ring-2 ring-[#2453ff] hover:border-[#2453ff]")} onMouseEnter={() => setHoveredId(listing.id)} onMouseLeave={() => setHoveredId(null)} onFocus={() => setHoveredId(listing.id)} onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setHoveredId(null); }}>
             <div className="relative aspect-[1.42] overflow-hidden bg-[#dce2f0]">
-              <Link href={listingHref(listing.id, state)} onClick={() => rememberSearch(listing.id)} className="absolute inset-0"><SmartImage src={listing.image} alt={listing.title} fill priority={index < 2} sizes={state.view === "list" ? "(max-width: 640px) 100vw, 30vw" : "(max-width: 640px) 100vw, (max-width: 1200px) 45vw, 25vw"} className="object-cover transition-transform duration-300 group-hover:scale-[1.035]" /></Link>
-              {listing.originalPrice > listing.price ? <span className="pointer-events-none absolute left-3 top-3 rounded-full bg-[#ffb020] px-3 py-1.5 text-[11px] font-bold text-[#1a1206]">比原价低 ${(listing.originalPrice - listing.price).toLocaleString("en-US")}</span> : listing.tags.includes("带家具") ? <span className="pointer-events-none absolute left-3 top-3 rounded-full bg-white px-3 py-1.5 text-[11px] font-bold text-[#0b1026]">带家具 · 轻松入住</span> : null}
-              <button type="button" onClick={() => saveListing(listing)} aria-label={savedIds.has(listing.id) ? `取消收藏 ${listing.title}` : `收藏 ${listing.title}`} aria-pressed={savedIds.has(listing.id)} className="absolute right-3 top-3 grid size-10 place-items-center rounded-full bg-white text-[#0b1026] shadow-sm transition-transform hover:scale-110"><Heart className={cn("size-[18px]", savedIds.has(listing.id) && "fill-[#2453ff] text-[#2453ff]")} /></button>
-              <button type="button" onClick={() => { update({ view: "map", selected: listing.id, page: state.page }); }} className="absolute bottom-3 right-3 flex items-center gap-1 rounded-full bg-white/95 px-2.5 py-1.5 text-[11px] font-semibold shadow-sm lg:opacity-0 lg:group-focus-within:opacity-100 lg:group-hover:opacity-100"><MapPin className="size-3" />在地图上查看</button>
+              <Link href={listingHref(listing.id, state)} onClick={() => rememberSearch(listing.id)} className="absolute inset-0"><Image src={listing.image} alt={listing.title} fill priority={index < 2} sizes={state.view === "list" ? "(max-width: 640px) 100vw, 30vw" : "(max-width: 640px) 100vw, (max-width: 1200px) 45vw, 25vw"} className="object-cover transition-transform duration-300 group-hover:scale-[1.035]" /></Link>
+              {listing.originalPrice > listing.price ? <span className="pointer-events-none absolute left-3 top-3 rounded-full bg-[#ffb020] px-3 py-1.5 text-[11px] font-bold text-[#1a1206] shadow-sm">比原价低 ${(listing.originalPrice - listing.price).toLocaleString("en-US")}</span> : listing.tags.includes("带家具") ? <span className="pointer-events-none absolute left-3 top-3 rounded-full bg-white/95 px-3 py-1.5 text-[11px] font-bold text-slate-800 shadow-sm">带家具</span> : null}
+              <button type="button" onClick={() => saveListing(listing)} aria-label={savedIds.has(listing.id) ? `取消收藏 ${listing.title}` : `收藏 ${listing.title}`} aria-pressed={savedIds.has(listing.id)} className="absolute right-3 top-3 grid size-11 place-items-center rounded-full bg-white/95 text-[#0b1026] shadow-sm transition-transform hover:scale-110"><Heart className={cn("size-[18px]", savedIds.has(listing.id) && "fill-[#2453ff] text-[#2453ff]")} /></button>
+              <button type="button" onClick={() => { update({ view: "map", selected: listing.id, page: state.page }); }} className="absolute bottom-3 right-3 flex min-h-11 items-center gap-1 rounded-full bg-white/95 px-2.5 py-1.5 text-[11px] font-semibold shadow-sm lg:opacity-0 lg:group-focus-within:opacity-100 lg:group-hover:opacity-100"><MapPin className="size-3" />在地图上查看</button>
             </div>
             <Link href={listingHref(listing.id, state)} onClick={() => rememberSearch(listing.id)} className="block px-4 pb-4 pt-3.5 sm:px-[18px]">
-              <div className="flex items-baseline justify-between gap-2"><p><span className="font-display text-[26px] font-bold leading-none">${listing.price.toLocaleString("en-US")}</span><span className="ml-1 text-xs text-[#5b6380]">/ 月</span></p><span className="font-display flex items-center gap-1 text-sm font-semibold"><Star className="size-3.5 fill-[#0b1026]" aria-hidden="true" />{listing.score}</span></div>
-              <h2 className="mt-2 truncate text-[15px] font-bold text-[#0b1026] group-hover:text-[#2453ff]">{listing.title}</h2>
-              <p className="mt-1 truncate text-xs text-slate-500">{listing.area}</p>
-              <div className="mt-2 flex items-center gap-3 text-xs text-slate-600"><span className="flex items-center gap-1"><BedDouble className="size-3.5" />{listing.beds} 卧</span><span className="flex items-center gap-1"><Bath className="size-3.5" />{listing.baths} 卫</span><span className="truncate">{listing.tags.slice(0, 2).join(" · ")}</span></div>
-              <p className="mt-2 flex items-center gap-1.5 truncate text-xs text-slate-500"><TrainFront className="size-3.5 shrink-0" />{listing.commute}</p>
-              {listing.availableFrom && listing.availableTo ? <p className="mt-2 border-t border-slate-100 pt-2 text-[11px] text-slate-500">可租 {listing.availableFrom.replaceAll("-", "/")} — {listing.availableTo.replaceAll("-", "/")}</p> : null}
+              <div className="flex items-baseline justify-between gap-2"><p><span className="font-display text-[26px] font-bold leading-none tabular-nums tracking-[-0.025em] text-[#0b1026]">${listing.price.toLocaleString("en-US")}</span><span className="ml-1 text-xs text-[#5b6380]">/ 月</span></p><span className="font-display flex items-center gap-1 text-sm font-semibold text-[#0b1026]"><Star className="size-3.5 fill-[#0b1026]" aria-hidden="true" />{listing.score}</span></div>
+              <h2 className="mt-2 truncate text-[15px] font-bold leading-6 text-[#0b1026] group-hover:text-[#2453ff]">{listing.title}</h2>
+              <p className="mt-1 truncate text-[13px] text-slate-600">{listing.area}</p>
+              <div className="mt-2 flex items-center gap-3 text-xs text-slate-600"><span className="flex items-center gap-1"><BedDouble className="size-3.5 text-brand-moss" />{listing.beds} 卧</span><span className="flex items-center gap-1"><Bath className="size-3.5 text-brand-moss" />{listing.baths} 卫</span><span className="truncate">{listing.tags.slice(0, 2).join(" · ")}</span></div>
+              <p className="mt-2 flex items-center gap-1.5 truncate text-xs text-slate-600"><TrainFront className="size-3.5 shrink-0 text-brand-moss" />{listing.commute}</p>
+              {listing.availableFrom && listing.availableTo ? <p className="mt-3 rounded-lg bg-brand-soft px-3 py-2 text-[13px] font-medium leading-5 tabular-nums text-brand">可租 {listing.availableFrom.replaceAll("-", "/")} — {listing.availableTo.replaceAll("-", "/")}</p> : null}
             </Link>
           </article>)}
         </div> : <div className="mt-7 rounded-3xl bg-slate-50 px-5 py-16 text-center"><Search className="mx-auto size-8 text-slate-400" /><h2 className="mt-5 text-xl font-bold">没有找到符合条件的房源</h2><p className="mt-2 text-sm leading-6 text-slate-500">试试调整预算、选择其他日期，或扩大找房区域。</p><button type="button" onClick={() => update({ ...defaultSearch, view: state.view })} className="mt-6 rounded-xl bg-slate-950 px-6 py-3 text-sm font-bold text-white">清除筛选</button></div>}
-        {catalog.pageCount > 1 ? <nav aria-label="房源分页" className="mt-10 flex items-center justify-center gap-5"><button type="button" disabled={catalog.page <= 1} onClick={() => { update({ page: catalog.page - 1 }); window.scrollTo({ top: 0 }); }} aria-label="上一页" className="grid size-10 place-items-center rounded-full border border-slate-200 disabled:opacity-30"><ArrowLeft className="size-4" /></button><span className="text-sm text-slate-600">第 {catalog.page} / {catalog.pageCount} 页</span><button type="button" disabled={catalog.page >= catalog.pageCount} onClick={() => { update({ page: catalog.page + 1 }); window.scrollTo({ top: 0 }); }} aria-label="下一页" className="grid size-10 place-items-center rounded-full border border-slate-200 disabled:opacity-30"><ArrowRight className="size-4" /></button></nav> : null}
+        {catalog.pageCount > 1 ? <nav aria-label="房源分页" className="mt-10 flex items-center justify-center gap-5"><button type="button" disabled={catalog.page <= 1} onClick={() => { update({ page: catalog.page - 1 }); window.scrollTo({ top: 0 }); }} aria-label="上一页" className="grid size-11 place-items-center rounded-full border border-slate-200 disabled:opacity-30"><ArrowLeft className="size-4" /></button><span className="text-sm text-slate-600">第 {catalog.page} / {catalog.pageCount} 页</span><button type="button" disabled={catalog.page >= catalog.pageCount} onClick={() => { update({ page: catalog.page + 1 }); window.scrollTo({ top: 0 }); }} aria-label="下一页" className="grid size-11 place-items-center rounded-full border border-slate-200 disabled:opacity-30"><ArrowRight className="size-4" /></button></nav> : null}
       </section>
-      <SearchResultsMap key={`${catalog.items.map((item) => item.id).join(",")}:${state.view}`} listings={catalog.items} activeListing={activeListing} stay={state} view={state.view} onSelect={(id) => selectListing(id, state.view === "split")} onOpen={rememberSearch} onClose={() => update({ selected: "", page: state.page }, "replace")} page={catalog.page} pageCount={catalog.pageCount} onPageChange={(page) => update({ page })} />
-    </div>
-    <div className="fixed bottom-[82px] left-1/2 z-40 flex -translate-x-1/2 rounded-full bg-slate-950 p-1 text-white shadow-xl md:bottom-6" aria-label="浏览方式">
-      {([["split", "分屏", LayoutGrid], ["list", "列表", List], ["map", "地图", Map]] as const).map(([view, label, Icon]) => <button key={view} type="button" onClick={() => update({ view, page: state.page, selected: state.selected })} aria-pressed={state.view === view} className={cn("flex items-center gap-2 rounded-full px-4 py-2.5 text-xs font-semibold", state.view === view ? "bg-white text-slate-950" : "text-slate-200 hover:bg-slate-800", view === "split" && "hidden lg:flex")}><Icon className="size-3.5" />{label}</button>)}
+      <SearchResultsMap key={catalog.items.map((item) => item.id).sort().join(",")} listings={catalog.items} activeListing={activeListing} selectedListingId={state.selected} stay={state} view={state.view} onSelect={(id) => selectListing(id, state.view === "split")} onOpen={rememberSearch} onClose={() => update({ selected: "", page: state.page }, "replace")} page={catalog.page} pageCount={catalog.pageCount} onPageChange={(page) => update({ page })} />
     </div>
     {notice ? <div role="status" className="fixed bottom-[144px] left-1/2 z-[70] flex -translate-x-1/2 items-center gap-2 whitespace-nowrap rounded-xl bg-slate-950 px-5 py-3 text-sm text-white shadow-xl md:bottom-24"><Check className="size-4 text-indigo-300" />{notice}<Link href="/saved" className="ml-2 underline">查看</Link></div> : null}
     {filterOpen ? <SearchFiltersDialog initialSection={filterOpen} initial={state} prices={searchCatalog(listings, { ...state, ...emptyFilters, page: 1 }, Number.MAX_SAFE_INTEGER).items.map((listing) => listing.price)} getCount={(draft) => searchCatalog(listings, draft).total} onApply={(draft) => { update({ ...draft, page: 1, selected: "" }); setFilterOpen(null); }} onClose={() => setFilterOpen(null)} /> : null}

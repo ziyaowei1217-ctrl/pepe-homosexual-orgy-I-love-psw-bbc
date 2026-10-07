@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 export const ISOLATED_ROOMMATE_SMOKE_TIMEOUT_MS = 15_000;
 
@@ -7,11 +7,12 @@ export function runIsolatedRoommateRealtimeSmoke(databaseUrl: string): void {
   const result = spawnSync(
     process.execPath,
     [
-      require.resolve("vitest/vitest.mjs"),
+      join(dirname(require.resolve("vitest/package.json")), "vitest.mjs"),
       "run",
       "test/roommate-realtime-smoke.spec.ts",
       "--pool=threads",
-      "--poolOptions.threads.singleThread"
+      "--maxWorkers=1",
+      "--no-file-parallelism"
     ],
     {
       cwd: join(__dirname, "../.."),
