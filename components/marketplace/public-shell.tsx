@@ -35,11 +35,12 @@ export function PublicShell({ active, mobileNavigation = "bottom", children }: {
       <header className="sticky top-0 z-50 border-b border-slate-200/80 bg-white/85 backdrop-blur-xl backdrop-saturate-150 supports-[not(backdrop-filter:blur(1px))]:bg-white">
         <div className="mx-auto flex h-[72px] max-w-[1520px] items-center gap-7 px-4 sm:px-6 lg:px-8">
           <Link href="/" className="group flex shrink-0 items-center gap-3" aria-label="Sublet Pipeline 首页">
-            <span className="grid size-10 place-items-center rounded-[14px] bg-[#2453ff] bg-gradient-to-br from-[#2453ff] to-[#6d4aff] text-white shadow-[0_10px_28px_rgba(36,83,255,0.25)] transition-transform group-hover:-translate-y-0.5">
+            <span className="grid size-10 place-items-center rounded-[12px] bg-[#2453ff] text-white transition-transform group-hover:-translate-y-0.5">
               <Home className="size-[19px]" aria-hidden="true" />
             </span>
-            <span className="block">
-              <span className="block text-[15px] font-black tracking-[-0.02em]">Sublet Pipeline</span>
+            {/* On phones the header-nav variant needs this room for its quick links. */}
+            <span className={cn("block", mobileNavigation === "header" && "hidden sm:block")}>
+              <span className="font-display block text-[17px] font-bold">Sublet Pipeline</span>
               <span className="hidden text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400 sm:block">Live well, sooner</span>
             </span>
           </Link>
@@ -51,8 +52,8 @@ export function PublicShell({ active, mobileNavigation = "bottom", children }: {
                 href={item.href}
                 aria-current={active === item.key ? "page" : undefined}
                 className={cn(
-                  "rounded-full px-4 py-2.5 text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-950",
-                  active === item.key && "bg-blue-50 text-[#2453ff]"
+                  "rounded-full px-[18px] py-2.5 text-sm font-semibold text-[#3a415c] transition-colors hover:bg-slate-100 hover:text-[#0b1026]",
+                  active === item.key && "bg-[#0b1026] font-bold text-white hover:bg-[#0b1026] hover:text-white"
                 )}
               >
                 {item.label}
@@ -62,8 +63,8 @@ export function PublicShell({ active, mobileNavigation = "bottom", children }: {
 
           <div className="ml-auto flex items-center gap-2">
             {mobileNavigation === "header" ? <nav aria-label="手机快捷导航" className="flex items-center gap-1 md:hidden">
-              <Link href="/search" aria-label="找房" className="flex min-h-11 items-center gap-1.5 rounded-full px-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-100"><Search className="size-4" aria-hidden="true" />找房</Link>
-              <Link href="/saved" aria-label="收藏房源" className="flex min-h-11 items-center gap-1.5 rounded-full px-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-100"><Heart className="size-4" aria-hidden="true" />收藏</Link>
+              <Link href="/search" aria-label="找房" className="flex min-h-11 items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-100"><Search className="size-4" aria-hidden="true" />找房</Link>
+              <Link href="/saved" aria-label="收藏房源" className="flex min-h-11 items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-100"><Heart className="size-4" aria-hidden="true" />收藏</Link>
             </nav> : null}
             <Link
               href="/host"
@@ -76,7 +77,7 @@ export function PublicShell({ active, mobileNavigation = "bottom", children }: {
               className="flex items-center gap-2 rounded-full border border-slate-200 bg-white p-1.5 pr-3 text-sm font-semibold text-slate-700 shadow-sm transition-shadow hover:shadow-md"
               aria-label="打开账户"
             >
-              <span className="grid size-8 place-items-center rounded-full bg-slate-950 text-white">
+              <span className="grid size-8 place-items-center rounded-full bg-[#0b1026] text-white">
                 <UserRound className="size-4" aria-hidden="true" />
               </span>
               <Menu className="size-4 text-slate-500" aria-hidden="true" />
@@ -101,12 +102,12 @@ export function PublicShell({ active, mobileNavigation = "bottom", children }: {
               href={item.href}
               aria-current={active === item.key ? "page" : undefined}
               className={cn(
-                "flex min-w-0 flex-col items-center gap-1 rounded-xl px-1 py-1.5 text-xs font-bold text-slate-600",
-                active === item.key && "text-[#2453ff]"
+                "flex min-w-0 flex-col items-center gap-1 rounded-xl px-1 py-1.5 text-xs font-semibold text-[#5b6380]",
+                active === item.key && "font-bold text-[#0b1026]"
               )}
             >
-              <span className={cn("grid h-7 w-12 place-items-center rounded-full transition-colors", active === item.key && "bg-blue-50")}>
-                <Icon className={cn("size-5", active === item.key && "fill-blue-100")} aria-hidden="true" />
+              <span className={cn("grid h-[30px] w-[52px] place-items-center rounded-full transition-colors", active === item.key && "bg-[#0b1026] text-white")}>
+                <Icon className="size-5" aria-hidden="true" />
               </span>
               <span>{item.label}</span>
             </Link>

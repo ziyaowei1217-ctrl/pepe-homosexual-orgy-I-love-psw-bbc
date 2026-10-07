@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 
 import { SavedListingsProvider } from "@/components/marketplace/saved-listings-provider";
 
+import "@fontsource-variable/space-grotesk";
 import "./globals.css";
 
 export const metadata: Metadata = {
