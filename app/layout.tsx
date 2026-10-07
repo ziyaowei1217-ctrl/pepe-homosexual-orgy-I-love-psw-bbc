@@ -32,7 +32,7 @@ export default function RootLayout({
   return (
     <html lang="zh-CN" data-scroll-behavior="smooth">
       <body>
-        {isWebsiteDemo() ? <aside aria-label="演示版说明" className="border-b border-[#1a3dd6]/25 bg-[#fbbf24] px-4 py-3 text-center text-xs font-semibold leading-5 text-[#2453ff] sm:text-sm">
+        {isWebsiteDemo() ? <aside aria-label="演示版说明" className="border-b border-[#1a3dd6]/25 bg-[#fbbf24] px-4 py-3 text-center text-xs font-semibold leading-5 text-[#0b1026] sm:text-sm">
           DEMO 演示版 · 房源、室友与匹配分数均为虚构示例。可搜索、查看和本机收藏；不提供登录、聊天、申请或付款。
         </aside> : null}
         <SavedListingsProvider>{children}</SavedListingsProvider>
