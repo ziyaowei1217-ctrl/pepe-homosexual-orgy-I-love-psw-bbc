@@ -55,6 +55,29 @@ describe("document navigation for unavailable website demo sections", () => {
     expect(document.querySelector('[data-website-demo-navigation="document"]')).toBeNull();
   });
 
+  it.each(["/", "/search?q=Boston", "/saved", "/roommates", "/listing/listing-a"])("avoids automatic prefetch for the public demo route %s", href => {
+    render(<AppLink href={href}>Browse</AppLink>);
+    expect(delegated).toHaveBeenCalledOnce();
+    expect(delegated.mock.calls[0][0]).toEqual({ href, prefetch: false, children: "Browse" });
+    expect(screen.getByTestId("next-link").textContent).toBe("Browse");
+  });
+
+  it.each([true, false, null])("retains the caller's explicit public demo prefetch value %j", prefetch => {
+    const props = { href: "/saved", prefetch, children: "Saved" };
+    render(<AppLink {...props} />);
+    expect(delegated).toHaveBeenCalledOnce();
+    expect(delegated.mock.calls[0][0]).toEqual(props);
+  });
+
+  it("retains the production default prefetch behavior", () => {
+    vi.stubEnv("NEXT_PUBLIC_WEBSITE_DEMO", "");
+    const props = { href: "/saved", children: "Saved" };
+    render(<AppLink {...props} />);
+    expect(delegated).toHaveBeenCalledOnce();
+    expect(delegated.mock.calls[0][0]).toEqual(props);
+    expect(delegated.mock.calls[0][0]).not.toHaveProperty("prefetch");
+  });
+
   it("retains Next routing for legacy child and as-path semantics", () => {
     const legacy = { href: "/inbox", legacyBehavior: true, children: <a>Legacy section</a> };
     const aliased = { href: "/inbox", as: "/messages", children: "Aliased section" };

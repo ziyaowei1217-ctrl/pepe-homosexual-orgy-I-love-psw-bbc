@@ -13,9 +13,15 @@ export default function AppLink(props: AppLinkProps) {
   }
 
   const pathname = props.href.split(/[?#]/, 1)[0];
-  if (canonicalWebsitePath(pathname) !== pathname || canBrowseWebsiteDemo(pathname) || !websiteDemoSectionForPath(pathname)) {
+  if (canonicalWebsitePath(pathname) !== pathname) {
     return <NextLink {...props} />;
   }
+  if (canBrowseWebsiteDemo(pathname)) {
+    // Browsing remains client navigation. Avoid unused speculative demo page
+    // requests that can be canceled by rapid document Back/Forward navigation.
+    return <NextLink {...props} prefetch={props.prefetch === undefined ? false : props.prefetch} />;
+  }
+  if (!websiteDemoSectionForPath(pathname)) return <NextLink {...props} />;
 
   // Closed demo sections cross documents, so Back after a reload does not
   // depend on the new page's App Router history listener being hydrated.
