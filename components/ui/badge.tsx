@@ -12,7 +12,7 @@ const badgeVariants = cva(
         secondary: "border-transparent bg-blue-50 text-blue-700",
         outline: "border-blue-200 bg-white text-foreground",
         trust: "border-trust-sky/20 bg-trust-sky/10 text-trust-blue",
-        success: "border-trust-green/20 bg-trust-green/10 text-trust-green",
+        success: "border-trust-verified/20 bg-trust-verified/10 text-trust-verified",
         warning: "border-trust-amber/25 bg-trust-amber/10 text-trust-amber",
         danger: "border-trust-red/20 bg-trust-red/10 text-trust-red"
       }

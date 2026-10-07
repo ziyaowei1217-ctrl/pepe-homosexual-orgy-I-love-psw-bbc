@@ -95,8 +95,8 @@ function buildCalendarMonth(monthStart: Date): CalendarMonth {
     days.push({ iso: toIsoDate(date), day, inCurrentMonth: true });
   }
 
-  while (days.length % 7 !== 0) {
-    const date = new Date(Date.UTC(year, month, daysInMonth + (days.length % 7)));
+  for (let nextDay = 1; days.length % 7 !== 0; nextDay += 1) {
+    const date = new Date(Date.UTC(year, month + 1, nextDay));
     days.push({ iso: toIsoDate(date), day: date.getUTCDate(), inCurrentMonth: false });
   }
 

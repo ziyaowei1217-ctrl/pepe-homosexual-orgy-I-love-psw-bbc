@@ -1,6 +1,7 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 
+import { parseStrictDate } from "../http/strict-date";
 import { PrismaService } from "../prisma/prisma.service";
 import { CreateRoommateProfileDto, UpdateProfileDto, UpdateRoommateProfileDto } from "./dto";
 
@@ -32,7 +33,7 @@ export class MarketplaceService {
 
   async createRoommateProfile(ownerId: string, email: string, dto: CreateRoommateProfileDto) {
     this.assertBudgetRange(dto.budgetMin, dto.budgetMax);
-    this.assertDateRange(dateValue(dto.moveInDate), dateValue(dto.moveOutDate));
+    this.assertDateRange(dateValue(dto.moveInDate, "moveInDate"), dateValue(dto.moveOutDate, "moveOutDate"));
     const profile = await this.ensureProfile(email);
 
     return this.prisma.$transaction(async (transaction) => {
@@ -61,7 +62,7 @@ export class MarketplaceService {
       // Serialize partial updates before reading the bounds they will merge with.
       // Non-key row locking remains compatible with foreign-key readers.
       await transaction.$queryRaw`SELECT "id" FROM "roommate_profiles"
-        WHERE "id" = ${id}::uuid AND "user_id" = ${profile.id}::uuid FOR NO KEY UPDATE`;
+        WHERE "id" = ${id}::uuid AND "user_id" = ${profile.id}::uuid FOR NO KEY UPDATE`.catch(rethrowMalformedUuidAsNotFound);
       const existing = await transaction.roommateMatchingProfile.findFirst({
         where: {
           id,
@@ -73,7 +74,7 @@ export class MarketplaceService {
         dto.budgetMin !== undefined ? dto.budgetMin : existing.budgetMin,
         dto.budgetMax !== undefined ? dto.budgetMax : existing.budgetMax
       );
-      this.assertDateRange(dateValue(dto.moveInDate) ?? existing.moveInDate, dateValue(dto.moveOutDate) ?? existing.moveOutDate);
+      this.assertDateRange(dateValue(dto.moveInDate, "moveInDate") ?? existing.moveInDate, dateValue(dto.moveOutDate, "moveOutDate") ?? existing.moveOutDate);
 
       const matchingProfile = await transaction.roommateMatchingProfile.update({
         where: { id },
@@ -149,8 +150,8 @@ function roommateProfileUpdateData(dto: UpdateRoommateProfileDto | CreateRoommat
     city: dto.city,
     budgetMin: dto.budgetMin,
     budgetMax: dto.budgetMax,
-    moveInDate: dateValue(dto.moveInDate),
-    moveOutDate: dateValue(dto.moveOutDate),
+    moveInDate: dateValue(dto.moveInDate, "moveInDate"),
+    moveOutDate: dateValue(dto.moveOutDate, "moveOutDate"),
     preferredNeighborhoods: dto.preferredNeighborhoods,
     roomType: dto.roomType,
     cleanliness: dto.cleanliness,
@@ -164,8 +165,8 @@ function roommateProfileUpdateData(dto: UpdateRoommateProfileDto | CreateRoommat
   });
 }
 
-function dateValue(value?: string) {
-  return value ? new Date(value) : undefined;
+function dateValue(value: string | undefined, field: string) {
+  return value ? parseStrictDate(value, field) : undefined;
 }
 
 function definedData<T extends Record<string, unknown>>(data: T) {
@@ -218,4 +219,12 @@ function formatBudget(budgetMin: number | null, budgetMax: number | null) {
   if (budgetMin !== null) return `From $${budgetMin.toLocaleString()}/month`;
   if (budgetMax !== null) return `Up to $${budgetMax.toLocaleString()}/month`;
   return "Flexible";
+}
+
+/** A non-UUID path id makes Postgres reject the ::uuid cast (22P02); that is a missing profile, not a server error. */
+function rethrowMalformedUuidAsNotFound(error: unknown): never {
+  if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2010" && /22P02|invalid input syntax for type uuid/.test(JSON.stringify(error.meta ?? {}) + error.message)) {
+    throw new NotFoundException("Roommate profile not found");
+  }
+  throw error;
 }

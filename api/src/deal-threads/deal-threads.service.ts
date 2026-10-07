@@ -8,6 +8,7 @@ import {
 import { Prisma, ViewingMode, ViewingRequestStatus } from "@prisma/client";
 import { isUUID } from "class-validator";
 
+import { parseStrictDate } from "../http/strict-date";
 import { PrismaService } from "../prisma/prisma.service";
 import { CreateDealThreadDto, CreateViewingRequestDto, SendDealMessageDto, ViewingModeDtoValue } from "./dto";
 
@@ -168,7 +169,7 @@ export class DealThreadsService {
       listingTitle: thread.listingTitle,
       area: thread.area,
       timeLabel: dto.timeLabel.trim(),
-      iso: new Date(dto.iso),
+      iso: parseStrictDate(dto.iso, "iso"),
       mode: toPrismaViewingMode(dto.mode),
       participantNames,
       status: ViewingRequestStatus.REQUESTED

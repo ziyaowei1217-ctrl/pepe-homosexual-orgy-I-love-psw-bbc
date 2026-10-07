@@ -36,10 +36,10 @@ export function formatPriceRangeLabel(range: PriceRangeFilter) {
   }
 
   if (normalized.priceMin === priceFilterBounds.min) {
-    return `$${normalized.priceMax.toLocaleString()} 以下`;
+    return `$${normalized.priceMax.toLocaleString("en-US")} 以下`;
   }
 
-  return `$${normalized.priceMin.toLocaleString()} - $${normalized.priceMax.toLocaleString()}`;
+  return `$${normalized.priceMin.toLocaleString("en-US")} - $${normalized.priceMax.toLocaleString("en-US")}`;
 }
 
 function clampPrice(value: number) {

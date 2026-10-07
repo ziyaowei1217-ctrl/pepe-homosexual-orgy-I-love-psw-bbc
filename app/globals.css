@@ -16,13 +16,13 @@
     --secondary-foreground: 220 24% 12%;
     --muted: 40 12% 93%;
     --muted-foreground: 218 10% 42%;
-    --accent: 215 100% 50%;
+    --accent: 229 100% 57%;
     --accent-foreground: 0 0% 100%;
     --destructive: 9 76% 48%;
     --destructive-foreground: 0 0% 100%;
     --border: 216 18% 86%;
     --input: 216 18% 84%;
-    --ring: 215 100% 50%;
+    --ring: 229 100% 57%;
     --radius: 18px;
   }
 
@@ -32,6 +32,11 @@
 
   html {
     scroll-behavior: smooth;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  ::selection {
+    background: rgba(36,83,255, 0.16);
   }
 
   body {
@@ -93,11 +98,11 @@
   }
 
   .primary-action {
-    @apply inline-flex min-h-10 items-center justify-center gap-2 rounded-full bg-[#0668e1] px-4 py-2.5 text-sm font-black text-white shadow-[0_8px_22px_rgba(6,104,225,0.22)] transition hover:-translate-y-0.5 hover:bg-[#0559c2] disabled:pointer-events-none disabled:opacity-50;
+    @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-full bg-[#2453ff] px-5 py-2.5 text-sm font-black text-white shadow-[0_10px_24px_rgba(36,83,255,0.3)] transition hover:-translate-y-0.5 hover:bg-[#1a3dd6] disabled:pointer-events-none disabled:opacity-50;
   }
 
   .secondary-action {
-    @apply inline-flex min-h-10 items-center justify-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2.5 text-sm font-black text-slate-700 transition hover:-translate-y-0.5 hover:border-slate-300 hover:bg-slate-50 disabled:pointer-events-none disabled:opacity-50;
+    @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-full border-[1.5px] border-[#0b1026] bg-white px-5 py-2.5 text-sm font-black text-[#0b1026] transition hover:-translate-y-0.5 hover:bg-[#0b1026] hover:text-white disabled:pointer-events-none disabled:opacity-50;
   }
 }
 
@@ -126,6 +131,18 @@
     letter-spacing: 0;
   }
 
+  /* Numbers, prices and Latin display copy; CJK falls through to the system stack. */
+  .font-display {
+    font-family: "Space Grotesk Variable", -apple-system, BlinkMacSystemFont, "PingFang SC", "Noto Sans CJK SC", "Microsoft YaHei", sans-serif;
+    letter-spacing: -0.02em;
+    font-feature-settings: "tnum" 1;
+  }
+
+  .photo-placeholder {
+    background-color: #dce2f0;
+    background-image: repeating-linear-gradient(135deg, rgba(11, 16, 38, 0.05) 0 12px, transparent 12px 24px);
+  }
+
   .glass-panel {
     background: rgba(255, 255, 255, 0.86);
     box-shadow: 0 24px 80px rgba(0, 36, 84, 0.08);
@@ -135,10 +152,10 @@
 
 @layer components {
   .search-pill {
-    @apply inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-full border border-slate-200 bg-white px-3.5 py-2.5 text-xs font-semibold text-slate-700 transition-colors hover:border-slate-500;
+    @apply inline-flex min-h-11 shrink-0 items-center gap-2 whitespace-nowrap rounded-full border border-[#cdd2e0] bg-white px-4 py-2.5 text-[13px] font-semibold text-[#0b1026] transition-colors hover:border-[#0b1026];
   }
   .search-pill-active {
-    @apply border-blue-200 bg-blue-50 text-blue-700;
+    @apply border-[#0b1026] bg-[#0b1026] text-white;
   }
   .marketplace-shell :is(button, a) {
     transition-property: color, background-color, border-color, box-shadow, opacity, transform;
@@ -146,7 +163,7 @@
     transition-timing-function: cubic-bezier(0.2, 0.7, 0.2, 1);
   }
   .marketplace-shell :is(button, a, input, select, textarea, summary):focus-visible {
-    outline: 2px solid #0668e1;
+    outline: 2px solid #2453ff;
     outline-offset: 4px;
   }
 }

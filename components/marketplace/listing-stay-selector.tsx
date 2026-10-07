@@ -8,7 +8,7 @@ import { useModalFocus } from "./use-modal-focus";
 
 export function ListingStayFields({ listing, stay, onChange }: { listing: PreviewListing; stay: ListingStay; onChange: (stay: ListingStay) => void }) {
   const earliest = earliestListingDate(listing);
-  return <div className="grid grid-cols-2 overflow-hidden rounded-2xl border border-slate-300 focus-within:border-[#0668e1] focus-within:ring-1 focus-within:ring-[#0668e1]">
+  return <div className="grid grid-cols-2 overflow-hidden rounded-2xl border border-slate-300 focus-within:border-[#2453ff] focus-within:ring-1 focus-within:ring-[#2453ff]">
     <label className="min-w-0 p-3 text-[11px] font-semibold text-slate-500">入住日期<input type="date" min={earliest} max={listing.availableTo || undefined} value={stay.moveIn} onChange={(event) => onChange({ ...stay, moveIn: event.target.value })} className="mt-2 block w-full min-w-0 bg-transparent text-sm font-semibold text-slate-950" /></label>
     <label className="min-w-0 border-l border-slate-300 p-3 text-[11px] font-semibold text-slate-500">退租日期<input type="date" min={stay.moveIn || earliest} max={listing.availableTo || undefined} value={stay.moveOut} onChange={(event) => onChange({ ...stay, moveOut: event.target.value })} className="mt-2 block w-full min-w-0 bg-transparent text-sm font-semibold text-slate-950" /></label>
   </div>;
@@ -25,8 +25,8 @@ export function ListingStayDialog({ listing, stay, onApply, onClose }: { listing
       <p className="mb-6 mt-2 text-sm leading-6 text-slate-500">{listing.title}</p>
       <ListingStayFields listing={listing} stay={draft} onChange={setDraft} />
       <p className="mt-4 flex gap-2 text-xs leading-6 text-slate-500"><CalendarDays className="mt-1 size-4 shrink-0" />可租日期：{earliestListingDate(listing)} 至 {listing.availableTo || "待确认"}</p>
-      {error ? <p role="alert" className="mt-3 rounded-xl bg-red-50 p-3 text-sm leading-6 text-red-700">{error}</p> : <p className="mt-3 text-sm text-emerald-700">所选日期在房源可租期内</p>}
-      <button type="button" disabled={Boolean(error)} onClick={() => onApply(draft)} className="mt-6 w-full rounded-xl bg-[#0668e1] py-3.5 text-sm font-bold text-white disabled:opacity-40">确认租期</button>
+      {error ? <p role="alert" className="mt-3 rounded-xl bg-red-50 p-3 text-sm leading-6 text-red-700">{error}</p> : <p className="mt-3 text-sm text-indigo-700">所选日期在房源可租期内</p>}
+      <button type="button" disabled={Boolean(error)} onClick={() => onApply(draft)} className="mt-6 w-full rounded-xl bg-[#2453ff] py-3.5 text-sm font-bold text-white disabled:opacity-40">确认租期</button>
     </section>
   </div>;
 }

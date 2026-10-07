@@ -16,7 +16,7 @@ const buttonVariants = cva(
         destructive: "bg-destructive text-destructive-foreground hover:bg-destructive/90",
         trust: "bg-accent text-accent-foreground hover:bg-trust-blue",
         reject: "border border-trust-red/25 bg-card text-trust-red hover:bg-trust-red hover:text-white",
-        accept: "border border-trust-green/25 bg-card text-trust-green hover:bg-trust-green hover:text-white"
+        accept: "border border-trust-verified/25 bg-card text-trust-verified hover:bg-trust-verified hover:text-white"
       },
       size: {
         default: "h-10 px-4 py-2",

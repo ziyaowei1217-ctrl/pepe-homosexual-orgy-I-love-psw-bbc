@@ -16,7 +16,7 @@ export default function AppError({ error, reset }: { error: Error & { digest?: s
         </span>
         <h1 className="mt-5 text-2xl font-black">页面暂时无法加载</h1>
         <p className="mt-3 text-sm leading-6 text-slate-500">服务连接出现问题，请稍后重试。我们不会用演示数据替代真实内容。</p>
-        <button type="button" onClick={reset} className="mt-6 inline-flex items-center gap-2 rounded-full bg-[#0668e1] px-5 py-3 text-sm font-black text-white">
+        <button type="button" onClick={reset} className="mt-6 inline-flex items-center gap-2 rounded-full bg-[#2453ff] px-5 py-3 text-sm font-black text-white">
           <RotateCcw className="size-4" />重新加载
         </button>
       </div>

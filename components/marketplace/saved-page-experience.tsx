@@ -13,7 +13,7 @@ import {
   Star,
   X
 } from "lucide-react";
-import Image from "next/image";
+import { SmartImage } from "@/components/ui/smart-image";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 
@@ -33,13 +33,15 @@ export function SavedPageExperience({ listings }: { listings: PreviewListing[] }
   const [sort, setSort] = useState<"recent" | "price-low" | "price-high">("recent");
   const activeCollection = state.collections.find((collection) => collection.id === activeCollectionId) ?? state.collections[0];
   const savedListings = useMemo(() => {
-    const activeIds = activeCollectionId === DEFAULT_SAVED_COLLECTION_ID
-      ? savedIds
-      : new Set(activeCollection?.listingIds ?? []);
-    const items = listings.filter((listing) => activeIds.has(listing.id));
+    // Collections append on save, so position in the id list is save order; newest first for "recent".
+    const orderedIds = activeCollectionId === DEFAULT_SAVED_COLLECTION_ID
+      ? [...savedIds]
+      : activeCollection?.listingIds ?? [];
+    const savedOrder = new globalThis.Map(orderedIds.map((id, index) => [id, index]));
+    const items = listings.filter((listing) => savedOrder.has(listing.id));
     if (sort === "price-low") return [...items].sort((left, right) => left.price - right.price);
     if (sort === "price-high") return [...items].sort((left, right) => right.price - left.price);
-    return items;
+    return [...items].sort((left, right) => (savedOrder.get(right.id) ?? 0) - (savedOrder.get(left.id) ?? 0));
   }, [activeCollection?.listingIds, activeCollectionId, listings, savedIds, sort]);
 
   function handleCreate(event: FormEvent<HTMLFormElement>) {
@@ -57,7 +59,7 @@ export function SavedPageExperience({ listings }: { listings: PreviewListing[] }
         <div className="mx-auto max-w-[1520px] px-4 py-6 sm:px-6 sm:py-10 lg:px-8 lg:py-14">
           <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-3 sm:flex sm:items-end sm:justify-between sm:gap-6">
             <div className="contents sm:block">
-              <div className="hidden items-center gap-2 text-xs font-black uppercase tracking-[0.15em] text-[#0668e1] sm:flex"><FolderHeart className="size-4" />你的空间</div>
+              <div className="hidden items-center gap-2 text-xs font-black uppercase tracking-[0.15em] text-[#2453ff] sm:flex"><FolderHeart className="size-4" />你的空间</div>
               <h1 className="col-start-1 row-start-1 text-3xl font-black tracking-[-0.055em] text-slate-950 sm:mt-3 sm:text-6xl">收藏清单</h1>
               <p className="col-span-2 row-start-2 max-w-2xl text-sm leading-6 text-slate-500 sm:mt-4 sm:text-base">把喜欢的房放在一起比较。清单、备注与排序都只保存在当前设备。</p>
               <div className="col-span-2 row-start-3 inline-flex w-fit items-center gap-2 rounded-full bg-amber-50 px-3 py-1.5 text-xs font-bold text-amber-800 sm:mt-4"><Info className="size-3.5 shrink-0" />{accountLabel}，暂不跨设备同步</div>
@@ -83,7 +85,7 @@ export function SavedPageExperience({ listings }: { listings: PreviewListing[] }
           <div className="min-w-0"><h2 className="truncate text-base font-black tracking-[-0.025em] sm:text-xl">{activeCollection?.name ?? "全部收藏"}</h2><p className="mt-1 text-xs text-slate-500">{savedListings.length} 套房源</p></div>
           <div className="flex shrink-0 items-center gap-2">
             <label className="rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-500"><span className="hidden sm:inline">排序 </span><select value={sort} onChange={(event) => setSort(event.target.value as typeof sort)} className="bg-transparent text-slate-800 outline-none sm:ml-1" aria-label="收藏排序"><option value="recent">最近收藏</option><option value="price-low">价格从低到高</option><option value="price-high">价格从高到低</option></select></label>
-            <button type="button" onClick={() => setMapView((current) => !current)} aria-pressed={mapView} className={cn("flex items-center gap-2 rounded-full border px-3.5 py-2 text-xs font-bold", mapView ? "border-[#0668e1] bg-blue-50 text-[#0668e1]" : "border-slate-200 bg-white text-slate-700")}>{mapView ? <List className="size-4" /> : <Map className="size-4" />}{mapView ? "列表" : "地图"}</button>
+            <button type="button" onClick={() => setMapView((current) => !current)} aria-pressed={mapView} className={cn("flex items-center gap-2 rounded-full border px-3.5 py-2 text-xs font-bold", mapView ? "border-[#2453ff] bg-blue-50 text-[#2453ff]" : "border-slate-200 bg-white text-slate-700")}>{mapView ? <List className="size-4" /> : <Map className="size-4" />}{mapView ? "列表" : "地图"}</button>
           </div>
         </div>
 
@@ -93,13 +95,13 @@ export function SavedPageExperience({ listings }: { listings: PreviewListing[] }
               {savedListings.map((listing) => (
                 <article key={listing.id} className="group overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-lg">
                   <Link href={`/listing/${encodeURIComponent(listing.id)}`} className="relative block aspect-[4/3] overflow-hidden bg-slate-200">
-                    <Image src={listing.image} alt={listing.title} fill sizes="(max-width: 640px) 100vw, 33vw" className="object-cover transition-transform duration-300 group-hover:scale-[1.035]" />
-                    <span className="absolute left-3 top-3 rounded-full bg-white/92 px-2.5 py-1.5 text-[11px] font-black text-emerald-700 shadow-sm"><ShieldCheck className="mr-1 inline size-3.5" />信任信息</span>
+                    <SmartImage src={listing.image} alt={listing.title} fill sizes="(max-width: 640px) 100vw, 33vw" className="object-cover transition-transform duration-300 group-hover:scale-[1.035]" />
+                    <span className="absolute left-3 top-3 rounded-full bg-white/92 px-2.5 py-1.5 text-[11px] font-black text-indigo-700 shadow-sm"><ShieldCheck className="mr-1 inline size-3.5" />信任信息</span>
                   </Link>
                   <div className="relative p-4">
-                    <button type="button" onClick={() => toggleSaved(listing.id)} className="absolute right-3 top-3 grid size-9 place-items-center rounded-full border border-slate-200 bg-white text-[#0668e1]" aria-label={`取消收藏 ${listing.title}`}><Heart className="size-4 fill-current" /></button>
-                    <Link href={`/listing/${encodeURIComponent(listing.id)}`} className="block pr-10"><h3 className="line-clamp-2 text-base font-black leading-snug text-slate-950 group-hover:text-[#0668e1]">{listing.title}</h3><p className="mt-1 flex items-center gap-1 truncate text-xs text-slate-500"><MapPin className="size-3.5" />{listing.area}</p></Link>
-                    <div className="mt-3 flex items-end justify-between"><p className="text-lg font-black">${listing.price.toLocaleString()} <span className="text-xs font-medium text-slate-400">/ 月</span></p><span className="flex items-center gap-1 text-xs font-bold"><Star className="size-3.5 fill-amber-400 text-amber-400" />{listing.score}</span></div>
+                    <button type="button" onClick={() => toggleSaved(listing.id)} className="absolute right-3 top-3 grid size-9 place-items-center rounded-full border border-slate-200 bg-white text-[#2453ff]" aria-label={`取消收藏 ${listing.title}`}><Heart className="size-4 fill-current" /></button>
+                    <Link href={`/listing/${encodeURIComponent(listing.id)}`} className="block pr-10"><h3 className="line-clamp-2 text-base font-black leading-snug text-slate-950 group-hover:text-[#2453ff]">{listing.title}</h3><p className="mt-1 flex items-center gap-1 truncate text-xs text-slate-500"><MapPin className="size-3.5" />{listing.area}</p></Link>
+                    <div className="mt-3 flex items-end justify-between"><p className="text-lg font-black">${listing.price.toLocaleString("en-US")} <span className="text-xs font-medium text-slate-400">/ 月</span></p><span className="flex items-center gap-1 text-xs font-bold"><Star className="size-3.5 fill-amber-400 text-amber-400" />{listing.score}</span></div>
                     <textarea defaultValue={state.notes[listing.id] ?? ""} onBlur={(event) => setNote(listing.id, event.target.value)} aria-label={`${listing.title} 的收藏备注`} placeholder="添加仅自己可见的备注…" className="mt-4 min-h-16 w-full resize-none rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2 text-xs leading-5 outline-none focus:border-blue-300 focus:bg-white" />
                     {state.collections.length > 1 ? <label className="mt-3 flex items-center justify-between text-xs font-bold text-slate-500">加入清单<select aria-label={`${listing.title} 所属清单`} className="max-w-[150px] rounded-full border border-slate-200 bg-white px-2 py-1.5 text-slate-700" value="" onChange={(event) => { if (event.target.value) toggleInCollection(listing.id, event.target.value); }}><option value="">选择清单</option>{state.collections.filter((collection) => collection.id !== DEFAULT_SAVED_COLLECTION_ID).map((collection) => <option key={collection.id} value={collection.id}>{collection.listingIds.includes(listing.id) ? "✓ " : ""}{collection.name}</option>)}</select></label> : null}
                   </div>
@@ -111,10 +113,10 @@ export function SavedPageExperience({ listings }: { listings: PreviewListing[] }
         ) : (
           <section className="mt-8 grid min-h-[440px] place-items-center rounded-[30px] border border-dashed border-slate-300 bg-white px-6 py-14 text-center">
             <div>
-              <span className="mx-auto grid size-16 place-items-center rounded-full bg-blue-50 text-[#0668e1]"><Heart className="size-7" /></span>
+              <span className="mx-auto grid size-16 place-items-center rounded-full bg-blue-50 text-[#2453ff]"><Heart className="size-7" /></span>
               <h2 className="mt-5 text-2xl font-black tracking-[-0.035em]">还没有收藏房源</h2>
               <p className="mx-auto mt-3 max-w-md text-sm leading-6 text-slate-500">浏览房源时点击爱心，这里就会成为一个干净、好比较的收藏空间。</p>
-              <Link href="/search" className="mt-6 inline-flex items-center gap-2 rounded-full bg-[#0668e1] px-5 py-3 text-sm font-black text-white"><Search className="size-4" />去找房</Link>
+              <Link href="/search" className="mt-6 inline-flex items-center gap-2 rounded-full bg-[#2453ff] px-5 py-3 text-sm font-black text-white"><Search className="size-4" />去找房</Link>
             </div>
           </section>
         )}
@@ -139,7 +141,7 @@ function NewCollectionDialog({ name, onNameChange, onSubmit, onClose }: {
   return (
     <div className="marketplace-modal-backdrop fixed inset-0 z-[80] grid place-items-center bg-slate-950/35 p-4 backdrop-blur-sm" role="presentation" onMouseDown={() => onClose()}>
       <form ref={dialog} onSubmit={onSubmit} onMouseDown={(event) => event.stopPropagation()} className="marketplace-modal-panel max-h-[calc(100dvh-32px)] w-full max-w-md overflow-y-auto rounded-[28px] bg-white p-6 shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="create-list-title">
-        <div className="flex items-center justify-between"><div><p className="text-xs font-black uppercase tracking-[0.14em] text-[#0668e1]">整理收藏</p><h2 id="create-list-title" className="mt-1 text-2xl font-black">新建清单</h2></div><button type="button" onClick={onClose} className="grid size-10 place-items-center rounded-full border border-slate-200" aria-label="关闭"><X className="size-4" /></button></div>
+        <div className="flex items-center justify-between"><div><p className="text-xs font-black uppercase tracking-[0.14em] text-[#2453ff]">整理收藏</p><h2 id="create-list-title" className="mt-1 text-2xl font-black">新建清单</h2></div><button type="button" onClick={onClose} className="grid size-10 place-items-center rounded-full border border-slate-200" aria-label="关闭"><X className="size-4" /></button></div>
         <label className="mt-6 block text-sm font-black">清单名称<input value={name} onChange={(event) => onNameChange(event.target.value)} placeholder="例如：九月入住" className="mt-2 h-12 w-full rounded-[16px] border border-slate-200 px-4 text-sm outline-none focus:border-blue-400" /></label>
         <button type="submit" className="mt-6 w-full rounded-full bg-slate-950 px-5 py-3 text-sm font-black text-white">创建清单</button>
       </form>
@@ -150,9 +152,17 @@ function NewCollectionDialog({ name, onNameChange, onSubmit, onClose }: {
 export function SavedMap({ listings }: { listings: PreviewListing[] }) {
   const canvas = useRef<HTMLElement>(null);
   const [mapSize, setMapSize] = useState({ width: 720, height: 620 });
-  const center = getMapCenterForListings(listings);
-  const tiles = getMapTiles(center, 11, mapSize);
-  const markers = getMapMarkers(listings, center, 11, mapSize);
+  const center = useMemo(() => getMapCenterForListings(listings), [listings]);
+  // Zoom out until every saved listing fits, so listings in different cities are not pinned to the edges.
+  const zoom = useMemo(() => {
+    for (let candidate = 11; candidate >= 2; candidate--) {
+      const points = getMapMarkers(listings, center, candidate, mapSize, false);
+      if (points.every((point) => point.x > 50 && point.x < mapSize.width - 50 && point.y > 60 && point.y < mapSize.height - 40)) return candidate;
+    }
+    return 2;
+  }, [center, listings, mapSize]);
+  const tiles = getMapTiles(center, zoom, mapSize);
+  const markers = getMapMarkers(listings, center, zoom, mapSize, false);
   const attribution = process.env.NEXT_PUBLIC_MAP_ATTRIBUTION ?? defaultMapAttribution;
 
   useEffect(() => {
@@ -167,7 +177,7 @@ export function SavedMap({ listings }: { listings: PreviewListing[] }) {
   }, []);
 
   return (
-    <aside ref={canvas} className="relative h-[60dvh] min-h-[360px] overflow-hidden rounded-[24px] bg-[#dce9e7] sm:rounded-[28px] lg:sticky lg:top-[96px] lg:h-[calc(100dvh-120px)] lg:min-h-[620px]" aria-label="收藏房源地图">
+    <aside ref={canvas} className="relative h-[60dvh] min-h-[360px] overflow-hidden rounded-[24px] bg-[#e6ebf3] sm:rounded-[28px] lg:sticky lg:top-[96px] lg:h-[calc(100dvh-120px)] lg:min-h-[620px]" aria-label="收藏房源地图">
       <div className="absolute inset-0" aria-hidden="true">
         {tiles.map((tile) => <div key={tile.id} className="absolute size-64 select-none bg-cover bg-center" style={{ backgroundImage: `url(${tile.url})`, left: tile.x, top: tile.y }} />)}
       </div>

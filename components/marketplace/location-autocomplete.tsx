@@ -102,7 +102,7 @@ export function LocationAutocomplete({
               onClick={() => choose(option)}
               className={cn("flex w-full items-center gap-3 rounded-[14px] px-3 py-3 text-left", index === highlightedIndex ? "bg-blue-50" : "hover:bg-slate-50")}
             >
-              <span className="grid size-9 shrink-0 place-items-center rounded-full bg-blue-100 text-[#0668e1]"><MapPin className="size-4" /></span>
+              <span className="grid size-9 shrink-0 place-items-center rounded-full bg-blue-100 text-[#2453ff]"><MapPin className="size-4" /></span>
               <span className="min-w-0">
                 <span className="block text-sm font-black text-slate-950">{option.label}</span>
                 <span className="block text-xs font-semibold text-slate-500">{option.region}</span>
