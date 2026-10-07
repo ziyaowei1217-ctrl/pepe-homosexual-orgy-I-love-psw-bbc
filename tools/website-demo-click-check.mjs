@@ -294,7 +294,12 @@ async function runProfile(profile) {
         assert.equal(evidence.status, 200, "Same-tab document link response200");
         assert.match(evidence.contentType, /^text\/html(?:;|$)/i, "Same-tab document link serves HTML");
         assert.match(evidence.cacheControl, /\bno-store\b/i, "Same-tab document preserves private no-store policy");
+        assert.match(evidence.cacheControl, /\bprivate\b/i, "Same-tab document is privately cached");
         assert.match(evidence.policy, /'nonce-[A-Za-z0-9+\/_=-]+'/i, "Same-tab document receives a nonce security policy");
+        assert.ok(evidence.policy.includes("'strict-dynamic'"), "Same-tab document preserves strict dynamic script policy");
+        assert.ok(evidence.policy.includes("connect-src 'self'"), "Same-tab demo cannot connect to private or external services");
+        const scriptPolicy = evidence.policy.split(";").find((directive) => directive.trim().startsWith("script-src "));
+        assert.ok(scriptPolicy && !scriptPolicy.includes("'unsafe-inline'"), "Same-tab document has no unsafe inline script permission");
         assert.equal(await response.finished(), null, "Same-tab document response body finishes without error");
         evidence.finishedAt = new Date().toISOString();
         await atPath("/inbox"); await privateNotice("消息", "消息");
