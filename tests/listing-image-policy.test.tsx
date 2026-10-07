@@ -31,6 +31,24 @@ function imagesIn(element: React.ReactNode) {
 }
 
 describe("revocable listing image requests", () => {
+  it("keeps an unchanged photo request intact when its surrounding card updates", () => {
+    const { rerender } = render(<SmartImage src={publicPhoto} alt="Listing photo" width={400} height={300} className="rounded-lg" />);
+    const image = screen.getByAltText("Listing photo") as HTMLImageElement;
+    const source = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, "src")!;
+    const sourceWrites = vi.fn();
+    Object.defineProperty(image, "src", {
+      configurable: true,
+      get: () => source.get!.call(image),
+      set: (value: string) => { sourceWrites(value); source.set!.call(image, value); }
+    });
+
+    rerender(<SmartImage src={publicPhoto} alt="Listing photo" width={400} height={300} className="rounded-xl" />);
+
+    expect(screen.getByAltText("Listing photo")).toBe(image);
+    expect(image.className).toContain("rounded-xl");
+    expect(sourceWrites).not.toHaveBeenCalled();
+  });
+
   it("keeps refreshed images visible in initial HTML and preserves direct revocable-media requests", () => {
     const [image] = imagesIn(<SmartImage src={publicPhoto} alt="Listing photo" width={400} height={300} unoptimized={false} />);
     expect(image.getAttribute("src")).toBe(publicPhoto);

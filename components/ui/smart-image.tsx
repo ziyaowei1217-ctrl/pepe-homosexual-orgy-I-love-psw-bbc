@@ -3,7 +3,7 @@
 import { ImageOff } from "lucide-react";
 import type { ImageProps } from "next/image";
 import Image from "@/components/ui/app-image";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 
 import { cn } from "@/lib/utils";
 /**
@@ -13,6 +13,20 @@ import { cn } from "@/lib/utils";
 export function SmartImage({ className, alt, src, onLoad, onError, ...props }: ImageProps) {
   const [failedSrc, setFailedSrc] = useState<ImageProps["src"] | null>(null);
   const failed = !src || failedSrc === src;
+  const handleLoad = useCallback<NonNullable<ImageProps["onLoad"]>>((event) => {
+    // next/image replays onLoad for images that settled before hydration, including broken ones.
+    if (event.currentTarget.naturalWidth === 0) {
+      setFailedSrc(src);
+      return;
+    }
+    onLoad?.(event);
+  }, [src, onLoad]);
+  // Next Image reattaches its image ref when onError changes and resets src.
+  // Keep an unchanged photo's request intact during surrounding UI updates.
+  const handleError = useCallback<NonNullable<ImageProps["onError"]>>((event) => {
+    setFailedSrc(src);
+    onError?.(event);
+  }, [src, onError]);
 
   if (failed) {
     return (
@@ -36,18 +50,8 @@ export function SmartImage({ className, alt, src, onLoad, onError, ...props }: I
       src={src}
       alt={alt}
       className={className}
-      onLoad={(event) => {
-        // next/image replays onLoad for images that settled before hydration, including broken ones.
-        if (event.currentTarget.naturalWidth === 0) {
-          setFailedSrc(src);
-          return;
-        }
-        onLoad?.(event);
-      }}
-      onError={(event) => {
-        setFailedSrc(src);
-        onError?.(event);
-      }}
+      onLoad={handleLoad}
+      onError={handleError}
     />
   );
 }
