@@ -66,10 +66,10 @@ function RoommateTeamSessionExperience({ token }: { token: string | null }) {
     void run((value) => leaveRoommateTeam(value, team.id));
   }
 
-  return <main className="min-h-[calc(100dvh-72px)] bg-[#F5F8F5] px-4 py-6 sm:px-6 sm:py-10 lg:px-8">
+  return <main className="min-h-[calc(100dvh-72px)] bg-[#f7f8fb] px-4 py-6 sm:px-6 sm:py-10 lg:px-8">
     <div className="mx-auto max-w-5xl">
       <header className="border-b border-slate-200 pb-6">
-        <p className="text-xs font-black uppercase tracking-[.14em] text-[#234B3B]">Co-rent team</p>
+        <p className="text-xs font-black uppercase tracking-[.14em] text-[#2453ff]">Co-rent team</p>
         <h1 className="mt-2 text-3xl font-black tracking-[-.05em] sm:text-5xl">合租小组</h1>
         <p className="mt-3 text-sm leading-6 text-slate-500">查看组队邀请和成员，找到合拍的室友后一起找房。</p>
       </header>

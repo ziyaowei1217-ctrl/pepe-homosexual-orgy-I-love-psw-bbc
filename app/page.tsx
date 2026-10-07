@@ -24,7 +24,11 @@ export default async function HomePage({
 
   return (
     <PublicShell active="discover">
-      <HomeExperience listings={listings.slice(0, 4)} />
+      <HomeExperience
+        listings={listings.slice(0, 4)}
+        totalListings={listings.length}
+        totalCities={new Set(listings.map((listing) => listing.area.split(" · ")[0])).size}
+      />
     </PublicShell>
   );
 }

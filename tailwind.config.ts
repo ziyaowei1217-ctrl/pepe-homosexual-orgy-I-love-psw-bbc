@@ -11,11 +11,11 @@ const config: Config = {
     extend: {
       colors: {
         brand: {
-          DEFAULT: "#234B3B",
-          moss: "#416F5A",
-          soft: "#EDF4EE",
-          citrus: "#E9F2A9",
-          ink: "#203C30"
+          DEFAULT: "#2453ff",
+          moss: "#1a3dd6",
+          soft: "#eef2ff",
+          citrus: "#fbbf24",
+          ink: "#0b1026"
         },
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
@@ -50,7 +50,8 @@ const config: Config = {
           navy: "#002244",
           blue: "#0D4599",
           sky: "#006AFF",
-          green: "#107C41",
+          green: "#4338CA",
+          verified: "#4338CA",
           amber: "#B45309",
           red: "#D9381E",
           slate: "#41748D"

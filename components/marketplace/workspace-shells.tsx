@@ -71,8 +71,8 @@ function WorkspaceShell<Key extends string>({ title, eyebrow, active, items, acc
   children: ReactNode;
 }) {
   return (
-    <div className="marketplace-shell min-h-dvh bg-[#F5F8F5] text-slate-950 lg:grid lg:grid-cols-[252px_minmax(0,1fr)]">
-      <aside className={cn("hidden min-h-dvh flex-col border-r px-4 py-5 text-white lg:sticky lg:top-0 lg:flex lg:h-dvh", accent === "blue" ? "border-white/10 bg-[#234B3B]" : "border-white/10 bg-[#142B23]")}>
+    <div className="marketplace-shell min-h-dvh bg-[#f7f8fb] text-slate-950 lg:grid lg:grid-cols-[252px_minmax(0,1fr)]">
+      <aside className={cn("hidden min-h-dvh flex-col border-r px-4 py-5 text-white lg:sticky lg:top-0 lg:flex lg:h-dvh", accent === "blue" ? "border-white/10 bg-[#2453ff]" : "border-white/10 bg-[#0b1026]")}>
         <Link href="/" className="flex items-center gap-3 rounded-[18px] px-2 py-2">
           <PswLogo variant="mark" inverse className="h-10 w-10" />
           <span><span className="block text-sm font-bold">{title}</span><span className="mt-0.5 block text-[10px] font-medium text-white/70">{eyebrow}</span></span>

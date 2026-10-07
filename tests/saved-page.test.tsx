@@ -8,6 +8,7 @@ import { SavedListingsProvider } from "../components/marketplace/saved-listings-
 import { SavedMap, SavedPageExperience } from "../components/marketplace/saved-page-experience";
 import { createPreviewListings } from "../lib/preview-data";
 import { getSavedCollectionsStorageKey } from "../lib/saved-collections";
+import { getMapCenterForListings, getMapMarkers } from "../lib/listing-map";
 
 afterEach(() => {
   cleanup();
@@ -124,6 +125,43 @@ describe("saved page", () => {
     setMapSize(720, 620);
     expect(westernMarker.style.left).toBe("302px");
     expect(westernMarker.style.top).toBe("310px");
+  });
+
+  it.each([{ width: 320, height: 480 }, { width: 720, height: 620 }])("fits saved Los Angeles and Boston homes at their actual coordinates in a $width×$height map", ({ width, height }) => {
+    let resize: (entries: ResizeObserverEntry[]) => void = () => {};
+    vi.stubGlobal("ResizeObserver", class implements ResizeObserver {
+      constructor(callback: ResizeObserverCallback) { resize = (entries) => callback(entries, this); }
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    });
+    const all = createPreviewListings();
+    const listings = [all.find((listing) => listing.area.startsWith("Los Angeles ·"))!, all.find((listing) => listing.area.startsWith("Boston ·"))!];
+    render(<SavedMap listings={listings} />);
+    const map = screen.getByRole("complementary", { name: "收藏房源地图" });
+    act(() => resize([{
+      target: map, contentRect: new DOMRect(0, 0, width, height),
+      borderBoxSize: [], contentBoxSize: [], devicePixelContentBoxSize: []
+    }]));
+    const tile = map.querySelector<HTMLElement>('[style*="background-image"]');
+    const match = tile?.style.backgroundImage.match(/tile\.openstreetmap\.de\/(\d+)\/\d+\/\d+\.png/);
+    expect(match).not.toBeNull();
+    const zoom = Number(match![1]);
+    expect(zoom).toBeGreaterThanOrEqual(2);
+    expect(zoom).toBeLessThan(11);
+    const points = getMapMarkers(listings, getMapCenterForListings(listings), zoom, { width, height }, false);
+    for (const point of points) {
+      const link = within(map).getByRole("link", { name: `查看 ${point.title} ${point.label} / 月` });
+      expect(link.getAttribute("href")).toBe(`/listing/${encodeURIComponent(point.id)}`);
+      expect(Number.parseFloat(link.style.left)).toBe(point.x);
+      expect(Number.parseFloat(link.style.top)).toBe(point.y);
+      expect(point.x).toBeGreaterThan(50);
+      expect(point.x).toBeLessThan(width - 50);
+      expect(point.y).toBeGreaterThan(60);
+      expect(point.y).toBeLessThan(height - 40);
+    }
+    const closer = getMapMarkers(listings, getMapCenterForListings(listings), zoom + 1, { width, height }, false);
+    expect(closer.some((point) => point.x <= 50 || point.x >= width - 50 || point.y <= 60 || point.y >= height - 40)).toBe(true);
   });
 
   it("closes the collection dialog with Escape and restores the opener focus", () => {

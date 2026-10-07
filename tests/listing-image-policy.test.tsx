@@ -1,11 +1,13 @@
 // @vitest-environment jsdom
 
 import { renderToStaticMarkup } from "react-dom/server";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { ImageConfigContext } from "next/dist/shared/lib/image-config-context.shared-runtime";
 import { imageConfigDefault } from "next/dist/shared/lib/image-config";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import Image from "../components/ui/app-image";
+import { SmartImage } from "../components/ui/smart-image";
 import { HomeExperience } from "../components/marketplace/home-experience";
 import { ListingPhotoGallery } from "../components/marketplace/listing-photo-gallery";
 import { isFirstPartyListingMedia } from "../lib/listing-image-policy";
@@ -21,7 +23,7 @@ const imageConfig = {
 };
 
 beforeEach(() => { vi.stubEnv("NEXT_PUBLIC_API_BASE_URL", apiBaseUrl); });
-afterEach(() => { vi.unstubAllEnvs(); });
+afterEach(() => { cleanup(); vi.unstubAllEnvs(); });
 
 function imagesIn(element: React.ReactNode) {
   const html = renderToStaticMarkup(<ImageConfigContext.Provider value={imageConfig}>{element}</ImageConfigContext.Provider>);
@@ -29,6 +31,26 @@ function imagesIn(element: React.ReactNode) {
 }
 
 describe("revocable listing image requests", () => {
+  it("keeps refreshed images visible in initial HTML and preserves direct revocable-media requests", () => {
+    const [image] = imagesIn(<SmartImage src={publicPhoto} alt="Listing photo" width={400} height={300} unoptimized={false} />);
+    expect(image.getAttribute("src")).toBe(publicPhoto);
+    expect(image.getAttribute("srcset")).toBeNull();
+    expect(image.classList.contains("opacity-0")).toBe(false);
+  });
+
+  it("contains a failed image placeholder and recovers when its source changes", () => {
+    const { rerender } = render(<SmartImage src={publicPhoto} alt="Listing photo" width={400} height={300} className="h-36" />);
+    fireEvent.error(screen.getByAltText("Listing photo"));
+    const placeholder = screen.getByRole("img", { name: "Listing photo" });
+    expect(placeholder.tagName).toBe("SPAN");
+    expect(placeholder.classList.contains("absolute")).toBe(false);
+    expect(placeholder.classList.contains("h-36")).toBe(true);
+    const replacementPhoto = `${apiBaseUrl}/listing-media/media-b/content`;
+    rerender(<SmartImage src={replacementPhoto} alt="Listing photo" width={400} height={300} />);
+    expect(screen.getByAltText("Listing photo").getAttribute("src")).toBe(replacementPhoto);
+    expect(screen.getByAltText("Listing photo").getAttribute("srcset")).toBeNull();
+  });
+
   it.each([publicPhoto, "/api/v1/listing-media/media-a/content"]) (
     "renders %s directly even when a caller requests optimization",
     (src) => {

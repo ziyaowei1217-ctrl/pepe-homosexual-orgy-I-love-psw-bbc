@@ -81,7 +81,7 @@ function TeamStateCopy({ action }: { action: RoommateTeamAction }) {
     return <p className="text-xs text-muted-foreground">对方邀请你组成两人小组</p>;
   }
   if (action.kind === "active") {
-    return <p className="text-xs text-trust-green">已组成两人小组</p>;
+    return <p className="text-xs text-trust-verified">已组成两人小组</p>;
   }
   return <p className="text-xs text-muted-foreground">确认后可共同申请房源</p>;
 }

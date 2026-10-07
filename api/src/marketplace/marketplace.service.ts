@@ -1,6 +1,7 @@
 import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import { Prisma, type RoommateMatchingProfile } from "@prisma/client";
 
+import { parseStrictDate } from "../http/strict-date";
 import { PrismaService } from "../prisma/prisma.service";
 import { assertRoommateDiscoveryCapacity, MAX_DISCOVERABLE_ROOMMATE_PROFILES } from "../roommates/discovery-capacity";
 import { CreateRoommateProfileDto, UpdateProfileDto, UpdateRoommateProfileDto } from "./dto";
@@ -33,7 +34,7 @@ export class MarketplaceService {
 
   async createRoommateProfile(ownerId: string, email: string, dto: CreateRoommateProfileDto) {
     this.assertBudgetRange(dto.budgetMin, dto.budgetMax);
-    this.assertDateRange(dateValue(dto.moveInDate), dateValue(dto.moveOutDate));
+    this.assertDateRange(dateValue(dto.moveInDate, "moveInDate"), dateValue(dto.moveOutDate, "moveOutDate"));
     const profile = await this.ensureProfile(email);
 
     return this.prisma.$transaction(async (transaction) => {
@@ -158,7 +159,7 @@ export class MarketplaceService {
       dto.budgetMin !== undefined ? dto.budgetMin : existing.budgetMin,
       dto.budgetMax !== undefined ? dto.budgetMax : existing.budgetMax
     );
-    this.assertDateRange(dateValue(dto.moveInDate) ?? existing.moveInDate, dateValue(dto.moveOutDate) ?? existing.moveOutDate);
+    this.assertDateRange(dateValue(dto.moveInDate, "moveInDate") ?? existing.moveInDate, dateValue(dto.moveOutDate, "moveOutDate") ?? existing.moveOutDate);
   }
 
   private async ensureProfile(email: string) {
@@ -226,8 +227,8 @@ function roommateProfileUpdateData(dto: UpdateRoommateProfileDto | CreateRoommat
     city: dto.city,
     budgetMin: dto.budgetMin,
     budgetMax: dto.budgetMax,
-    moveInDate: dateValue(dto.moveInDate),
-    moveOutDate: dateValue(dto.moveOutDate),
+    moveInDate: dateValue(dto.moveInDate, "moveInDate"),
+    moveOutDate: dateValue(dto.moveOutDate, "moveOutDate"),
     preferredNeighborhoods: dto.preferredNeighborhoods,
     roomType: dto.roomType,
     cleanliness: dto.cleanliness,
@@ -241,8 +242,8 @@ function roommateProfileUpdateData(dto: UpdateRoommateProfileDto | CreateRoommat
   });
 }
 
-function dateValue(value?: string) {
-  return value ? new Date(value) : undefined;
+function dateValue(value: string | undefined, field: string) {
+  return value ? parseStrictDate(value, field) : undefined;
 }
 
 function definedData<T extends Record<string, unknown>>(data: T) {

@@ -21,7 +21,7 @@ export type ApiListing = {
   tags: string[];
   score: number;
   ownerId?: string;
-  status?: "DRAFT" | "SUBMITTED" | "APPROVED" | "REJECTED";
+  status?: "DRAFT" | "SUBMITTED" | "APPROVED" | "REJECTED" | "SUSPENDED" | "LEASED";
   submittedAt?: string | null;
   reviewedAt?: string | null;
   rejectionReason?: string | null;

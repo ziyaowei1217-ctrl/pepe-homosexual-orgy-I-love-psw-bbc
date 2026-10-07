@@ -3,7 +3,7 @@
 import { newBrowserCommandId } from "@/lib/browser-id";
 
 import { useEffect, useRef, useState } from "react";
-import Image from "@/components/ui/app-image";
+import { SmartImage as Image } from "@/components/ui/smart-image";
 
 import { assertCurrentAuthSession } from "@/lib/auth-session";
 import { Button } from "@/components/ui/button";

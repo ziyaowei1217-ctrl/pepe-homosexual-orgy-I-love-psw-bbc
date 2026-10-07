@@ -97,7 +97,7 @@ export function DemoPaymentPanel({
         <p className="rounded-md bg-white p-3 text-sm font-extrabold text-primary">{DEMO_PAYMENT_DISCLAIMER}</p>
         {payment ? (
           <div className="grid gap-3">
-            <div className="flex justify-between rounded-md border bg-white p-3 text-sm font-bold"><span>{application.scope === "TEAM" ? "两人小组申请" : "个人申请"}</span><span>${(payment.amountCents / 100).toLocaleString()} {payment.currency}</span></div>
+            <div className="flex justify-between rounded-md border bg-white p-3 text-sm font-bold"><span>{application.scope === "TEAM" ? "两人小组申请" : "个人申请"}</span><span>${(payment.amountCents / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {payment.currency}</span></div>
             {payment.status === "AWAITING_ATTEMPT" && isRenter && application.status === "ACCEPTED" ? <div className="flex flex-wrap gap-2"><Button disabled={pending} onClick={() => void run("success")}>模拟支付成功</Button><Button variant="outline" disabled={pending} onClick={() => void run("failure")}>模拟支付失败</Button></div> : null}
             {state?.attempts.at(-1)?.outcome === "FAILED" ? <p className="text-sm font-semibold text-destructive">上次模拟失败，可重试；未发生真实扣款。</p> : null}
             {heldFund ? (

@@ -487,7 +487,7 @@ function createRoommates(): Roommate[] {
       role: roommateRoles[index % roommateRoles.length],
       image: roommateImages[index % roommateImages.length],
       match: 82 + ((index * 3) % 17),
-      budget: `$${budget.toLocaleString()}/月`,
+      budget: `$${budget.toLocaleString("en-US")}/月`,
       commute: commuteZones[index % commuteZones.length],
       gender: roommateGenders[index % roommateGenders.length],
       school: getRoommateSchool(roommateRoles[index % roommateRoles.length]),
@@ -3030,12 +3030,12 @@ function StandaloneAuthScreen({
   toast: string;
 }) {
   return (
-    <main className="min-h-screen bg-[#F5F8F5]">
+    <main className="min-h-screen bg-[#f7f8fb]">
       <header className="app-shell flex items-center justify-between gap-4 py-5 md:py-7">
         <div className="flex items-center gap-3">
           <div>
             <PswLogo className="h-9 w-auto max-w-full" />
-            <div className="mt-1 text-xs font-bold text-[#416F5A]">留学生转租与室友平台</div>
+            <div className="mt-1 text-xs font-bold text-[#1a3dd6]">留学生转租与室友平台</div>
           </div>
         </div>
         <Button type="button" variant="ghost" size="sm" onClick={onClose}>
@@ -3053,7 +3053,7 @@ function StandaloneAuthScreen({
             {contextMessage}
           </p>
         </div>
-        <div className="mx-auto mt-6 max-w-3xl overflow-hidden rounded-[28px] border border-[#416F5A]/20 bg-white shadow-panel md:mt-8">
+        <div className="mx-auto mt-6 max-w-3xl overflow-hidden rounded-[28px] border border-[#1a3dd6]/20 bg-white shadow-panel md:mt-8">
           <AuthFlowPanel
             token={token}
             user={user}
@@ -3121,7 +3121,7 @@ function AppHeader({
         <div className="flex min-w-0 items-center gap-3 md:col-span-2 xl:col-span-3">
           <div className="min-w-0 leading-tight">
             <PswLogo className="h-9 w-auto max-w-full" />
-            <div className="mt-1 hidden text-xs font-bold text-[#416F5A] xl:block">留学生转租与室友平台</div>
+            <div className="mt-1 hidden text-xs font-bold text-[#1a3dd6] xl:block">留学生转租与室友平台</div>
           </div>
         </div>
 
@@ -3169,7 +3169,7 @@ function AppHeader({
             className="hidden min-w-0 items-center gap-2 rounded-full border border-blue-100 bg-white px-3 py-2 text-sm font-bold text-primary shadow-sm transition-colors hover:bg-blue-50 lg:flex"
             onClick={onAuthOpen}
           >
-            <ShieldCheck className="size-4 text-trust-green" aria-hidden="true" />
+            <ShieldCheck className="size-4 text-trust-verified" aria-hidden="true" />
             <span className="max-w-[180px] truncate">
               {user ? profile?.displayName ?? user.email : "登录 / 注册"}
             </span>
@@ -3522,7 +3522,7 @@ function RoommatesMarketplaceScreen({
             <PreferenceSummaryField
               icon={DollarSign}
               label="预算"
-              value={`$${draftPreference.budgetMin.toLocaleString()} - $${draftPreference.budgetMax.toLocaleString()}`}
+              value={`$${draftPreference.budgetMin.toLocaleString("en-US")} - $${draftPreference.budgetMax.toLocaleString("en-US")}`}
               onClick={cycleBudgetFilter}
             />
             <PreferenceSummaryField
@@ -3747,7 +3747,7 @@ function RoommatePreferencePanel({
           <div className="mb-2 flex items-center justify-between gap-3">
             <span className="text-xs font-extrabold uppercase tracking-wide text-muted-foreground">预算</span>
             <span className="text-xs font-bold text-[#006AFF]">
-              ${preference.budgetMin.toLocaleString()} - ${preference.budgetMax.toLocaleString()}
+              ${preference.budgetMin.toLocaleString("en-US")} - ${preference.budgetMax.toLocaleString("en-US")}
             </span>
           </div>
           <div className="grid grid-cols-2 gap-2">
@@ -4331,8 +4331,8 @@ function LikeQueueScreen({
           )}
         </QueueColumn>
 
-        <QueueColumn title="室友小组" description={ready ? `人均 $${averageBudget.toLocaleString()}` : "等待服务端确认室友关系"} count={members.length}>
-          <div className="text-3xl font-extrabold text-primary">{ready ? `$${totalBudget.toLocaleString()} / 月` : "尚未组成"}</div>
+        <QueueColumn title="室友小组" description={ready ? `人均 $${averageBudget.toLocaleString("en-US")}` : "等待服务端确认室友关系"} count={members.length}>
+          <div className="text-3xl font-extrabold text-primary">{ready ? `$${totalBudget.toLocaleString("en-US")} / 月` : "尚未组成"}</div>
           {members.length > 0 ? (
             members.map((member) => (
               <div key={getRoommateKey(member)} className="flex items-center gap-3 rounded-[22px] border border-blue-100 bg-white p-3">
@@ -4749,7 +4749,7 @@ function SearchHero({
         <div
           className={cn(
             "col-span-full grid min-w-0 grid-cols-1 gap-3 md:col-span-5 xl:col-span-3",
-            insight.status === "healthy" && "border-emerald-100 bg-emerald-50/70",
+            insight.status === "healthy" && "border-indigo-100 bg-indigo-50/70",
             insight.status === "tight" && "border-trust-amber/25 bg-trust-amber/5",
             insight.status === "empty" && "border-trust-red/20 bg-trust-red/5"
           )}
@@ -4758,7 +4758,7 @@ function SearchHero({
             <Sparkles
               className={cn(
                 "size-4",
-                insight.status === "healthy" && "text-trust-green",
+                insight.status === "healthy" && "text-trust-verified",
                 insight.status === "tight" && "text-trust-amber",
                 insight.status === "empty" && "text-trust-red"
               )}
@@ -5120,7 +5120,7 @@ function MessagesScreen({
                   <div className="truncate text-xl font-extrabold text-primary">{selectedListing.title}</div>
                   <div className="flex flex-wrap items-center gap-3 text-sm font-bold text-muted-foreground">
                     <span>{selectedListing.area}</span>
-                    <span>${selectedListing.price.toLocaleString()}/月</span>
+                    <span>${selectedListing.price.toLocaleString("en-US")}/月</span>
                     <span>{selectedListing.beds} 间卧室 · {selectedListing.baths} 间卫浴</span>
                   </div>
                 </CardContent>
@@ -5574,7 +5574,7 @@ function LandlordListingsPanel({
                   <Badge variant={meta.variant}>{meta.label}</Badge>
                 </div>
                 <div className="mt-3 flex items-center justify-between text-sm font-bold text-primary">
-                  <span>${listing.price.toLocaleString()}/月</span>
+                  <span>${listing.price.toLocaleString("en-US")}/月</span>
                   <span>{listing.mediaCount ?? listing.media?.length ?? 0} 张媒体</span>
                 </div>
                 <p className="mt-2 text-xs font-semibold text-muted-foreground">{meta.description}</p>
@@ -5783,13 +5783,13 @@ function ListingDetailScreen({
                   </p>
                 </div>
                 <div className="text-left md:text-right">
-                  <div className="text-3xl font-extrabold text-primary">${listing.price.toLocaleString()}</div>
+                  <div className="text-3xl font-extrabold text-primary">${listing.price.toLocaleString("en-US")}</div>
                   <div className="text-sm font-semibold text-muted-foreground">
-                    <span className="line-through">${listing.originalPrice.toLocaleString()}</span>
+                    <span className="line-through">${listing.originalPrice.toLocaleString("en-US")}</span>
                     <span> / 月</span>
                   </div>
-                  <div className="mt-1 text-sm font-bold text-trust-green">
-                    省 ${detail.monthlySavings.toLocaleString()}/月
+                  <div className="mt-1 text-sm font-bold text-trust-verified">
+                    省 ${detail.monthlySavings.toLocaleString("en-US")}/月
                   </div>
                 </div>
               </div>
@@ -5830,7 +5830,7 @@ function ListingDetailScreen({
               </div>
               <div className="rounded-md border bg-white p-4">
                 <div className="text-xs font-bold text-muted-foreground">小组人均</div>
-                <div className="mt-2 text-lg font-extrabold text-primary">${perPersonPrice.toLocaleString()}/月</div>
+                <div className="mt-2 text-lg font-extrabold text-primary">${perPersonPrice.toLocaleString("en-US")}/月</div>
                 <div className="mt-1 text-sm font-semibold text-muted-foreground">{roommateCount} 人预算估算</div>
               </div>
               <div className="rounded-md border bg-white p-4">
@@ -5891,7 +5891,7 @@ function ListingDetailScreen({
               <div className="rounded-md bg-secondary p-3 text-sm font-semibold text-primary">
                 <div className="flex justify-between">
                   <span>月租</span>
-                  <span>${listing.price.toLocaleString()}</span>
+                  <span>${listing.price.toLocaleString("en-US")}</span>
                 </div>
                 <div className="mt-2 flex justify-between text-muted-foreground">
                   <span>支付</span>
@@ -6153,7 +6153,7 @@ function DetailList({ title, items }: { title: string; items: string[] }) {
       <div className="mt-3 flex flex-col gap-2">
         {items.map((item, index) => (
           <div key={`${title}-${index}`} className="flex gap-2 text-sm font-semibold text-muted-foreground">
-            <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-trust-green" aria-hidden="true" />
+            <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-trust-verified" aria-hidden="true" />
             <span>{item}</span>
           </div>
         ))}
@@ -6316,7 +6316,7 @@ function MapCanvas({
           <div className="absolute right-3 top-3 grid grid-cols-3 overflow-hidden rounded-[18px] border bg-white/95 text-center shadow-card">
 	            <MapStat label="总结果" value={`${totalResultCount}`} />
 	            <MapStat label="本页标记" value={`${mapSummary.count}`} />
-	            <MapStat label="最低" value={mapSummary.minimumPrice ? `$${mapSummary.minimumPrice.toLocaleString()}` : "--"} />
+	            <MapStat label="最低" value={mapSummary.minimumPrice ? `$${mapSummary.minimumPrice.toLocaleString("en-US")}` : "--"} />
           </div>
           {markers.map((marker) => (
 	              <MapMarker
@@ -6536,7 +6536,7 @@ function ListingCard({
             {getTrustSourceLabel(listing.trust)}
           </Badge>
           {listing.tags.some((tag) => tag.includes("Group")) ? (
-            <Badge className="border-emerald-100 bg-emerald-50 text-emerald-700 shadow-sm">小组匹配</Badge>
+            <Badge className="border-indigo-100 bg-indigo-50 text-indigo-700 shadow-sm">小组匹配</Badge>
           ) : null}
         </div>
         <div className="absolute inset-x-3 top-1/2 flex -translate-y-1/2 items-center justify-between">
@@ -6782,7 +6782,7 @@ export function PublishingFlow({
     return (
       <Card className="shadow-panel">
         <CardContent className="flex min-h-[320px] flex-col items-center justify-center gap-4 p-8 text-center">
-          <div className="flex size-14 items-center justify-center rounded-full bg-emerald-50 text-trust-green">
+          <div className="flex size-14 items-center justify-center rounded-full bg-indigo-50 text-trust-verified">
             <CheckCircle2 className="size-7" aria-hidden="true" />
           </div>
           <div>
@@ -6909,7 +6909,7 @@ export function PublishingFlow({
                 <PublishReviewItem label="区域" value={draft.area || "未填写"} />
                 <PublishReviewItem label="可入住日期" value={draft.availableFrom || "未填写"} />
                 <PublishReviewItem label="最晚退租日期" value={draft.availableTo || "未填写"} />
-                <PublishReviewItem label="价格" value={`$${draft.price.toLocaleString()} / 月`} />
+                <PublishReviewItem label="价格" value={`$${draft.price.toLocaleString("en-US")} / 月`} />
                 <PublishReviewItem label="图片" value={`${mediaSummary.readyCount} 张已保存图片`} />
                 <PublishReviewItem label="设施" value={draft.tags.join("、") || "未选择"} />
                 <PublishReviewItem label="Trust 来源" value={draft.landlordAware ? "用户声明 · 待平台审核" : "未声明 · 待平台审核"} />
@@ -7022,7 +7022,7 @@ function StatusToast({ message }: { message: string }) {
   return (
     <div className="pointer-events-none fixed bottom-4 left-1/2 z-40 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 rounded-md border bg-white/96 px-4 py-3 text-sm font-semibold text-primary shadow-panel backdrop-blur">
       <div className="flex items-center gap-2">
-        <CheckCircle2 className="size-4 text-trust-green" aria-hidden="true" />
+        <CheckCircle2 className="size-4 text-trust-verified" aria-hidden="true" />
         <span className="min-w-0 truncate">{message}</span>
       </div>
     </div>

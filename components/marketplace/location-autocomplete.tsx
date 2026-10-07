@@ -89,7 +89,7 @@ export function LocationAutocomplete({
         placeholder={placeholder}
       />
       {expanded ? (
-        <div id={listboxId} role="listbox" aria-label="地点建议" className="absolute left-0 top-[calc(100%+12px)] z-[90] w-[270px] min-w-0 max-w-[calc(100vw-96px)] sm:max-w-full overflow-hidden rounded-[16px] border border-slate-200 bg-white p-2 text-left shadow-[0_12px_32px_rgba(35,75,59,0.12)]">
+        <div id={listboxId} role="listbox" aria-label="地点建议" className="absolute left-0 top-[calc(100%+12px)] z-[90] w-[270px] min-w-0 max-w-[calc(100vw-96px)] sm:max-w-full overflow-hidden rounded-[16px] border border-slate-200 bg-white p-2 text-left shadow-[0_12px_32px_rgba(11,16,38,0.12)]">
           {suggestions.map((option, index) => (
             <button
               key={option.id}
@@ -102,7 +102,7 @@ export function LocationAutocomplete({
               onClick={() => choose(option)}
               className={cn("flex w-full items-center gap-3 rounded-[14px] px-3 py-3 text-left", index === highlightedIndex ? "bg-brand-soft" : "hover:bg-slate-50")}
             >
-              <span className="grid size-9 shrink-0 place-items-center rounded-full bg-brand-soft text-[#234B3B]"><MapPin className="size-4" /></span>
+              <span className="grid size-9 shrink-0 place-items-center rounded-full bg-brand-soft text-[#2453ff]"><MapPin className="size-4" /></span>
               <span className="min-w-0">
                 <span className="block text-sm font-semibold text-slate-950">{option.label}</span>
                 <span className="block text-xs font-semibold text-slate-500">{option.region}</span>

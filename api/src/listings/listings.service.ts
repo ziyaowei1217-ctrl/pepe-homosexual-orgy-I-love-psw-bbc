@@ -322,8 +322,13 @@ function approvedPublicTrust(value: string) {
   return declarations.join(" · ");
 }
 
-function presentApprovedListing<T extends { trust: string }>(listing: T): T {
-  return { ...listing, trust: approvedPublicTrust(listing.trust) };
+const moderationOnlyFields = ["reviewerId", "rejectionReason", "suspendedAt", "suspendedBy", "suspensionReason"] as const;
+
+/** Public catalog rows are approved listings; reviewer identity and moderation notes stay admin-only. */
+function presentApprovedListing<T extends { trust: string }>(listing: T): Omit<T, (typeof moderationOnlyFields)[number]> {
+  const publicListing: Record<string, unknown> = { ...listing, trust: approvedPublicTrust(listing.trust) };
+  for (const field of moderationOnlyFields) delete publicListing[field];
+  return publicListing as Omit<T, (typeof moderationOnlyFields)[number]>;
 }
 
 function presentListingWithMedia<T extends { media: ListingMediaPresentationSource[] }>(listing: T) {

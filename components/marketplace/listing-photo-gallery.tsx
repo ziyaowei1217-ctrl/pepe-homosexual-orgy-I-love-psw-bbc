@@ -1,7 +1,7 @@
 "use client";
 
 import { ChevronLeft, ChevronRight, Grid2X2, ImageIcon, X } from "lucide-react";
-import Image from "@/components/ui/app-image";
+import { SmartImage as Image } from "@/components/ui/smart-image";
 import { useRef, useState } from "react";
 import { buildListingGallery, getGalleryIndex } from "@/lib/listing-detail";
 import type { PreviewListing } from "@/lib/preview-data";

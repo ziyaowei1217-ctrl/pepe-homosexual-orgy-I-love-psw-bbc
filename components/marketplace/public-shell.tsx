@@ -23,19 +23,19 @@ const publicNav = [
 
 export function PublicShell({ active, mobileNavigation = "bottom", children }: { active?: PublicNavKey; mobileNavigation?: "bottom" | "header"; children: ReactNode }) {
   return (
-    <div className="marketplace-shell min-h-dvh bg-[#F5F8F5] text-[#203C30]">
+    <div className="marketplace-shell min-h-dvh bg-[#f4f5fa] text-[#0b1026]">
       <a
         href="#main-content"
-        className="fixed left-4 top-3 z-[100] flex min-h-11 -translate-y-20 items-center rounded-full bg-[#234B3B] px-4 py-2 text-sm font-semibold text-white transition-transform focus:translate-y-0"
+        className="fixed left-4 top-3 z-[100] flex min-h-11 -translate-y-20 items-center rounded-full bg-[#2453ff] px-4 py-2 text-sm font-semibold text-white transition-transform focus:translate-y-0"
       >
         跳到主要内容
       </a>
 
-      <header className="sticky top-0 z-50 border-b border-[#234B3B]/15 bg-white">
-        <div className="mx-auto flex h-[72px] max-w-[1440px] items-center gap-3 px-4 sm:gap-5 sm:px-6 lg:px-10">
-          <Link href="/" className="flex min-h-11 shrink-0 flex-col justify-center" aria-label="psw 首页">
-            <PswLogo className="h-8 w-[92px] sm:h-9 sm:w-auto" />
-            <span className="hidden text-[11px] leading-4 text-[#416F5A] lg:block">留学生转租与接租</span>
+      <header className="sticky top-0 z-50 border-b border-[#e3e6ef] bg-white/85 backdrop-blur-xl backdrop-saturate-150 supports-[not(backdrop-filter:blur(1px))]:bg-white">
+        <div className="mx-auto flex h-[72px] max-w-[1520px] items-center gap-3 px-4 sm:gap-5 sm:px-6 lg:px-8">
+          <Link href="/" className="group flex min-h-11 shrink-0 items-center gap-3" aria-label="psw 首页">
+            <span className="grid size-10 place-items-center rounded-[12px] bg-[#2453ff] transition-transform group-hover:-translate-y-0.5"><PswLogo variant="mark" inverse className="h-8 w-8" /></span>
+            <span className={cn("block", mobileNavigation === "header" && "hidden sm:block")}><span className="font-display block text-[28px] font-bold leading-none text-[#0b1026]">psw</span><span className="hidden text-[11px] leading-4 text-[#5b6380] lg:block">留学生转租与接租</span></span>
           </Link>
 
           <nav className="hidden flex-1 items-center justify-center gap-1.5 md:flex" aria-label="主导航">
@@ -45,8 +45,8 @@ export function PublicShell({ active, mobileNavigation = "bottom", children }: {
                 href={item.href}
                 aria-current={active === item.key ? "page" : undefined}
                 className={cn(
-                  "flex min-h-11 items-center rounded-full px-4 py-2.5 text-sm font-medium text-[#416F5A] transition-colors hover:bg-[#F5F8F5] hover:text-[#234B3B]",
-                  active === item.key && "bg-[#E9F2A9]/60 font-semibold text-[#234B3B]"
+                  "flex min-h-11 items-center rounded-full px-4 py-2.5 text-sm font-medium text-[#5b6380] transition-colors hover:bg-[#eaeeff] hover:text-[#0b1026]",
+                  active === item.key && "bg-[#0b1026] font-bold text-white hover:bg-[#0b1026] hover:text-white"
                 )}
               >
                 {item.label}
@@ -56,21 +56,21 @@ export function PublicShell({ active, mobileNavigation = "bottom", children }: {
 
           <div className="ml-auto flex items-center gap-2">
             {mobileNavigation === "header" ? <nav aria-label="手机快捷导航" className="flex items-center gap-1 md:hidden">
-              <Link href="/search" aria-label="转租" className="flex min-h-11 items-center gap-1 rounded-full px-1.5 text-[13px] font-medium text-[#234B3B] hover:bg-[#F5F8F5] sm:gap-1.5 sm:px-2.5 sm:text-sm"><Search className="size-3.5 sm:size-4" aria-hidden="true" />转租</Link>
-              <Link href="/saved" aria-label="收藏房源" className="flex min-h-11 items-center gap-1 rounded-full px-1.5 text-[13px] font-medium text-[#234B3B] hover:bg-[#F5F8F5] sm:gap-1.5 sm:px-2.5 sm:text-sm"><Heart className="size-3.5 sm:size-4" aria-hidden="true" />收藏</Link>
+              <Link href="/search" aria-label="转租" className="flex min-h-11 items-center gap-1 whitespace-nowrap rounded-full px-1.5 text-[13px] font-medium text-[#0b1026] hover:bg-[#eaeeff] sm:gap-1.5 sm:px-2.5 sm:text-sm"><Search className="size-3.5 sm:size-4" aria-hidden="true" />转租</Link>
+              <Link href="/saved" aria-label="收藏房源" className="flex min-h-11 items-center gap-1 whitespace-nowrap rounded-full px-1.5 text-[13px] font-medium text-[#0b1026] hover:bg-[#eaeeff] sm:gap-1.5 sm:px-2.5 sm:text-sm"><Heart className="size-3.5 sm:size-4" aria-hidden="true" />收藏</Link>
             </nav> : null}
             <Link
               href="/host"
-              className="hidden min-h-11 items-center rounded-full px-4 py-2.5 text-sm font-medium text-[#234B3B] transition-colors hover:bg-[#F5F8F5] lg:inline-flex"
+              className="hidden min-h-11 items-center rounded-full px-4 py-2.5 text-sm font-medium text-[#0b1026] transition-colors hover:bg-[#eaeeff] lg:inline-flex"
             >
               房东中心
             </Link>
             <Link
               href="/account"
-              className="flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-full border border-[#234B3B]/20 bg-white p-1.5 text-sm font-medium text-[#234B3B] transition-colors hover:border-[#416F5A] hover:bg-[#F5F8F5] lg:pr-3"
+              className="flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-full border border-[#cdd2e0] bg-white p-1.5 text-sm font-medium text-[#0b1026] transition-colors hover:border-[#2453ff] hover:bg-[#eaeeff] lg:pr-3"
               aria-label="打开账户"
             >
-              <span className="grid size-8 place-items-center rounded-full bg-[#234B3B] text-white">
+              <span className="grid size-8 place-items-center rounded-full bg-[#0b1026] text-white">
                 <UserRound className="size-4" aria-hidden="true" />
               </span>
               <span className="hidden text-[13px] lg:block">我的账户</span>
@@ -84,7 +84,7 @@ export function PublicShell({ active, mobileNavigation = "bottom", children }: {
       </div>
 
       {mobileNavigation === "bottom" ? <nav
-        className="fixed inset-x-0 bottom-0 z-50 grid grid-cols-5 border-t border-[#234B3B]/15 bg-white px-1 pb-[max(0.4rem,env(safe-area-inset-bottom))] pt-1.5 md:hidden"
+        className="fixed inset-x-0 bottom-0 z-50 grid grid-cols-5 border-t border-[#e3e6ef] bg-white/90 px-1 backdrop-blur-xl shadow-[0_-8px_30px_rgba(11,16,38,0.08)] pb-[max(0.4rem,env(safe-area-inset-bottom))] pt-1.5 md:hidden"
         aria-label="手机导航"
       >
         {publicNav.map((item) => {
@@ -95,11 +95,11 @@ export function PublicShell({ active, mobileNavigation = "bottom", children }: {
               href={item.href}
               aria-current={active === item.key ? "page" : undefined}
               className={cn(
-                "flex min-h-[52px] min-w-0 flex-col items-center justify-center gap-1 rounded-xl px-1 py-1.5 text-xs font-medium text-[#416F5A]",
-                active === item.key && "bg-[#F5F8F5] font-semibold text-[#234B3B]"
+                "flex min-h-[52px] min-w-0 flex-col items-center justify-center gap-0.5 rounded-xl px-1 py-1 text-xs font-semibold leading-4 text-[#5b6380]",
+                active === item.key && "font-bold text-[#0b1026]"
               )}
             >
-              <Icon className={cn("size-5", active === item.key && "fill-[#E9F2A9]")} aria-hidden="true" />
+              <span className={cn("grid h-[30px] w-[52px] place-items-center rounded-full transition-colors", active === item.key && "bg-[#0b1026] text-white")}><Icon className="size-5" aria-hidden="true" /></span>
               <span>{item.label}</span>
             </Link>
           );
