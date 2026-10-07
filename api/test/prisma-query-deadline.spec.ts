@@ -20,7 +20,14 @@ describe("installed Prisma driver transport deadline", () => {
       expect(Date.now() - started).toBeLessThan(4_500);
       expect(attempts.every(result => result.status === "rejected" && result.reason.getStatus() === 503)).toBe(true);
       expect(fixture.state.executions).toBe(1);
+      // Caller expiry can precede driver expiry during a cold start. Observe actual
+      // peer closure and completion of the shared check before one recovery call.
+      await vi.waitFor(() => {
+        expect(fixture.state.closedConnections).toBe(1);
+        expect((health as unknown as { inFlightCheck?: Promise<unknown> }).inFlightCheck).toBeUndefined();
+      }, { timeout: 500, interval: 10 });
       expect(fixture.state.closedConnections).toBe(1);
+      expect(Date.now() - started).toBeLessThan(4_500);
       fixture.state.stall = false;
       await expect(health.ready()).resolves.toMatchObject({ status: "ok" });
       expect(fixture.state.executions).toBe(2);
@@ -45,7 +52,9 @@ describe("installed Prisma driver transport deadline", () => {
       const start = Date.now();
       await expect(prisma.$transaction(transaction => transaction.$queryRaw`SELECT 1`)).rejects.toThrow();
       expect(Date.now() - start).toBeLessThan(4_500);
+      await vi.waitFor(() => expect(fixture.state.closedConnections).toBe(1), { timeout: 500, interval: 10 });
       expect(fixture.state.closedConnections).toBe(1);
+      expect(Date.now() - start).toBeLessThan(4_500);
       fixture.state.stall = false;
       await expect(prisma.$transaction(transaction => transaction.$queryRaw`SELECT 1`)).resolves.toEqual([{ one: 1 }]);
       expect(fixture.state.connections).toBe(2);
@@ -86,7 +95,9 @@ describe("installed Prisma driver transport deadline", () => {
       fixture.state.stall = true;
       const again = Date.now(); await expect(prisma.$queryRaw`SELECT 1`).rejects.toThrow();
       expect(Date.now() - again).toBeLessThan(4_500);
+      await vi.waitFor(() => expect(fixture.state.closedConnections).toBe(2), { timeout: 500, interval: 10 });
       expect(fixture.state.closedConnections).toBe(2);
+      expect(Date.now() - again).toBeLessThan(4_500);
     } finally { await fixture.close(); await prisma.$disconnect(); }
   }, 10_000);
 
