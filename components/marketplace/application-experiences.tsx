@@ -11,7 +11,7 @@ import {
   MessageCircle,
   ShieldCheck
 } from "lucide-react";
-import Image from "next/image";
+import { SmartImage } from "@/components/ui/smart-image";
 import Link from "next/link";
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 
@@ -206,9 +206,9 @@ function ApplicationFormSession({ listing, initialStay, selectionId }: Applicati
 
           <aside aria-label="申请房源摘要" className="order-first rounded-[22px] border border-slate-200 bg-white p-4 shadow-sm lg:sticky lg:top-[96px] lg:order-last">
             <div className="flex items-center gap-3 lg:block">
-              <div className="relative size-16 shrink-0 overflow-hidden rounded-2xl bg-slate-200 lg:aspect-[4/3] lg:h-auto lg:w-full"><Image src={listing.image} alt={listing.title} fill sizes="(max-width: 1023px) 64px, 340px" className="object-cover" /></div>
+              <div className="relative size-16 shrink-0 overflow-hidden rounded-2xl bg-slate-200 lg:aspect-[4/3] lg:h-auto lg:w-full"><SmartImage src={listing.image} alt={listing.title} fill sizes="(max-width: 1023px) 64px, 340px" className="object-cover" /></div>
               <div className="min-w-0 flex-1"><h2 className="line-clamp-2 text-sm font-bold leading-snug lg:mt-4 lg:text-base">{listing.title}</h2><p className="mt-1 hidden text-xs text-slate-500 lg:block">{listing.area}</p>
-                <p className="mt-2 text-lg font-black lg:mt-4 lg:border-t lg:border-slate-200 lg:pt-4 lg:text-xl">${listing.price.toLocaleString()} <span className="text-xs font-medium text-slate-500">/ 月</span></p>
+                <p className="mt-2 text-lg font-black lg:mt-4 lg:border-t lg:border-slate-200 lg:pt-4 lg:text-xl">${listing.price.toLocaleString("en-US")} <span className="text-xs font-medium text-slate-500">/ 月</span></p>
                 <p className="mt-3 hidden text-xs leading-5 text-slate-500 lg:block">所选租期<br /><span className="font-semibold text-slate-700">{draft.moveIn || "待选择"} 至 {draft.moveOut || "待选择"}</span></p>
               </div>
             </div>

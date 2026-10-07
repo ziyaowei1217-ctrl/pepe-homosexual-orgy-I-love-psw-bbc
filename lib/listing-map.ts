@@ -116,7 +116,7 @@ export function getMapMarkers(
     return {
       ...listing,
       ...point,
-      label: `$${listing.price.toLocaleString()}`,
+      label: `$${listing.price.toLocaleString("en-US")}`,
       x: Math.round(clampToViewport ? keepInsideViewport(markerPixel.x - centerPixel.x + size.width / 2, size.width, markerInset.x) : markerPixel.x - centerPixel.x + size.width / 2),
       y: Math.round(clampToViewport ? keepInsideViewport(markerPixel.y - centerPixel.y + size.height / 2, size.height, markerInset.y) : markerPixel.y - centerPixel.y + size.height / 2)
     };

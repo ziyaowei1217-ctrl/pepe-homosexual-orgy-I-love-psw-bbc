@@ -32,15 +32,15 @@ export function PublicShell({ active, mobileNavigation = "bottom", children }: {
         跳到主要内容
       </a>
 
-      <header className="sticky top-0 z-50 border-b border-slate-200 bg-white">
+      <header className="sticky top-0 z-50 border-b border-slate-200/80 bg-white/85 backdrop-blur-xl backdrop-saturate-150 supports-[not(backdrop-filter:blur(1px))]:bg-white">
         <div className="mx-auto flex h-[72px] max-w-[1520px] items-center gap-7 px-4 sm:px-6 lg:px-8">
           <Link href="/" className="group flex shrink-0 items-center gap-3" aria-label="Sublet Pipeline 首页">
             <span className="grid size-10 place-items-center rounded-[14px] bg-[#0668e1] text-white shadow-[0_10px_28px_rgba(6,104,225,0.25)] transition-transform group-hover:-translate-y-0.5">
               <Home className="size-[19px]" aria-hidden="true" />
             </span>
-            <span className="hidden sm:block">
+            <span className="block">
               <span className="block text-[15px] font-black tracking-[-0.02em]">Sublet Pipeline</span>
-              <span className="block text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Live well, sooner</span>
+              <span className="hidden text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400 sm:block">Live well, sooner</span>
             </span>
           </Link>
 
@@ -90,7 +90,7 @@ export function PublicShell({ active, mobileNavigation = "bottom", children }: {
       </div>
 
       {mobileNavigation === "bottom" ? <nav
-        className="fixed inset-x-0 bottom-0 z-50 grid grid-cols-5 border-t border-slate-200 bg-white px-1 pb-[max(0.4rem,env(safe-area-inset-bottom))] pt-1.5 shadow-[0_-8px_30px_rgba(15,23,42,0.08)] md:hidden"
+        className="fixed inset-x-0 bottom-0 z-50 grid grid-cols-5 border-t border-slate-200/80 bg-white/90 px-1 backdrop-blur-xl pb-[max(0.4rem,env(safe-area-inset-bottom))] pt-1.5 shadow-[0_-8px_30px_rgba(15,23,42,0.08)] md:hidden"
         aria-label="手机导航"
       >
         {publicNav.map((item) => {
@@ -105,7 +105,9 @@ export function PublicShell({ active, mobileNavigation = "bottom", children }: {
                 active === item.key && "text-[#0668e1]"
               )}
             >
-              <Icon className={cn("size-5", active === item.key && "fill-blue-50")} aria-hidden="true" />
+              <span className={cn("grid h-7 w-12 place-items-center rounded-full transition-colors", active === item.key && "bg-blue-50")}>
+                <Icon className={cn("size-5", active === item.key && "fill-blue-100")} aria-hidden="true" />
+              </span>
               <span>{item.label}</span>
             </Link>
           );

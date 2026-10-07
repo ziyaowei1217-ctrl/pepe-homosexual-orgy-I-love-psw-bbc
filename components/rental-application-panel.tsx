@@ -102,7 +102,7 @@ function RentalApplicationSession({
             <div>
               <Badge variant="trust">{step + 1} / 3</Badge>
               <CardTitle className="mt-2">申请 {listing.title}</CardTitle>
-              <CardDescription>${listing.price.toLocaleString()}/月 · 不收集证件、银行流水或精确收入</CardDescription>
+              <CardDescription>${listing.price.toLocaleString("en-US")}/月 · 不收集证件、银行流水或精确收入</CardDescription>
             </div>
             <Button variant="ghost" onClick={onClose} disabled={pending}>关闭</Button>
           </div>

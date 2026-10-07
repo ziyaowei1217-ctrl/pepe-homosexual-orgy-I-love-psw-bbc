@@ -46,7 +46,7 @@ export function buildListingDetail(listing: DetailListing, dateRange: DateRange)
         listing.commute,
         listing.transit,
         `${listing.beds} 间卧室 · ${listing.baths} 间卫浴`,
-        monthlySavings > 0 ? `比原价低 $${monthlySavings.toLocaleString()}/月` : "价格已锁定"
+        monthlySavings > 0 ? `比原价低 $${monthlySavings.toLocaleString("en-US")}/月` : "价格已锁定"
       ],
       houseRules: [
         listing.trust,

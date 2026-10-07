@@ -1,7 +1,7 @@
 "use client";
 
 import { Building2, CalendarDays, ClipboardCheck, Eye, MapPin, MessageCircle, Pencil, Plus } from "lucide-react";
-import Image from "next/image";
+import { SmartImage } from "@/components/ui/smart-image";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -108,13 +108,13 @@ function HostListingsExperienceSession() {
   const visible = listings.filter((listing) => tab === "all" || statusKey(listing.status) === tab);
 
   return <HostPage title="我的房源" description="按生命周期查看草稿、审核和发布状态。" action={<Link href="/host/listings/new" className="primary-action"><Plus className="size-4" />发布新房源</Link>}>
-    <div className="mt-6 flex gap-2 overflow-x-auto">{[["all","全部"],["draft","草稿"],["review","审核中"],["published","已发布"],["rented","已出租"]].map(([value,label]) => <button key={value} onClick={() => setTab(value)} className={cn("rounded-full border px-4 py-2.5 text-xs font-black", tab === value ? "border-slate-950 bg-slate-950 text-white" : "border-slate-200 bg-white")}>{label}</button>)}</div>
+    <div className="mt-6 flex gap-2 overflow-x-auto">{[["all","全部"],["draft","草稿"],["review","审核中"],["published","已发布"],["rented","已出租"],["suspended","已下架"]].map(([value,label]) => <button key={value} onClick={() => setTab(value)} className={cn("rounded-full border px-4 py-2.5 text-xs font-black", tab === value ? "border-slate-950 bg-slate-950 text-white" : "border-slate-200 bg-white")}>{label}</button>)}</div>
     {!session.token ? <LoginGate text="登录后读取真实房源" returnTo="/host/listings" /> : null}
     {error || session.error ? <ErrorNotice text={error ?? session.error!} /> : null}
     {error || session.error ? <button type="button" onClick={() => { if (session.error) session.reload(); setLoadAttempt((attempt) => attempt + 1); }} className="secondary-action mt-4">重新加载房源</button> : null}
     {session.token && (session.loading || loading) ? <p role="status" className="mt-6 text-sm font-bold text-slate-500">正在加载房源…</p> : null}
     {session.user && !loading && visible.length === 0 && !error && !session.error ? <EmptyState text="这个状态下还没有房源。" /> : null}
-    <div className="mt-6 grid gap-5 lg:grid-cols-2">{visible.map((listing, index) => <article key={listing.id} className="grid overflow-hidden rounded-[26px] border border-slate-200 bg-white shadow-sm sm:grid-cols-[190px_minmax(0,1fr)]"><div className="relative min-h-48 bg-slate-100"><Image src={getListingCoverUrl(listing)} alt={listing.title} fill priority={index < 4} fetchPriority={index < 4 ? "high" : "auto"} sizes="190px" className="object-cover" /></div><div className="flex flex-col p-5"><span className="w-fit rounded-full bg-blue-50 px-2.5 py-1 text-[10px] font-black text-blue-700">{statusLabel(listing.status)}</span><h2 className="mt-3 text-base font-black">{listing.title}</h2><p className="mt-2 flex items-center gap-1 text-xs text-slate-500"><MapPin className="size-3.5" />{listing.area}</p><p className="mt-4 text-lg font-black">${listing.price.toLocaleString()} <span className="text-xs text-slate-400">/ 月</span></p><div className="mt-auto flex gap-2 pt-5"><Link href={`/host/listings/${listing.id}`} className="secondary-action"><Pencil className="size-3.5" />管理</Link>{listing.status === "APPROVED" ? <Link href={`/listing/${listing.id}`} className="secondary-action" aria-label="查看公开房源"><Eye className="size-3.5" /></Link> : null}</div></div></article>)}</div>
+    <div className="mt-6 grid gap-5 lg:grid-cols-2">{visible.map((listing, index) => <article key={listing.id} className="grid overflow-hidden rounded-[26px] border border-slate-200 bg-white shadow-sm sm:grid-cols-[190px_minmax(0,1fr)]"><div className="relative min-h-48 bg-slate-100"><SmartImage src={getListingCoverUrl(listing)} alt={listing.title} fill priority={index < 4} fetchPriority={index < 4 ? "high" : "auto"} sizes="190px" className="object-cover" /></div><div className="flex flex-col p-5"><span className="w-fit rounded-full bg-blue-50 px-2.5 py-1 text-[10px] font-black text-blue-700">{statusLabel(listing.status)}</span><h2 className="mt-3 text-base font-black">{listing.title}</h2><p className="mt-2 flex items-center gap-1 text-xs text-slate-500"><MapPin className="size-3.5" />{listing.area}</p><p className="mt-4 text-lg font-black">${listing.price.toLocaleString("en-US")} <span className="text-xs text-slate-400">/ 月</span></p><div className="mt-auto flex gap-2 pt-5"><Link href={`/host/listings/${listing.id}`} className="secondary-action"><Pencil className="size-3.5" />管理</Link>{listing.status === "APPROVED" ? <Link href={`/listing/${listing.id}`} className="secondary-action" aria-label="查看公开房源"><Eye className="size-3.5" /></Link> : null}</div></div></article>)}</div>
   </HostPage>;
 }
 
@@ -292,8 +292,8 @@ function ErrorNotice({ text }: { text: string }) { return <p role="alert" classN
 function EmptyState({ text }: { text: string }) { return <p className="mt-6 rounded-[20px] border border-dashed border-slate-300 bg-white p-8 text-center text-sm font-bold text-slate-500">{text}</p>; }
 function RoleGate() { return <section className="mt-6 rounded-[20px] border border-dashed border-slate-300 bg-white p-8 text-center"><p className="text-sm font-bold text-slate-500">请先在账户资料中将身份设置为房东或租客兼房东。</p><Link href="/account/profile" className="primary-action mt-5">前往账户资料</Link></section>; }
 function Metric({ icon: Icon, label, value, href }: { icon: typeof Building2; label: string; value: string; href: string }) { return <Link href={href} className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm"><span className="grid size-10 place-items-center rounded-[14px] bg-blue-50 text-[#0668e1]"><Icon className="size-5" /></span><p className="mt-5 text-xs font-black text-slate-500">{label}</p><p className="mt-2 text-3xl font-black">{value}</p></Link>; }
-function statusKey(status?: ApiListing["status"]) { return status === "DRAFT" || status === "REJECTED" ? "draft" : status === "SUBMITTED" ? "review" : status === "APPROVED" ? "published" : "rented"; }
-function statusLabel(status?: ApiListing["status"]) { return status === "DRAFT" ? "草稿" : status === "SUBMITTED" ? "审核中" : status === "APPROVED" ? "已发布" : status === "REJECTED" ? "已退回" : "已出租"; }
+function statusKey(status?: ApiListing["status"]) { return status === "DRAFT" || status === "REJECTED" ? "draft" : status === "SUBMITTED" ? "review" : status === "APPROVED" ? "published" : status === "SUSPENDED" ? "suspended" : "rented"; }
+function statusLabel(status?: ApiListing["status"]) { return status === "DRAFT" ? "草稿" : status === "SUBMITTED" ? "审核中" : status === "APPROVED" ? "已发布" : status === "REJECTED" ? "已退回" : status === "SUSPENDED" ? "已下架" : "已出租"; }
 
 export function getHostApplicationPresentation(status: RentalApplicationStatus) {
   return {

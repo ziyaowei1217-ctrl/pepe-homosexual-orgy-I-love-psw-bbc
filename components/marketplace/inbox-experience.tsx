@@ -1,7 +1,7 @@
 "use client";
 
 import { ArrowLeft, CalendarDays, FileText, Search, Send, UsersRound } from "lucide-react";
-import Image from "next/image";
+import { SmartImage } from "@/components/ui/smart-image";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 
@@ -391,7 +391,7 @@ function withMessages(conversation: InboxConversation, incoming: Message[]): Inb
 }
 function latestTime(conversation: InboxConversation) { return conversation.messages.at(-1)?.createdAt ?? ""; }
 function EmptyInbox({ title, actionHref, action }: { title: string; actionHref: string; action: string }) { return <div className="m-2 rounded-[18px] border border-dashed border-slate-300 p-6 text-center"><p className="text-sm font-black">{title}</p><Link href={actionHref} className="mt-4 inline-flex rounded-full bg-[#0668e1] px-4 py-2 text-xs font-black text-white">{action}</Link></div>; }
-function Avatar({ name, src, small = false }: { name: string; src?: string | null; small?: boolean }) { return <div className={cn("relative grid shrink-0 place-items-center overflow-hidden rounded-full bg-blue-50 font-black text-[#0668e1]", small ? "size-10" : "size-12")}>{src ? <Image src={src} alt="" fill sizes={small ? "40px" : "48px"} className="object-cover" /> : name.slice(0, 1).toUpperCase()}</div>; }
+function Avatar({ name, src, small = false }: { name: string; src?: string | null; small?: boolean }) { return <div className={cn("relative grid shrink-0 place-items-center overflow-hidden rounded-full bg-blue-50 font-black text-[#0668e1]", small ? "size-10" : "size-12")}>{src ? <SmartImage src={src} alt="" fill sizes={small ? "40px" : "48px"} className="object-cover" /> : name.slice(0, 1).toUpperCase()}</div>; }
 function KindIcon({ kind }: { kind: ConversationKind }) { return <span className="grid size-8 place-items-center rounded-[11px] bg-white text-[#0668e1]">{kind === "application" ? <FileText className="size-4" /> : kind === "tour" ? <CalendarDays className="size-4" /> : <UsersRound className="size-4" />}</span>; }
 function MessageBubble({ message }: { message: Message }) { return <div className={cn("flex", message.align === "right" && "justify-end")}><div className={cn("min-w-0 max-w-[78%] rounded-[20px] px-4 py-3 text-sm leading-6", message.align === "right" ? "rounded-br-md bg-[#0668e1] text-white" : "rounded-bl-md bg-slate-100 text-slate-800")}><p className="whitespace-pre-wrap [overflow-wrap:anywhere]">{message.body}</p><p className={cn("mt-1 text-[10px]", message.align === "right" ? "text-blue-100" : "text-slate-400")}>{formatTime(message.createdAt)}</p></div></div>; }
 function formatTime(value: string) { const date = new Date(value); return Number.isNaN(date.getTime()) ? "" : new Intl.DateTimeFormat("zh-CN", { hour: "2-digit", minute: "2-digit" }).format(date); }

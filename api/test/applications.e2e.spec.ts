@@ -57,6 +57,11 @@ describe("rental application HTTP API", () => {
       .auth(tokens["renter-1"], { type: "bearer" }).set("Idempotency-Key", "create-contact-request")
       .send({ ...applicationPayload(), contactName: "  Entered Contact  ", contactEmail: "  entered@example.com  " }).expect(201);
     expect(created.body).toMatchObject({ contactName: "Entered Contact", contactEmail: "entered@example.com" });
+    // Hosts only see an application once the renter submits it.
+    await http.get(`/api/v1/applications/${created.body.id}`)
+      .auth(tokens["owner-1"], { type: "bearer" }).expect(404);
+    await http.post(`/api/v1/applications/${created.body.id}/submit`)
+      .auth(tokens["renter-1"], { type: "bearer" }).set("Idempotency-Key", "submit-contact-request").expect(201);
     const reloaded = await http.get(`/api/v1/applications/${created.body.id}`)
       .auth(tokens["owner-1"], { type: "bearer" }).expect(200);
     expect(reloaded.body).toMatchObject({ contactName: "Entered Contact", contactEmail: "entered@example.com" });

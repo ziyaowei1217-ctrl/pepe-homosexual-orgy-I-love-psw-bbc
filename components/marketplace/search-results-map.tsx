@@ -1,7 +1,7 @@
 "use client";
 
 import { ArrowRight, LocateFixed, MapPin, Minus, Plus, X, ChevronLeft, ChevronRight } from "lucide-react";
-import Image from "next/image";
+import { SmartImage } from "@/components/ui/smart-image";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -75,14 +75,14 @@ export function SearchResultsMap({ listings, activeListing, stay, view, onSelect
     {!listings.length ? <div className="absolute inset-0 grid place-items-center bg-slate-100/80 px-6 text-center text-sm text-slate-600">当前条件下没有房源，调整筛选后再看看。</div> : null}
     {clusterListings.length ? <div className="absolute inset-x-4 bottom-[136px] z-40 mx-auto max-w-[380px] overflow-hidden rounded-[20px] bg-white p-4 shadow-2xl md:bottom-24">
       <div className="mb-3 flex items-center justify-between"><h2 className="text-sm font-bold">此区域的 {clusterListings.length} 套房源</h2><button type="button" aria-label="关闭区域房源" onClick={() => setClusterIds([])} className="grid size-7 place-items-center rounded-full hover:bg-slate-100"><X className="size-4" /></button></div>
-      <div className="max-h-52 space-y-1 overflow-y-auto">{clusterListings.map((listing) => <button type="button" key={listing.id} onClick={() => { setClusterIds([]); onSelect(listing.id); }} className="flex w-full items-center justify-between gap-3 rounded-xl px-2 py-3 text-left text-xs hover:bg-blue-50"><span className="truncate">{listing.title}</span><strong className="shrink-0">${listing.price.toLocaleString()}/月</strong></button>)}</div>
+      <div className="max-h-52 space-y-1 overflow-y-auto">{clusterListings.map((listing) => <button type="button" key={listing.id} onClick={() => { setClusterIds([]); onSelect(listing.id); }} className="flex w-full items-center justify-between gap-3 rounded-xl px-2 py-3 text-left text-xs hover:bg-blue-50"><span className="truncate">{listing.title}</span><strong className="shrink-0">${listing.price.toLocaleString("en-US")}/月</strong></button>)}</div>
       <button type="button" onClick={() => { setViewport({ center: getMapCenterForListings(clusterListings), zoom: Math.min(16, zoom + 2) }); setClusterIds([]); }} className="mt-3 w-full rounded-xl bg-slate-950 py-2.5 text-xs font-semibold text-white">放大这一区域</button>
     </div> : null}
     {activeListing && !clusterListings.length ? <div className="absolute inset-x-4 bottom-[136px] z-30 mx-auto max-w-[380px] overflow-hidden rounded-[20px] bg-white shadow-[0_12px_48px_rgba(15,23,42,0.2)] md:bottom-24">
       <button type="button" aria-label="关闭地图房源预览" onClick={onClose} className="absolute right-2 top-2 z-10 grid size-7 place-items-center rounded-full bg-white/95 shadow-sm"><X className="size-3.5" /></button>
       <Link href={listingHref(activeListing.id, stay)} onClick={() => onOpen(activeListing.id)} className="flex gap-3 p-3">
-        <div className="relative h-[104px] w-[112px] shrink-0 overflow-hidden rounded-xl"><Image src={activeListing.image} alt="" fill sizes="112px" className="object-cover" /></div>
-        <div className="min-w-0 py-1 pr-3"><p className="text-lg font-bold">${activeListing.price.toLocaleString()} <span className="text-xs font-normal text-slate-500">/ 月</span></p><p className="mt-1 truncate text-sm font-semibold">{activeListing.title}</p><p className="mt-1 truncate text-xs text-slate-500">{activeListing.area}</p><span className="mt-3 flex items-center gap-1 text-xs font-semibold text-[#0668e1]">查看房源 <ArrowRight className="size-3" /></span></div>
+        <div className="relative h-[104px] w-[112px] shrink-0 overflow-hidden rounded-xl"><SmartImage src={activeListing.image} alt="" fill sizes="112px" className="object-cover" /></div>
+        <div className="min-w-0 py-1 pr-3"><p className="text-lg font-bold">${activeListing.price.toLocaleString("en-US")} <span className="text-xs font-normal text-slate-500">/ 月</span></p><p className="mt-1 truncate text-sm font-semibold">{activeListing.title}</p><p className="mt-1 truncate text-xs text-slate-500">{activeListing.area}</p><span className="mt-3 flex items-center gap-1 text-xs font-semibold text-[#0668e1]">查看房源 <ArrowRight className="size-3" /></span></div>
       </Link>
     </div> : <p className="absolute bottom-[144px] left-1/2 z-20 -translate-x-1/2 whitespace-nowrap rounded-full bg-white/95 px-4 py-2 text-xs text-slate-600 shadow-sm md:bottom-24">拖动地图探索 · 点击价格查看房源</p>}
     <span className="absolute bottom-[72px] right-2 z-30 rounded bg-white/90 px-1.5 py-0.5 text-[10px] text-slate-600 md:bottom-2">{attribution}</span>

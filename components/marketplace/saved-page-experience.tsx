@@ -13,7 +13,7 @@ import {
   Star,
   X
 } from "lucide-react";
-import Image from "next/image";
+import { SmartImage } from "@/components/ui/smart-image";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 
@@ -33,13 +33,15 @@ export function SavedPageExperience({ listings }: { listings: PreviewListing[] }
   const [sort, setSort] = useState<"recent" | "price-low" | "price-high">("recent");
   const activeCollection = state.collections.find((collection) => collection.id === activeCollectionId) ?? state.collections[0];
   const savedListings = useMemo(() => {
-    const activeIds = activeCollectionId === DEFAULT_SAVED_COLLECTION_ID
-      ? savedIds
-      : new Set(activeCollection?.listingIds ?? []);
-    const items = listings.filter((listing) => activeIds.has(listing.id));
+    // Collections append on save, so position in the id list is save order; newest first for "recent".
+    const orderedIds = activeCollectionId === DEFAULT_SAVED_COLLECTION_ID
+      ? [...savedIds]
+      : activeCollection?.listingIds ?? [];
+    const savedOrder = new globalThis.Map(orderedIds.map((id, index) => [id, index]));
+    const items = listings.filter((listing) => savedOrder.has(listing.id));
     if (sort === "price-low") return [...items].sort((left, right) => left.price - right.price);
     if (sort === "price-high") return [...items].sort((left, right) => right.price - left.price);
-    return items;
+    return [...items].sort((left, right) => (savedOrder.get(right.id) ?? 0) - (savedOrder.get(left.id) ?? 0));
   }, [activeCollection?.listingIds, activeCollectionId, listings, savedIds, sort]);
 
   function handleCreate(event: FormEvent<HTMLFormElement>) {
@@ -93,13 +95,13 @@ export function SavedPageExperience({ listings }: { listings: PreviewListing[] }
               {savedListings.map((listing) => (
                 <article key={listing.id} className="group overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-lg">
                   <Link href={`/listing/${encodeURIComponent(listing.id)}`} className="relative block aspect-[4/3] overflow-hidden bg-slate-200">
-                    <Image src={listing.image} alt={listing.title} fill sizes="(max-width: 640px) 100vw, 33vw" className="object-cover transition-transform duration-300 group-hover:scale-[1.035]" />
+                    <SmartImage src={listing.image} alt={listing.title} fill sizes="(max-width: 640px) 100vw, 33vw" className="object-cover transition-transform duration-300 group-hover:scale-[1.035]" />
                     <span className="absolute left-3 top-3 rounded-full bg-white/92 px-2.5 py-1.5 text-[11px] font-black text-emerald-700 shadow-sm"><ShieldCheck className="mr-1 inline size-3.5" />信任信息</span>
                   </Link>
                   <div className="relative p-4">
                     <button type="button" onClick={() => toggleSaved(listing.id)} className="absolute right-3 top-3 grid size-9 place-items-center rounded-full border border-slate-200 bg-white text-[#0668e1]" aria-label={`取消收藏 ${listing.title}`}><Heart className="size-4 fill-current" /></button>
                     <Link href={`/listing/${encodeURIComponent(listing.id)}`} className="block pr-10"><h3 className="line-clamp-2 text-base font-black leading-snug text-slate-950 group-hover:text-[#0668e1]">{listing.title}</h3><p className="mt-1 flex items-center gap-1 truncate text-xs text-slate-500"><MapPin className="size-3.5" />{listing.area}</p></Link>
-                    <div className="mt-3 flex items-end justify-between"><p className="text-lg font-black">${listing.price.toLocaleString()} <span className="text-xs font-medium text-slate-400">/ 月</span></p><span className="flex items-center gap-1 text-xs font-bold"><Star className="size-3.5 fill-amber-400 text-amber-400" />{listing.score}</span></div>
+                    <div className="mt-3 flex items-end justify-between"><p className="text-lg font-black">${listing.price.toLocaleString("en-US")} <span className="text-xs font-medium text-slate-400">/ 月</span></p><span className="flex items-center gap-1 text-xs font-bold"><Star className="size-3.5 fill-amber-400 text-amber-400" />{listing.score}</span></div>
                     <textarea defaultValue={state.notes[listing.id] ?? ""} onBlur={(event) => setNote(listing.id, event.target.value)} aria-label={`${listing.title} 的收藏备注`} placeholder="添加仅自己可见的备注…" className="mt-4 min-h-16 w-full resize-none rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2 text-xs leading-5 outline-none focus:border-blue-300 focus:bg-white" />
                     {state.collections.length > 1 ? <label className="mt-3 flex items-center justify-between text-xs font-bold text-slate-500">加入清单<select aria-label={`${listing.title} 所属清单`} className="max-w-[150px] rounded-full border border-slate-200 bg-white px-2 py-1.5 text-slate-700" value="" onChange={(event) => { if (event.target.value) toggleInCollection(listing.id, event.target.value); }}><option value="">选择清单</option>{state.collections.filter((collection) => collection.id !== DEFAULT_SAVED_COLLECTION_ID).map((collection) => <option key={collection.id} value={collection.id}>{collection.listingIds.includes(listing.id) ? "✓ " : ""}{collection.name}</option>)}</select></label> : null}
                   </div>
@@ -150,9 +152,17 @@ function NewCollectionDialog({ name, onNameChange, onSubmit, onClose }: {
 export function SavedMap({ listings }: { listings: PreviewListing[] }) {
   const canvas = useRef<HTMLElement>(null);
   const [mapSize, setMapSize] = useState({ width: 720, height: 620 });
-  const center = getMapCenterForListings(listings);
-  const tiles = getMapTiles(center, 11, mapSize);
-  const markers = getMapMarkers(listings, center, 11, mapSize);
+  const center = useMemo(() => getMapCenterForListings(listings), [listings]);
+  // Zoom out until every saved listing fits, so listings in different cities are not pinned to the edges.
+  const zoom = useMemo(() => {
+    for (let candidate = 11; candidate >= 2; candidate--) {
+      const points = getMapMarkers(listings, center, candidate, mapSize, false);
+      if (points.every((point) => point.x > 50 && point.x < mapSize.width - 50 && point.y > 60 && point.y < mapSize.height - 40)) return candidate;
+    }
+    return 2;
+  }, [center, listings, mapSize]);
+  const tiles = getMapTiles(center, zoom, mapSize);
+  const markers = getMapMarkers(listings, center, zoom, mapSize, false);
   const attribution = process.env.NEXT_PUBLIC_MAP_ATTRIBUTION ?? defaultMapAttribution;
 
   useEffect(() => {

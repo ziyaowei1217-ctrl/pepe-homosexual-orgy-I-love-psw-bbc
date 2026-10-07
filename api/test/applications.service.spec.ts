@@ -102,9 +102,10 @@ describe("ApplicationsService draft and submit workflow", () => {
     const mine = await service.mine("renter-1");
     const hostInbox = await service.hostInbox("owner-1");
     expect(mine.map((record) => record.id).sort()).toEqual(["application-1", "application-team"]);
-    expect(hostInbox.map((record) => record.id).sort()).toEqual(["application-1", "application-team"]);
+    // Unsubmitted drafts stay private to the renter side.
+    expect(hostInbox).toEqual([]);
+    await expect(service.findOne("owner-1", solo.id)).rejects.toBeInstanceOf(NotFoundException);
     expect(mine.every((record) => record.listingTitle === "Westwood room")).toBe(true);
-    expect(hostInbox.every((record) => record.listingTitle === "Westwood room")).toBe(true);
     expect((await service.findOne("renter-2", "application-team")).id).toBe("application-team");
   });
 

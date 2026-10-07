@@ -1,7 +1,7 @@
 "use client";
 
 import { ArrowLeft, ArrowRight, Bath, BedDouble, CalendarDays, Check, ChevronDown, Heart, LayoutGrid, List, Map, MapPin, Search, SlidersHorizontal, Star, TrainFront, X } from "lucide-react";
-import Image from "next/image";
+import { SmartImage } from "@/components/ui/smart-image";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -18,7 +18,7 @@ import { cn } from "@/lib/utils";
 export function SearchExperience({ listings, initialQuery, initialMoveIn, initialMoveOut, initialState }: {
   listings: PreviewListing[]; initialQuery: string; initialMoveIn: string; initialMoveOut: string; initialState?: SearchState;
 }) {
-  const [state, setState] = useState<SearchState>(() => typeof window !== "undefined" && window.location.pathname === "/search" ? parseSearchState(new URLSearchParams(window.location.search)) : initialState ?? { ...defaultSearch, query: initialQuery, moveIn: initialMoveIn, moveOut: initialMoveOut });
+  const [state, setState] = useState<SearchState>(() => initialState ?? { ...defaultSearch, query: initialQuery, moveIn: initialMoveIn, moveOut: initialMoveOut });
   const [filterOpen, setFilterOpen] = useState<SearchFilterSection | null>(null);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
@@ -31,12 +31,32 @@ export function SearchExperience({ listings, initialQuery, initialMoveIn, initia
   const filterCount = state.amenities.length + Number(Boolean(state.priceMin || state.priceMax)) + Number(Boolean(state.beds));
 
   useEffect(() => {
+    // Read the address bar after commit, not during render: on a client navigation the router has not
+    // updated it yet during render, while a restored history entry may carry filters added via pushState.
+    if (window.location.pathname === "/search") {
+      const fromUrl = parseSearchState(new URLSearchParams(window.location.search));
+      setState((current) => searchHref(fromUrl) === searchHref(current) ? current : fromUrl);
+    }
     if (window.matchMedia?.("(max-width: 1023px)").matches) {
       setState((current) => current.view === "split" ? { ...current, view: "list" } : current);
     }
     const selected = initialState?.selected;
     if (selected) cards.current.get(selected)?.scrollIntoView?.({ block: "nearest", behavior: "instant" });
   }, [initialState?.selected]);
+
+  // Client-side navigation to a /search URL that matches the mounted key (e.g. the "找房" nav link
+  // after filters were pushed with history.pushState) re-renders with a fresh initialState but no remount.
+  const mountedInitialState = useRef(initialState);
+  useEffect(() => {
+    if (mountedInitialState.current === initialState) return;
+    mountedInitialState.current = initialState;
+    if (initialState) {
+      const compact = window.matchMedia?.("(max-width: 1023px)").matches && initialState.view === "split";
+      setState(compact ? { ...initialState, view: "list" } : initialState);
+      setHoveredId(null);
+      setFilterOpen(null);
+    }
+  }, [initialState]);
 
   useEffect(() => {
     const onBack = () => { setState(parseSearchState(new URLSearchParams(window.location.search))); setHoveredId(null); setFilterOpen(null); };
@@ -77,7 +97,7 @@ export function SearchExperience({ listings, initialQuery, initialMoveIn, initia
   }
 
   const dateLabel = state.moveIn && state.moveOut ? `${state.moveIn.slice(5).replace("-", "/")} – ${state.moveOut.slice(5).replace("-", "/")}` : "租期";
-  const budgetLabel = state.priceMin || state.priceMax ? `$${state.priceMin.toLocaleString()} – ${state.priceMax ? `$${state.priceMax.toLocaleString()}` : "不限"}` : "每月预算";
+  const budgetLabel = state.priceMin || state.priceMax ? `$${state.priceMin.toLocaleString("en-US")} – ${state.priceMax ? `$${state.priceMax.toLocaleString("en-US")}` : "不限"}` : "每月预算";
   const chips = [
     ...(state.priceMin || state.priceMax ? [{ label: budgetLabel, clear: () => update({ priceMin: 0, priceMax: 0 }) }] : []),
     ...(state.beds ? [{ label: `${state.beds}+ 间卧室`, clear: () => update({ beds: 0 }) }] : []),
@@ -118,14 +138,14 @@ export function SearchExperience({ listings, initialQuery, initialMoveIn, initia
         </div>
         {catalog.items.length ? <div className={cn("mt-5 grid gap-x-5 gap-y-7", state.view === "list" ? "sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4" : "sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2")}>
           {catalog.items.map((listing, index) => <article key={listing.id} ref={(node) => { if (node) cards.current.set(listing.id, node); else cards.current.delete(listing.id); }} id={`result-${listing.id}`} className={cn("group min-w-0 scroll-mt-[210px] rounded-[20px] transition-shadow", activeId === listing.id && "outline outline-2 outline-offset-[7px] outline-[#0668e1]")} onMouseEnter={() => setHoveredId(listing.id)} onMouseLeave={() => setHoveredId(null)} onFocus={() => setHoveredId(listing.id)} onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setHoveredId(null); }}>
-            <div className="relative aspect-[1.42] overflow-hidden rounded-[18px] bg-slate-100">
-              <Link href={listingHref(listing.id, state)} onClick={() => rememberSearch(listing.id)} className="absolute inset-0"><Image src={listing.image} alt={listing.title} fill priority={index < 2} sizes={state.view === "list" ? "(max-width: 640px) 100vw, 30vw" : "(max-width: 640px) 100vw, (max-width: 1200px) 45vw, 25vw"} className="object-cover transition-transform duration-300 group-hover:scale-[1.035]" /></Link>
+            <div className="relative aspect-[1.42] overflow-hidden rounded-[18px] bg-slate-100 ring-1 ring-slate-900/5 transition-shadow duration-300 group-hover:shadow-[0_18px_40px_rgba(15,23,42,0.14)]">
+              <Link href={listingHref(listing.id, state)} onClick={() => rememberSearch(listing.id)} className="absolute inset-0"><SmartImage src={listing.image} alt={listing.title} fill priority={index < 2} sizes={state.view === "list" ? "(max-width: 640px) 100vw, 30vw" : "(max-width: 640px) 100vw, (max-width: 1200px) 45vw, 25vw"} className="object-cover transition-transform duration-300 group-hover:scale-[1.035]" /></Link>
               {listing.tags.includes("带家具") ? <span className="pointer-events-none absolute left-3 top-3 rounded-full bg-white/95 px-3 py-1.5 text-[11px] font-bold text-slate-800 shadow-sm">带家具 · 轻松入住</span> : null}
               <button type="button" onClick={() => saveListing(listing)} aria-label={savedIds.has(listing.id) ? `取消收藏 ${listing.title}` : `收藏 ${listing.title}`} aria-pressed={savedIds.has(listing.id)} className="absolute right-3 top-3 grid size-9 place-items-center rounded-full bg-white/95 text-slate-700 shadow-sm transition-transform hover:scale-110"><Heart className={cn("size-[18px]", savedIds.has(listing.id) && "fill-[#0668e1] text-[#0668e1]")} /></button>
               <button type="button" onClick={() => { update({ view: "map", selected: listing.id, page: state.page }); }} className="absolute bottom-3 right-3 flex items-center gap-1 rounded-full bg-white/95 px-2.5 py-1.5 text-[11px] font-semibold shadow-sm lg:opacity-0 lg:group-focus-within:opacity-100 lg:group-hover:opacity-100"><MapPin className="size-3" />在地图上查看</button>
             </div>
             <Link href={listingHref(listing.id, state)} onClick={() => rememberSearch(listing.id)} className="mt-3 block">
-              <div className="flex items-baseline justify-between gap-2"><p><span className="text-[23px] font-bold tracking-tight">${listing.price.toLocaleString()}</span><span className="ml-1 text-xs text-slate-500">/ 月</span></p><span className="flex items-center gap-1 text-xs font-medium"><Star className="size-3 fill-slate-900" />{listing.score}</span></div>
+              <div className="flex items-baseline justify-between gap-2"><p><span className="text-[23px] font-bold tracking-tight">${listing.price.toLocaleString("en-US")}</span><span className="ml-1 text-xs text-slate-500">/ 月</span></p><span className="flex items-center gap-1 text-xs font-medium"><Star className="size-3 fill-slate-900" />{listing.score}</span></div>
               <h2 className="mt-1.5 truncate text-[14px] font-semibold text-slate-950 group-hover:text-[#0668e1]">{listing.title}</h2>
               <p className="mt-1 truncate text-xs text-slate-500">{listing.area}</p>
               <div className="mt-2 flex items-center gap-3 text-xs text-slate-600"><span className="flex items-center gap-1"><BedDouble className="size-3.5" />{listing.beds} 卧</span><span className="flex items-center gap-1"><Bath className="size-3.5" />{listing.baths} 卫</span><span className="truncate">{listing.tags.slice(0, 2).join(" · ")}</span></div>
