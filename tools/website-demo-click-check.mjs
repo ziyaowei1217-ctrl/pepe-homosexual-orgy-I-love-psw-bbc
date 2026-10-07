@@ -273,6 +273,39 @@ async function runProfile(profile) {
     assert.ok(geometry.centerHits, `Closed section title is initially covered: ${JSON.stringify(geometry)}`);
   }
   async function finishSameTabInboxNavigation() {
+    if (await nav("消息").getAttribute("data-website-demo-navigation") === "document") {
+      // Demo-only document links require their own positive wire proof. The
+      // original RSC lifecycle checks below still apply to framework links.
+      await decodedVisibleImages(); await page.waitForLoadState("networkidle", { timeout: 12_000 });
+      const oldDocument = await page.evaluate(() => window.__demoClickDocument);
+      const evidence = { startedAt: new Date().toISOString(), path: "/inbox", oldDocument, mode: "document" };
+      result.sameTabDocumentNavigations ??= []; result.sameTabDocumentNavigations.push(evidence);
+      await directDocumentNavigation("/inbox", async () => {
+        const pendingResponse = page.waitForResponse((response) => {
+          const request = response.request(), url = new URL(response.url());
+          return url.origin === origin && url.pathname === "/inbox" && request.method() === "GET" &&
+            request.isNavigationRequest() && request.resourceType() === "document" && request.frame() === page.mainFrame();
+        }, { timeout: 12_000 });
+        await hit(nav("消息"), "Repeat navigation 消息", { scroll: false });
+        const response = await pendingResponse;
+        Object.assign(evidence, { url: response.url(), status: response.status(), method: response.request().method(),
+          type: response.request().resourceType(), contentType: response.headers()["content-type"] ?? "",
+          policy: response.headers()["content-security-policy"] ?? "", cacheControl: response.headers()["cache-control"] ?? "" });
+        assert.equal(evidence.status, 200, "Same-tab document link response200");
+        assert.match(evidence.contentType, /^text\/html(?:;|$)/i, "Same-tab document link serves HTML");
+        assert.match(evidence.cacheControl, /\bno-store\b/i, "Same-tab document preserves private no-store policy");
+        assert.match(evidence.policy, /'nonce-[A-Za-z0-9+\/_=-]+'/i, "Same-tab document receives a nonce security policy");
+        assert.equal(await response.finished(), null, "Same-tab document response body finishes without error");
+        evidence.finishedAt = new Date().toISOString();
+        await atPath("/inbox"); await privateNotice("消息", "消息");
+        evidence.newDocument = await page.evaluate(() => window.__demoClickDocument);
+        assert.equal(typeof evidence.newDocument, "string", "Same-tab document identity is known");
+        assert.ok(evidence.newDocument.length > 0, "Same-tab document identity is nonempty");
+        assert.notEqual(evidence.newDocument, oldDocument, "Same-tab demo notice creates a fresh document");
+        assertRuntime();
+      });
+      return;
+    }
     const document = await page.evaluate(() => window.__demoClickDocument);
     assert.equal(typeof document, "string", "Known same-tab inbox document identity");
     assert.ok(document.length > 0, "Same-tab inbox document identity is nonempty");

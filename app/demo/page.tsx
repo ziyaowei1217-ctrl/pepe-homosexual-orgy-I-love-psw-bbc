@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { LockKeyhole, Search, UsersRound } from "lucide-react";
-import Link from "next/link";
+import Link from "@/components/ui/app-link";
 import { notFound } from "next/navigation";
 
 import { PublicShell } from "@/components/marketplace/public-shell";

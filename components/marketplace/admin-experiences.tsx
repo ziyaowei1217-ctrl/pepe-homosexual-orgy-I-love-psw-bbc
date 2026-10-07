@@ -1,7 +1,7 @@
 "use client";
 
 import { ArrowRight, CheckCircle2, FileSearch, IdCard, UsersRound } from "lucide-react";
-import Link from "next/link";
+import Link from "@/components/ui/app-link";
 import { useEffect, useState } from "react";
 
 import { AdminRoommatesScreen } from "@/components/admin-roommates-screen";

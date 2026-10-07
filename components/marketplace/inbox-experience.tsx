@@ -2,7 +2,7 @@
 
 import { ArrowLeft, CalendarDays, FileText, Search, Send, UsersRound } from "lucide-react";
 import { SmartImage as Image } from "@/components/ui/smart-image";
-import Link from "next/link";
+import Link from "@/components/ui/app-link";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent } from "react";
 
 import { apiGet, apiPost, getDealMessages, getRoommateConversations, getRoommateMessages, markRoommateConversationRead, sendRoommateMessage } from "@/lib/api";

@@ -2,7 +2,7 @@
 
 import { ArrowRight, LocateFixed, MapPin, Minus, Plus, X, ChevronLeft, ChevronRight, GraduationCap } from "lucide-react";
 import { SmartImage as Image } from "@/components/ui/smart-image";
-import Link from "next/link";
+import Link from "@/components/ui/app-link";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 
 import { defaultMapAttribution, getListingPoint, getMapCenterForListings, getMapMarkers, minMapZoom, maxMapZoom, type MapSize } from "@/lib/listing-map";

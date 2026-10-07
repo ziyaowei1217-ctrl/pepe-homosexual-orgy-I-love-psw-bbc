@@ -17,7 +17,7 @@ import {
   Star,
   TrainFront
 } from "lucide-react";
-import Link from "next/link";
+import Link from "@/components/ui/app-link";
 import { useEffect, useState } from "react";
 
 import { useSavedListings } from "@/components/marketplace/saved-listings-provider";

@@ -5,7 +5,7 @@ import {
   UserRound,
   UsersRound
 } from "lucide-react";
-import Link from "next/link";
+import Link from "@/components/ui/app-link";
 import type { ReactNode } from "react";
 
 import { PswLogo } from "@/components/brand/psw-logo";

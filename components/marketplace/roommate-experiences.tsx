@@ -2,7 +2,7 @@
 
 import { ArrowLeft, Check, Heart, MessageCircle, Settings2, Sparkles, UsersRound, X } from "lucide-react";
 import { SmartImage as Image } from "@/components/ui/smart-image";
-import Link from "next/link";
+import Link from "@/components/ui/app-link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { apiGet, apiPost } from "@/lib/api";

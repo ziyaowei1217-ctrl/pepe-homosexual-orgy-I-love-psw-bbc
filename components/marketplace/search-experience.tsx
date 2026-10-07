@@ -2,7 +2,7 @@
 
 import { ArrowLeft, ArrowRight, Bath, BedDouble, CalendarDays, Check, ChevronDown, Heart, LayoutGrid, List, Map, MapPin, Search, SlidersHorizontal, Star, TrainFront, X } from "lucide-react";
 import { SmartImage as Image } from "@/components/ui/smart-image";
-import Link from "next/link";
+import Link from "@/components/ui/app-link";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 

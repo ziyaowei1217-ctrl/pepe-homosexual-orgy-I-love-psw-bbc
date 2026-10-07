@@ -12,7 +12,7 @@ import {
   ShieldCheck
 } from "lucide-react";
 import { SmartImage as Image } from "@/components/ui/smart-image";
-import Link from "next/link";
+import Link from "@/components/ui/app-link";
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 
 import { ApplicationCancellation } from "@/components/application-cancellation";

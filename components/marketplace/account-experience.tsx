@@ -13,7 +13,7 @@ import {
   ShieldCheck,
   UserRound
 } from "lucide-react";
-import Link from "next/link";
+import Link from "@/components/ui/app-link";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 
 import {

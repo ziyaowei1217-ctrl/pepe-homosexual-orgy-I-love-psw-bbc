@@ -2,7 +2,7 @@
 
 import { Building2, CalendarDays, ClipboardCheck, Eye, MapPin, MessageCircle, Pencil, Plus } from "lucide-react";
 import { SmartImage as Image } from "@/components/ui/smart-image";
-import Link from "next/link";
+import Link from "@/components/ui/app-link";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { ApplicationCancellation } from "@/components/application-cancellation";

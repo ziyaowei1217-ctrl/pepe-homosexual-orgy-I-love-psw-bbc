@@ -1,6 +1,6 @@
 import { ArrowRight, CalendarDays, ChevronRight, KeyRound, MapPin, Search, Sofa, TrainFront, UsersRound } from "lucide-react";
 import { SmartImage as Image } from "@/components/ui/smart-image";
-import Link from "next/link";
+import Link from "@/components/ui/app-link";
 
 import { LocationAutocomplete } from "@/components/marketplace/location-autocomplete";
 import type { PreviewListing } from "@/lib/preview-data";

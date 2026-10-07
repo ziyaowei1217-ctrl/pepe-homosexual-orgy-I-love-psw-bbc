@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { SmartImage as Image } from "@/components/ui/smart-image";
-import Link from "next/link";
+import Link from "@/components/ui/app-link";
 import { notFound } from "next/navigation";
 
 import { PublicShell } from "@/components/marketplace/public-shell";
