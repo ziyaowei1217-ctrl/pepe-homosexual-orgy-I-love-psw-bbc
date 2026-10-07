@@ -43,7 +43,7 @@ const config: Config = {
           navy: "#002244",
           blue: "#0D4599",
           sky: "#006AFF",
-          green: "#107C41",
+          verified: "#4338CA",
           amber: "#B45309",
           red: "#D9381E",
           slate: "#41748D"

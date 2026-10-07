@@ -35,7 +35,7 @@ export function PublicShell({ active, mobileNavigation = "bottom", children }: {
       <header className="sticky top-0 z-50 border-b border-slate-200/80 bg-white/85 backdrop-blur-xl backdrop-saturate-150 supports-[not(backdrop-filter:blur(1px))]:bg-white">
         <div className="mx-auto flex h-[72px] max-w-[1520px] items-center gap-7 px-4 sm:px-6 lg:px-8">
           <Link href="/" className="group flex shrink-0 items-center gap-3" aria-label="Sublet Pipeline 首页">
-            <span className="grid size-10 place-items-center rounded-[14px] bg-[#0668e1] text-white shadow-[0_10px_28px_rgba(6,104,225,0.25)] transition-transform group-hover:-translate-y-0.5">
+            <span className="grid size-10 place-items-center rounded-[14px] bg-[#2453ff] bg-gradient-to-br from-[#2453ff] to-[#6d4aff] text-white shadow-[0_10px_28px_rgba(36,83,255,0.25)] transition-transform group-hover:-translate-y-0.5">
               <Home className="size-[19px]" aria-hidden="true" />
             </span>
             <span className="block">
@@ -52,7 +52,7 @@ export function PublicShell({ active, mobileNavigation = "bottom", children }: {
                 aria-current={active === item.key ? "page" : undefined}
                 className={cn(
                   "rounded-full px-4 py-2.5 text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-950",
-                  active === item.key && "bg-blue-50 text-[#0668e1]"
+                  active === item.key && "bg-blue-50 text-[#2453ff]"
                 )}
               >
                 {item.label}
@@ -102,7 +102,7 @@ export function PublicShell({ active, mobileNavigation = "bottom", children }: {
               aria-current={active === item.key ? "page" : undefined}
               className={cn(
                 "flex min-w-0 flex-col items-center gap-1 rounded-xl px-1 py-1.5 text-xs font-bold text-slate-600",
-                active === item.key && "text-[#0668e1]"
+                active === item.key && "text-[#2453ff]"
               )}
             >
               <span className={cn("grid h-7 w-12 place-items-center rounded-full transition-colors", active === item.key && "bg-blue-50")}>

@@ -16,13 +16,13 @@
     --secondary-foreground: 220 24% 12%;
     --muted: 40 12% 93%;
     --muted-foreground: 218 10% 42%;
-    --accent: 215 100% 50%;
+    --accent: 229 100% 57%;
     --accent-foreground: 0 0% 100%;
     --destructive: 9 76% 48%;
     --destructive-foreground: 0 0% 100%;
     --border: 216 18% 86%;
     --input: 216 18% 84%;
-    --ring: 215 100% 50%;
+    --ring: 229 100% 57%;
     --radius: 18px;
   }
 
@@ -36,7 +36,7 @@
   }
 
   ::selection {
-    background: rgba(6, 104, 225, 0.16);
+    background: rgba(36,83,255, 0.16);
   }
 
   body {
@@ -98,7 +98,7 @@
   }
 
   .primary-action {
-    @apply inline-flex min-h-10 items-center justify-center gap-2 rounded-full bg-[#0668e1] px-4 py-2.5 text-sm font-black text-white shadow-[0_8px_22px_rgba(6,104,225,0.22)] transition hover:-translate-y-0.5 hover:bg-[#0559c2] disabled:pointer-events-none disabled:opacity-50;
+    @apply inline-flex min-h-10 items-center justify-center gap-2 rounded-full bg-[#2453ff] bg-gradient-to-r from-[#2453ff] to-[#6d4aff] px-4 py-2.5 text-sm font-black text-white shadow-[0_10px_26px_rgba(36,83,255,0.35)] transition hover:-translate-y-0.5 hover:brightness-110 disabled:pointer-events-none disabled:opacity-50;
   }
 
   .secondary-action {
@@ -151,7 +151,7 @@
     transition-timing-function: cubic-bezier(0.2, 0.7, 0.2, 1);
   }
   .marketplace-shell :is(button, a, input, select, textarea, summary):focus-visible {
-    outline: 2px solid #0668e1;
+    outline: 2px solid #2453ff;
     outline-offset: 4px;
   }
 }

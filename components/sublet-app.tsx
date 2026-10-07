@@ -3168,7 +3168,7 @@ function AppHeader({
             className="hidden min-w-0 items-center gap-2 rounded-full border border-blue-100 bg-white px-3 py-2 text-sm font-bold text-primary shadow-sm transition-colors hover:bg-blue-50 lg:flex"
             onClick={onAuthOpen}
           >
-            <ShieldCheck className="size-4 text-trust-green" aria-hidden="true" />
+            <ShieldCheck className="size-4 text-trust-verified" aria-hidden="true" />
             <span className="max-w-[180px] truncate">
               {user ? profile?.displayName ?? user.email : "登录 / 注册"}
             </span>
@@ -4748,7 +4748,7 @@ function SearchHero({
         <div
           className={cn(
             "col-span-full grid min-w-0 grid-cols-1 gap-3 md:col-span-5 xl:col-span-3",
-            insight.status === "healthy" && "border-emerald-100 bg-emerald-50/70",
+            insight.status === "healthy" && "border-indigo-100 bg-indigo-50/70",
             insight.status === "tight" && "border-trust-amber/25 bg-trust-amber/5",
             insight.status === "empty" && "border-trust-red/20 bg-trust-red/5"
           )}
@@ -4757,7 +4757,7 @@ function SearchHero({
             <Sparkles
               className={cn(
                 "size-4",
-                insight.status === "healthy" && "text-trust-green",
+                insight.status === "healthy" && "text-trust-verified",
                 insight.status === "tight" && "text-trust-amber",
                 insight.status === "empty" && "text-trust-red"
               )}
@@ -5787,7 +5787,7 @@ function ListingDetailScreen({
                     <span className="line-through">${listing.originalPrice.toLocaleString("en-US")}</span>
                     <span> / 月</span>
                   </div>
-                  <div className="mt-1 text-sm font-bold text-trust-green">
+                  <div className="mt-1 text-sm font-bold text-trust-verified">
                     省 ${detail.monthlySavings.toLocaleString("en-US")}/月
                   </div>
                 </div>
@@ -6152,7 +6152,7 @@ function DetailList({ title, items }: { title: string; items: string[] }) {
       <div className="mt-3 flex flex-col gap-2">
         {items.map((item, index) => (
           <div key={`${title}-${index}`} className="flex gap-2 text-sm font-semibold text-muted-foreground">
-            <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-trust-green" aria-hidden="true" />
+            <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-trust-verified" aria-hidden="true" />
             <span>{item}</span>
           </div>
         ))}
@@ -6535,7 +6535,7 @@ function ListingCard({
             {getTrustSourceLabel(listing.trust)}
           </Badge>
           {listing.tags.some((tag) => tag.includes("Group")) ? (
-            <Badge className="border-emerald-100 bg-emerald-50 text-emerald-700 shadow-sm">小组匹配</Badge>
+            <Badge className="border-indigo-100 bg-indigo-50 text-indigo-700 shadow-sm">小组匹配</Badge>
           ) : null}
         </div>
         <div className="absolute inset-x-3 top-1/2 flex -translate-y-1/2 items-center justify-between">
@@ -6781,7 +6781,7 @@ export function PublishingFlow({
     return (
       <Card className="shadow-panel">
         <CardContent className="flex min-h-[320px] flex-col items-center justify-center gap-4 p-8 text-center">
-          <div className="flex size-14 items-center justify-center rounded-full bg-emerald-50 text-trust-green">
+          <div className="flex size-14 items-center justify-center rounded-full bg-indigo-50 text-trust-verified">
             <CheckCircle2 className="size-7" aria-hidden="true" />
           </div>
           <div>
@@ -7021,7 +7021,7 @@ function StatusToast({ message }: { message: string }) {
   return (
     <div className="pointer-events-none fixed bottom-4 left-1/2 z-40 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 rounded-md border bg-white/96 px-4 py-3 text-sm font-semibold text-primary shadow-panel backdrop-blur">
       <div className="flex items-center gap-2">
-        <CheckCircle2 className="size-4 text-trust-green" aria-hidden="true" />
+        <CheckCircle2 className="size-4 text-trust-verified" aria-hidden="true" />
         <span className="min-w-0 truncate">{message}</span>
       </div>
     </div>
