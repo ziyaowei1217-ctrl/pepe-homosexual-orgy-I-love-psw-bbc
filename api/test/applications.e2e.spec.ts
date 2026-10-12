@@ -1,3 +1,4 @@
+import { signTestSession } from "./support/auth-sessions";
 import "reflect-metadata";
 import { INestApplication, ValidationPipe } from "@nestjs/common";
 import { JwtModule, JwtService } from "@nestjs/jwt";
@@ -6,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ApplicationsController } from "../src/applications/applications.controller";
 import { ApplicationsService } from "../src/applications/applications.service";
+import { MfaGuard } from "../src/auth/mfa.guard";
 import { AuthGuard } from "../src/auth/auth.guard";
 import { AuthenticatedUserService } from "../src/auth/authenticated-user.service";
 import { DemoPaymentsService } from "../src/demo-payments/demo-payments.service";
@@ -28,6 +30,7 @@ describe("rental application HTTP API", () => {
       controllers: [ApplicationsController],
       providers: [
         AuthGuard,
+        MfaGuard,
         AuthenticatedUserService,
         ApplicationsService,
         DemoPaymentsService,
@@ -41,7 +44,7 @@ describe("rental application HTTP API", () => {
     await app.init();
     const jwt = app.get(JwtService);
     tokens = Object.fromEntries(
-      await Promise.all(["owner-1", "renter-1", "stranger-1"].map(async (id) => [id, await jwt.signAsync({ sub: id })]))
+      await Promise.all(["owner-1", "renter-1", "stranger-1"].map(async (id) => [id, await signTestSession(jwt, app.get(PrismaService), { sub: id })]))
     );
   });
 

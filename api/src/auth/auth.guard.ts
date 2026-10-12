@@ -14,7 +14,9 @@ export type AuthenticatedRequest = RequestLike & {
     id: string;
     email: string;
     role: string;
+    sessionId: string;
     adminReauthenticatedAt?: number;
+    mfaVerifiedAt?: number;
   };
 };
 

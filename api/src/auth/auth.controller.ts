@@ -3,6 +3,7 @@ import { Body, Controller, Get, Inject, Post, Req, Res, UseGuards, ValidationPip
 import { AuthRateLimitException, AuthRateLimiter, getRequestIdentity } from "./auth-rate-limit";
 import { AdminGuard } from "./admin.guard";
 import { AuthGuard, AuthenticatedRequest } from "./auth.guard";
+import { AuthenticatedUserService } from "./authenticated-user.service";
 import { AuthService } from "./auth.service";
 import { AdminStepUpCodeDto, EmailCodeDto, VerifyEmailDto } from "./dto";
 
@@ -31,7 +32,8 @@ const adminStepUpBodyPipe = new ValidationPipe({
 export class AuthController {
   constructor(
     @Inject(AuthService) private readonly auth: AuthService,
-    @Inject(AuthRateLimiter) private readonly rateLimiter: AuthRateLimiter
+    @Inject(AuthRateLimiter) private readonly rateLimiter: AuthRateLimiter,
+    @Inject(AuthenticatedUserService) private readonly authenticatedUsers: AuthenticatedUserService
   ) {}
 
   @Post("email-code")
@@ -74,9 +76,17 @@ export class AuthController {
     await this.enforceRateLimit("verify", "ADMIN_STEP_UP", request.user.email, request, response);
     return this.auth.verifyAdminStepUpCode({
       userId: request.user.id,
+      sessionId: request.user.sessionId,
       email: request.user.email,
       code: dto.code
     });
+  }
+
+  @UseGuards(AuthGuard)
+  @Post("logout")
+  async logout(@Req() request: AuthenticatedRequest) {
+    await this.authenticatedUsers.revoke(request.user);
+    return { revoked: true };
   }
 
   @UseGuards(AuthGuard)

@@ -134,7 +134,7 @@ export function AdminRoommatesScreen({
       onToast(`${saved.name} 已保存，匹配推荐将使用这份资料。`);
     } catch (error) {
       const productError = toProductApiError(error);
-      if (productError.code === "ADMIN_REAUTH_REQUIRED") {
+      if (["ADMIN_REAUTH_REQUIRED", "MFA_REQUIRED", "MFA_VERIFICATION_REQUIRED"].includes(productError.code ?? "")) {
         onStepUpRequired();
       } else if (productError.status === 401 && onAuthenticationError) {
         onAuthenticationError(error);
@@ -163,7 +163,7 @@ export function AdminRoommatesScreen({
       onToast(`${archived.name} 已归档，已从活跃推荐中移除。`);
     } catch (error) {
       const productError = toProductApiError(error);
-      if (productError.code === "ADMIN_REAUTH_REQUIRED") {
+      if (["ADMIN_REAUTH_REQUIRED", "MFA_REQUIRED", "MFA_VERIFICATION_REQUIRED"].includes(productError.code ?? "")) {
         onStepUpRequired();
       } else if (productError.status === 401 && onAuthenticationError) {
         onAuthenticationError(error);

@@ -584,15 +584,11 @@ describe("SubletApp roommate chat", () => {
           payload: { conversationId: conversation.id, message: realtimeMessage }
         });
       });
-      reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = false;
-      try {
+      await act(async () => {
         newestRefresh.resolve({ messages: [newerHttpMessage], nextCursor: "cursor-new" });
         staleRefresh.resolve({ messages: [staleMessage], nextCursor: null });
         await flushMicrotasks();
-        await new Promise((resolve) => setTimeout(resolve, 0));
-      } finally {
-        reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true;
-      }
+      });
 
       expect(renderedText(renderer.root)).toContain(realtimeMessage.body);
       expect(renderedText(renderer.root)).toContain(newerHttpMessage.body);

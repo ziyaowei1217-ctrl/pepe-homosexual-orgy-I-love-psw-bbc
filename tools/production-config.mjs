@@ -13,6 +13,7 @@ const required = [
   "JWT_SECRET",
   "OTP_HASH_SECRET",
   "SECURITY_IDENTIFIER_HASH_SECRET",
+  "MFA_ENCRYPTION_KEY",
   "EMAIL_FROM",
   "RESEND_API_KEY",
   "PAYMENT_SERVICE_URL",
@@ -31,6 +32,9 @@ const developmentAuthenticationSecrets = new Map([
   ["JWT_SECRET", "dev-change-me"],
   ["OTP_HASH_SECRET", "development-otp-hash-secret"],
   ["SECURITY_IDENTIFIER_HASH_SECRET", "development-identifier-hash-secret"]
+]);
+const publicDevelopmentSecrets = new Set([
+  ...developmentAuthenticationSecrets.values(), "docker-development-jwt-secret-change-me"
 ]);
 
 export function validateProductionConfig(environment) {
@@ -71,9 +75,12 @@ export function validateProductionConfig(environment) {
 
   requireUrl(environment, "VALKEY_URL", ["rediss:"], errors);
 
-  requireUrl(environment, "LISTING_MEDIA_STORAGE_ENDPOINT", ["http:", "https:"], errors);
+  const storageUrl = requireUrl(environment, "LISTING_MEDIA_STORAGE_ENDPOINT", ["http:", "https:"], errors);
+  rejectPublicUrlComponents(storageUrl, "LISTING_MEDIA_STORAGE_ENDPOINT", errors);
+  rejectBaseUrlQuery(storageUrl, "LISTING_MEDIA_STORAGE_ENDPOINT", errors);
   const uploadUrl = requireUrl(environment, "LISTING_MEDIA_UPLOAD_ENDPOINT", ["https:"], errors);
   rejectPublicUrlComponents(uploadUrl, "LISTING_MEDIA_UPLOAD_ENDPOINT", errors);
+  rejectBaseUrlQuery(uploadUrl, "LISTING_MEDIA_UPLOAD_ENDPOINT", errors);
 
   if (environment.EMAIL_SENDER !== "resend") errors.push("EMAIL_SENDER must be resend");
   if (environment.EMAIL_FROM?.trim() === "Sublet Pipeline <no-reply@example.com>") {
@@ -84,14 +91,24 @@ export function validateProductionConfig(environment) {
   }
 
   for (const name of authenticationSecrets) {
-    if (environment[name] && Buffer.byteLength(environment[name], "utf8") < 32) errors.push(`${name} must be at least 32 bytes`);
-    if (environment[name] === developmentAuthenticationSecrets.get(name)) {
+    if (environment[name] && Buffer.byteLength(environment[name].trim(), "utf8") < 32) errors.push(`${name} must be at least 32 bytes`);
+    if (environment[name] && environment[name] !== environment[name].trim()) errors.push(`${name} must not have surrounding whitespace`);
+    if (environment[name] && publicDevelopmentSecrets.has(environment[name].trim())) {
       errors.push(`${name} must not use a development default`);
     }
   }
   const configuredAuthenticationSecrets = authenticationSecrets.map((name) => environment[name]).filter(Boolean);
   if (new Set(configuredAuthenticationSecrets).size !== configuredAuthenticationSecrets.length) {
     errors.push("Authentication secrets must be distinct");
+  }
+  const mfaValue = environment.MFA_ENCRYPTION_KEY ?? "";
+  const mfaBytes = Buffer.from(mfaValue, "base64");
+  if (mfaBytes.length !== 32 || mfaBytes.toString("base64") !== mfaValue || new Set(mfaBytes).size < 2 ||
+    mfaBytes.equals(Buffer.from("development-only-mfa-key-32-byte"))) {
+    errors.push("MFA_ENCRYPTION_KEY must be 32 bytes in canonical base64; public development and uniform-byte keys are prohibited");
+  }
+  if (configuredAuthenticationSecrets.some((secret) => secret === mfaValue || Buffer.from(secret).equals(mfaBytes))) {
+    errors.push("MFA_ENCRYPTION_KEY and authentication secrets must be distinct");
   }
 
   requireFixedPositiveInteger(environment, "AUTH_CODE_TTL_SECONDS", 600, errors);

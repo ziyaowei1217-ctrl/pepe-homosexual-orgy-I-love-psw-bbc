@@ -15,11 +15,14 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState, type FormEvent } from "react";
+import { MfaSettings, RecoveryCodes } from "@/components/mfa-settings";
+import type { MfaEnrollmentConfirmation } from "@/lib/mfa";
 
 import {
   getMyProfile,
   getSessionUser,
   requestEmailCode,
+  revokeSession,
   updateMyProfile,
   verifyEmailCode,
   type ApiProfile,
@@ -47,10 +50,25 @@ type AccountExperienceProps = { mode: AccountMode; returnTo?: string | null; aut
 
 export function AccountExperience(props: AccountExperienceProps) {
   const token = useAuthSessionToken();
-  return <AccountSessionExperience key={token ?? "guest"} {...props} token={token} />;
+  // The root saved-listings provider also remounts on token rotation. Complete
+  // the one-time disclosure before rotating, and bind it to the source session.
+  const [recovery, setRecovery] = useState<{ sourceToken: string; result: MfaEnrollmentConfirmation } | null>(null);
+  useEffect(() => { if (recovery && token !== recovery.sourceToken) setRecovery(null); }, [token, recovery]);
+  function enrolled(result: MfaEnrollmentConfirmation) {
+    assertCurrentAuthSession(token);
+    setRecovery({ sourceToken: token, result });
+  }
+  function finishEnrollment() {
+    if (!recovery) return;
+    assertCurrentAuthSession(recovery.sourceToken);
+    setRecovery(null);
+    writeStoredAuthSession(recovery.result.accessToken);
+  }
+  return <AccountSessionExperience key={token ?? "guest"} {...props} token={token} onEnrolled={enrolled}
+    recoveryCodes={recovery?.sourceToken === token ? recovery.result.recoveryCodes : null} onRecoveryDismiss={finishEnrollment} />;
 }
 
-function AccountSessionExperience({ mode, returnTo = null, authIntent = "account", token }: AccountExperienceProps & { token: string | null }) {
+function AccountSessionExperience({ mode, returnTo = null, authIntent = "account", token, onEnrolled, recoveryCodes, onRecoveryDismiss }: AccountExperienceProps & { token: string | null; onEnrolled: (result: MfaEnrollmentConfirmation) => void; recoveryCodes: string[] | null; onRecoveryDismiss: () => void }) {
   const [user, setUser] = useState<SessionUser | null>(null);
   const [profile, setProfile] = useState<ApiProfile | null>(null);
   const [applications, setApplications] = useState<ApiRentalApplication[] | null>(null);
@@ -58,6 +76,8 @@ function AccountSessionExperience({ mode, returnTo = null, authIntent = "account
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loadAttempt, setLoadAttempt] = useState(0);
   const [notice, setNotice] = useState<string | null>(null);
+  const [loggingOut, setLoggingOut] = useState(false);
+  const [logoutError, setLogoutError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!token) { setLoading(false); return; }
@@ -92,9 +112,24 @@ function AccountSessionExperience({ mode, returnTo = null, authIntent = "account
     if (returnTo && typeof window !== "undefined") window.location.assign(returnTo);
   }
 
-  function logout() {
-    if (readStoredAuthSession()?.accessToken !== token) return;
-    clearStoredAuthSession();
+  async function logout() {
+    if (!token || loggingOut || readStoredAuthSession()?.accessToken !== token) return;
+    setLoggingOut(true);
+    setLogoutError(null);
+    try {
+      await revokeSession(token);
+    } catch (error) {
+      // An already expired/revoked session is safe to discard. An outage is not
+      // proof of revocation: retain the token so the user can retry logout.
+      if (!(error instanceof Error && "status" in error && error.status === 401)) {
+        if (readStoredAuthSession()?.accessToken === token) {
+          setLogoutError("退出登录未完成，请重试。当前会话尚未确认撤销。");
+          setLoggingOut(false);
+        }
+        return;
+      }
+    }
+    if (readStoredAuthSession()?.accessToken === token) clearStoredAuthSession();
   }
 
   const authenticated = Boolean(token && user);
@@ -103,8 +138,10 @@ function AccountSessionExperience({ mode, returnTo = null, authIntent = "account
       <header>
         <p className="hidden text-xs font-black uppercase tracking-[.16em] text-blue-700 lg:block">Your space</p>
         <h1 className="text-2xl font-black tracking-[-.04em] sm:text-4xl lg:mt-2">我的账户</h1>
-        <p className="mt-2 text-sm leading-6 text-slate-600 lg:mt-3 lg:text-slate-500"><span className="lg:hidden">管理资料，查看认证与通知方式。</span><span className="hidden lg:inline">更新个人资料，查看认证状态、申请和消息。</span></p>
+        <p className="mt-2 text-sm leading-6 text-slate-600 lg:mt-3 lg:text-slate-600"><span className="lg:hidden">管理资料，查看认证与通知方式。</span><span className="hidden lg:inline">更新个人资料，查看认证状态、申请和消息。</span></p>
       </header>
+      {recoveryCodes ? <RecoveryCodes codes={recoveryCodes} onDismiss={onRecoveryDismiss} /> : null}
+      {logoutError ? <p role="alert" className="mt-5 text-sm font-bold text-red-700">{logoutError}</p> : null}
       {notice ? <div className="mt-5 rounded-[16px] bg-indigo-50 px-4 py-3 text-sm font-bold text-indigo-800">{notice}</div> : null}
       <div className="mt-5 grid items-start gap-4 lg:mt-8 lg:grid-cols-[250px_minmax(0,1fr)] lg:gap-6">
         <aside className="flex min-w-0 items-center overflow-hidden rounded-[18px] border border-slate-200 bg-white p-1 shadow-sm lg:block lg:rounded-[24px] lg:p-2">
@@ -112,15 +149,16 @@ function AccountSessionExperience({ mode, returnTo = null, authIntent = "account
           <nav className="grid min-w-0 flex-1 grid-cols-4 lg:mt-2 lg:block lg:space-y-1" aria-label="账户导航">
             {accountNav.map((item) => {
               const Icon = item.icon;
-              return <Link key={item.mode} href={item.href} aria-label={item.label} aria-current={mode === item.mode ? "page" : undefined} className={cn("flex min-h-11 items-center justify-center gap-1.5 rounded-[14px] px-1 text-sm font-bold text-slate-600 hover:bg-slate-50 lg:justify-start lg:gap-3 lg:px-3 lg:py-3", mode === item.mode && "bg-blue-50 text-blue-700 hover:bg-blue-50")}>
+              return <Link key={item.mode} href={item.href} aria-label={item.mode === "settings" ? "通知与隐私设置" : item.label} aria-current={mode === item.mode ? "page" : undefined} className={cn("flex min-h-11 items-center justify-center gap-1.5 rounded-[14px] px-1 text-sm font-bold text-slate-600 hover:bg-slate-50 lg:justify-start lg:gap-3 lg:px-3 lg:py-3", mode === item.mode && "bg-blue-50 text-blue-700 hover:bg-blue-50")}>
                 <Icon className="size-4 shrink-0" aria-hidden="true" /><span className="lg:hidden">{item.mobileLabel}</span><span className="hidden lg:inline">{item.label}</span><ChevronRight className="ml-auto hidden size-4 opacity-40 lg:block" aria-hidden="true" />
               </Link>;
             })}
           </nav>
-          {authenticated ? <button onClick={logout} aria-label="退出登录" className="ml-1 flex size-11 shrink-0 items-center justify-center rounded-[14px] text-sm font-bold text-slate-600 hover:bg-slate-50 lg:ml-0 lg:mt-2 lg:h-auto lg:w-full lg:justify-start lg:gap-3 lg:px-3 lg:py-3"><LogOut className="size-4" aria-hidden="true" /><span className="hidden lg:inline">退出登录</span></button> : null}
+          {authenticated ? <button onClick={logout} disabled={loggingOut} aria-busy={loggingOut} aria-label="退出登录" className="ml-1 flex size-11 shrink-0 items-center justify-center rounded-[14px] text-sm font-bold text-slate-600 hover:bg-slate-50 lg:ml-0 lg:mt-2 lg:h-auto lg:w-full lg:justify-start lg:gap-3 lg:px-3 lg:py-3"><LogOut className="size-4" aria-hidden="true" /><span className="hidden lg:inline">退出登录</span></button> : null}
         </aside>
 
-        {authenticated && token && user ? <AuthenticatedAccount mode={mode} token={token} user={user} profile={profile} applications={applications} onProfileChange={setProfile} onNotice={setNotice} />
+        {recoveryCodes ? <section className="rounded-[28px] border border-slate-200 bg-white p-6"><p role="status" className="text-sm leading-6 text-slate-700">双重验证已启用。请先保存上方恢复码，完成后继续管理账户。</p></section>
+          : authenticated && token && user ? <AuthenticatedAccount mode={mode} token={token} user={user} profile={profile} applications={applications} onProfileChange={setProfile} onNotice={setNotice} onEnrolled={onEnrolled} onReauthenticate={logout} />
           : token ? <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm sm:p-8">{loading ? <p role="status" className="text-sm font-bold text-slate-500">正在加载账户资料…</p> : <><p role="alert" className="text-sm font-bold text-red-700">{loadError}</p><button type="button" onClick={() => setLoadAttempt((attempt) => attempt + 1)} className="primary-action mt-4">重新加载账户</button></>}</section>
           : <GuestAccount mode={mode} returnTo={returnTo} authIntent={authIntent} onAuthenticated={handleAuthenticated} />}
       </div>
@@ -183,9 +221,9 @@ function GuestAccount({ mode, returnTo, authIntent, onAuthenticated }: { mode: A
   </section>;
 }
 
-function AuthenticatedAccount({ mode, token, user, profile, applications, onProfileChange, onNotice }: { mode: AccountMode; token: string; user: SessionUser; profile: ApiProfile | null; applications: ApiRentalApplication[] | null; onProfileChange: (profile: ApiProfile) => void; onNotice: (message: string) => void }) {
+function AuthenticatedAccount({ mode, token, user, profile, applications, onProfileChange, onNotice, onEnrolled, onReauthenticate }: { mode: AccountMode; token: string; user: SessionUser; profile: ApiProfile | null; applications: ApiRentalApplication[] | null; onProfileChange: (profile: ApiProfile) => void; onNotice: (message: string) => void; onEnrolled: (result: MfaEnrollmentConfirmation) => void; onReauthenticate: () => void | Promise<void> }) {
   if (mode === "profile") return <ProfileEditor token={token} profile={profile} onProfileChange={onProfileChange} onNotice={onNotice} />;
-  if (mode === "verification") return <VerificationPanel profile={profile} />;
+  if (mode === "verification") return <div className="min-w-0 space-y-6"><VerificationPanel profile={profile} /><MfaSettings token={token} onEnrolled={onEnrolled} onReauthenticate={onReauthenticate} /></div>;
   if (mode === "settings") return <SettingsPanel />;
   const activeApplications = applications?.filter((application) => application.status === "DRAFT" || application.status === "SUBMITTED").length;
   const acceptedApplications = applications?.filter((application) => application.status === "ACCEPTED" || application.status === "COMPLETED").length;
@@ -266,13 +304,13 @@ function VerificationRow({ icon: Icon, title, detail, done }: { icon: typeof Mai
   return <div className="flex items-center gap-3 py-5 sm:gap-4">
     <span className="grid size-11 shrink-0 place-items-center rounded-[14px] bg-slate-100"><Icon className="size-5" aria-hidden="true" /></span>
     <span className="min-w-0 flex-1"><span className="block text-sm font-black">{title}</span><span className="mt-1 block text-xs leading-5 text-slate-500">{detail}</span></span>
-    <span className={cn("shrink-0 rounded-full px-3 py-1.5 text-xs font-black", done ? "bg-indigo-50 text-indigo-700" : "bg-slate-100 text-slate-500")}>{done ? "已完成" : "暂未开放"}</span>
+    <span className={cn("shrink-0 rounded-full px-3 py-1.5 text-xs font-black", done ? "bg-indigo-50 text-indigo-700" : "bg-slate-100 text-slate-600")}>{done ? "已完成" : "暂未开放"}</span>
   </div>;
 }
 function SettingsRow({ icon: Icon, title, detail, href }: { icon: typeof Bell; title: string; detail: string; href?: string }) {
   return <div className="flex items-center gap-3 py-5 sm:gap-4">
     <span className="grid size-11 shrink-0 place-items-center rounded-[14px] bg-slate-100"><Icon className="size-5" aria-hidden="true" /></span>
     <span className="min-w-0 flex-1"><span className="block text-sm font-black">{title}</span><span className="mt-1 block text-xs leading-5 text-slate-500">{detail}</span></span>
-    {href ? <Link href={href} aria-label={`查看${title}`} className="inline-flex min-h-11 shrink-0 items-center gap-1 rounded-full px-3 text-xs font-black text-blue-700 hover:bg-blue-50">查看<ChevronRight className="size-4" aria-hidden="true" /></Link> : <span className="shrink-0 rounded-full bg-slate-100 px-3 py-1.5 text-xs font-black text-slate-500">暂未开放</span>}
+    {href ? <Link href={href} aria-label={`查看${title}`} className="inline-flex min-h-11 shrink-0 items-center gap-1 rounded-full px-3 text-xs font-black text-blue-700 hover:bg-blue-50">查看<ChevronRight className="size-4" aria-hidden="true" /></Link> : <span className="shrink-0 rounded-full bg-slate-100 px-3 py-1.5 text-xs font-black text-slate-600">暂未开放</span>}
   </div>;
 }

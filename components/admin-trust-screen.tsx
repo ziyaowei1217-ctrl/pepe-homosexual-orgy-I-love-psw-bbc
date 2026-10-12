@@ -201,7 +201,7 @@ export function AdminTrustScreen({
       }
     } catch (error) {
       const productError = toProductApiError(error);
-      if (productError.code === "ADMIN_REAUTH_REQUIRED") {
+      if (["ADMIN_REAUTH_REQUIRED", "MFA_REQUIRED", "MFA_VERIFICATION_REQUIRED"].includes(productError.code ?? "")) {
         onStepUpRequired();
       } else if (productError.status === 401 && onAuthenticationError) {
         onAuthenticationError(error);

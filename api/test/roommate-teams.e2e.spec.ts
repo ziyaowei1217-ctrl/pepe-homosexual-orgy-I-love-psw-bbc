@@ -1,3 +1,4 @@
+import { signTestSession } from "./support/auth-sessions";
 import "reflect-metadata";
 import { INestApplication, ValidationPipe } from "@nestjs/common";
 import { JwtModule, JwtService } from "@nestjs/jwt";
@@ -44,7 +45,7 @@ describe("roommate teams HTTP API", () => {
     app.setGlobalPrefix("api/v1");
     app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }));
     await app.init();
-    token = await app.get(JwtService).signAsync({ sub: "user-a" });
+    token = await signTestSession(app.get(JwtService), app.get(PrismaService), { sub: "user-a" });
   });
 
   afterEach(async () => app.close());

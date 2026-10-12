@@ -232,6 +232,29 @@ describe("rental application experiences", () => {
     expect(text(renderer.root)).toContain("等待房东处理");
   });
 
+  it("keeps the listing title after a withdrawal response omits presentation fields", async () => {
+    writeStoredAuthSession("renter-token");
+    const current = { ...application(), status: "SUBMITTED" };
+    const withdrawn = { ...current, listingTitle: undefined, status: "WITHDRAWN" };
+    vi.stubGlobal("confirm", vi.fn(() => true));
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/applications/mine")) return jsonResponse([current]);
+      if (url.endsWith("/auth/me")) return jsonResponse({ id: "renter-1" });
+      if (url.endsWith("/withdraw")) return jsonResponse(withdrawn);
+      return new Response(null, { status: 404 });
+    }));
+    let renderer!: TestRenderer.ReactTestRenderer;
+    await act(async () => { renderer = TestRenderer.create(<ApplicationDetailExperience applicationId="application-1" />); });
+    expect(text(renderer.root.findByType("h1"))).toBe("Westwood room");
+
+    await act(async () => findButton(renderer, "撤回申请").props.onClick());
+
+    expect(text(renderer.root)).toContain("申请已撤回");
+    expect(text(renderer.root.findByType("h1"))).toBe("Westwood room");
+    expect(renderer.root.findAllByType("button").some((button) => text(button) === "撤回申请")).toBe(false);
+  });
+
   it("uses production checkout and status without calling demo routes", async () => {
     writeStoredAuthSession("renter-token");
     const routes: string[] = [];

@@ -1,13 +1,14 @@
+import { testDatabaseUrl, testDatabaseContainer, testDatabaseUser } from "./postgres-target";
 import { randomUUID } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 
-export const DISPOSABLE_POSTGRES_PROCESS_TIMEOUT_MS = 10_000;
+export const DISPOSABLE_POSTGRES_PROCESS_TIMEOUT_MS = 60_000;
 
 export function createDisposablePostgres(prefix: string) {
   const safePrefix = prefix.replace(/[^a-z0-9_]/gi, "_").toLowerCase();
   const databaseName = `${safePrefix}_${randomUUID().replaceAll("-", "")}`;
-  const databaseUrl = `postgresql://sublet:sublet@localhost:5432/${databaseName}?schema=public`;
+  const databaseUrl = testDatabaseUrl(databaseName);
 
   return {
     databaseName,
@@ -37,7 +38,7 @@ export function createDisposablePostgres(prefix: string) {
 function dockerPsql(args: string[]) {
   const result = spawnSync(
     "docker",
-    ["exec", "-i", "sublet-pipeline-db", "psql", "-v", "ON_ERROR_STOP=1", "-U", "sublet", ...args],
+    ["exec", "-i", testDatabaseContainer(), "psql", "-v", "ON_ERROR_STOP=1", "-U", testDatabaseUser(), ...args],
     { encoding: "utf8", timeout: DISPOSABLE_POSTGRES_PROCESS_TIMEOUT_MS }
   );
   if (result.status !== 0) throw new Error(`psql failed: ${result.stderr || result.stdout}`);

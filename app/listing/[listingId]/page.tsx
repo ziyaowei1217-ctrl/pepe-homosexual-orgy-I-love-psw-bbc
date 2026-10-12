@@ -5,6 +5,7 @@ import { ListingDetailExperience } from "@/components/marketplace/listing-detail
 import { PublicShell } from "@/components/marketplace/public-shell";
 import { loadMarketplaceListing } from "@/lib/marketplace-data";
 import { ProductApiError } from "@/lib/product-errors";
+import { localDate } from "@/lib/listing-stay";
 
 export async function generateMetadata({ params }: { params: Promise<{ listingId: string }> }): Promise<Metadata> {
   await params;
@@ -24,7 +25,7 @@ export default async function ListingPage({ params, searchParams }: { params: Pr
 
   return (
     <PublicShell active="discover" mobileNavigation="header">
-      <ListingDetailExperience key={`${listing.id}:${stay?.moveIn ?? ""}:${stay?.moveOut ?? ""}`} listing={listing} initialStay={stay} />
+      <ListingDetailExperience key={`${listing.id}:${stay?.moveIn ?? ""}:${stay?.moveOut ?? ""}`} listing={listing} initialStay={stay} dateSnapshot={localDate()} />
     </PublicShell>
   );
 }

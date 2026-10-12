@@ -21,7 +21,7 @@ describe("disposable PostgreSQL process bounds", () => {
 
     expect(spawnSyncMock).toHaveBeenCalledTimes(4);
     for (const call of spawnSyncMock.mock.calls) {
-      expect(call[2]).toEqual(expect.objectContaining({ timeout: 10_000 }));
+      expect(call[2]).toEqual(expect.objectContaining({ timeout: 60_000 }));
     }
   });
 });

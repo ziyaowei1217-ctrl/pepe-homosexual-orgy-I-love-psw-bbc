@@ -1,3 +1,4 @@
+import { signTestSession } from "./support/auth-sessions";
 import "reflect-metadata";
 import { JwtService } from "@nestjs/jwt";
 import { describe, expect, it, vi } from "vitest";
@@ -21,19 +22,18 @@ describe("RoommateConversationGateway", () => {
 
   it("joins only the authenticated user room", async () => {
     const jwt = new JwtService({ secret: "test-secret" });
-    const gateway = new RoommateConversationGateway(
-      new AuthenticatedUserService(jwt, userStore([{ id: "user-a", email: "a@example.test", role: "USER" }]) as never)
-    );
-    const client = socket({ token: await jwt.signAsync({ sub: "user-a" }) });
+    const prisma = userStore([{ id: "user-a", email: "a@example.test", role: "USER" }]);
+    const gateway = new RoommateConversationGateway(new AuthenticatedUserService(jwt, prisma as never));
+    const client = socket({ token: await signTestSession(jwt, prisma, { sub: "user-a" }) });
 
     await gateway.handleConnection(client as never);
 
-    expect(client.joinedRooms).toEqual(["user:user-a"]);
+    expect(client.joinedRooms).toEqual([expect.stringMatching(/^session:/)]);
     expect(client.disconnected).toBe(false);
   });
 
   it("emits a committed message to both participant user rooms", async () => {
-    const gateway = new RoommateConversationGateway({} as AuthenticatedUserService);
+    const gateway = new RoommateConversationGateway({ activeSessionIds: async (id: string) => [`test-${id}`] } as AuthenticatedUserService);
     const emitted: Array<{ room: string; name: string; payload: unknown }> = [];
     gateway.server = namespace(emitted) as never;
 
@@ -47,12 +47,12 @@ describe("RoommateConversationGateway", () => {
 
     expect(emitted).toEqual([
       {
-        room: "user:user-a",
+        room: "session:test-user-a",
         name: "roommate.message.created",
         payload: { message: { id: "message-1", senderRole: "self" } }
       },
       {
-        room: "user:user-b",
+        room: "session:test-user-b",
         name: "roommate.message.created",
         payload: { message: { id: "message-1", senderRole: "peer" } }
       }
@@ -64,17 +64,16 @@ describe("RoommateConversationGateway", () => {
 
   it("never accepts a client-supplied target room", async () => {
     const jwt = new JwtService({ secret: "test-secret" });
-    const gateway = new RoommateConversationGateway(
-      new AuthenticatedUserService(jwt, userStore([{ id: "user-a", email: "a@example.test", role: "USER" }]) as never)
-    );
+    const prisma = userStore([{ id: "user-a", email: "a@example.test", role: "USER" }]);
+    const gateway = new RoommateConversationGateway(new AuthenticatedUserService(jwt, prisma as never));
     const client = socket({
-      token: await jwt.signAsync({ sub: "user-a" }),
+      token: await signTestSession(jwt, prisma, { sub: "user-a" }),
       room: "user:victim"
     });
 
     await gateway.handleConnection(client as never);
 
-    expect(client.joinedRooms).toEqual(["user:user-a"]);
+    expect(client.joinedRooms).toEqual([expect.stringMatching(/^session:/)]);
   });
 
   it("keeps HTTP send successful when socket publication throws", async () => {
@@ -149,6 +148,7 @@ function socket(auth: Record<string, unknown>) {
     handshake: { auth },
     joinedRooms: [] as string[],
     disconnected: false,
+    once() {},
     async join(room: string) {
       this.joinedRooms.push(room);
     },

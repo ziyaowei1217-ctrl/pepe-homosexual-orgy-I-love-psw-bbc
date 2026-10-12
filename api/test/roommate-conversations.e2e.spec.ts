@@ -1,3 +1,4 @@
+import { signTestSession } from "./support/auth-sessions";
 import "reflect-metadata";
 import { INestApplication, ValidationPipe } from "@nestjs/common";
 import { JwtModule, JwtService } from "@nestjs/jwt";
@@ -43,7 +44,7 @@ describe("roommate conversation HTTP API", () => {
 
     const jwt = app.get(JwtService);
     tokens = Object.fromEntries(
-      await Promise.all(database.users.map(async (user) => [user.id, await jwt.signAsync({ sub: user.id })]))
+      await Promise.all(database.users.map(async (user) => [user.id, await signTestSession(jwt, app.get(PrismaService), { sub: user.id })]))
     );
   });
 

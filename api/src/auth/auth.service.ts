@@ -20,6 +20,7 @@ import {
 } from "./code-security";
 import { AUTH_OPTIONS, EMAIL_SENDER } from "./auth.tokens";
 import { VerifyEmailDto } from "./dto";
+import { signSessionToken, SESSION_LIFETIME_MS } from "./session-token";
 import { acquireNormalizedEmailAdvisoryLock } from "./email-advisory-lock";
 
 export type AuthServiceOptions = {
@@ -251,22 +252,21 @@ export class AuthService {
           create: { email, role: isLocalAdmin ? "ADMIN" : "USER" }
         });
         await transaction.profile.upsert({ where: { email }, update: {}, create: { email } });
-        return { user, isNewUser };
+        const session = await transaction.authSession.create({ data: { userId: user.id, expiresAt: new Date(this.now() + SESSION_LIFETIME_MS) } });
+        return { user, isNewUser, session };
       }
     });
 
     return {
-      accessToken: await this.jwt.signAsync({
-        sub: result.user.id,
-        email: result.user.email,
-        role: result.user.role
-      }),
+      accessToken: await signSessionToken(this.jwt, result.session, { email: result.user.email, role: result.user.role }),
       user: result.user,
       isNewUser: result.isNewUser
     };
   }
 
-  async verifyAdminStepUpCode(input: { userId: string; email: string; code: string }) {
+  async verifyAdminStepUpCode(input: { userId: string; email: string; code: string; sessionId: string }) {
+    const session = await this.prisma.authSession.findUnique({ where: { id: input.sessionId } });
+    if (!session || session.userId !== input.userId || session.revokedAt || session.expiresAt.getTime() <= this.now()) throw new UnauthorizedException("Session expired");
     await this.verifyCode({
       emailInput: input.email,
       codeInput: input.code,
@@ -275,12 +275,7 @@ export class AuthService {
     });
     const adminReauthenticatedAt = Math.floor(this.now() / 1000);
     return {
-      accessToken: await this.jwt.signAsync({
-        sub: input.userId,
-        email: normalizeEmail(input.email),
-        role: "ADMIN",
-        adminReauthenticatedAt
-      }),
+      accessToken: await signSessionToken(this.jwt, session, { email: input.email, role: "ADMIN", adminReauthenticatedAt }),
       reauthenticatedUntil: new Date((adminReauthenticatedAt + 30 * 60) * 1000)
     };
   }

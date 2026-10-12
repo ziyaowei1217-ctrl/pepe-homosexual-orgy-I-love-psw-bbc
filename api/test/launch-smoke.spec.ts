@@ -1,3 +1,4 @@
+import { signTestSession, signTestMfaSession } from "./support/auth-sessions";
 import { INestApplication, ValidationPipe } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { Test } from "@nestjs/testing";
@@ -120,8 +121,8 @@ describeSmoke("launch smoke against real PostgreSQL", () => {
 
   it("runs the core HTTP flow against the real database", async () => {
     const http = request(app.getHttpServer());
-    const ownerToken = await jwt.signAsync({ sub: ownerId, email: ownerEmail, role: "USER" });
-    const adminToken = await jwt.signAsync({
+    const ownerToken = await signTestSession(jwt, prisma, { sub: ownerId, email: ownerEmail, role: "USER" });
+    const adminToken = await signTestMfaSession(jwt, prisma, {
       sub: adminId,
       email: adminEmail,
       role: "ADMIN",
@@ -133,7 +134,7 @@ describeSmoke("launch smoke against real PostgreSQL", () => {
       checks: {
         database: "ok",
         realtime: { status: "ok", mode: "single-instance" },
-        messageRateLimit: { status: "ok", mode: "single-instance" }
+        messageRateLimit: { status: "ok", mode: process.env.VALKEY_URL?.trim() ? "distributed" : "single-instance" }
       }
     });
 

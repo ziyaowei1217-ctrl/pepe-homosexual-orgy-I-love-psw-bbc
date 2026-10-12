@@ -1,4 +1,6 @@
 import "reflect-metadata";
+import { JwtService } from "@nestjs/jwt";
+import { signTestMfaSession } from "./support/auth-sessions";
 import { INestApplication, ValidationPipe } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import { describe, expect, it, beforeEach, afterEach } from "vitest";
@@ -134,7 +136,11 @@ describe("backend launch readiness HTTP flow", () => {
       .set("Authorization", `Bearer ${adminToken}`)
       .send({ code: adminStepUpCodeResponse.body.devCode })
       .expect(201);
-    const steppedUpAdminToken = adminStepUpResponse.body.accessToken;
+    // The historical email-only step-up cannot authorize an administrator write.
+    await http.post(`/api/v1/admin/listings/${listingResponse.body.id}/approve`)
+      .auth(adminStepUpResponse.body.accessToken, {type: "bearer"})
+      .send({revision: submittedResponse.body.revision}).expect(403);
+    const steppedUpAdminToken = await signTestMfaSession(app.get(JwtService), app.get(PrismaService), {sub: adminSessionResponse.body.user.id});
 
     await http
       .post(`/api/v1/admin/listings/${listingResponse.body.id}/approve`)

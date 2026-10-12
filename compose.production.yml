@@ -3,6 +3,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.api
+      target: migration
     command: ["./api/node_modules/.bin/prisma", "migrate", "deploy", "--schema", "api/prisma/schema.prisma"]
     env_file:
       - ${API_ENV_FILE:-api/.env.production}
@@ -12,6 +13,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.api
+      target: runtime
     env_file:
       - ${API_ENV_FILE:-api/.env.production}
     environment:

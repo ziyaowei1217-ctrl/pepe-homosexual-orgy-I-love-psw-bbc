@@ -126,7 +126,7 @@ export function SearchExperience({ listings, initialQuery, initialMoveIn, initia
 
     <div className={cn("mx-auto grid max-w-[1920px]", state.view === "split" && "lg:grid-cols-[minmax(480px,0.95fr)_minmax(0,1.05fr)]")}>
       <section className={cn("min-w-0 px-4 pb-28 pt-6 sm:px-6 lg:px-8", state.view === "map" && "hidden")} aria-labelledby="result-heading">
-        <div className="flex items-center gap-2 text-xs text-slate-400"><Link href="/" className="hover:text-slate-950">首页</Link><span>/</span><span>房源列表</span>{state.query ? <><span>/</span><span className="truncate text-slate-600">{state.query}</span></> : null}</div>
+        <div className="flex items-center gap-2 text-xs text-slate-600"><Link href="/" className="hover:text-slate-950">首页</Link><span>/</span><span>房源列表</span>{state.query ? <><span>/</span><span className="truncate text-slate-600">{state.query}</span></> : null}</div>
         <div className="mt-4 flex items-start justify-between gap-3">
           <div><h1 id="result-heading" className="text-[28px] font-black leading-tight tracking-[-0.02em] text-[#0b1026] sm:text-[36px]">{catalog.heading}</h1><p className="mt-2 text-sm text-[#5b6380]" role="status" aria-live="polite"><strong className="font-display text-base font-bold text-[#0b1026]">{catalog.total}</strong> 套符合条件 · 按月租住，自在安顿</p></div>
         </div>
@@ -158,7 +158,7 @@ export function SearchExperience({ listings, initialQuery, initialMoveIn, initia
       </section>
       <SearchResultsMap key={`${catalog.items.map((item) => item.id).join(",")}:${state.view}`} listings={catalog.items} activeListing={activeListing} stay={state} view={state.view} onSelect={(id) => selectListing(id, state.view === "split")} onOpen={rememberSearch} onClose={() => update({ selected: "", page: state.page }, "replace")} page={catalog.page} pageCount={catalog.pageCount} onPageChange={(page) => update({ page })} />
     </div>
-    <div className="fixed bottom-[82px] left-1/2 z-40 flex -translate-x-1/2 rounded-full bg-slate-950 p-1 text-white shadow-xl md:bottom-6" aria-label="浏览方式">
+    <div role="group" className="fixed bottom-[82px] left-1/2 z-40 flex -translate-x-1/2 rounded-full bg-slate-950 p-1 text-white shadow-xl md:bottom-6" aria-label="浏览方式">
       {([["split", "分屏", LayoutGrid], ["list", "列表", List], ["map", "地图", Map]] as const).map(([view, label, Icon]) => <button key={view} type="button" onClick={() => update({ view, page: state.page, selected: state.selected })} aria-pressed={state.view === view} className={cn("flex items-center gap-2 rounded-full px-4 py-2.5 text-xs font-semibold", state.view === view ? "bg-white text-slate-950" : "text-slate-200 hover:bg-slate-800", view === "split" && "hidden lg:flex")}><Icon className="size-3.5" />{label}</button>)}
     </div>
     {notice ? <div role="status" className="fixed bottom-[144px] left-1/2 z-[70] flex -translate-x-1/2 items-center gap-2 whitespace-nowrap rounded-xl bg-slate-950 px-5 py-3 text-sm text-white shadow-xl md:bottom-24"><Check className="size-4 text-indigo-300" />{notice}<Link href="/saved" className="ml-2 underline">查看</Link></div> : null}

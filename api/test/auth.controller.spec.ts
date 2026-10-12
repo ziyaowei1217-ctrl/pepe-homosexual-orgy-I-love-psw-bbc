@@ -1,3 +1,4 @@
+import { signTestSession } from "./support/auth-sessions";
 import "reflect-metadata";
 import { INestApplication } from "@nestjs/common";
 import { JwtModule, JwtService } from "@nestjs/jwt";
@@ -74,7 +75,7 @@ describe("administrator step-up HTTP routes", () => {
   });
 
   it("requests the code for the current administrator even when the body names another email", async () => {
-    const token = await jwt.signAsync({ sub: "admin-1", email: "stale@example.com", role: "USER" });
+    const token = await signTestSession(jwt, app.get(PrismaService), { sub: "admin-1", email: "stale@example.com", role: "USER" });
 
     await request(app.getHttpServer())
       .post("/api/v1/auth/admin-step-up/email-code")
@@ -89,7 +90,7 @@ describe("administrator step-up HTTP routes", () => {
   });
 
   it("rejects a client-selected email and verifies against the current administrator identity", async () => {
-    const token = await jwt.signAsync({ sub: "admin-1", email: "stale@example.com", role: "USER" });
+    const token = await signTestSession(jwt, app.get(PrismaService), { sub: "admin-1", email: "stale@example.com", role: "USER" });
     const http = request(app.getHttpServer());
 
     await http
@@ -105,7 +106,7 @@ describe("administrator step-up HTTP routes", () => {
       .expect(201);
 
     expect(auth.verifyCalls).toEqual([
-      { userId: "admin-1", email: "current-admin@example.com", code: "123456" }
+      { userId: "admin-1", sessionId: expect.any(String), email: "current-admin@example.com", code: "123456" }
     ]);
     expect(rateLimiter.calls).toEqual([
       { action: "verify", purpose: "ADMIN_STEP_UP", email: "current-admin@example.com" }

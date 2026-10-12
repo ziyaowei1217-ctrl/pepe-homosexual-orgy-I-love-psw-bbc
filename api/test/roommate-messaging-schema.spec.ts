@@ -1,3 +1,4 @@
+import { testDatabaseUrl, testDatabaseContainer, testDatabaseUser } from "./support/postgres-target";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { randomUUID } from "node:crypto";
 import { spawnSync } from "node:child_process";
@@ -10,7 +11,7 @@ const databaseName = `roommate_messaging_${randomUUID().replaceAll("-", "")}`;
 function dockerPsql(args: string[], input?: string) {
   const result = spawnSync(
     "docker",
-    ["exec", "-i", "sublet-pipeline-db", "psql", "-v", "ON_ERROR_STOP=1", "-U", "sublet", ...args],
+    ["exec", "-i", testDatabaseContainer(), "psql", "-v", "ON_ERROR_STOP=1", "-U", testDatabaseUser(), ...args],
     { encoding: "utf8", input }
   );
 
@@ -35,7 +36,7 @@ function runPrismaMigrate(...args: string[]) {
     encoding: "utf8",
     env: {
       ...process.env,
-      DATABASE_URL: `postgresql://sublet:sublet@localhost:5432/${databaseName}?schema=public`
+      DATABASE_URL: testDatabaseUrl(databaseName)
     }
   });
 

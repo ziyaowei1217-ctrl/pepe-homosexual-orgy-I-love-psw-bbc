@@ -1,3 +1,4 @@
+import { signTestSession } from "./support/auth-sessions";
 import { UnauthorizedException } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { describe, expect, it } from "vitest";
@@ -7,15 +8,17 @@ import { AuthenticatedUserService } from "../src/auth/authenticated-user.service
 describe("AuthenticatedUserService", () => {
   it("reloads the current database user from a valid bearer token", async () => {
     const jwt = new JwtService({ secret: "test-secret" });
-    const token = await jwt.signAsync({ sub: "user-1", email: "stale@example.test", role: "ADMIN" });
-    const service = new AuthenticatedUserService(jwt, {
+    const prisma = {
       user: {
         findUnique: async () => ({ id: "user-1", email: "current@example.test", role: "USER" })
       }
-    } as never);
+    };
+    const token = await signTestSession(jwt, prisma, { sub: "user-1", email: "stale@example.test", role: "ADMIN" });
+    const service = new AuthenticatedUserService(jwt, prisma as never);
 
     await expect(service.fromBearerToken(token)).resolves.toEqual({
       id: "user-1",
+      sessionId: expect.any(String),
       email: "current@example.test",
       role: "USER"
     });

@@ -1,3 +1,4 @@
+import { signTestSession } from "./support/auth-sessions";
 import "reflect-metadata";
 import { randomUUID } from "node:crypto";
 import type { AddressInfo } from "node:net";
@@ -117,7 +118,7 @@ function defineIsolatedRoommateRealtimeSmoke() {
 
     [tokenA, tokenB, tokenC] = await Promise.all(
       [userA, userB, userC].map((user) =>
-        jwt.signAsync({ sub: user.id, email: user.email, role: "USER" })
+        signTestSession(jwt, activePrisma, { sub: user.id, email: user.email, role: "USER" })
       )
     );
   }, 30_000);
@@ -200,8 +201,8 @@ function defineIsolatedRoommateRealtimeSmoke() {
     const socketA = await connectSocket(baseUrl, tokenA, sockets);
     let socketB = await connectSocket(baseUrl, tokenB, sockets);
     await Promise.all([
-      waitForSocketRoom(gateway!.server, userA.id),
-      waitForSocketRoom(gateway!.server, userB.id)
+      waitForSocketRoom(gateway!.server, tokenA),
+      waitForSocketRoom(gateway!.server, tokenB)
     ]);
 
     const createdEventsForA: MessageCreatedEvent[] = [];
@@ -252,9 +253,9 @@ function defineIsolatedRoommateRealtimeSmoke() {
 
     socketB.close();
     sockets.delete(socketB);
-    await waitForSocketRoom(gateway!.server, userB.id, false);
+    await waitForSocketRoom(gateway!.server, tokenB, false);
     socketB = await connectSocket(baseUrl, tokenB, sockets);
-    await waitForSocketRoom(gateway!.server, userB.id);
+    await waitForSocketRoom(gateway!.server, tokenB);
     const recovered = await http
       .get(`/api/v1/roommate-conversations/${conversationId}/messages`)
       .auth(tokenB, { type: "bearer" })
@@ -379,21 +380,22 @@ async function connectSocket(baseUrl: string, token: string, sockets: Set<Socket
 
 function waitForSocketRoom(
   namespace: Namespace,
-  userId: string,
+  token: string,
   expectedPresent = true,
   timeoutMs = 2_000
 ): Promise<void> {
+  const { sid: sessionId } = new JwtService().decode<{ sid: string }>(token);
   return new Promise((resolve, reject) => {
     const deadline = Date.now() + timeoutMs;
     const check = () => {
-      if (namespace.adapter.rooms.has(`user:${userId}`) === expectedPresent) {
+      if (namespace.adapter.rooms.has(`session:${sessionId}`) === expectedPresent) {
         resolve();
         return;
       }
       if (Date.now() >= deadline) {
         reject(
           new Error(
-            `Timed out waiting for authenticated socket room for ${userId} to be ${expectedPresent ? "present" : "absent"}`
+            `Timed out waiting for authenticated socket room for session ${sessionId} to be ${expectedPresent ? "present" : "absent"}`
           )
         );
         return;

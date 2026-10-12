@@ -1,0 +1,103 @@
+name: Release validation
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      DATABASE_URL: postgresql://sublet:release-test-only@localhost:15432/release_test?schema=public
+      TEST_DATABASE_URL: postgresql://sublet:release-test-only@localhost:15432/postgres?schema=public
+      TEST_DATABASE_CONTAINER: sublet-release-test-postgres
+      VALKEY_URL: redis://localhost:16379
+      LISTING_MEDIA_STORAGE_ENDPOINT: http://localhost:19000
+      LISTING_MEDIA_UPLOAD_ENDPOINT: http://localhost:19000
+      LISTING_MEDIA_STORAGE_REGION: us-east-1
+      LISTING_MEDIA_STORAGE_BUCKET: release-test-media
+      LISTING_MEDIA_STORAGE_ACCESS_KEY_ID: release-test
+      LISTING_MEDIA_STORAGE_SECRET_ACCESS_KEY: release-test-only
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: corepack enable && corepack prepare pnpm@9.15.4 --activate
+      - run: pnpm install --frozen-lockfile
+      - run: docker compose -f compose.test.yml up -d --wait
+      - run: docker compose -f compose.test.yml run --rm minio-init
+      - run: pnpm -C api prisma migrate deploy
+      - run: pnpm release:check
+      - name: Validate synthetic production Compose contract
+        env:
+          SYNTHETIC_PUBLIC_API_BASE_URL: https://api.ci.invalid/api/v1
+          SYNTHETIC_MAP_TILE_URL_TEMPLATE: https://tiles.ci.invalid/{z}/{x}/{y}.png
+          SYNTHETIC_MAP_ATTRIBUTION: Synthetic CI map
+        run: |
+          trap 'rm -f "$RUNNER_TEMP/sublet-production-api.env" "$RUNNER_TEMP/sublet-production-compose.env"' EXIT
+          node <<'NODE'
+          const { randomBytes } = require("node:crypto");
+          const { join } = require("node:path");
+          const { writeFileSync } = require("node:fs");
+
+          const apiPath = join(process.env.RUNNER_TEMP, "sublet-production-api.env");
+          const composePath = join(process.env.RUNNER_TEMP, "sublet-production-compose.env");
+          const serialize = (values) => Object.entries(values)
+            .map(([name, value]) => `${name}=${JSON.stringify(value)}`)
+            .join("\n");
+          writeFileSync(apiPath, serialize({
+            NODE_ENV: "production",
+            PORT: "4000",
+            DATABASE_URL: "postgresql://ci:synthetic-only@db.ci.invalid/sublet?sslmode=verify-full",
+            WEB_ORIGIN: "https://app.ci.invalid",
+            JWT_SECRET: randomBytes(32).toString("hex"),
+            OTP_HASH_SECRET: randomBytes(32).toString("hex"),
+            SECURITY_IDENTIFIER_HASH_SECRET: randomBytes(32).toString("hex"),
+            MFA_ENCRYPTION_KEY: randomBytes(32).toString("base64"),
+            EMAIL_SENDER: "resend",
+            EMAIL_FROM: "Synthetic CI <no-reply@ci.invalid>",
+            RESEND_API_KEY: "synthetic-ci-key",
+            PAYMENT_SERVICE_URL: "https://payments.ci.invalid/v1",
+            PAYMENT_SERVICE_API_KEY: "synthetic-ci-key",
+            AUTH_CODE_TTL_SECONDS: "600",
+            AUTH_CODE_MAX_ATTEMPTS: "5",
+            AUTH_CODE_COOLDOWN_SECONDS: "60",
+            TRUSTED_PROXY_HOPS: "0",
+            LOCAL_ADMIN_EMAILS: "",
+            VALKEY_URL: "rediss://cache.ci.invalid:6379",
+            LISTING_MEDIA_STORAGE_ENDPOINT: "http://storage.internal:9000",
+            LISTING_MEDIA_UPLOAD_ENDPOINT: "https://uploads.ci.invalid",
+            LISTING_MEDIA_STORAGE_REGION: "us-east-1",
+            LISTING_MEDIA_STORAGE_BUCKET: "synthetic-ci-media",
+            LISTING_MEDIA_STORAGE_ACCESS_KEY_ID: "synthetic-ci-access",
+            LISTING_MEDIA_STORAGE_SECRET_ACCESS_KEY: "synthetic-ci-secret",
+            LISTING_MEDIA_UPLOAD_TTL_SECONDS: "600"
+          }), { mode: 0o600 });
+          writeFileSync(composePath, serialize({
+            API_ENV_FILE: apiPath,
+            NEXT_PUBLIC_API_BASE_URL: process.env.SYNTHETIC_PUBLIC_API_BASE_URL,
+            NEXT_PUBLIC_MAP_TILE_URL_TEMPLATE: process.env.SYNTHETIC_MAP_TILE_URL_TEMPLATE,
+            NEXT_PUBLIC_MAP_ATTRIBUTION: process.env.SYNTHETIC_MAP_ATTRIBUTION
+          }), { mode: 0o600 });
+          NODE
+          pnpm production:check-config --compose --env-file "$RUNNER_TEMP/sublet-production-compose.env"
+      - run: pnpm audit --prod --audit-level=high
+      - name: Build deployment images
+        env:
+          SYNTHETIC_PUBLIC_API_BASE_URL: https://api.ci.invalid/api/v1
+          SYNTHETIC_MAP_TILE_URL_TEMPLATE: https://tiles.ci.invalid/{z}/{x}/{y}.png
+          SYNTHETIC_MAP_ATTRIBUTION: Synthetic CI map
+        run: |
+          docker build --target runtime -f Dockerfile.api -t sublet-api:ci .
+          docker build --target migration -f Dockerfile.api -t sublet-migration:ci .
+          docker build \
+            --build-arg NEXT_PUBLIC_API_BASE_URL="$SYNTHETIC_PUBLIC_API_BASE_URL" \
+            --build-arg NEXT_PUBLIC_MAP_TILE_URL_TEMPLATE="$SYNTHETIC_MAP_TILE_URL_TEMPLATE" \
+            --build-arg NEXT_PUBLIC_MAP_ATTRIBUTION="$SYNTHETIC_MAP_ATTRIBUTION" \
+            -f Dockerfile.web -t sublet-web:ci .
+      - name: Remove dedicated test services
+        if: always()
+        run: docker compose -f compose.test.yml down -v

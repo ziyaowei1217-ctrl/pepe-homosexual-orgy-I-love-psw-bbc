@@ -6,8 +6,8 @@ import { earliestListingDate, listingStayError, type ListingStay } from "@/lib/l
 import type { PreviewListing } from "@/lib/preview-data";
 import { useModalFocus } from "./use-modal-focus";
 
-export function ListingStayFields({ listing, stay, onChange }: { listing: PreviewListing; stay: ListingStay; onChange: (stay: ListingStay) => void }) {
-  const earliest = earliestListingDate(listing);
+export function ListingStayFields({ listing, stay, onChange, today }: { listing: PreviewListing; stay: ListingStay; onChange: (stay: ListingStay) => void; today?: string }) {
+  const earliest = earliestListingDate(listing, today);
   return <div className="grid grid-cols-2 overflow-hidden rounded-2xl border border-slate-300 focus-within:border-[#2453ff] focus-within:ring-1 focus-within:ring-[#2453ff]">
     <label className="min-w-0 p-3 text-[11px] font-semibold text-slate-500">入住日期<input type="date" min={earliest} max={listing.availableTo || undefined} value={stay.moveIn} onChange={(event) => onChange({ ...stay, moveIn: event.target.value })} className="mt-2 block w-full min-w-0 bg-transparent text-sm font-semibold text-slate-950" /></label>
     <label className="min-w-0 border-l border-slate-300 p-3 text-[11px] font-semibold text-slate-500">退租日期<input type="date" min={stay.moveIn || earliest} max={listing.availableTo || undefined} value={stay.moveOut} onChange={(event) => onChange({ ...stay, moveOut: event.target.value })} className="mt-2 block w-full min-w-0 bg-transparent text-sm font-semibold text-slate-950" /></label>

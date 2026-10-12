@@ -1,3 +1,4 @@
+import { createTestSessionStore } from "./auth-sessions";
 type UserRole = "USER" | "ADMIN";
 type ListingStatus = "DRAFT" | "SUBMITTED" | "APPROVED" | "REJECTED";
 type RoommateActionType = "LIKE" | "PASS" | "LATER";
@@ -342,6 +343,7 @@ export function createLaunchPrismaMock() {
   };
 
   const mock = {
+    authSession: createTestSessionStore(),
     $connect: async () => undefined,
     $disconnect: async () => undefined,
     $queryRaw: async () => [{ ok: 1 }],

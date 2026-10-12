@@ -1,3 +1,4 @@
+import { hasRecentMfa } from "./mfa.guard";
 import { CanActivate, ExecutionContext, ForbiddenException, Inject, Injectable } from "@nestjs/common";
 
 import { AuditService } from "../audit/audit.service";
@@ -16,12 +17,7 @@ export class AdminStepUpGuard implements CanActivate {
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<AuthenticatedRequest & RequestWithId>();
-    const verifiedAt = request.user.adminReauthenticatedAt;
-    const nowSeconds = Math.floor(this.options.now() / 1_000);
-    const valid =
-      Number.isSafeInteger(verifiedAt) &&
-      verifiedAt! <= nowSeconds + 60 &&
-      nowSeconds - verifiedAt! <= 30 * 60;
+    const valid = await hasRecentMfa(this.prisma, request.user, this.options.now());
 
     if (valid) return true;
 
@@ -42,8 +38,8 @@ export class AdminStepUpGuard implements CanActivate {
 
     throw new ForbiddenException({
       statusCode: 403,
-      code: "ADMIN_REAUTH_REQUIRED",
-      message: "Administrator verification is required"
+      code: "MFA_VERIFICATION_REQUIRED",
+      message: "Independent administrator verification is required"
     });
   }
 }

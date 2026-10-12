@@ -1,0 +1,54 @@
+name: sublet-release-test
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: sublet-release-test-postgres
+    environment:
+      POSTGRES_USER: sublet
+      POSTGRES_PASSWORD: release-test-only
+      POSTGRES_DB: release_test
+    ports: ["127.0.0.1:15432:5432"]
+    tmpfs: ["/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "sublet", "-d", "release_test"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+  minio:
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
+    container_name: sublet-release-test-minio
+    command: server /data
+    environment:
+      MINIO_ROOT_USER: release-test
+      MINIO_ROOT_PASSWORD: release-test-only
+      MINIO_API_CORS_ALLOW_ORIGIN: https://localhost:3443,http://localhost:3008
+    ports: ["127.0.0.1:19000:9000"]
+    tmpfs: ["/data"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+  minio-init:
+    image: minio/mc:RELEASE.2025-08-13T08-35-41Z
+    profiles: [setup]
+    restart: "no"
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        mc alias set local http://minio:9000 release-test release-test-only &&
+        mc mb --ignore-existing local/release-test-media &&
+        mc anonymous set none local/release-test-media
+    depends_on:
+      minio:
+        condition: service_healthy
+  valkey:
+    image: valkey/valkey:8-alpine
+    container_name: sublet-release-test-valkey
+    ports: ["127.0.0.1:16379:6379"]
+    tmpfs: ["/data"]
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 30

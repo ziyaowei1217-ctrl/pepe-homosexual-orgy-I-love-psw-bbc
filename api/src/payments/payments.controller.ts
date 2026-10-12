@@ -1,5 +1,6 @@
 import { Controller, Get, Headers, Inject, Param, Post, Req, UseGuards } from "@nestjs/common";
 
+import { MfaGuard } from "../auth/mfa.guard";
 import { AuthGuard, type AuthenticatedRequest } from "../auth/auth.guard";
 import { PaymentsService } from "./payments.service";
 
@@ -16,6 +17,7 @@ export class PaymentsController {
     return this.payments.status(request.user.id, applicationId);
   }
 
+  @UseGuards(MfaGuard)
   @Post("applications/:applicationId/checkout")
   createCheckout(
     @Req() request: AuthenticatedRequest,

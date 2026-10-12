@@ -5,6 +5,7 @@ type JwtSecretInput = {
 
 type AuthSecurityConfigInput = {
   nodeEnv?: string;
+  jwtSecret?: string;
   otpHashSecret?: string;
   securityIdentifierHashSecret?: string;
   codeTtlSeconds?: string;
@@ -47,6 +48,11 @@ export type AuthSecurityConfig = {
 const developmentJwtSecret = "dev-change-me";
 const developmentOtpHashSecret = "development-otp-hash-secret";
 const developmentIdentifierHashSecret = "development-identifier-hash-secret";
+const publicDevelopmentSecrets = new Set([
+  developmentJwtSecret, developmentOtpHashSecret, developmentIdentifierHashSecret,
+  "docker-development-jwt-secret-change-me"
+]);
+const developmentMfaKey = Buffer.from("development-only-mfa-key-32-byte");
 
 export function assertProductionRuntimeConfig(environment: Record<string, string | undefined> = process.env) {
   if (environment.NODE_ENV !== "production") return;
@@ -59,10 +65,57 @@ export function assertProductionRuntimeConfig(environment: Record<string, string
   if (webOrigin.pathname !== "/" || webOrigin.search || webOrigin.hash) {
     throw new Error("WEB_ORIGIN must be an HTTPS origin without a path");
   }
+  rejectUrlCredentials("WEB_ORIGIN", webOrigin);
   requiredUrl("VALKEY_URL", environment.VALKEY_URL, ["rediss:"]);
   if (environment.LOCAL_ADMIN_EMAILS?.trim()) {
     throw new Error("LOCAL_ADMIN_EMAILS must be empty in production");
   }
+  getJwtSecret({ nodeEnv: "production", jwtSecret: environment.JWT_SECRET ?? "" });
+  getAuthSecurityConfig({
+    nodeEnv: "production",
+    jwtSecret: environment.JWT_SECRET ?? "",
+    otpHashSecret: environment.OTP_HASH_SECRET ?? "",
+    securityIdentifierHashSecret: environment.SECURITY_IDENTIFIER_HASH_SECRET ?? "",
+    codeTtlSeconds: environment.AUTH_CODE_TTL_SECONDS ?? "600",
+    codeMaxAttempts: environment.AUTH_CODE_MAX_ATTEMPTS ?? "5",
+    codeCooldownSeconds: environment.AUTH_CODE_COOLDOWN_SECONDS ?? "60",
+    trustedProxyHops: environment.TRUSTED_PROXY_HOPS ?? "0"
+  });
+  const mfaKey = getMfaEncryptionKey({ nodeEnv: "production", mfaEncryptionKey: environment.MFA_ENCRYPTION_KEY ?? "" });
+  if ([environment.JWT_SECRET, environment.OTP_HASH_SECRET, environment.SECURITY_IDENTIFIER_HASH_SECRET]
+    .some((secret) => secret === environment.MFA_ENCRYPTION_KEY || Buffer.from(secret ?? "").equals(mfaKey))) {
+    throw new Error("MFA_ENCRYPTION_KEY and authentication secrets must be distinct");
+  }
+  const paymentUrl = requiredUrl("PAYMENT_SERVICE_URL", environment.PAYMENT_SERVICE_URL, ["https:"]);
+  rejectUrlCredentials("PAYMENT_SERVICE_URL", paymentUrl);
+  if (paymentUrl.search || paymentUrl.hash) throw new Error("PAYMENT_SERVICE_URL must not include a query or fragment");
+  requiredProductionValue("PAYMENT_SERVICE_API_KEY", environment.PAYMENT_SERVICE_API_KEY);
+  if (environment.EMAIL_SENDER !== "resend") throw new Error("EMAIL_SENDER must be resend in production");
+  requiredProductionValue("RESEND_API_KEY", environment.RESEND_API_KEY);
+  requiredProductionValue("EMAIL_FROM", environment.EMAIL_FROM);
+  if (environment.EMAIL_FROM?.trim() === "Sublet Pipeline <no-reply@example.com>") {
+    throw new Error("EMAIL_FROM must not use the development default");
+  }
+  getListingMediaStorageConfig({
+    nodeEnv: "production", endpoint: environment.LISTING_MEDIA_STORAGE_ENDPOINT ?? "",
+    uploadEndpoint: environment.LISTING_MEDIA_UPLOAD_ENDPOINT ?? "",
+    region: environment.LISTING_MEDIA_STORAGE_REGION ?? "", bucket: environment.LISTING_MEDIA_STORAGE_BUCKET ?? "",
+    accessKeyId: environment.LISTING_MEDIA_STORAGE_ACCESS_KEY_ID ?? "",
+    secretAccessKey: environment.LISTING_MEDIA_STORAGE_SECRET_ACCESS_KEY ?? "",
+    uploadTtlSeconds: environment.LISTING_MEDIA_UPLOAD_TTL_SECONDS ?? "600"
+  });
+}
+
+export function getMfaEncryptionKey(input: { nodeEnv?: string; mfaEncryptionKey?: string } = {}): Buffer {
+  const nodeEnv = input.nodeEnv ?? process.env.NODE_ENV ?? "development";
+  const value = input.mfaEncryptionKey ?? process.env.MFA_ENCRYPTION_KEY;
+  if (!value && nodeEnv !== "production") return Buffer.from(developmentMfaKey);
+  const bytes = Buffer.from(value ?? "", "base64");
+  if (bytes.length !== 32 || bytes.toString("base64") !== value || new Set(bytes).size < 2 ||
+    (nodeEnv === "production" && bytes.equals(developmentMfaKey))) {
+    throw new Error("MFA_ENCRYPTION_KEY must be 32 bytes in canonical base64; public development and uniform-byte keys are prohibited");
+  }
+  return bytes;
 }
 
 export function getJwtSecret(input: JwtSecretInput = {}) {
@@ -70,10 +123,10 @@ export function getJwtSecret(input: JwtSecretInput = {}) {
   const jwtSecret = input.jwtSecret ?? process.env.JWT_SECRET;
 
   if (nodeEnv === "production") {
-    if (!jwtSecret || jwtSecret === developmentJwtSecret) {
+    if (!jwtSecret || publicDevelopmentSecrets.has(jwtSecret.trim())) {
       throw new Error("JWT_SECRET is required in production");
     }
-
+    validateSecretBytes("JWT_SECRET", jwtSecret);
     return jwtSecret;
   }
 
@@ -85,6 +138,7 @@ export function getAuthSecurityConfig(input: AuthSecurityConfigInput = {}): Auth
   const otpHashSecret = input.otpHashSecret ?? process.env.OTP_HASH_SECRET;
   const securityIdentifierHashSecret =
     input.securityIdentifierHashSecret ?? process.env.SECURITY_IDENTIFIER_HASH_SECRET;
+  const jwtSecret = input.jwtSecret ?? process.env.JWT_SECRET;
 
   if (nodeEnv === "production" && !otpHashSecret) throw new Error("OTP_HASH_SECRET is required in production");
   if (nodeEnv === "production" && !securityIdentifierHashSecret) {
@@ -92,18 +146,19 @@ export function getAuthSecurityConfig(input: AuthSecurityConfigInput = {}): Auth
   }
   if (
     nodeEnv === "production" &&
-    (otpHashSecret === developmentOtpHashSecret || securityIdentifierHashSecret === developmentIdentifierHashSecret)
+    (publicDevelopmentSecrets.has(otpHashSecret!.trim()) || publicDevelopmentSecrets.has(securityIdentifierHashSecret!.trim()))
   ) {
     throw new Error("Production auth hash secrets must not use development defaults");
   }
-  if (nodeEnv === "production" && Buffer.byteLength(otpHashSecret!, "utf8") < 32) {
-    throw new Error("OTP_HASH_SECRET must be at least 32 bytes in production");
-  }
-  if (nodeEnv === "production" && Buffer.byteLength(securityIdentifierHashSecret!, "utf8") < 32) {
-    throw new Error("SECURITY_IDENTIFIER_HASH_SECRET must be at least 32 bytes in production");
+  if (nodeEnv === "production") {
+    validateSecretBytes("OTP_HASH_SECRET", otpHashSecret!);
+    validateSecretBytes("SECURITY_IDENTIFIER_HASH_SECRET", securityIdentifierHashSecret!);
   }
   if (nodeEnv === "production" && otpHashSecret === securityIdentifierHashSecret) {
     throw new Error("Production auth hash secrets must be distinct");
+  }
+  if (nodeEnv === "production" && jwtSecret && [otpHashSecret, securityIdentifierHashSecret].includes(jwtSecret)) {
+    throw new Error("Production authentication secrets must be distinct");
   }
 
   const codeTtlSeconds = parsePositiveInteger(
@@ -192,6 +247,14 @@ export function getListingMediaStorageConfig(
 
   validateStorageEndpoint("LISTING_MEDIA_STORAGE_ENDPOINT", endpoint);
   validateStorageEndpoint("LISTING_MEDIA_UPLOAD_ENDPOINT", uploadEndpoint);
+  if (nodeEnv === "production") {
+    const upload = requiredUrl("LISTING_MEDIA_UPLOAD_ENDPOINT", uploadEndpoint, ["https:"]);
+    rejectUrlCredentials("LISTING_MEDIA_UPLOAD_ENDPOINT", upload);
+    if (upload.search || upload.hash) throw new Error("LISTING_MEDIA_UPLOAD_ENDPOINT must not include a query or fragment");
+    const storage = new URL(endpoint);
+    rejectUrlCredentials("LISTING_MEDIA_STORAGE_ENDPOINT", storage);
+    if (storage.search || storage.hash) throw new Error("LISTING_MEDIA_STORAGE_ENDPOINT must not include a query or fragment");
+  }
 
   return {
     endpoint,
@@ -203,6 +266,21 @@ export function getListingMediaStorageConfig(
     uploadTtlSeconds,
     forcePathStyle: true
   };
+}
+
+function validateSecretBytes(name: string, value: string) {
+  if (Buffer.byteLength(value.trim(), "utf8") < 32) {
+    throw new Error(`${name} must be at least 32 bytes in production`);
+  }
+  if (value !== value.trim()) throw new Error(`${name} must not have surrounding whitespace`);
+}
+
+function requiredProductionValue(name: string, value: string | undefined) {
+  if (!value?.trim()) throw new Error(`${name} is required in production`);
+}
+
+function rejectUrlCredentials(name: string, url: URL) {
+  if (url.username || url.password) throw new Error(`${name} must not include credentials`);
 }
 
 function parsePositiveInteger(name: string, value: string | undefined, fallback: number) {

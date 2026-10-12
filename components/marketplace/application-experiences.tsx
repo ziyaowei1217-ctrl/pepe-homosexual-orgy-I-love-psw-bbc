@@ -251,7 +251,7 @@ function ApplicationsSession() {
   return (
     <main className="min-h-[calc(100dvh-72px)] bg-[#f7f8fb]">
       <div className="mx-auto max-w-[1180px] px-4 py-10 sm:px-6 lg:px-8 lg:py-14">
-        <div className="flex flex-col justify-between gap-6 border-b border-slate-200 pb-7 sm:flex-row sm:items-end"><div><p className="text-xs font-black uppercase tracking-[0.15em] text-[#2453ff]">Application center</p><h1 className="mt-2 text-4xl font-black tracking-[-0.05em] sm:text-5xl">我的申请</h1><p className="mt-3 text-sm text-slate-500">草稿、已提交和需要补充的申请都在这里。</p></div><Link href="/trips" className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-3 text-sm font-black text-slate-700">查看已接受的租住<ChevronRight className="size-4" /></Link></div>
+        <div className="flex flex-col justify-between gap-6 border-b border-slate-200 pb-7 sm:flex-row sm:items-end"><div><p className="text-xs font-black uppercase tracking-[0.15em] text-[#2453ff]">Application center</p><h1 className="mt-2 text-4xl font-black tracking-[-0.05em] sm:text-5xl">我的申请</h1><p className="mt-3 text-sm text-slate-600">草稿、已提交和需要补充的申请都在这里。</p></div><Link href="/trips" className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-3 text-sm font-black text-slate-700">查看已接受的租住<ChevronRight className="size-4" /></Link></div>
         <div className="mt-7 grid gap-5">
           {applications.map((application, index) => {
             const copy = getRentalApplicationStatusCopy(application.status);
@@ -317,7 +317,8 @@ function ApplicationDetailSession({ applicationId }: { applicationId: string }) 
     if (!token || !application || !window.confirm("确认撤回这份申请？")) return;
     try {
       assertCurrentAuthSession(token);
-      setApplication(await withdrawRentalApplication(token, application.id, `applicant-withdraw-${application.id}`));
+      const withdrawn = await withdrawRentalApplication(token, application.id, `applicant-withdraw-${application.id}`);
+      setApplication((current) => current ? mergeRentalApplicationUpdate(current, withdrawn) : withdrawn);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "撤回失败，请重试。");
     }

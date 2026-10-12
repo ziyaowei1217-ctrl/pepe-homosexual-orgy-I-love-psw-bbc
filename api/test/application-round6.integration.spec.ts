@@ -6,6 +6,8 @@ import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { Prisma, PrismaClient } from '@prisma/client';
 import { AuthGuard } from '../src/auth/auth.guard';
+import { MfaGuard } from '../src/auth/mfa.guard';
+import { PAYMENT_COMMANDS } from '../src/payments/payment-commands';
 import { ApplicationsController } from '../src/applications/applications.controller';
 import { ApplicationsService } from '../src/applications/applications.service';
 import { DealThreadsService } from '../src/deal-threads/deal-threads.service';
@@ -45,6 +47,10 @@ describeDatabase('application completion and concurrent command recovery on Post
     const moduleRef = await Test.createTestingModule({
       controllers: [ApplicationsController, ListingsController],
       providers: [
+        { provide: PAYMENT_COMMANDS, useValue: payments },
+        // Keep PaymentMfaGuard active with the actual demo payment implementation.
+        // An unexpected request for independent verification must fail this fixture.
+        { provide: MfaGuard, useValue: { canActivate() { throw new Error('Unexpected MFA check for demo funds'); } } },
         { provide: ApplicationsService, useValue: controllerDelegate },
         { provide: ListingsService, useValue: new ListingsService(prisma as never, { append: async () => {} } as never) }
       ]
@@ -261,7 +267,14 @@ describeDatabase('application completion and concurrent command recovery on Post
     expect(saved[0].status).toBe(expectedStatus);
     expect(await prisma.demoPayment.count({ where: { applicationId: saved[0].id } })).toBe(operation === 'accept' ? 1 : 0);
     if (operation !== 'create') expect(observed.errors).toContain('P2034');
-    expect((await post(path, key, body, 'stranger')).status).toBe(409);
+    const persistedKey = operation === 'create' ? saved[0].createKey : operation === 'submit' ? saved[0].submitKey : saved[0].decisionKey;
+    expect(persistedKey).toBe(key);
+    for (let check = 0; check < 20; check += 1) {
+      const unauthorized = await post(path, key, body, 'stranger');
+      expect({ status: unauthorized.status, message: unauthorized.body.message }).toEqual({
+        status: 409, message: expect.stringContaining('Idempotency-Key is already bound')
+      });
+    }
     if (operation === 'accept' || operation === 'reject') {
       expect((await post(path, key, { reason: 'Changed decision payload' }, actor)).status).toBe(409);
     }

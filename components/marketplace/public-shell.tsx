@@ -34,14 +34,15 @@ export function PublicShell({ active, mobileNavigation = "bottom", children }: {
 
       <header className="sticky top-0 z-50 border-b border-slate-200/80 bg-white/85 backdrop-blur-xl backdrop-saturate-150 supports-[not(backdrop-filter:blur(1px))]:bg-white">
         <div className="mx-auto flex h-[72px] max-w-[1520px] items-center gap-7 px-4 sm:px-6 lg:px-8">
-          <Link href="/" className="group flex shrink-0 items-center gap-3" aria-label="Sublet Pipeline 首页">
+          <Link href="/" className="group flex shrink-0 items-center gap-3">
+            <span className="sr-only">首页</span>
             <span className="grid size-10 place-items-center rounded-[12px] bg-[#2453ff] text-white transition-transform group-hover:-translate-y-0.5">
               <Home className="size-[19px]" aria-hidden="true" />
             </span>
             {/* On phones the header-nav variant needs this room for its quick links. */}
             <span className={cn("block", mobileNavigation === "header" && "hidden sm:block")}>
               <span className="font-display block text-[17px] font-bold">Sublet Pipeline</span>
-              <span className="hidden text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400 sm:block">Live well, sooner</span>
+              <span className="hidden text-[10px] font-bold uppercase tracking-[0.16em] text-slate-600 sm:block">Live well, sooner</span>
             </span>
           </Link>
 
