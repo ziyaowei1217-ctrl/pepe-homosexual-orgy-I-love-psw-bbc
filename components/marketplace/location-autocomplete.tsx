@@ -89,7 +89,7 @@ export function LocationAutocomplete({
         placeholder={placeholder}
       />
       {expanded ? (
-        <div id={listboxId} role="listbox" aria-label="地点建议" className="absolute left-0 top-[calc(100%+12px)] z-[90] min-w-[270px] overflow-hidden rounded-[20px] border border-slate-200 bg-white p-2 text-left shadow-[0_22px_60px_rgba(15,23,42,0.18)]">
+        <div id={listboxId} role="listbox" aria-label="地点建议" className="absolute left-0 top-[calc(100%+12px)] z-[90] w-full min-w-0 overflow-hidden rounded-[20px] border border-slate-200 bg-white p-2 text-left shadow-[0_22px_60px_rgba(15,23,42,0.18)]">
           {suggestions.map((option, index) => (
             <button
               key={option.id}

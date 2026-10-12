@@ -23,9 +23,44 @@ describe("API production container dependency boundaries", () => {
     const compose = readFileSync("compose.production.yml", "utf8");
 
     expect(dockerfile).toContain(" AS migration");
-    expect(dockerfile).toContain("--from=build /app/api/node_modules");
+    expect(dockerfile).toContain("--from=production-install /prod/node_modules ./api/node_modules");
+    expect(dockerfile).not.toContain("--from=build /app/node_modules ./node_modules");
+    expect(dockerfile).toContain("ln -s \"../${prisma_cli#/app/api/node_modules/}\"");
     expect(compose).toMatch(/migrate:[\s\S]*?target: migration/);
     expect(compose).toMatch(/api:[\s\S]*?target: runtime/);
+  });
+
+  it("updates Alpine packages and strips package managers from final runtime images", () => {
+    const apiDockerfile = readFileSync("Dockerfile.api", "utf8");
+    const webDockerfile = readFileSync("Dockerfile.web", "utf8");
+
+    expect(apiDockerfile.match(/apk upgrade --no-cache/g)).toHaveLength(2);
+    expect(webDockerfile.match(/apk upgrade --no-cache/g)).toHaveLength(1);
+    for (const dockerfile of [apiDockerfile, webDockerfile]) {
+      expect(dockerfile).toContain("/usr/local/lib/node_modules/npm");
+      expect(dockerfile).toContain("/usr/local/lib/node_modules/corepack");
+      expect(dockerfile).toContain("/usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack");
+    }
+  });
+
+  it("removes build-only compiler packages conservatively traced into the web runtime", () => {
+    const dockerfile = readFileSync("Dockerfile.web", "utf8");
+    const runtime = dockerfile.slice(dockerfile.indexOf(" AS runtime"));
+
+    for (const buildOnlyPackage of [
+      "node_modules/typescript",
+      "node_modules/.pnpm/node_modules/esbuild",
+      "node_modules/.pnpm/node_modules/webpack",
+      "node_modules/.pnpm/@esbuild+*",
+      "node_modules/.pnpm/esbuild@*",
+      "node_modules/.pnpm/typescript@*",
+      "node_modules/.pnpm/webpack@*",
+      "node_modules/.pnpm/browserslist@*",
+      "node_modules/.pnpm/baseline-browser-mapping@*",
+      "node_modules/.pnpm/fast-uri@*"
+    ]) {
+      expect(runtime).toContain(buildOnlyPackage);
+    }
   });
 
   it("validates a synthetic resolved production contract and passes every web build argument in CI", () => {

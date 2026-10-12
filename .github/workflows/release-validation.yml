@@ -27,6 +27,8 @@ jobs:
           node-version: '22'
       - run: corepack enable && corepack prepare pnpm@9.15.4 --activate
       - run: pnpm install --frozen-lockfile
+      - name: Build test object storage from verified upstream source
+        run: docker compose -f compose.test.yml build --pull minio minio-init
       - run: docker compose -f compose.test.yml up -d --wait
       - run: docker compose -f compose.test.yml run --rm minio-init
       - run: pnpm -C api prisma migrate deploy
