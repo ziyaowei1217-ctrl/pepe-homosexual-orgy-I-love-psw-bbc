@@ -18,7 +18,10 @@ suite('MFA real PostgreSQL enrollment, replay and session binding',()=>{
  beforeAll(async()=>{
   database.create();database.migrateDeploy();process.env.DATABASE_URL=database.databaseUrl;process.env.NODE_ENV='test';process.env.JWT_SECRET='mfa-integration-test-only-long-secret';
   const {AppModule}=await import('../src/app.module');
-  const module=await Test.createTestingModule({imports:[AppModule]}).compile();app=module.createNestApplication();app.useLogger(false);app.setGlobalPrefix('api/v1');app.useGlobalPipes(new ValidationPipe({whitelist:true,forbidNonWhitelisted:true,transform:true}));await app.init();prisma=app.get(PrismaService);jwt=app.get(JwtService);
+  const module=await Test.createTestingModule({imports:[AppModule]}).compile();app=module.createNestApplication();app.useLogger(false);app.setGlobalPrefix('api/v1');app.useGlobalPipes(new ValidationPipe({whitelist:true,forbidNonWhitelisted:true,transform:true}));await app.init();
+  // Own one listener for the suite; Supertest must not close it after the first concurrent response.
+  await app.listen(0, '127.0.0.1');
+  prisma=app.get(PrismaService);jwt=app.get(JwtService);
  },90000);
  afterEach(()=>vi.useRealTimers());
  afterAll(async()=>{await app?.close();database.drop();for(const [k,v] of Object.entries(old)){if(v===undefined)delete process.env[k];else process.env[k]=v;}});

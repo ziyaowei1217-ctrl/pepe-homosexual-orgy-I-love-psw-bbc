@@ -67,6 +67,8 @@ describeDatabase('application completion and concurrent command recovery on Post
     app.setGlobalPrefix('api/v1');
     app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }));
     await app.init();
+    // Keep the listener alive for every request in each concurrent command batch.
+    await app.listen(0, '127.0.0.1');
   }, 30_000);
 
   afterAll(async () => { await app?.close(); await prisma?.$disconnect(); database.drop(); });
