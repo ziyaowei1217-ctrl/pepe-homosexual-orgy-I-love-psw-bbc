@@ -49,6 +49,8 @@ export function clearStoredAuthSession() {
 
   window.localStorage.removeItem(authSessionKey);
   window.localStorage.removeItem(legacyTokenKey);
+  window.localStorage.removeItem("sublet:admin-step-up:v1");
+  window.sessionStorage?.removeItem("sublet:admin-step-up:v1");
   window.dispatchEvent?.(new Event(authSessionChangedEvent));
 }
 

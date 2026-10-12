@@ -1,3 +1,4 @@
+import { signTestSession, signTestMfaSession } from "./support/auth-sessions";
 import "reflect-metadata";
 import { randomUUID } from "node:crypto";
 import { INestApplication, ValidationPipe } from "@nestjs/common";
@@ -145,7 +146,7 @@ async function signInAsAdmin(app: INestApplication, email: string) {
   const jwt = app.get(JwtService);
   const adminId = session.user.id as string;
   const adminEmail = session.user.email as string;
-  const adminToken = await jwt.signAsync({
+  const adminToken = await signTestMfaSession(jwt, app.get(PrismaService), {
     sub: adminId,
     email: adminEmail,
     role: "ADMIN",

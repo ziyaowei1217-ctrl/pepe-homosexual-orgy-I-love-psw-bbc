@@ -1,3 +1,4 @@
+import { createTestSessionStore } from "./support/auth-sessions";
 import { UnauthorizedException } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { VerificationDeliveryStatus, VerificationPurpose } from "@prisma/client";
@@ -18,6 +19,7 @@ describe("AuthService production email issuance", () => {
     const code = sender.sent.at(-1)?.code;
     const result = await service.verifyAdminStepUpCode({
       userId: "admin-1",
+      sessionId: (await prisma.authSession.create({data:{userId:"admin-1",expiresAt:new Date(now+86400000)}})).id,
       email: "admin@example.com",
       code: code!
     });
@@ -37,7 +39,7 @@ describe("AuthService production email issuance", () => {
     const login = await service.requestEmailCode("admin@example.com");
 
     await expect(
-      service.verifyAdminStepUpCode({ userId: "admin-1", email: "admin@example.com", code: login.devCode! })
+      service.verifyAdminStepUpCode({ userId: "admin-1", sessionId: "nonexistent-session", email: "admin@example.com", code: login.devCode! })
     ).rejects.toBeInstanceOf(UnauthorizedException);
   });
 
@@ -379,6 +381,7 @@ function createAuthPrismaMock(
   };
 
   const transaction = {
+    authSession: createTestSessionStore(),
     $executeRaw: async () => 1,
     user: {
       findUnique: async ({ where }: { where: { email: string } }) =>
@@ -471,6 +474,7 @@ function createAuthPrismaMock(
 
   return {
     state,
+    authSession: transaction.authSession,
     verificationCode: transaction.verificationCode,
     $transaction: async <T>(operation: (client: typeof transaction) => Promise<T>) => {
       state.inTransaction = true;

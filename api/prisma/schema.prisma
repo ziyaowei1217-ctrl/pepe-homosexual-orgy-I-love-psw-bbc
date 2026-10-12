@@ -76,6 +76,9 @@ enum ViewingRequestStatus {
 }
 
 model User {
+  authSessions                    AuthSession[]
+  mfa                             UserMfa?
+  mfaRecoveryCodes                MfaRecoveryCode[]
   legacyLeaseApplications         LeaseApplication[] @relation("LegacyLeaseApplicant") @ignore
   legacyOwnedLeaseApplications    LeaseApplication[] @relation("LegacyLeaseOwner") @ignore
   id                              String                       @id @default(cuid())
@@ -916,4 +919,38 @@ model ViewingRequest {
   @@index([threadId, createdAt])
   @@index([requesterId, status, createdAt])
   @@index([listingId, status, createdAt])
+}
+
+model AuthSession {
+  mfaVerifiedAt DateTime?
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+  revokedAt DateTime?
+
+  @@index([userId, revokedAt, expiresAt])
+}
+
+model UserMfa {
+  userId String @id
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  encryptedSecret String?
+  pendingEncryptedSecret String?
+  pendingSessionId String? @db.Uuid
+  pendingExpiresAt DateTime?
+  enabledAt DateTime?
+  lastUsedStep Int?
+  failureCount Int @default(0)
+  lockedUntil DateTime?
+}
+
+model MfaRecoveryCode {
+  id String @id @default(uuid()) @db.Uuid
+  userId String
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  codeHash String
+  usedAt DateTime?
+  @@unique([userId, codeHash])
 }

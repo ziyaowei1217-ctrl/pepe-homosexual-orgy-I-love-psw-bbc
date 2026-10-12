@@ -1,3 +1,4 @@
+import { testDatabaseContainer, testDatabaseUser } from "./support/postgres-target";
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
@@ -139,12 +140,12 @@ function dockerPsql(databaseName: string, args: string[], input?: string) {
     [
       "exec",
       "-i",
-      "sublet-pipeline-db",
+      testDatabaseContainer(),
       "psql",
       "-v",
       "ON_ERROR_STOP=1",
       "-U",
-      "sublet",
+      testDatabaseUser(),
       "-d",
       databaseName,
       ...args

@@ -48,7 +48,7 @@ export function HomeExperience({ listings, totalListings = listings.length, tota
             </div>
           </Link> : null}
         </div>
-        <div className="mt-12 flex items-center gap-2.5 overflow-x-auto pb-1 [scrollbar-width:none]" aria-label="热门地点"><span className="mr-2 shrink-0 text-xs font-bold tracking-[0.14em] text-[#8c95b4]">热门城市</span>{destinations.map((destination) => <Link key={destination} href={`/search?q=${encodeURIComponent(destination)}`} className="shrink-0 rounded-full border border-white/20 px-[18px] py-2.5 text-sm font-medium text-white transition-colors hover:border-white hover:bg-white hover:text-[#0b1026]">{destination}</Link>)}</div>
+        <div role="group" className="mt-12 flex items-center gap-2.5 overflow-x-auto pb-1 [scrollbar-width:none]" aria-label="热门地点"><span className="mr-2 shrink-0 text-xs font-bold tracking-[0.14em] text-[#8c95b4]">热门城市</span>{destinations.map((destination) => <Link key={destination} href={`/search?q=${encodeURIComponent(destination)}`} className="shrink-0 rounded-full border border-white/20 px-[18px] py-2.5 text-sm font-medium text-white transition-colors hover:border-white hover:bg-white hover:text-[#0b1026]">{destination}</Link>)}</div>
       </div>
     </section>
 

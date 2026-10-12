@@ -1,3 +1,6 @@
+import { generate } from "otplib";
+import { RoommateConversationGateway } from "../src/roommate-conversations/roommate-conversations.gateway";
+import { signTestSession } from "./support/auth-sessions";
 import "reflect-metadata";
 import { randomUUID } from "node:crypto";
 import { spawnSync } from "node:child_process";
@@ -90,7 +93,7 @@ function defineTwoInstanceValkeySmoke() {
 
     const jwt = instanceA.app.get(JwtService);
     [tokenA, tokenB] = await Promise.all(
-      [userA, userB].map((user) => jwt.signAsync({ sub: user.id, email: user.email, role: "USER" }))
+      [userA, userB].map((user) => signTestSession(jwt, prisma, { sub: user.id, email: user.email, role: "USER" }))
     );
   }, 20_000);
 
@@ -221,6 +224,73 @@ function defineTwoInstanceValkeySmoke() {
       socketB.off("roommate.message.created", recordForB);
     }
   }, 10_000);
+
+  it("revokes one device over HTTP and disconnects its existing sockets on both instances", async () => {
+    const prisma = instanceA!.app.get(PrismaService);
+    const jwt = instanceA!.app.get(JwtService);
+    const user = await prisma.user.create({ data: { email: `session-${randomUUID()}@example.test` } });
+    const first = await signTestSession(jwt, prisma, { sub: user.id });
+    const second = await signTestSession(jwt, prisma, { sub: user.id });
+    const [firstA, firstB, secondB] = await Promise.all([
+      connectSocket(instanceA!.baseUrl, first, sockets), connectSocket(instanceB!.baseUrl, first, sockets),
+      connectSocket(instanceB!.baseUrl, second, sockets)
+    ]);
+    const gateway = instanceA!.app.get(RoommateConversationGateway);
+    const sid = jwt.decode<{ sid: string }>(first).sid;
+    await expect.poll(async () => (await gateway.server.in(`session:${sid}`).fetchSockets()).length).toBe(2);
+    const disconnected = Promise.all([onceEvent(firstA, "disconnect"), onceEvent(firstB, "disconnect")]);
+    await request(instanceA!.app.getHttpServer()).post("/api/v1/auth/logout").auth(first, { type: "bearer" }).expect(201);
+    await disconnected;
+    await request(instanceB!.app.getHttpServer()).get("/api/v1/auth/me").auth(first, { type: "bearer" }).expect(401);
+    await request(instanceB!.app.getHttpServer()).get("/api/v1/auth/me").auth(second, { type: "bearer" }).expect(200);
+    expect(secondB.connected).toBe(true);
+    expect(await prisma.authSession.count({ where: { userId: user.id, revokedAt: null } })).toBe(1);
+  }, 10_000);
+
+  it("disconnects a durable revocation even when there was no pubsub notification", async () => {
+    const prisma = instanceA!.app.get(PrismaService);
+    const jwt = instanceA!.app.get(JwtService);
+    const user = await prisma.user.create({ data: { email: `session-poll-${randomUUID()}@example.test` } });
+    const token = await signTestSession(jwt, prisma, { sub: user.id });
+    const socket = await connectSocket(instanceB!.baseUrl, token, sockets);
+    const sid = jwt.decode<{ sid: string }>(token).sid;
+    const gateway = instanceB!.app.get(RoommateConversationGateway);
+    await expect.poll(async () => (await gateway.server.in(`session:${sid}`).fetchSockets()).length).toBe(1);
+    const disconnected = onceEvent(socket, "disconnect", 3_000);
+    await prisma.authSession.update({ where: { id: sid }, data: { revokedAt: new Date() } });
+    const deliveries: unknown[] = [];
+    socket.on("roommate.message.created", (event) => deliveries.push(event));
+    await gateway.publish({ name: "roommate.message.created", deliveries: [{ userId: user.id, payload: { message: { id: "private-after-logout" } } }] } as never);
+    await disconnected;
+    expect(deliveries).toEqual([]);
+  }, 10_000);
+
+  it("factor enrollment and disable revoke other devices across HTTP and existing remote sockets", async () => {
+    const prisma = instanceA!.app.get(PrismaService);
+    const jwt = instanceA!.app.get(JwtService);
+    const user = await prisma.user.create({data:{email:`mfa-devices-${randomUUID()}@example.test`}});
+    const current = await signTestSession(jwt, prisma, {sub:user.id});
+    const other = await signTestSession(jwt, prisma, {sub:user.id});
+    const currentSocket = await connectSocket(instanceA!.baseUrl, current, sockets);
+    const otherSocket = await connectSocket(instanceB!.baseUrl, other, sockets);
+    const httpA = request(instanceA!.app.getHttpServer());
+    const httpB = request(instanceB!.app.getHttpServer());
+    const setup = await httpA.post('/api/v1/auth/mfa/enrollment').auth(current,{type:'bearer'}).send({}).expect(201);
+    const confirmed = await httpA.post('/api/v1/auth/mfa/enrollment/confirm').auth(current,{type:'bearer'}).send({code:await generate({secret:setup.body.secret})}).expect(201);
+    await httpB.get('/api/v1/auth/me').auth(other,{type:'bearer'}).expect(401);
+    await httpB.get('/api/v1/auth/me').auth(confirmed.body.accessToken,{type:'bearer'}).expect(200);
+    await expect.poll(()=>otherSocket.connected,{timeout:3000}).toBe(false);
+    expect(currentSocket.connected).toBe(true);
+    const later = await signTestSession(jwt,prisma,{sub:user.id});
+    const laterSocket = await connectSocket(instanceB!.baseUrl,later,sockets);
+    await httpA.post('/api/v1/auth/mfa/disable').auth(confirmed.body.accessToken,{type:'bearer'}).send({recoveryCode:confirmed.body.recoveryCodes[0]}).expect(201);
+    await httpB.get('/api/v1/auth/me').auth(later,{type:'bearer'}).expect(401);
+    await httpB.get('/api/v1/auth/me').auth(confirmed.body.accessToken,{type:'bearer'}).expect(200);
+    await expect.poll(()=>laterSocket.connected,{timeout:3000}).toBe(false);
+    expect(currentSocket.connected).toBe(true);
+    expect(await prisma.authSession.count({where:{userId:user.id,revokedAt:null}})).toBe(1);
+  }, 15000);
+
 }
 
 if (runIsolatedChild) {

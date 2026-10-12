@@ -1,3 +1,6 @@
+import { MfaController } from "./mfa.controller";
+import { MfaService } from "./mfa.service";
+import { MfaGuard } from "./mfa.guard";
 import { Module } from "@nestjs/common";
 
 import { AuditModule } from "../audit/audit.module";
@@ -51,7 +54,7 @@ export function createAuthServiceOptions(
 
 @Module({
   imports: [AuditModule],
-  controllers: [AuthController],
+  controllers: [AuthController, MfaController],
   providers: [
     {
       provide: AUTH_SECURITY_CONFIG,
@@ -85,6 +88,8 @@ export function createAuthServiceOptions(
           nodeEnv: process.env.NODE_ENV ?? "development"
         })
     },
+    MfaService,
+    MfaGuard,
     AuthService,
     AuthenticatedUserService,
     VerificationCodeCleanupService,
@@ -99,6 +104,8 @@ export function createAuthServiceOptions(
     AdminGuard,
     AdminStepUpGuard,
     OptionalAuthGuard,
+    MfaService,
+    MfaGuard,
     AuthService,
     AuthenticatedUserService,
     ADMIN_STEP_UP_OPTIONS,

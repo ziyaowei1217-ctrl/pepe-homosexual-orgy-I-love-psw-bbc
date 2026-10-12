@@ -23,6 +23,7 @@ function validEnvironment() {
     JWT_SECRET: "jwt-production-secret-with-more-than-32-bytes",
     OTP_HASH_SECRET: "otp-production-secret-with-more-than-32-bytes",
     SECURITY_IDENTIFIER_HASH_SECRET: "identifier-production-secret-with-more-than-32-bytes",
+    MFA_ENCRYPTION_KEY: "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=",
     EMAIL_SENDER: "resend",
     EMAIL_FROM: "Sublet <login@example.com>",
     RESEND_API_KEY: "resend-production-key",
@@ -98,6 +99,11 @@ afterEach(() => {
 });
 
 describe("production configuration gate", () => {
+  it.each([" ".repeat(40), "docker-development-jwt-secret-change-me", "development-identifier-hash-secret"])(
+    "rejects public or blank signing keys even when their byte length passes", (JWT_SECRET) => {
+      expect(validateProductionConfig({ ...validEnvironment(), JWT_SECRET }).length).toBeGreaterThan(0);
+    }
+  );
   it("accepts a complete production configuration and omitted runtime defaults", () => {
     expect(validateProductionConfig(validEnvironment())).toEqual([]);
   });

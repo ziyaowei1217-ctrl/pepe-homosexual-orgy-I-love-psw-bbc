@@ -3,15 +3,67 @@ WORKDIR /app
 RUN corepack enable
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY api/package.json api/package.json
-RUN pnpm install --frozen-lockfile
+COPY api/prisma api/prisma
+RUN sed -i '/^[[:space:]]*- "\."$/d' pnpm-workspace.yaml
+RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store \
+  pnpm install --frozen-lockfile --filter sublet-pipeline-api
 COPY api ./api
 RUN pnpm -C api build
+
+FROM node:22-alpine AS production-install
+WORKDIR /prod
+RUN corepack enable
+COPY package.json /tmp/root-package.json
+COPY pnpm-lock.yaml /tmp/workspace-lock.yaml
+COPY api/package.json package.json
+COPY api/prisma prisma
+RUN node -e 'const fs = require("node:fs"); const manifest = require("./package.json"); const root = require("/tmp/root-package.json"); manifest.packageManager = root.packageManager; manifest.pnpm = root.pnpm; fs.writeFileSync("package.json", `${JSON.stringify(manifest, null, 2)}\n`);' \
+  && awk '\
+    $0 == "importers:" { print; print ""; print "  .:"; in_importers = 1; next } \
+    in_importers && $0 == "  api:" { in_api = 1; next } \
+    in_importers && $0 == "packages:" { in_importers = 0; in_api = 0; print ""; print; next } \
+    in_api { print; next } \
+    !in_importers { print } \
+  ' /tmp/workspace-lock.yaml > pnpm-lock.yaml
+RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store \
+  pnpm install --frozen-lockfile --prod
+RUN --mount=from=build,source=/app/node_modules,target=/build-node_modules,ro \
+  set -eu; \
+  prisma_cli="$(find /build-node_modules/.pnpm -path '*/node_modules/prisma/build/index.js' -print -quit)"; \
+  test -n "$prisma_cli"; \
+  node "$prisma_cli" generate --schema /prod/prisma/schema.prisma
+
+FROM production-install AS production-dependencies
+RUN set -eu; \
+  rm -rf /prod/node_modules/.pnpm/prisma@* /prod/node_modules/.pnpm/typescript@* /prod/node_modules/.pnpm/@types+node@*; \
+  find /prod/node_modules/.pnpm -type l \( -name prisma -o -name typescript \) -exec rm -f {} \;
+
+FROM node:22-alpine AS migration
+WORKDIR /app
+ENV NODE_ENV=production
+RUN apk upgrade --no-cache \
+  && rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack \
+  && rm -f /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack \
+    /usr/local/bin/pnpm /usr/local/bin/pnpx /usr/local/bin/yarn /usr/local/bin/yarnpkg
+COPY --from=production-install /prod/node_modules ./api/node_modules
+COPY --from=build /app/api/dist ./api/dist
+COPY --from=build /app/api/package.json ./api/package.json
+COPY --from=build /app/api/prisma ./api/prisma
+RUN set -eu; \
+  prisma_cli="$(find /app/api/node_modules/.pnpm -path '*/node_modules/prisma/build/index.js' -print -quit)"; \
+  test -n "$prisma_cli"; \
+  mkdir -p /app/api/node_modules/.bin; \
+  ln -s "../${prisma_cli#/app/api/node_modules/}" /app/api/node_modules/.bin/prisma
+USER node
 
 FROM node:22-alpine AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
-COPY --from=build /app/node_modules ./node_modules
-COPY --from=build /app/api/node_modules ./api/node_modules
+RUN apk upgrade --no-cache \
+  && rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack \
+  && rm -f /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack \
+    /usr/local/bin/pnpm /usr/local/bin/pnpx /usr/local/bin/yarn /usr/local/bin/yarnpkg
+COPY --from=production-dependencies /prod/node_modules ./node_modules
 COPY --from=build /app/api/dist ./api/dist
 COPY --from=build /app/api/package.json ./api/package.json
 COPY --from=build /app/api/prisma ./api/prisma

@@ -1,3 +1,4 @@
+import { testDatabaseUrl, testDatabaseContainer, testDatabaseUser } from "./support/postgres-target";
 import { randomUUID } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { join } from "node:path";
@@ -15,7 +16,7 @@ describeDatabase("roommate read cursor migration", () => {
       encoding: "utf8",
       env: {
         ...process.env,
-        DATABASE_URL: `postgresql://sublet:sublet@localhost:5432/${databaseName}?schema=public`
+        DATABASE_URL: testDatabaseUrl(databaseName)
       }
     });
     if (result.status !== 0) throw new Error(result.stderr || result.stdout);
@@ -52,7 +53,7 @@ describeDatabase("roommate read cursor migration", () => {
 });
 
 function dockerPsql(args: string[], input?: string) {
-  const result = spawnSync("docker", ["exec", "-i", "sublet-pipeline-db", "psql", "-v", "ON_ERROR_STOP=1", "-U", "sublet", ...args], {
+  const result = spawnSync("docker", ["exec", "-i", testDatabaseContainer(), "psql", "-v", "ON_ERROR_STOP=1", "-U", testDatabaseUser(), ...args], {
     encoding: "utf8",
     input
   });

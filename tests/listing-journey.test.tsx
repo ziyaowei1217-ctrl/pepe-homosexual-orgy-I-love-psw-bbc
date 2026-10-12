@@ -25,7 +25,7 @@ describe("listing to application journey", () => {
 
   it("lets mobile renters edit dates in a sheet and discard unfinished changes", () => {
     render(<SavedListingsProvider><ListingDetailExperience listing={listing} initialStay={stay} /></SavedListingsProvider>);
-    const trigger = screen.getByRole("button", { name: "编辑租期" });
+    const trigger = screen.getByRole("button", { name: /修改租期$/ });
     trigger.focus(); fireEvent.click(trigger);
     const dialog = screen.getByRole("dialog", { name: "选择租期" });
     fireEvent.change(within(dialog).getByLabelText("退租日期"), { target: { value: "2027-01-01" } });

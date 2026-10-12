@@ -1,3 +1,4 @@
+import { signTestSession } from "./support/auth-sessions";
 import "reflect-metadata";
 import { JwtModule, JwtService } from "@nestjs/jwt";
 import { Test } from "@nestjs/testing";
@@ -33,7 +34,7 @@ it("preserves valid credentials across a user lookup outage without misreporting
   app.setGlobalPrefix("api/v1");
   try {
     await app.init();
-    const token = await moduleRef.get(JwtService).signAsync({ sub: "user-1" }, { expiresIn: "1h" });
+    const token = await signTestSession(moduleRef.get(JwtService), app.get(PrismaService), { sub: "user-1" }, { expiresIn: "1h" });
     const http = request(app.getHttpServer());
     const before = await http.get("/api/v1/auth/me").auth(token, { type: "bearer" });
     unavailable = true;

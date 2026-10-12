@@ -65,10 +65,10 @@ export function productErrorForStatus(status: number, code?: unknown): ProductAp
 
   if (productMessage) {
     return new ProductApiError({
-      category: status >= 500 ? "service" : "validation",
+      category: status >= 500 || status === 429 ? "service" : status === 403 ? "permission" : "validation",
       code: safeCode,
       message: productMessage,
-      retryable: status >= 500 || safeCode === "LISTING_MEDIA_STATE_CONFLICT",
+      retryable: status >= 500 || status === 429 || safeCode === "LISTING_MEDIA_STATE_CONFLICT",
       status
     });
   }
@@ -87,7 +87,7 @@ export function productErrorForStatus(status: number, code?: unknown): ProductAp
       return new ProductApiError({
         category: "permission",
         code: safeCode,
-        message: "需要再次验证管理员邮箱。",
+        message: "需要完成独立双重验证。",
         retryable: false,
         status
       });
@@ -119,6 +119,13 @@ export function productErrorForStatus(status: number, code?: unknown): ProductAp
 }
 
 const productCodeMessages: Record<string, string> = {
+  AUTH_RECENT_LOGIN_REQUIRED: "为保护账户，请重新登录邮箱后再继续。",
+  MFA_REQUIRED: "请先在账户的身份与认证页面启用双重验证。",
+  MFA_VERIFICATION_REQUIRED: "请先在账户的身份与认证页面验证敏感操作，再返回重试。",
+  MFA_INVALID_CODE: "验证码或恢复码无效。请检查后重试；已使用的恢复码不能重复使用。",
+  MFA_ALREADY_ENABLED: "双重验证已经启用，请刷新状态。",
+  MFA_ENROLLMENT_REQUIRED: "设置已过期，请重新绑定验证器。",
+  MFA_RATE_LIMITED: "验证尝试过于频繁，请稍后再试。",
   LISTING_MEDIA_LIMIT_REACHED: "每套房源最多上传 12 张图片。",
   LISTING_MEDIA_LOCKED: "房源提交审核后，图片已锁定。",
   LISTING_MEDIA_STATE_CONFLICT: "图片状态已变化，请刷新后重试。",

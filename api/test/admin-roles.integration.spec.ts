@@ -1,3 +1,4 @@
+import { testDatabaseUrl, testDatabaseContainer, testDatabaseUser } from "./support/postgres-target";
 import { randomUUID } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { join } from "node:path";
@@ -10,12 +11,12 @@ import { AdminRolesService } from "../src/operations/admin-roles.service";
 const runDatabaseTests = process.env.RUN_DB_SMOKE === "1";
 const describeDatabase = runDatabaseTests ? describe : describe.skip;
 const databaseName = `admin_roles_${randomUUID().replaceAll("-", "")}`;
-const databaseUrl = `postgresql://sublet:sublet@localhost:5432/${databaseName}?schema=public`;
+const databaseUrl = testDatabaseUrl(databaseName);
 
 function dockerPsql(args: string[]) {
   const result = spawnSync(
     "docker",
-    ["exec", "-i", "sublet-pipeline-db", "psql", "-v", "ON_ERROR_STOP=1", "-U", "sublet", ...args],
+    ["exec", "-i", testDatabaseContainer(), "psql", "-v", "ON_ERROR_STOP=1", "-U", testDatabaseUser(), ...args],
     { encoding: "utf8" }
   );
   if (result.status !== 0) {

@@ -1,3 +1,4 @@
+import { createTestSessionStore } from "./support/auth-sessions";
 import { BadRequestException, UnauthorizedException } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { VerificationDeliveryStatus, VerificationPurpose } from "@prisma/client";
@@ -633,6 +634,7 @@ function createPrismaMock() {
   };
 
   const mock = {
+    authSession: createTestSessionStore(),
     verificationCode: {
       state,
       updateCalls: [] as Array<{ where: { id: string }; data: VerificationCodeUpdateData }>,

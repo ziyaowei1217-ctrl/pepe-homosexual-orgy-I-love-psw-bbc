@@ -1,3 +1,4 @@
+import { signTestSession, signTestMfaSession } from "./support/auth-sessions";
 import "reflect-metadata";
 
 import { createHash, randomUUID } from "node:crypto";
@@ -97,7 +98,7 @@ function defineMarketplaceJourney() {
     });
 
     for (const [key, actor] of Object.entries(actors) as Array<[keyof typeof actors, (typeof actors)[keyof typeof actors]]>) {
-      tokens[key] = await jwt.signAsync({
+      tokens[key] = await (key === "admin" ? signTestMfaSession : signTestSession)(jwt, prisma, {
         sub: actor.id,
         email: actor.email,
         role: actor.role,

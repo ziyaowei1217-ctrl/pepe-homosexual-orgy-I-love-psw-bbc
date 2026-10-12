@@ -1,3 +1,4 @@
+import { signTestSession } from "./support/auth-sessions";
 import "reflect-metadata";
 import { INestApplication, ValidationPipe } from "@nestjs/common";
 import { JwtModule, JwtService } from "@nestjs/jwt";
@@ -42,7 +43,7 @@ describe("demo payment HTTP API", () => {
     await app.init();
     const jwt = app.get(JwtService);
     tokens = Object.fromEntries(
-      await Promise.all(["owner-1", "renter-1", "stranger-1"].map(async (id) => [id, await jwt.signAsync({ sub: id })]))
+      await Promise.all(["owner-1", "renter-1", "stranger-1"].map(async (id) => [id, await signTestSession(jwt, app.get(PrismaService), { sub: id })]))
     );
 
     const applications = app.get(ApplicationsService);

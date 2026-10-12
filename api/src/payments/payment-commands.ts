@@ -41,9 +41,12 @@ export function createPaymentCommands(input: PaymentCommandsFactoryInput = {}): 
   const serviceUrl = input.serviceUrl ?? process.env.PAYMENT_SERVICE_URL;
   const apiKey = input.apiKey ?? process.env.PAYMENT_SERVICE_API_KEY;
   if (!serviceUrl) throw new Error("PAYMENT_SERVICE_URL is required in production");
-  if (!apiKey) throw new Error("PAYMENT_SERVICE_API_KEY is required in production");
+  if (!apiKey?.trim()) throw new Error("PAYMENT_SERVICE_API_KEY is required in production");
   const url = new URL(serviceUrl);
   if (url.protocol !== "https:") throw new Error("PAYMENT_SERVICE_URL must use HTTPS in production");
+  if (url.username || url.password || url.search || url.hash) {
+    throw new Error("PAYMENT_SERVICE_URL must not include credentials, a query or fragment");
+  }
   return new HttpPaymentCommands(url.href.replace(/\/+$/, ""), apiKey, input.fetchImpl ?? fetch);
 }
 

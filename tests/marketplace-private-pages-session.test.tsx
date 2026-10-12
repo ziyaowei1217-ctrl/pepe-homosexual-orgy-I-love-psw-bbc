@@ -25,6 +25,7 @@ function fixture(input: RequestInfo | URL, init?: RequestInit): Response {
   const token = new Headers(init?.headers).get("Authorization");
   const old = token === "Bearer account-a";
   if (url.endsWith("/auth/me")) return json({ id: old ? "a" : "b", email: old ? "a@example.com" : "b@example.com", role: old ? "ADMIN" : "USER" });
+  if (url.endsWith("/auth/mfa")) return json({ enabled: true, recoveryCodesRemaining: 10, verifiedUntil: null });
   if (url.endsWith("/profiles/me")) return json(old ? profile : { ...profile, id: "profile-b", displayName: "Account B", email: "b@example.com" });
   if (url.endsWith("/applications/mine")) return json(old ? [{ id: "stay-a", listingId: "listing-a", listingTitle: privateName, status: "ACCEPTED", moveIn: "2026-10-01", moveOut: "2027-01-01" }] : []);
   if (url.endsWith("/deal-threads")) return json(old ? [thread] : []);
@@ -149,7 +150,7 @@ describe("administrator session writes", () => {
     expect(writes).toBe(0);
   });
 
-  it("does not request a step-up code for an old base login", async () => {
+  it("does not submit independent MFA proof for an old base login", async () => {
     const { AdminRoommatesExperience } = await import("../components/marketplace/admin-experiences");
     let writes = 0;
     vi.stubGlobal("fetch", vi.fn(async (input, init) => {
@@ -159,7 +160,8 @@ describe("administrator session writes", () => {
     writeStoredAuthSession("account-a");
     render(<AdminRoommatesExperience />);
     fireEvent.click(await screen.findByRole("button", { name: "保存资料" }));
-    const send = await screen.findByRole("button", { name: "发送管理员验证码" });
+    fireEvent.change(await screen.findByLabelText("验证器验证码"), { target: { value: "123456" } });
+    const send = screen.getByRole("button", { name: "完成管理员验证" });
     localStorage.setItem("sublet_auth_session", JSON.stringify({ version: 1, accessToken: "account-b" }));
     fireEvent.click(send);
     await act(async () => undefined);

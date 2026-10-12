@@ -1,11 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type ComponentProps } from "react";
+import Link from "next/link";
 import { DemoPaymentPanel } from "@/components/demo-payment-panel";
 import { apiGet } from "@/lib/api";
 import { assertCurrentAuthSession } from "@/lib/auth-session";
 import { createPaymentCheckout, newIdempotencyKey, type ApiRentalApplication } from "@/lib/rental-applications";
 import { useWindowFocusRefresh } from "@/lib/use-window-focus-refresh";
+import { toProductApiError } from "@/lib/product-errors";
 
 type Props = ComponentProps<typeof DemoPaymentPanel>;
 type PaymentStatus = "AWAITING_PAYMENT" | "PROCESSING" | "PAID" | "REFUNDED" | "RELEASED" | "CANCELLED";
@@ -24,6 +26,7 @@ function PaymentSession(props: Props) {
   const [mode, setMode] = useState<"demo" | "production" | null>(null);
   const [status, setStatus] = useState<PaymentStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [requiresMfa, setRequiresMfa] = useState(false);
   const [pending, setPending] = useState(false);
   const mounted = useRef(true);
   const busy = useRef(false);
@@ -60,7 +63,7 @@ function PaymentSession(props: Props) {
   async function checkout() {
     if (busy.current || currentUserId !== application.submitterId || status !== "AWAITING_PAYMENT" || application.status !== "ACCEPTED") return;
     busy.current = true;
-    setPending(true); setError(null);
+    setPending(true); setError(null); setRequiresMfa(false);
     try {
       assertCurrentAuthSession(token);
       const storageKey = `sublet_checkout:${encodeURIComponent(currentUserId)}:${encodeURIComponent(application.id)}`;
@@ -73,7 +76,10 @@ function PaymentSession(props: Props) {
       if (destination.protocol !== "https:" || destination.username || destination.password) throw new Error("付款链接无效，请刷新后重试。");
       window.location.assign(destination.href);
     } catch (caught) {
-      if (mounted.current) setError(caught instanceof Error ? caught.message : "付款暂时无法开始，请重试。");
+      if (mounted.current) {
+        setError(caught instanceof Error ? caught.message : "付款暂时无法开始，请重试。");
+        setRequiresMfa(["MFA_REQUIRED", "MFA_VERIFICATION_REQUIRED"].includes(toProductApiError(caught).code ?? ""));
+      }
     } finally {
       busy.current = false;
       if (mounted.current) setPending(false);
@@ -89,5 +95,6 @@ function PaymentSession(props: Props) {
       : <p>等待申请人完成付款。</p> : null}
     <button disabled={pending} onClick={() => void load()} className="secondary-action">刷新付款状态</button>
     {error ? <p role="alert" className="text-sm text-red-700">{error}</p> : null}
+    {requiresMfa ? <Link href="/account/verification" className="inline-flex min-h-11 items-center text-sm font-bold text-blue-700 underline underline-offset-4">前往完成双重验证，再返回付款</Link> : null}
   </section>;
 }

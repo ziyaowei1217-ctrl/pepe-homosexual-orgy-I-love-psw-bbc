@@ -18,8 +18,27 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
+RUN apk upgrade --no-cache \
+  && rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack \
+  && rm -f /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack \
+    /usr/local/bin/pnpm /usr/local/bin/pnpx /usr/local/bin/yarn /usr/local/bin/yarnpkg
 COPY --from=build /app/.next/standalone ./
 COPY --from=build /app/.next/static ./.next/static
+# Next's server trace conservatively includes its optional production compiler
+# path.  A prebuilt standalone server never compiles source at runtime, so keep
+# webpack, TypeScript, esbuild, and their traced-only vulnerable metadata/binary
+# out of the deployable image.
+RUN rm -rf \
+    node_modules/typescript \
+    node_modules/.pnpm/node_modules/esbuild \
+    node_modules/.pnpm/node_modules/webpack \
+    node_modules/.pnpm/@esbuild+* \
+    node_modules/.pnpm/esbuild@* \
+    node_modules/.pnpm/typescript@* \
+    node_modules/.pnpm/webpack@* \
+    node_modules/.pnpm/browserslist@* \
+    node_modules/.pnpm/baseline-browser-mapping@* \
+    node_modules/.pnpm/fast-uri@*
 USER node
 EXPOSE 3000
 CMD ["node", "server.js"]

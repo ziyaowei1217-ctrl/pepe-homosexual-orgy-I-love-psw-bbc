@@ -581,3 +581,7 @@ function apiBaseUrl() {
 function apiOrigin() {
   return new URL(apiBaseUrl()).origin;
 }
+
+export function revokeSession(token: string) {
+  return apiPost<{ revoked: true }>("/auth/logout", {}, token);
+}

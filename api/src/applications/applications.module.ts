@@ -1,3 +1,4 @@
+import { PaymentMfaGuard } from "../auth/payment-mfa.guard";
 import { Module } from "@nestjs/common";
 
 import { AuthModule } from "../auth/auth.module";
@@ -10,7 +11,7 @@ import { ApplicationsService } from "./applications.service";
 @Module({
   imports: [AuthModule, PrismaModule, PaymentCommandsModule, DealThreadsModule],
   controllers: [ApplicationsController],
-  providers: [ApplicationsService],
+  providers: [ApplicationsService, PaymentMfaGuard],
   exports: [ApplicationsService]
 })
 export class ApplicationsModule {}

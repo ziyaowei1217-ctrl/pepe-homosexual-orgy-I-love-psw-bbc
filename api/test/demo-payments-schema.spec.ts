@@ -1,3 +1,4 @@
+import { testDatabaseContainer, testDatabaseUser } from "./support/postgres-target";
 import { randomUUID } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { Prisma } from "@prisma/client";
@@ -89,7 +90,7 @@ describeDatabase("demo payment PostgreSQL constraints", () => {
 function execute(sql: string) {
   const result = spawnSync(
     "docker",
-    ["exec", "-i", "sublet-pipeline-db", "psql", "-v", "ON_ERROR_STOP=1", "-U", "sublet", "-d", database.databaseName],
+    ["exec", "-i", testDatabaseContainer(), "psql", "-v", "ON_ERROR_STOP=1", "-U", testDatabaseUser(), "-d", database.databaseName],
     { encoding: "utf8", input: sql, timeout: 10_000 }
   );
   if (result.status !== 0) throw new Error(result.stderr || result.stdout);

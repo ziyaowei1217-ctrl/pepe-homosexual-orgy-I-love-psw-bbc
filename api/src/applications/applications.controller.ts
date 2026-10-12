@@ -1,5 +1,6 @@
 import { Body, Controller, Get, Headers, Inject, Param, Post, Req, UseGuards, ValidationPipe } from "@nestjs/common";
 
+import { PaymentMfaGuard } from "../auth/payment-mfa.guard";
 import { AuthGuard, type AuthenticatedRequest } from "../auth/auth.guard";
 import { ApplicationDecisionDto, CancelRentalApplicationDto, CreateRentalApplicationDto } from "./applications.dto";
 import { ApplicationsService } from "./applications.service";
@@ -72,6 +73,7 @@ export class ApplicationsController {
     return this.applications.withdraw(request.user.id, id, idempotencyKey);
   }
 
+  @UseGuards(PaymentMfaGuard)
   @Post(":id/accept")
   accept(
     @Req() request: AuthenticatedRequest,
@@ -92,6 +94,7 @@ export class ApplicationsController {
     return this.applications.reject(request.user.id, id, idempotencyKey, dto);
   }
 
+  @UseGuards(PaymentMfaGuard)
   @Post(":id/cancel")
   cancel(
     @Req() request: AuthenticatedRequest,

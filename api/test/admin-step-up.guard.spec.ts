@@ -6,77 +6,19 @@ import { AuditService } from "../src/audit/audit.service";
 import { AdminListingsController } from "../src/listings/admin-listings.controller";
 
 describe("AdminStepUpGuard", () => {
-  it("allows a step-up completed exactly within the 30-minute window", async () => {
-    const { guard } = createGuard({ nowSeconds: 2_000 });
-
-    await expect(
-      guard.canActivate(contextFor({ role: "ADMIN", adminReauthenticatedAt: 201 }))
-    ).resolves.toBe(true);
+  it.each([1_999_000, 1_400_001])("allows matching independent verification within ten minutes (%s)",async(mfaVerifiedAt)=>{
+    const {guard}=createGuard({nowSeconds:2000,mfaVerifiedAt});
+    await expect(guard.canActivate(contextFor({role:"ADMIN",mfaVerifiedAt}))).resolves.toBe(true);
   });
-
-  it("allows a step-up completed exactly 30 minutes ago", async () => {
-    const { guard } = createGuard({ nowSeconds: 2_000 });
-
-    await expect(
-      guard.canActivate(contextFor({ role: "ADMIN", adminReauthenticatedAt: 200 }))
-    ).resolves.toBe(true);
+  it.each([undefined,1_400_000,2_000_001])("blocks missing, expired and future verification (%s)",async(mfaVerifiedAt)=>{
+    const {guard,prisma}=createGuard({nowSeconds:2000,mfaVerifiedAt});
+    await expect(guard.canActivate(contextFor({role:"ADMIN",mfaVerifiedAt}))).rejects.toMatchObject({status:403,response:{code:"MFA_VERIFICATION_REQUIRED"}});
+    expect(prisma.auditEvent.rows.at(-1)).toMatchObject({action:"ADMIN_WRITE_BLOCKED",outcome:"BLOCKED"});
   });
-
-  it.each([undefined, 200])(
-    "blocks missing or expired step-up and audits the route",
-    async (adminReauthenticatedAt) => {
-      const { guard, prisma } = createGuard({ nowSeconds: 2_001 });
-
-      await expect(
-        guard.canActivate(contextFor({ role: "ADMIN", adminReauthenticatedAt }))
-      ).rejects.toMatchObject({
-        status: 403,
-        response: {
-          statusCode: 403,
-          code: "ADMIN_REAUTH_REQUIRED",
-          message: "Administrator verification is required"
-        }
-      });
-      expect(prisma.auditEvent.rows.at(-1)).toMatchObject({
-        actorType: "USER",
-        actorUserId: "admin-1",
-        actorEmail: "admin@example.com",
-        action: "ADMIN_WRITE_BLOCKED",
-        targetType: "HTTP_ROUTE",
-        targetId: "AdminListingsController.approve",
-        outcome: "BLOCKED",
-        requestId: "request-1",
-        metadata: {
-          method: "POST",
-          reason: "ADMIN_REAUTH_REQUIRED"
-        }
-      });
-    }
-  );
-
-  it("rejects a claim more than 60 seconds in the future", async () => {
-    const { guard } = createGuard({ nowSeconds: 2_000 });
-
-    await expect(
-      guard.canActivate(contextFor({ role: "ADMIN", adminReauthenticatedAt: 2_061 }))
-    ).rejects.toMatchObject({
-      status: 403,
-      response: {
-        statusCode: 403,
-        code: "ADMIN_REAUTH_REQUIRED",
-        message: "Administrator verification is required"
-      }
-    });
+  it("rejects an email-only step-up even when fresh",async()=>{
+    const {guard}=createGuard({nowSeconds:2000});
+    await expect(guard.canActivate(contextFor({role:"ADMIN",adminReauthenticatedAt:2000}))).rejects.toMatchObject({status:403});
   });
-
-  it("allows a claim exactly 60 seconds in the future", async () => {
-    const { guard } = createGuard({ nowSeconds: 2_000 });
-
-    await expect(
-      guard.canActivate(contextFor({ role: "ADMIN", adminReauthenticatedAt: 2_060 }))
-    ).resolves.toBe(true);
-  });
-
   it("uses static handler identity without persisting sensitive request path values", async () => {
     const { guard, prisma } = createGuard({ nowSeconds: 2_001 });
     const pathEmail = "victim@example.com";
@@ -93,8 +35,8 @@ describe("AdminStepUpGuard", () => {
       status: 403,
       response: {
         statusCode: 403,
-        code: "ADMIN_REAUTH_REQUIRED",
-        message: "Administrator verification is required"
+        code: "MFA_VERIFICATION_REQUIRED",
+        message: "Independent administrator verification is required"
       }
     });
     expect(prisma.auditEvent.rows.at(-1)).toMatchObject({
@@ -107,6 +49,35 @@ describe("AdminStepUpGuard", () => {
     const auditPayload = JSON.stringify(prisma.auditEvent.rows.at(-1));
     expect(auditPayload).not.toContain(pathEmail);
     expect(auditPayload).not.toContain(pathToken);
+  });
+
+  it("records the authenticated actor while redacting token-like route identifiers", async () => {
+    const { guard, prisma } = createGuard({ nowSeconds: 2_001 });
+    const context = contextFor({ role: "ADMIN" });
+    const controller = function Controller() {};
+    Object.defineProperty(controller, "name", { value: "Controller".repeat(30) });
+    context.getClass = () => controller as never;
+    await expect(guard.canActivate(context)).rejects.toMatchObject({ status: 403 });
+    expect(prisma.auditEvent.rows.at(-1)).toMatchObject({
+      actorType: "USER", actorUserId: "admin-1", actorEmail: "admin@example.com",
+      targetType: "HTTP_ROUTE", requestId: "request-1", outcome: "BLOCKED"
+    });
+    const route = prisma.auditEvent.rows.at(-1)?.targetId;
+    expect(typeof route).toBe("string");
+    expect(route).toBe("[REDACTED]");
+  });
+
+  it("retains a usable audit route identity when controller and handler names are absent", async () => {
+    const { guard, prisma } = createGuard({ nowSeconds: 2_001 });
+    const context = contextFor({ role: "ADMIN" });
+    const anonymous = function () {};
+    Object.defineProperty(anonymous, "name", { value: "" });
+    context.getClass = () => anonymous as never;
+    context.getHandler = () => anonymous;
+    await expect(guard.canActivate(context)).rejects.toMatchObject({ status: 403 });
+    expect(prisma.auditEvent.rows.at(-1)).toMatchObject({
+      targetId: "UnknownController.unknownHandler", targetType: "HTTP_ROUTE"
+    });
   });
 
   it("waits for the blocked-write audit to persist before throwing HTTP 403", async () => {
@@ -137,17 +108,19 @@ describe("AdminStepUpGuard", () => {
       status: 403,
       response: {
         statusCode: 403,
-        code: "ADMIN_REAUTH_REQUIRED",
-        message: "Administrator verification is required"
+        code: "MFA_VERIFICATION_REQUIRED",
+        message: "Independent administrator verification is required"
       }
     });
     expect(prisma.auditEvent.rows).toHaveLength(1);
   });
 });
 
-function createGuard({ nowSeconds, auditRelease }: { nowSeconds: number; auditRelease?: Promise<void> }) {
+function createGuard({ nowSeconds, auditRelease, mfaVerifiedAt }: { nowSeconds: number; auditRelease?: Promise<void>; mfaVerifiedAt?:number }) {
   const rows: Array<Record<string, unknown>> = [];
   const prisma = {
+    userMfa:{findUnique:async()=>({enabledAt:new Date(0)})},
+    authSession:{findUnique:async()=>({id:"session-1",userId:"admin-1",revokedAt:null,expiresAt:new Date(9_000_000),mfaVerifiedAt:mfaVerifiedAt===undefined?null:new Date(mfaVerifiedAt)})},
     auditEvent: {
       rows,
       createCalls: 0,
@@ -169,7 +142,7 @@ function createGuard({ nowSeconds, auditRelease }: { nowSeconds: number; auditRe
 }
 
 function contextFor(
-  user: { role: string; adminReauthenticatedAt?: number },
+  user: { role: string; adminReauthenticatedAt?: number; mfaVerifiedAt?:number },
   request: { originalUrl?: string; method?: string } = {}
 ): ExecutionContext {
   return {
@@ -180,6 +153,7 @@ function contextFor(
         headers: {},
         user: {
           id: "admin-1",
+          sessionId:"session-1",
           email: "admin@example.com",
           ...user
         },

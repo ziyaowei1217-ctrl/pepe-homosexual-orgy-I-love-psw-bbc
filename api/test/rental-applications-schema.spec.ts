@@ -1,3 +1,4 @@
+import { testDatabaseContainer, testDatabaseUser } from "./support/postgres-target";
 import { randomUUID } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { Prisma } from "@prisma/client";
@@ -129,7 +130,7 @@ function query(sql: string) {
 function runPsql(args: string[], input?: string) {
   const result = spawnSync(
     "docker",
-    ["exec", "-i", "sublet-pipeline-db", "psql", "-v", "ON_ERROR_STOP=1", "-U", "sublet", ...args],
+    ["exec", "-i", testDatabaseContainer(), "psql", "-v", "ON_ERROR_STOP=1", "-U", testDatabaseUser(), ...args],
     { encoding: "utf8", input, timeout: 10_000 }
   );
   if (result.status !== 0) throw new Error(result.stderr || result.stdout);

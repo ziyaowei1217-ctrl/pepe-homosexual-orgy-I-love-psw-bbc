@@ -1,3 +1,4 @@
+import { signTestSession, withTestSessions } from "./support/auth-sessions";
 import { ExecutionContext, UnauthorizedException } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { describe, expect, it } from "vitest";
@@ -20,18 +21,19 @@ describe("AuthGuard", () => {
 
   it("rejects valid tokens when the user no longer exists", async () => {
     const jwt = new JwtService({ secret: "test-secret" });
-    const token = await jwt.signAsync({ sub: "missing-user", email: "old@example.com", role: "ADMIN" });
-    const guard = createGuard(jwt, createPrismaMock());
+    const prisma = withTestSessions(createPrismaMock());
+    const token = await signTestSession(jwt, prisma, { sub: "missing-user", email: "old@example.com", role: "ADMIN" });
+    const guard = createGuard(jwt, prisma);
 
     await expect(guard.canActivate(contextWithHeader(`Bearer ${token}`))).rejects.toBeInstanceOf(UnauthorizedException);
   });
 
   it("attaches the current database user to the request", async () => {
     const jwt = new JwtService({ secret: "test-secret" });
-    const token = await jwt.signAsync({ sub: "user-1", email: "old@example.com", role: "ADMIN" });
     const prisma = createPrismaMock({
       users: [{ id: "user-1", email: "current@example.com", role: "USER" }]
     });
+    const token = await signTestSession(jwt, prisma, { sub: "user-1", email: "old@example.com", role: "ADMIN" });
     const request = requestWithHeader(`Bearer ${token}`);
     const guard = createGuard(jwt, prisma);
 
@@ -39,6 +41,7 @@ describe("AuthGuard", () => {
 
     expect(request.user).toEqual({
       id: "user-1",
+      sessionId: expect.any(String),
       email: "current@example.com",
       role: "USER"
     });
@@ -46,10 +49,10 @@ describe("AuthGuard", () => {
 
   it("uses the current database role instead of a stale admin token role", async () => {
     const jwt = new JwtService({ secret: "test-secret" });
-    const token = await jwt.signAsync({ sub: "user-1", email: "admin@example.com", role: "ADMIN" });
     const prisma = createPrismaMock({
       users: [{ id: "user-1", email: "admin@example.com", role: "USER" }]
     });
+    const token = await signTestSession(jwt, prisma, { sub: "user-1", email: "admin@example.com", role: "ADMIN" });
     const request = requestWithHeader(`Bearer ${token}`);
     const guard = createGuard(jwt, prisma);
 
@@ -60,10 +63,10 @@ describe("AuthGuard", () => {
 
   it("copies a verified numeric administrator reauthentication timestamp", async () => {
     const jwt = new JwtService({ secret: "test-secret" });
-    const token = await jwt.signAsync({ sub: "admin-1", adminReauthenticatedAt: 1_912_345_600 });
     const prisma = createPrismaMock({
       users: [{ id: "admin-1", email: "admin@example.com", role: "ADMIN" }]
     });
+    const token = await signTestSession(jwt, prisma, { sub: "admin-1", adminReauthenticatedAt: 1_912_345_600 });
     const request = requestWithHeader(`Bearer ${token}`);
     const guard = createGuard(jwt, prisma);
 
@@ -76,10 +79,10 @@ describe("AuthGuard", () => {
     "does not copy an unsafe administrator reauthentication timestamp: %s",
     async (adminReauthenticatedAt) => {
       const jwt = new JwtService({ secret: "test-secret" });
-      const token = await jwt.signAsync({ sub: "admin-1", adminReauthenticatedAt });
       const prisma = createPrismaMock({
         users: [{ id: "admin-1", email: "admin@example.com", role: "ADMIN" }]
       });
+      const token = await signTestSession(jwt, prisma, { sub: "admin-1", adminReauthenticatedAt });
       const request = requestWithHeader(`Bearer ${token}`);
       const guard = createGuard(jwt, prisma);
 
@@ -105,7 +108,7 @@ function createPrismaMock({ users = [] }: { users?: TestUser[] } = {}) {
 }
 
 function createGuard(jwt: JwtService, prisma: ReturnType<typeof createPrismaMock>) {
-  return new AuthGuard(new AuthenticatedUserService(jwt, prisma as never));
+  return new AuthGuard(new AuthenticatedUserService(jwt, withTestSessions(prisma) as never));
 }
 
 function requestWithHeader(authorization?: string): AuthenticatedRequest {

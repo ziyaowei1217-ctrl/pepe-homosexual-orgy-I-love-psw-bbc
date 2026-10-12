@@ -24,34 +24,44 @@ import { useSavedListings } from "@/components/marketplace/saved-listings-provid
 import { ListingPhotoGallery } from "@/components/marketplace/listing-photo-gallery";
 import { ListingStayDialog, ListingStayFields } from "@/components/marketplace/listing-stay-selector";
 import { defaultMapAttribution, getListingCoordinates, getMapTiles } from "@/lib/listing-map";
-import { applicationHref, earliestListingDate, initialListingStay, listingHref, listingStayError, type ListingStay } from "@/lib/listing-stay";
+import { applicationHref, earliestListingDate, initialListingStay, listingHref, listingStayError, localDate, type ListingStay } from "@/lib/listing-stay";
 import type { PreviewListing } from "@/lib/preview-data";
 import { safeSearchReturn } from "@/lib/search-state";
 import { cn } from "@/lib/utils";
 
-export function ListingDetailExperience({ listing, initialStay }: { listing: PreviewListing; initialStay?: Partial<ListingStay> }) {
+export function ListingDetailExperience({ listing, initialStay, dateSnapshot }: { listing: PreviewListing; initialStay?: Partial<ListingStay>; dateSnapshot?: string }) {
   const { savedIds, toggleSaved, accountLabel } = useSavedListings();
   const saved = savedIds.has(listing.id);
+  const [today, setToday] = useState(() => dateSnapshot ?? localDate());
   const [stay, setStay] = useState(() => {
     if (typeof window !== "undefined" && window.location.pathname === `/listing/${encodeURIComponent(listing.id)}`) {
       const params = new URLSearchParams(window.location.search);
-      return initialListingStay(listing, { moveIn: params.get("moveIn") ?? "", moveOut: params.get("moveOut") ?? "" });
+      return initialListingStay(listing, { moveIn: params.get("moveIn") ?? "", moveOut: params.get("moveOut") ?? "" }, today);
     }
-    return initialListingStay(listing, initialStay);
+    return initialListingStay(listing, initialStay, today);
   });
   const [stayOpen, setStayOpen] = useState(false);
   const [selectionId, setSelectionId] = useState("");
-  const stayError = listingStayError(stay, listing);
+  const stayError = listingStayError(stay, listing, today);
   const applyHref = applicationHref(listing.id, stay, selectionId);
   const inboxHref = `/inbox?listingId=${encodeURIComponent(listing.id)}`;
   const mapTiles = getMapTiles(getListingCoordinates(listing.area), 12, { width: 900, height: 340 });
   const mapAttribution = process.env.NEXT_PUBLIC_MAP_ATTRIBUTION ?? defaultMapAttribution;
-  const earliestMoveIn = earliestListingDate(listing);
+  const earliestMoveIn = earliestListingDate(listing, today);
   const availabilityLabel = listing.availableFrom && listing.availableTo > earliestMoveIn ? `${earliestMoveIn} 可入住` : "租期待确认";
   const moveInTags = [...listing.tags.filter((tag) => !tag.includes("入住")), availabilityLabel];
   const amenities = listing.tags.filter((tag) => !tag.includes("入住") && tag !== "房东知情");
   const [shareStatus, setShareStatus] = useState<string | null>(null);
   const [returnHref, setReturnHref] = useState("/search");
+
+  useEffect(() => {
+    // Reuse the server date for hydration, then validate against the browser's
+    // current LA date, including when a tab is revisited after midnight.
+    const refreshDate = () => setToday(localDate());
+    refreshDate();
+    window.addEventListener("focus", refreshDate);
+    return () => window.removeEventListener("focus", refreshDate);
+  }, []);
 
   useEffect(() => {
     try { setReturnHref(safeSearchReturn(sessionStorage.getItem("sublet:last-search"))); } catch { /* The search route remains available without storage. */ }
@@ -100,7 +110,7 @@ export function ListingDetailExperience({ listing, initialStay }: { listing: Pre
           <Link href={returnHref} className="flex items-center gap-2 rounded-full px-3 py-2 text-sm font-bold text-slate-600 hover:bg-slate-100"><ArrowLeft className="size-4" />返回搜索</Link>
           <div className="flex items-center gap-2">
             <button type="button" onClick={() => void shareListing()} className="flex items-center gap-2 rounded-full px-3 py-2 text-sm font-bold text-slate-700 hover:bg-slate-100"><Share2 className="size-4" />{shareStatus ?? "分享"}</button>
-            <button type="button" onClick={() => toggleSaved(listing.id)} className={cn("flex items-center gap-2 rounded-full px-3 py-2 text-sm font-bold hover:bg-slate-100", saved ? "text-[#2453ff]" : "text-slate-700")} aria-label={saved ? "取消收藏房源" : "收藏房源"}>
+            <button type="button" onClick={() => toggleSaved(listing.id)} className={cn("flex items-center gap-2 rounded-full px-3 py-2 text-sm font-bold hover:bg-slate-100", saved ? "text-[#2453ff]" : "text-slate-700")} aria-label={saved ? "已收藏，取消收藏房源" : "收藏房源"}>
               <Heart className={cn("size-4", saved && "fill-current")} />{saved ? "已收藏" : "收藏"}
             </button>
           </div>
@@ -169,7 +179,7 @@ export function ListingDetailExperience({ listing, initialStay }: { listing: Pre
 
             <section className="py-8">
               <h2 id="listing-location" className="scroll-mt-40 text-2xl font-black tracking-[-0.035em]">位置与通勤</h2>
-              <div className="relative mt-6 h-[340px] overflow-hidden rounded-[26px] bg-[#e6ebf3]" aria-label="房源位置地图">
+              <div role="region" className="relative mt-6 h-[340px] overflow-hidden rounded-[26px] bg-[#e6ebf3]" aria-label="房源位置地图">
                 <div className="absolute left-1/2 top-0 h-[340px] w-[900px] -translate-x-1/2">
                   {mapTiles.map((tile) => <div key={tile.id} className="absolute size-64 select-none bg-cover bg-center" style={{ backgroundImage: `url(${tile.url})`, left: tile.x, top: tile.y }} />)}
                 </div>
@@ -183,26 +193,26 @@ export function ListingDetailExperience({ listing, initialStay }: { listing: Pre
           <aside className="hidden lg:block">
             <div className="sticky top-[148px] rounded-[24px] border border-slate-200 bg-white p-6 shadow-[0_12px_40px_rgba(15,23,42,0.08)]">
               <div className="flex items-end justify-between gap-4"><p><span className="text-3xl font-black tracking-[-0.05em]">${listing.price.toLocaleString("en-US")}</span><span className="text-sm text-slate-500"> / 月</span></p><span className="flex items-center gap-1 text-sm font-bold"><Star className="size-4 fill-amber-400 text-amber-400" />{listing.score}</span></div>
-              <div className="mt-5"><ListingStayFields listing={listing} stay={stay} onChange={updateStay} /></div>
+              <div className="mt-5"><ListingStayFields listing={listing} stay={stay} onChange={updateStay} today={today} /></div>
               {stayError ? <p role="alert" className="mt-3 text-sm leading-6 text-red-700">{stayError}</p> : <p className="mt-3 flex items-center gap-1.5 text-xs text-indigo-700"><Check className="size-3.5" />所选租期可申请</p>}
               {stayError ? <button disabled className="mt-4 w-full rounded-xl bg-slate-200 px-5 py-3.5 text-sm font-bold text-slate-500">请先确认租期</button> : <Link href={applyHref} className="mt-4 flex w-full items-center justify-center rounded-xl bg-[#2453ff] px-5 py-3.5 text-sm font-bold text-white shadow-[0_10px_28px_rgba(36,83,255,0.18)] hover:bg-blue-700">申请租住</Link>}
               <p className="mt-3 text-center text-xs text-slate-500">提交申请不会立即扣款</p>
               <div className="mt-5 border-t border-slate-200 pt-5">
-                <div className="flex items-center justify-between"><h2 className="text-sm font-black">费用明细</h2><span className="text-xs text-slate-400">月度估算</span></div>
+                <div className="flex items-center justify-between"><h2 className="text-sm font-black">费用明细</h2><span className="text-xs text-slate-600">月度估算</span></div>
                 <dl className="mt-4 space-y-3 text-sm"><div className="flex justify-between text-slate-600"><dt>月租</dt><dd>${listing.price.toLocaleString("en-US")}</dd></div><div className="flex justify-between text-slate-600"><dt>平台服务</dt><dd>申请接受后确认</dd></div><div className="flex justify-between border-t border-slate-200 pt-3 font-black"><dt>申请时支付</dt><dd>$0</dd></div></dl>
               </div>
               <div className="mt-5 grid grid-cols-2 gap-2">
                 <Link href={`${inboxHref}&tour=1`} className="flex items-center justify-center gap-1.5 rounded-full border border-slate-200 px-3 py-2.5 text-xs font-black text-slate-700 hover:bg-slate-50"><CalendarDays className="size-4" />预约看房</Link>
                 <Link href={inboxHref} className="flex items-center justify-center gap-1.5 rounded-full border border-slate-200 px-3 py-2.5 text-xs font-black text-slate-700 hover:bg-slate-50"><MessageCircle className="size-4" />联系房东</Link>
               </div>
-              <p className="mt-4 text-center text-[11px] leading-5 text-slate-400">{accountLabel}</p>
+              <p className="mt-4 text-center text-[11px] leading-5 text-slate-600">{accountLabel}</p>
             </div>
           </aside>
         </div>
       </div>
 
       <div className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white px-4 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2 shadow-[0_-8px_30px_rgba(15,23,42,0.08)] lg:hidden">
-        <div className="mx-auto flex max-w-2xl items-center gap-3"><div className="min-w-0 flex-1"><p className="text-lg font-black">${listing.price.toLocaleString("en-US")} <span className="text-xs font-medium text-slate-600">/ 月</span></p><button type="button" aria-label="编辑租期" onClick={() => setStayOpen(true)} className="block min-h-7 max-w-full truncate text-xs font-semibold text-slate-600 underline underline-offset-4">{stayError ? "选择可租日期" : `${stay.moveIn.replaceAll("-", "/")} – ${stay.moveOut.replaceAll("-", "/")}`}<span className="ml-2 text-[#2453ff]">修改</span></button></div>{stayError ? <button type="button" onClick={() => setStayOpen(true)} className="shrink-0 rounded-xl bg-[#2453ff] px-5 py-3.5 text-sm font-bold text-white">选择租期</button> : <Link href={applyHref} className="shrink-0 rounded-xl bg-[#2453ff] px-5 py-3.5 text-sm font-bold text-white">申请租住</Link>}</div>
+        <div className="mx-auto flex max-w-2xl items-center gap-3"><div className="min-w-0 flex-1"><p className="text-lg font-black">${listing.price.toLocaleString("en-US")} <span className="text-xs font-medium text-slate-600">/ 月</span></p><button type="button" aria-label={`${stayError ? "选择可租日期" : `${stay.moveIn.replaceAll("-", "/")} – ${stay.moveOut.replaceAll("-", "/")}`} 修改租期`} onClick={() => setStayOpen(true)} className="block min-h-7 max-w-full truncate text-xs font-semibold text-slate-600 underline underline-offset-4">{stayError ? "选择可租日期" : `${stay.moveIn.replaceAll("-", "/")} – ${stay.moveOut.replaceAll("-", "/")}`}<span className="ml-2 text-[#2453ff]">修改</span></button></div>{stayError ? <button type="button" onClick={() => setStayOpen(true)} className="shrink-0 rounded-xl bg-[#2453ff] px-5 py-3.5 text-sm font-bold text-white">选择租期</button> : <Link href={applyHref} className="shrink-0 rounded-xl bg-[#2453ff] px-5 py-3.5 text-sm font-bold text-white">申请租住</Link>}</div>
       </div>
 
       {stayOpen ? <ListingStayDialog listing={listing} stay={stay} onClose={() => setStayOpen(false)} onApply={(value) => { updateStay(value); setStayOpen(false); }} /> : null}

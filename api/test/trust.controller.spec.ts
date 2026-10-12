@@ -1,3 +1,4 @@
+import { signTestSession } from "./support/auth-sessions";
 import "reflect-metadata";
 import { INestApplication } from "@nestjs/common";
 import { JwtModule, JwtService } from "@nestjs/jwt";
@@ -65,7 +66,7 @@ describe("TrustController HTTP authorization", () => {
   });
 
   it("returns 403 when an ordinary user reads the Trust queue", async () => {
-    const token = await jwt.signAsync({ sub: "user-1" });
+    const token = await signTestSession(jwt, app.get(PrismaService), { sub: "user-1" });
 
     await request(app.getHttpServer())
       .get("/api/v1/trust/queues")
@@ -74,7 +75,7 @@ describe("TrustController HTTP authorization", () => {
   });
 
   it("returns the Trust queue to an administrator", async () => {
-    const token = await jwt.signAsync({ sub: "admin-1" });
+    const token = await signTestSession(jwt, app.get(PrismaService), { sub: "admin-1" });
 
     await request(app.getHttpServer())
       .get("/api/v1/trust/queues")

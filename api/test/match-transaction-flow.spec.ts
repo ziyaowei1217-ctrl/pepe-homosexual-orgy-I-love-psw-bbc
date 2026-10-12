@@ -1,3 +1,4 @@
+import { createTestSessionStore } from "./support/auth-sessions";
 import { JwtService } from "@nestjs/jwt";
 import { describe, expect, it } from "vitest";
 
@@ -193,6 +194,7 @@ function createPrismaMock() {
   };
 
   const mock = {
+    authSession: createTestSessionStore(),
     $transaction: async (operation: (transaction: object) => Promise<unknown>) =>
       operation({
         ...mock,

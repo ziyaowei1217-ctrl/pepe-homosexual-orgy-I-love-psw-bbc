@@ -18,6 +18,9 @@ export default defineConfig({
   },
   test: {
     environment: "node",
+    // Keep DOM suites within CI/desktop capacity while builds run alongside.
+    maxWorkers: 2,
+    minWorkers: 1,
     exclude: ["**/node_modules/**", "**/.next/**", "**/.tmp-tests/**", "api/**"],
     include: ["tests/**/*.test.{ts,tsx}"],
     poolOptions: {

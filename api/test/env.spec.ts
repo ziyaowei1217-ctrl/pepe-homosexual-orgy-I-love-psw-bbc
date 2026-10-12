@@ -1,3 +1,4 @@
+import { productionEnvironment } from "./support/production-environment";
 import { describe, expect, it, vi } from "vitest";
 
 import { assertProductionRuntimeConfig, getAuthSecurityConfig, getJwtSecret } from "../src/config/env";
@@ -7,10 +8,15 @@ describe("environment config", () => {
   it("requires production database, origin, and distributed messaging infrastructure", () => {
     expect(() => assertProductionRuntimeConfig({ NODE_ENV: "production" })).toThrow("DATABASE_URL");
     expect(() => assertProductionRuntimeConfig({
+      ...productionEnvironment(),
       NODE_ENV: "production",
       DATABASE_URL: "postgresql://db.example.com/app?sslmode=require",
       WEB_ORIGIN: "https://app.example.com",
-      VALKEY_URL: "rediss://cache.example.com:6379"
+      VALKEY_URL: "rediss://cache.example.com:6379",
+      JWT_SECRET: "jwt-production-fixture-with-at-least-32-bytes",
+      OTP_HASH_SECRET: "otp-production-fixture-with-at-least-32-bytes",
+      SECURITY_IDENTIFIER_HASH_SECRET: "identifier-production-fixture-with-at-least-32-bytes",
+      MFA_ENCRYPTION_KEY: "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="
     })).not.toThrow();
   });
 
@@ -26,7 +32,8 @@ describe("environment config", () => {
   });
 
   it("accepts explicit production secrets", () => {
-    expect(getJwtSecret({ nodeEnv: "production", jwtSecret: "prod-secret-value" })).toBe("prod-secret-value");
+    const jwtSecret = "jwt-production-fixture-with-at-least-32-bytes";
+    expect(getJwtSecret({ nodeEnv: "production", jwtSecret })).toBe(jwtSecret);
   });
 
   it("validates verification lifetimes and production security secrets", () => {

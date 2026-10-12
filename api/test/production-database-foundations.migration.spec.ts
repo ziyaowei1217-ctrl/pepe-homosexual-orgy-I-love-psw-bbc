@@ -1,3 +1,4 @@
+import { testDatabaseUrl, testDatabaseContainer, testDatabaseUser } from "./support/postgres-target";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
@@ -34,7 +35,7 @@ describe("operator attribution redaction migration source", () => {
 function dockerPsql(args: string[], input?: string) {
   const result = spawnSync(
     "docker",
-    ["exec", "-i", "sublet-pipeline-db", "psql", "-v", "ON_ERROR_STOP=1", "-U", "sublet", ...args],
+    ["exec", "-i", testDatabaseContainer(), "psql", "-v", "ON_ERROR_STOP=1", "-U", testDatabaseUser(), ...args],
     { encoding: "utf8", input }
   );
 
@@ -63,7 +64,7 @@ function runPrismaMigrate(database: string, ...args: string[]) {
     encoding: "utf8",
     env: {
       ...process.env,
-      DATABASE_URL: `postgresql://sublet:sublet@localhost:5432/${database}?schema=public`
+      DATABASE_URL: testDatabaseUrl(database)
     }
   });
 

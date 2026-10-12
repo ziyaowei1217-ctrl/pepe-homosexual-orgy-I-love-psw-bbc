@@ -1,6 +1,9 @@
 export const MAX_LISTING_MEDIA_BYTES = 10 * 1024 * 1024;
 export const MAX_LISTING_MEDIA_COUNT = 12;
 export const MAX_LISTING_MEDIA_PIXELS = 40_000_000;
+export const MAX_LISTING_MEDIA_DECODED_BYTES = 128 * 1024 * 1024;
+export const MAX_LISTING_MEDIA_CHANNELS = 4;
+export const MAX_LISTING_MEDIA_PARSE_MS = 3_000;
 
 export const SUPPORTED_LISTING_MEDIA_MIME_TYPES = [
   "image/jpeg",

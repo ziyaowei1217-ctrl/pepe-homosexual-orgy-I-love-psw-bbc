@@ -107,6 +107,7 @@ function requestFor(id: string, role = "USER"): AuthenticatedRequest & RequestWi
     headers: {},
     requestId: "request-1",
     user: {
+      sessionId: "test-session",
       id,
       email: `${id}@example.com`,
       role
