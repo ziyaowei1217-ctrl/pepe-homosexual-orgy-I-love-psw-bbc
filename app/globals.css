@@ -4,26 +4,27 @@
 
 @layer base {
   :root {
-    --background: 40 20% 97%;
-    --foreground: 220 24% 9%;
+    /* psw design system (see the psw 设计系统 tokens): 葡萄紫 primary, 夜墨 ink, 薰衣草白 page. */
+    --background: 250 100% 97.6%;
+    --foreground: 250 48.8% 16.9%;
     --card: 0 0% 100%;
-    --card-foreground: 220 24% 9%;
+    --card-foreground: 250 48.8% 16.9%;
     --popover: 0 0% 100%;
-    --popover-foreground: 220 24% 9%;
-    --primary: 220 24% 9%;
+    --popover-foreground: 250 48.8% 16.9%;
+    --primary: 250.4 100% 65.1%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 214 55% 95%;
-    --secondary-foreground: 220 24% 12%;
-    --muted: 40 12% 93%;
-    --muted-foreground: 218 10% 42%;
-    --accent: 229 100% 57%;
+    --secondary: 246 90.9% 95.7%;
+    --secondary-foreground: 250.1 67.1% 51.2%;
+    --muted: 252 45.5% 97.8%;
+    --muted-foreground: 250.6 16.2% 41.2%;
+    --accent: 250.4 100% 65.1%;
     --accent-foreground: 0 0% 100%;
-    --destructive: 9 76% 48%;
+    --destructive: 357.7 66.5% 45.7%;
     --destructive-foreground: 0 0% 100%;
-    --border: 216 18% 86%;
-    --input: 216 18% 84%;
-    --ring: 229 100% 57%;
-    --radius: 18px;
+    --border: 247.5 29.6% 89.4%;
+    --input: 247.5 9.7% 51.4%;
+    --ring: 250 48.8% 16.9%;
+    --radius: 16px;
   }
 
   * {
@@ -36,15 +37,20 @@
   }
 
   ::selection {
-    background: rgba(36,83,255, 0.16);
+    background: rgba(108,77,255, 0.16);
   }
 
   body {
     @apply bg-background text-foreground antialiased;
-    font-family: "Inter", "Geist", -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans CJK SC", sans-serif;
-    font-feature-settings: "cv02", "cv03", "cv04", "ss01";
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", sans-serif;
     letter-spacing: 0;
+    text-autospace: normal;
     overflow-x: hidden;
+  }
+
+  /* psw: titles use the rounded face (资源圆体); body and trust details stay on the system sans. */
+  h1, h2, h3, h4 {
+    font-family: var(--font-rounded), "PingFang SC", "Microsoft YaHei", sans-serif;
   }
 }
 
@@ -62,7 +68,7 @@
   }
 
   .app-panel {
-    @apply rounded-[20px] border border-blue-100 bg-white p-4 shadow-panel md:p-5 xl:p-6;
+    @apply rounded-psw-xl border border-line bg-surface p-4 md:p-5 xl:p-6;
   }
 
   .app-card-grid {
@@ -74,7 +80,7 @@
   }
 
   .editorial-title {
-    @apply text-balance text-[clamp(2rem,4vw,4.75rem)] font-black leading-[0.94] tracking-[-0.045em] text-foreground;
+    @apply text-balance text-[clamp(2rem,4vw,4.75rem)] font-black leading-[1.15] tracking-[-0.01em] text-foreground;
   }
 
   .editorial-toolbar {
@@ -90,19 +96,19 @@
   }
 
   .editorial-panel {
-    @apply min-w-0 rounded-[18px] border border-border bg-card shadow-card;
+    @apply min-w-0 rounded-psw-xl border border-line bg-card;
   }
 
   .application-input {
-    @apply h-12 min-w-0 w-full rounded-[16px] border border-slate-200 bg-white px-4 text-base font-semibold text-slate-900 outline-none transition-colors placeholder:text-slate-400 focus:border-blue-400 focus:ring-4 focus:ring-blue-50 sm:text-sm;
+    @apply h-12 min-w-0 w-full rounded-psw-md border border-control-border bg-surface px-4 text-base font-semibold text-ink outline-none transition-colors placeholder:text-ink-placeholder focus:border-primary focus:ring-4 focus:ring-primary-soft sm:text-sm;
   }
 
   .primary-action {
-    @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-full bg-[#2453ff] px-5 py-2.5 text-sm font-black text-white shadow-[0_10px_24px_rgba(36,83,255,0.3)] transition hover:-translate-y-0.5 hover:bg-[#1a3dd6] disabled:pointer-events-none disabled:opacity-50;
+    @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-full bg-primary px-5 py-2.5 font-rounded text-sm font-bold text-white transition active:scale-[0.97] hover:bg-primary-hover disabled:pointer-events-none disabled:opacity-50;
   }
 
   .secondary-action {
-    @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-full border-[1.5px] border-[#0b1026] bg-white px-5 py-2.5 text-sm font-black text-[#0b1026] transition hover:-translate-y-0.5 hover:bg-[#0b1026] hover:text-white disabled:pointer-events-none disabled:opacity-50;
+    @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-full bg-primary-soft px-5 py-2.5 font-rounded text-sm font-bold text-primary-text transition active:scale-[0.97] hover:bg-primary-soft-hover hover:text-ink disabled:pointer-events-none disabled:opacity-50;
   }
 }
 
@@ -113,7 +119,7 @@
 
   .app-scrollbar {
     scrollbar-width: thin;
-    scrollbar-color: rgba(65, 116, 141, 0.35) transparent;
+    scrollbar-color: rgba(94,88,122, 0.35) transparent;
   }
 
   .app-scrollbar::-webkit-scrollbar {
@@ -122,40 +128,40 @@
   }
 
   .app-scrollbar::-webkit-scrollbar-thumb {
-    background: rgba(65, 116, 141, 0.35);
+    background: rgba(94,88,122, 0.35);
     border-radius: 999px;
   }
 
   .text-display {
-    font-family: "Inter", "Geist", -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", sans-serif;
+    font-family: var(--font-rounded), "PingFang SC", "Microsoft YaHei", sans-serif;
     letter-spacing: 0;
   }
 
-  /* Numbers, prices and Latin display copy; CJK falls through to the system stack. */
+  /* Numbers, prices and Latin display copy use Nunito; CJK falls through to the rounded face. */
   .font-display {
-    font-family: "Space Grotesk Variable", -apple-system, BlinkMacSystemFont, "PingFang SC", "Noto Sans CJK SC", "Microsoft YaHei", sans-serif;
-    letter-spacing: -0.02em;
+    font-family: var(--font-num), var(--font-rounded), "PingFang SC", "Microsoft YaHei", sans-serif;
+    letter-spacing: 0;
     font-feature-settings: "tnum" 1;
   }
 
   .photo-placeholder {
-    background-color: #dce2f0;
-    background-image: repeating-linear-gradient(135deg, rgba(11, 16, 38, 0.05) 0 12px, transparent 12px 24px);
+    background-color: theme("colors.primary.soft");
+    background-image: repeating-linear-gradient(135deg, rgba(29,22,64, 0.05) 0 12px, transparent 12px 24px);
   }
 
   .glass-panel {
     background: rgba(255, 255, 255, 0.86);
-    box-shadow: 0 24px 80px rgba(0, 36, 84, 0.08);
+    box-shadow: 0 24px 80px rgba(29,22,64, 0.08);
     backdrop-filter: blur(18px);
   }
 }
 
 @layer components {
   .search-pill {
-    @apply inline-flex min-h-11 shrink-0 items-center gap-2 whitespace-nowrap rounded-full border border-[#cdd2e0] bg-white px-4 py-2.5 text-[13px] font-semibold text-[#0b1026] transition-colors hover:border-[#0b1026];
+    @apply inline-flex min-h-11 shrink-0 items-center gap-2 whitespace-nowrap rounded-full border-[1.5px] border-outline bg-surface px-4 py-2.5 text-[13px] font-semibold text-ink transition-colors hover:border-control-border;
   }
   .search-pill-active {
-    @apply border-[#0b1026] bg-[#0b1026] text-white;
+    @apply border-primary bg-primary text-white hover:border-primary-hover;
   }
   .marketplace-shell :is(button, a) {
     transition-property: color, background-color, border-color, box-shadow, opacity, transform;
@@ -163,8 +169,8 @@
     transition-timing-function: cubic-bezier(0.2, 0.7, 0.2, 1);
   }
   .marketplace-shell :is(button, a, input, select, textarea, summary):focus-visible {
-    outline: 2px solid #2453ff;
-    outline-offset: 4px;
+    outline: 3px solid theme("colors.focus.ring");
+    outline-offset: 2px;
   }
 }
 

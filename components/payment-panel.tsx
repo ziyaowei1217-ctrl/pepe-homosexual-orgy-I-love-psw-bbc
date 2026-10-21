@@ -81,13 +81,13 @@ function PaymentSession(props: Props) {
   }
 
   if (mode === "demo") return <DemoPaymentPanel {...props} />;
-  return <section aria-label="付款状态" className="space-y-3 rounded-2xl border bg-white p-5">
+  return <section aria-label="付款状态" className="space-y-3 rounded-2xl border bg-surface p-5">
     <h2 className="font-bold">付款与资金状态</h2>
     <p role="status">{status ? labels[status] : error ? "付款状态未确认" : "正在读取付款状态…"}</p>
     {status === "AWAITING_PAYMENT" && application.status === "ACCEPTED" ? currentUserId === application.submitterId
       ? <button disabled={pending} onClick={() => void checkout()} className="primary-action">{pending ? "正在打开付款…" : "继续付款"}</button>
       : <p>等待申请人完成付款。</p> : null}
     <button disabled={pending} onClick={() => void load()} className="secondary-action">刷新付款状态</button>
-    {error ? <p role="alert" className="text-sm text-red-700">{error}</p> : null}
+    {error ? <p role="alert" className="text-sm text-danger-text">{error}</p> : null}
   </section>;
 }

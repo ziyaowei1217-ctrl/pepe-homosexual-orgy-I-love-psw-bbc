@@ -185,11 +185,11 @@ export function AdminRoommatesScreen({
 
   return (
     <section className="mx-auto grid w-full max-w-[1440px] gap-6 px-4 py-5 xl:grid-cols-[420px_minmax(0,1fr)] xl:px-6">
-      <Card className="rounded-[32px] border-blue-100 bg-white shadow-[0_18px_60px_rgba(15,23,42,0.08)]">
+      <Card className="rounded-[32px] border-primary-soft bg-surface shadow-[0_18px_60px_rgba(29,22,64,0.08)]">
         <CardHeader>
           <div className="flex items-center justify-between gap-3">
             <div>
-              <CardTitle className="text-3xl font-black text-primary">室友资料管理</CardTitle>
+              <CardTitle className="text-3xl font-black text-foreground">室友资料管理</CardTitle>
               <p className="mt-1 text-sm font-semibold text-muted-foreground">新增、调整和归档用于匹配推荐的室友资料。</p>
             </div>
             <Button variant="outline" className="rounded-full font-bold" disabled={loading} onClick={() => void loadProfiles()}>
@@ -199,27 +199,27 @@ export function AdminRoommatesScreen({
           </div>
         </CardHeader>
         <CardContent className="grid gap-3">
-          <Button className="rounded-full bg-[#006AFF] font-bold text-white hover:bg-[#0D4599]" onClick={resetDraft}>
+          <Button className="rounded-full bg-primary font-bold text-white hover:bg-primary-pressed" onClick={resetDraft}>
             <Plus data-icon="inline-start" />
             新建资料
           </Button>
           {profiles.map((profile) => (
             <button
               key={profile.id ?? profile.name}
-              className="rounded-3xl border border-blue-100 bg-blue-50/60 p-4 text-left transition hover:bg-blue-50"
+              className="rounded-3xl border border-primary-soft bg-surface-subtle/60 p-4 text-left transition hover:bg-surface-subtle"
               type="button"
               onClick={() => setSelectedId(profile.id ?? null)}
             >
               <div className="flex items-center justify-between gap-3">
                 <div className="min-w-0">
-                  <div className="truncate text-base font-black text-primary">{profile.name}</div>
+                  <div className="truncate text-base font-black text-foreground">{profile.name}</div>
                   <div className="truncate text-xs font-bold text-muted-foreground">{profile.role}</div>
                 </div>
                 <Badge variant={profile.status === "hidden" ? "secondary" : "trust"}>
                   {profile.status === "hidden" ? "已归档" : "启用"}
                 </Badge>
               </div>
-              <div className="mt-3 flex flex-wrap gap-2 text-xs font-bold text-[#006AFF]">
+              <div className="mt-3 flex flex-wrap gap-2 text-xs font-bold text-primary-text">
                 <span>基础匹配度 {profile.match}%</span>
                 <span>{profile.budget}</span>
                 <span>{profile.commute}</span>
@@ -229,10 +229,10 @@ export function AdminRoommatesScreen({
         </CardContent>
       </Card>
 
-      <Card className="rounded-[32px] border-blue-100 bg-white shadow-[0_18px_60px_rgba(15,23,42,0.08)]">
+      <Card className="rounded-[32px] border-primary-soft bg-surface shadow-[0_18px_60px_rgba(29,22,64,0.08)]">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-2xl font-black text-primary">
-            <Users className="size-6 text-[#006AFF]" aria-hidden="true" />
+          <CardTitle className="flex items-center gap-2 text-2xl font-black text-foreground">
+            <Users className="size-6 text-primary-text" aria-hidden="true" />
             {selectedProfile ? `编辑 ${selectedProfile.name}` : "新建室友资料"}
           </CardTitle>
         </CardHeader>
@@ -264,7 +264,7 @@ export function AdminRoommatesScreen({
             onChange={(tags) => setDraft((current) => ({ ...current, tags: splitTags(tags) }))}
           />
           <div className="flex flex-wrap gap-3">
-            <Button className="rounded-full bg-[#006AFF] font-black text-white hover:bg-[#0D4599]" disabled={saving} onClick={() => void saveDraft()}>
+            <Button className="rounded-full bg-primary font-black text-white hover:bg-primary-pressed" disabled={saving} onClick={() => void saveDraft()}>
               <Save data-icon="inline-start" />
               {saving ? "保存中…" : "保存资料"}
             </Button>
@@ -284,9 +284,9 @@ export function AdminRoommatesScreen({
 function AdminRoommatesGate({ title, detail }: { title: string; detail: string }) {
   return (
     <section className="mx-auto max-w-3xl px-4 py-10">
-      <Card className="rounded-[32px] border-blue-100 bg-white shadow-[0_18px_60px_rgba(15,23,42,0.08)]">
+      <Card className="rounded-[32px] border-primary-soft bg-surface shadow-[0_18px_60px_rgba(29,22,64,0.08)]">
         <CardContent className="p-8">
-          <div className="text-3xl font-black text-primary">{title}</div>
+          <div className="text-3xl font-black text-foreground">{title}</div>
           <p className="mt-2 text-sm font-semibold text-muted-foreground">{detail}</p>
         </CardContent>
       </Card>

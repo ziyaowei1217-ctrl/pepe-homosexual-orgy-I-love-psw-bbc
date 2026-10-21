@@ -89,7 +89,7 @@ export function LocationAutocomplete({
         placeholder={placeholder}
       />
       {expanded ? (
-        <div id={listboxId} role="listbox" aria-label="地点建议" className="absolute left-0 top-[calc(100%+12px)] z-[90] min-w-[270px] overflow-hidden rounded-[20px] border border-slate-200 bg-white p-2 text-left shadow-[0_22px_60px_rgba(15,23,42,0.18)]">
+        <div id={listboxId} role="listbox" aria-label="地点建议" className="absolute left-0 top-[calc(100%+12px)] z-[90] min-w-[270px] overflow-hidden rounded-[20px] border border-line-strong bg-surface p-2 text-left shadow-[0_22px_60px_rgba(29,22,64,0.18)]">
           {suggestions.map((option, index) => (
             <button
               key={option.id}
@@ -100,13 +100,13 @@ export function LocationAutocomplete({
               onMouseDown={(event) => event.preventDefault()}
               onMouseEnter={() => setHighlightedIndex(index)}
               onClick={() => choose(option)}
-              className={cn("flex w-full items-center gap-3 rounded-[14px] px-3 py-3 text-left", index === highlightedIndex ? "bg-blue-50" : "hover:bg-slate-50")}
+              className={cn("flex w-full items-center gap-3 rounded-[14px] px-3 py-3 text-left", index === highlightedIndex ? "bg-surface-subtle" : "hover:bg-surface-subtle")}
             >
-              <span className="grid size-9 shrink-0 place-items-center rounded-full bg-blue-100 text-[#2453ff]"><MapPin className="size-4" /></span>
+              <span className="grid size-9 shrink-0 place-items-center rounded-full bg-primary-soft text-primary-text"><MapPin className="size-4" /></span>
               <span className="min-w-0">
-                <span className="block text-sm font-black text-slate-950">{option.label}</span>
-                <span className="block text-xs font-semibold text-slate-500">{option.region}</span>
-                <span className="mt-0.5 block truncate text-[11px] text-slate-400">{option.highlights.join(" · ")}</span>
+                <span className="block text-sm font-black text-ink">{option.label}</span>
+                <span className="block text-xs font-semibold text-ink-secondary">{option.region}</span>
+                <span className="mt-0.5 block truncate text-[11px] text-ink-placeholder">{option.highlights.join(" · ")}</span>
               </span>
             </button>
           ))}

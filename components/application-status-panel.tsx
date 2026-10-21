@@ -77,7 +77,7 @@ export function ApplicationStatusPanel({
         {applications.length === 0 ? <p className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">还没有租房申请。请从房源详情发起。</p> : applications.map((application) => {
           const copy = getRentalApplicationStatusCopy(application.status);
           return (
-            <article key={application.id} className="space-y-3 rounded-md border bg-white p-4">
+            <article key={application.id} className="space-y-3 rounded-md border bg-surface p-4">
               <div className="flex items-start justify-between gap-3"><div><h3 className="font-extrabold">{application.listingTitle ?? "房源"}</h3><p className="text-sm text-muted-foreground">{application.moveIn.slice(0, 10)} 至 {application.moveOut.slice(0, 10)} · {application.scope === "TEAM" ? "小组" : "个人"}</p></div><Badge variant={application.status === "ACCEPTED" || application.status === "COMPLETED" || application.status === "CANCELLATION_PENDING" ? "success" : "trust"}>{copy.label}</Badge></div>
               <p className="text-sm font-semibold text-muted-foreground">{copy.description}</p>
               {application.decisionReason ? <p className="rounded-md bg-secondary p-3 text-sm">{application.decisionReason}</p> : null}

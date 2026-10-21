@@ -819,7 +819,7 @@ function inboxContactUnread(root: ReactTestInstance, contactName: string) {
     .findAll(
       (candidate) =>
         typeof candidate.props.className === "string" &&
-        candidate.props.className.includes("bg-[#006AFF]")
+        candidate.props.className.includes("bg-badge")
     )
     .map(renderedText);
 }

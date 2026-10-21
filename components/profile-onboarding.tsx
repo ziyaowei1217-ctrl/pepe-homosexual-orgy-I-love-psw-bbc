@@ -91,7 +91,7 @@ export function ProfileOnboarding({
         <div className="editorial-panel mx-auto max-w-3xl p-4 md:p-6">
           <div className="mb-5">
             <div className="editorial-kicker">02 / 个人资料</div>
-            <h2 id={`${fieldId}-title`} className="text-xl font-black text-primary">
+            <h2 id={`${fieldId}-title`} className="text-xl font-black text-foreground">
               {title}
             </h2>
             <p className="mt-1 text-sm font-semibold text-muted-foreground">

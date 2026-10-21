@@ -17,5 +17,5 @@ export default async function NewApplicationPage({ searchParams }: { searchParam
 }
 
 function EmptyApplicationState() {
-  return <main className="grid min-h-[60dvh] place-items-center px-6 text-center"><div><h1 className="text-3xl font-black">暂无可申请房源</h1><p className="mt-3 text-sm text-slate-500">房源发布后会出现在这里。</p></div></main>;
+  return <main className="grid min-h-[60dvh] place-items-center px-6 text-center"><div><h1 className="text-3xl font-black">暂无可申请房源</h1><p className="mt-3 text-sm text-ink-secondary">房源发布后会出现在这里。</p></div></main>;
 }

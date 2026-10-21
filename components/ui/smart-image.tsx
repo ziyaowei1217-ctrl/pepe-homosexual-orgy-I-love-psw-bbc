@@ -21,7 +21,7 @@ export function SmartImage({ className, alt, src, onLoad, onError, ...props }: I
         role={alt ? "img" : undefined}
         aria-label={alt || undefined}
         aria-hidden={alt ? undefined : true}
-        className="photo-placeholder absolute inset-0 grid place-items-center text-[#6b7493]"
+        className="photo-placeholder absolute inset-0 grid place-items-center text-ink-secondary"
       >
         <ImageOff className="size-7" aria-hidden="true" />
       </span>

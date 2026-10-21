@@ -46,7 +46,7 @@ describe("responsive grid system", () => {
   it("uses the approved shared card and control radii", () => {
     const card = readFileSync("components/ui/card.tsx", "utf8");
     const button = readFileSync("components/ui/button.tsx", "utf8");
-    expect(card).toContain("rounded-[18px]");
-    expect(button).toContain("rounded-[12px]");
+    expect(card).toContain("rounded-psw-xl");
+    expect(button).toContain("rounded-full");
   });
 });

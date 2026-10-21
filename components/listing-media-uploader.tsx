@@ -257,7 +257,7 @@ export function ListingMediaUploader({
       {rows.length > 0 ? (
         <ul className="grid gap-3 md:grid-cols-2">
           {rows.map((row, index) => (
-            <li key={row.key} className="grid gap-3 rounded-md border bg-white p-3">
+            <li key={row.key} className="grid gap-3 rounded-md border bg-surface p-3">
               {row.previewUrl ? (
                 <div className="relative h-36 w-full overflow-hidden rounded-md bg-secondary">
                   <SmartImage
@@ -274,7 +274,7 @@ export function ListingMediaUploader({
               )}
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-sm font-bold text-primary">{row.media.kind} {index === 0 ? "· 封面" : ""}</p>
+                  <p className="text-sm font-bold text-foreground">{row.media.kind} {index === 0 ? "· 封面" : ""}</p>
                   <p className="text-xs font-semibold text-muted-foreground">{mediaStatusLabel(row)}</p>
                 </div>
                 <div className="flex gap-1">

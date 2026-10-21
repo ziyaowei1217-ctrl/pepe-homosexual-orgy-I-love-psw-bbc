@@ -4,17 +4,18 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
 const badgeVariants = cva(
-  "inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors",
+  // psw: status tags use small corners and no outline (outlines and full rounding mean "tappable").
+  "inline-flex items-center rounded-psw-sm px-2 py-0.5 text-xs font-semibold transition-colors",
   {
     variants: {
       variant: {
-        default: "border-transparent bg-accent text-accent-foreground",
-        secondary: "border-transparent bg-blue-50 text-blue-700",
-        outline: "border-blue-200 bg-white text-foreground",
-        trust: "border-trust-sky/20 bg-trust-sky/10 text-trust-blue",
-        success: "border-trust-verified/20 bg-trust-verified/10 text-trust-verified",
-        warning: "border-trust-amber/25 bg-trust-amber/10 text-trust-amber",
-        danger: "border-trust-red/20 bg-trust-red/10 text-trust-red"
+        default: "bg-primary-soft text-primary-text",
+        secondary: "bg-tag-neutral text-ink-secondary",
+        outline: "bg-tag-neutral text-foreground",
+        trust: "bg-primary-soft text-primary-text",
+        success: "bg-success-soft text-success-text",
+        warning: "bg-warning-soft text-warning-text",
+        danger: "bg-danger-soft text-danger-text"
       }
     },
     defaultVariants: {

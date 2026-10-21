@@ -95,7 +95,7 @@ function RentalApplicationSession({
   }
 
   return (
-    <div className="fixed inset-0 z-[80] grid place-items-center bg-slate-950/45 p-4" role="dialog" aria-modal="true" aria-label="租房申请">
+    <div className="fixed inset-0 z-[80] grid place-items-center bg-ink-block/45 p-4" role="dialog" aria-modal="true" aria-label="租房申请">
       <Card className="max-h-[92vh] w-full max-w-2xl overflow-y-auto shadow-panel">
         <CardHeader>
           <div className="flex items-start justify-between gap-4">
@@ -115,7 +115,7 @@ function RentalApplicationSession({
                 <button
                   key={option.value}
                   type="button"
-                  className={`w-full rounded-md border p-4 text-left font-bold ${draft.scope === option.value ? "border-blue-500 bg-blue-50" : "bg-white"}`}
+                  className={`w-full rounded-md border p-4 text-left font-bold ${draft.scope === option.value ? "border-primary bg-surface-subtle" : "bg-surface"}`}
                   onClick={() => chooseScope(option.value)}
                 >
                   {option.label}
@@ -131,12 +131,12 @@ function RentalApplicationSession({
               <label className="grid gap-2 text-sm font-bold">退租日期<Input type="date" value={draft.moveOut} onChange={(event) => setDraft({ ...draft, moveOut: event.target.value })} /></label>
               <label className="grid gap-2 text-sm font-bold md:col-span-2">学校或职业<Input value={draft.schoolOrOccupation} maxLength={140} onChange={(event) => setDraft({ ...draft, schoolOrOccupation: event.target.value })} /></label>
               <label className="grid gap-2 text-sm font-bold">收入区间
-                <select className="h-10 rounded-md border bg-white px-3" value={draft.incomeBand} onChange={(event) => setDraft({ ...draft, incomeBand: event.target.value as RentalApplicationDraft["incomeBand"] })}>
+                <select className="h-10 rounded-md border bg-surface px-3" value={draft.incomeBand} onChange={(event) => setDraft({ ...draft, incomeBand: event.target.value as RentalApplicationDraft["incomeBand"] })}>
                   <option value="BELOW_2X">低于月租 2 倍</option><option value="TWO_TO_THREE_X">月租 2–3 倍</option><option value="THREE_TO_FOUR_X">月租 3–4 倍</option><option value="ABOVE_FOUR_X">高于月租 4 倍</option><option value="PREFER_NOT_TO_SAY">不愿透露</option>
                 </select>
               </label>
               <label className="grid gap-2 text-sm font-bold">担保人
-                <select className="h-10 rounded-md border bg-white px-3" value={draft.guarantorStatus} onChange={(event) => setDraft({ ...draft, guarantorStatus: event.target.value as RentalApplicationDraft["guarantorStatus"] })}>
+                <select className="h-10 rounded-md border bg-surface px-3" value={draft.guarantorStatus} onChange={(event) => setDraft({ ...draft, guarantorStatus: event.target.value as RentalApplicationDraft["guarantorStatus"] })}>
                   <option value="AVAILABLE">可提供</option><option value="NOT_AVAILABLE">无法提供</option><option value="NOT_NEEDED">不需要</option>
                 </select>
               </label>

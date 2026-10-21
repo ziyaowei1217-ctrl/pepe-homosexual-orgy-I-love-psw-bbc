@@ -3023,15 +3023,15 @@ function StandaloneAuthScreen({
   toast: string;
 }) {
   return (
-    <main className="min-h-screen bg-[radial-gradient(circle_at_top_left,rgba(0,106,255,0.12),transparent_34%),linear-gradient(180deg,#f8fbff_0%,#ffffff_58%)]">
+    <main className="min-h-screen bg-surface-subtle">
       <header className="app-shell flex items-center justify-between gap-4 py-5 md:py-7">
         <div className="flex items-center gap-3">
-          <div className="flex size-11 items-center justify-center rounded-[22px] bg-[linear-gradient(135deg,#006AFF,#0D4599)] text-white shadow-[0_16px_40px_rgba(0,106,255,0.28)]">
+          <div className="flex size-11 items-center justify-center rounded-[22px] bg-primary text-white shadow-[0_16px_40px_rgba(108,77,255,0.28)]">
             <Home className="size-5" aria-hidden="true" />
           </div>
           <div>
-            <div className="text-lg font-black text-primary">Sublet Pipeline</div>
-            <div className="text-xs font-bold text-[#006AFF]">可信赖的短租与室友平台</div>
+            <div className="text-lg font-black text-foreground">psw</div>
+            <div className="text-xs font-bold text-primary-text">可信赖的短租与室友平台</div>
           </div>
         </div>
         <Button type="button" variant="ghost" size="sm" onClick={onClose}>
@@ -3042,14 +3042,14 @@ function StandaloneAuthScreen({
       <section className="app-shell pb-10 pt-4 md:pb-16 md:pt-10">
         <div className="mx-auto max-w-2xl text-center">
           <span className="editorial-kicker">账户与安全</span>
-          <h1 className="mt-3 text-3xl font-black tracking-[-0.035em] text-primary md:text-5xl">
-            登录 Sublet Pipeline
+          <h1 className="mt-3 text-3xl font-black tracking-[-0.01em] text-foreground md:text-5xl">
+            登录 psw
           </h1>
           <p className="mx-auto mt-3 max-w-xl text-sm font-semibold leading-6 text-muted-foreground md:text-base">
             {contextMessage}
           </p>
         </div>
-        <div className="mx-auto mt-6 max-w-3xl overflow-hidden rounded-[28px] border border-blue-100 bg-white shadow-panel md:mt-8">
+        <div className="mx-auto mt-6 max-w-3xl overflow-hidden rounded-[28px] border border-primary-soft bg-surface shadow-panel md:mt-8">
           <AuthFlowPanel
             token={token}
             user={user}
@@ -3115,12 +3115,12 @@ function AppHeader({
     <header className="sticky top-0 z-30 border-b border-border bg-background/92 backdrop-blur-xl">
       <div className="app-shell grid min-h-[72px] grid-cols-[minmax(0,1fr)_auto] items-center gap-3 py-3 md:grid-cols-8 md:gap-5 xl:grid-cols-12 xl:gap-6">
         <div className="flex min-w-0 items-center gap-3 md:col-span-2 xl:col-span-3">
-          <div className="flex size-11 items-center justify-center rounded-[22px] bg-[linear-gradient(135deg,#006AFF,#0D4599)] text-white shadow-[0_16px_40px_rgba(0,106,255,0.28)]">
+          <div className="flex size-11 items-center justify-center rounded-[22px] bg-primary text-white shadow-[0_16px_40px_rgba(108,77,255,0.28)]">
             <Home className="size-5" aria-hidden="true" />
           </div>
           <div className="min-w-0 leading-tight">
-            <div className="truncate text-lg font-black text-primary">Sublet Pipeline</div>
-            <div className="hidden text-xs font-bold text-[#006AFF] xl:block">可信赖的短租与室友平台</div>
+            <div className="truncate text-lg font-black text-foreground">psw</div>
+            <div className="hidden text-xs font-bold text-primary-text xl:block">可信赖的短租与室友平台</div>
           </div>
         </div>
 
@@ -3144,7 +3144,7 @@ function AppHeader({
                 <Icon className="size-4" aria-hidden="true" />
                 {item.label}
                 {item.section === "Messages" && messageUnreadCount > 0 ? (
-                  <span className="flex min-w-5 items-center justify-center rounded-full bg-[#006AFF] px-1.5 text-[10px] font-black text-white">
+                  <span className="flex min-w-5 items-center justify-center rounded-full bg-badge px-1.5 text-[10px] font-black text-on-badge">
                     {messageUnreadCount > 99 ? "99+" : messageUnreadCount}
                   </span>
                 ) : null}
@@ -3155,17 +3155,17 @@ function AppHeader({
 
         <div className="flex min-w-0 shrink-0 items-center justify-end gap-2 md:col-span-1 xl:col-span-3">
           <Button variant={savedOnly ? "secondary" : "ghost"} size="icon" className="hidden rounded-full sm:inline-flex" aria-label="本机收藏" aria-pressed={savedOnly} onClick={onSavedHomes}>
-            <Bookmark className={favoriteCount > 0 ? "fill-current text-primary" : undefined} />
+            <Bookmark className={favoriteCount > 0 ? "fill-current text-foreground" : undefined} />
           </Button>
           {user ? (
             <Button variant={notificationsOpen ? "secondary" : "ghost"} size="icon" className="relative hidden rounded-full sm:inline-flex" aria-label="本机提醒" aria-expanded={notificationsOpen} onClick={onNotifications}>
               <Bell />
-              {unreadCount > 0 ? <span className="absolute right-0 top-0 flex size-4 items-center justify-center rounded-full bg-[#006AFF] text-[10px] font-black text-white">{unreadCount}</span> : null}
+              {unreadCount > 0 ? <span className="absolute right-0 top-0 flex size-4 items-center justify-center rounded-full bg-badge text-[10px] font-black text-on-badge">{unreadCount}</span> : null}
             </Button>
           ) : null}
           <button
             type="button"
-            className="hidden min-w-0 items-center gap-2 rounded-full border border-blue-100 bg-white px-3 py-2 text-sm font-bold text-primary shadow-sm transition-colors hover:bg-blue-50 lg:flex"
+            className="hidden min-w-0 items-center gap-2 rounded-full border border-primary-soft bg-surface px-3 py-2 text-sm font-bold text-foreground shadow-sm transition-colors hover:bg-surface-subtle lg:flex"
             onClick={onAuthOpen}
           >
             <ShieldCheck className="size-4 text-trust-verified" aria-hidden="true" />
@@ -3203,9 +3203,9 @@ function AppHeader({
         </div>
       </div>
       {visibleAdminItems.length > 0 ? (
-        <div className="border-t border-blue-100 bg-blue-50/70">
+        <div className="border-t border-primary-soft bg-surface-subtle/70">
           <nav aria-label="管理员工具" className="app-shell flex flex-wrap items-center gap-2 py-2">
-            <span className="mr-1 text-xs font-black text-[#006AFF]">管理员工具</span>
+            <span className="mr-1 text-xs font-black text-primary-text">管理员工具</span>
             {visibleAdminItems.map((item) => {
               const Icon = navIcons[item.section];
               return (
@@ -3226,10 +3226,10 @@ function AppHeader({
         </div>
       ) : null}
       {user && notificationsOpen ? (
-        <div className="absolute right-4 top-[68px] z-50 w-[min(360px,calc(100vw-2rem))] rounded-[24px] border border-blue-100 bg-white p-4 shadow-panel">
+        <div className="absolute right-4 top-[68px] z-50 w-[min(360px,calc(100vw-2rem))] rounded-[24px] border border-primary-soft bg-surface p-4 shadow-panel">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <div className="text-base font-extrabold text-primary">本机提醒</div>
+              <div className="text-base font-extrabold text-foreground">本机提醒</div>
               <div className="text-xs font-semibold text-muted-foreground">仅保存在此设备</div>
             </div>
             {unreadCount > 0 ? (
@@ -3240,13 +3240,13 @@ function AppHeader({
             {notifications.length > 0 ? notifications.slice(0, 6).map((notification) => (
               <button
                 key={notification.id}
-                className={cn("rounded-2xl p-3 text-left", notification.read ? "bg-slate-50" : "bg-blue-50")}
+                className={cn("rounded-2xl p-3 text-left", notification.read ? "bg-surface-muted" : "bg-surface-subtle")}
                 type="button"
                 onClick={() => onNotificationOpen(notification)}
               >
                 <div className="flex items-center justify-between gap-2">
-                  <div className="text-sm font-extrabold text-primary">{notification.title}</div>
-                  {!notification.read ? <span className="size-2 rounded-full bg-[#006AFF]" aria-label="未读" /> : null}
+                  <div className="text-sm font-extrabold text-foreground">{notification.title}</div>
+                  {!notification.read ? <span className="size-2 rounded-full bg-badge" aria-label="未读" /> : null}
                 </div>
                 <div className="mt-1 text-xs font-semibold text-muted-foreground">{notification.detail}</div>
                 <div className="mt-2 text-[11px] font-bold text-muted-foreground">{formatReminderTime(notification.createdAt)}</div>
@@ -3255,7 +3255,7 @@ function AppHeader({
           </div>
         </div>
       ) : null}
-      {mobileMenuOpen ? <div className="border-t border-blue-100 bg-white md:hidden">
+      {mobileMenuOpen ? <div className="border-t border-primary-soft bg-surface md:hidden">
         <div className="app-shell flex gap-1 overflow-x-auto py-2">
           {[...primaryItems, ...secondaryItems].map((item) => {
             const Icon = navIcons[item.section];
@@ -3274,7 +3274,7 @@ function AppHeader({
                 <Icon className="size-3.5" aria-hidden="true" />
                 {item.label}
                 {item.section === "Messages" && messageUnreadCount > 0 ? (
-                  <span className="rounded-full bg-[#006AFF] px-1.5 text-[10px] font-black text-white">
+                  <span className="rounded-full bg-badge px-1.5 text-[10px] font-black text-on-badge">
                     {messageUnreadCount > 99 ? "99+" : messageUnreadCount}
                   </span>
                 ) : null}
@@ -3473,7 +3473,7 @@ function RoommatesMarketplaceScreen({
           <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
             <div>
               <span className="editorial-kicker">01 / 室友</span>
-              <h1 className="text-display text-4xl font-black leading-tight text-primary md:text-6xl">
+              <h1 className="text-display text-4xl font-black leading-tight text-foreground md:text-6xl">
                 室友匹配
               </h1>
               <p className="mt-2 text-sm font-semibold text-muted-foreground">
@@ -3490,7 +3490,7 @@ function RoommatesMarketplaceScreen({
                 浏览房源
               </Button>
               <Button
-                className="rounded-full bg-[#006AFF] font-bold text-white hover:bg-[#0D4599]"
+                className="rounded-full bg-primary font-bold text-white hover:bg-primary-pressed"
                 onClick={() => {
                   setAppliedPreference(
                     genderFilterAvailable
@@ -3553,7 +3553,7 @@ function RoommatesMarketplaceScreen({
         <div className="col-span-full min-w-0 xl:col-span-8">
           <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <div className="text-2xl font-extrabold text-primary">
+              <div className="text-2xl font-extrabold text-foreground">
                 {activeDeckRoommate
                   ? `偏好匹配度 ${activeDeckRoommate.preferenceFit.score}%`
                   : "没有符合当前偏好的室友"}
@@ -3564,13 +3564,13 @@ function RoommatesMarketplaceScreen({
                   : "调整左侧偏好并重新应用后再查看。"}
               </div>
             </div>
-            <div className="flex w-fit overflow-hidden rounded-full border border-blue-200 bg-white p-1 shadow-sm">
+            <div className="flex w-fit overflow-hidden rounded-full border border-primary-soft-hover bg-surface p-1 shadow-sm">
               {(["Preference", "Budget"] as const).map((mode) => (
                 <button
                   key={mode}
                   className={cn(
                     "rounded-full px-4 py-2 text-sm font-extrabold transition-colors",
-                    sortMode === mode ? "bg-[#006AFF] text-white" : "text-primary hover:bg-blue-50"
+                    sortMode === mode ? "bg-primary text-white" : "text-foreground hover:bg-surface-subtle"
                   )}
                   type="button"
                   onClick={() => setSortMode(mode)}
@@ -3637,17 +3637,17 @@ function PreferenceSummaryField({
 }) {
   return (
     <button
-      className="flex min-h-16 min-w-0 items-center gap-3 border-b border-blue-100 bg-white px-4 py-3 text-left transition-colors hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60 last:border-b-0 md:border-r md:last:border-r-0 xl:border-b-0"
+      className="flex min-h-16 min-w-0 items-center gap-3 border-b border-primary-soft bg-surface px-4 py-3 text-left transition-colors hover:bg-surface-subtle disabled:cursor-not-allowed disabled:opacity-60 last:border-b-0 md:border-r md:last:border-r-0 xl:border-b-0"
       type="button"
       disabled={disabled}
       onClick={onClick}
     >
-      <Icon className="size-5 shrink-0 text-[#006AFF]" aria-hidden="true" />
+      <Icon className="size-5 shrink-0 text-primary-text" aria-hidden="true" />
       <div className="min-w-0">
         <div className="text-xs font-bold text-muted-foreground">{label}</div>
-        <div className="mt-1 truncate text-sm font-extrabold text-primary">{value}</div>
+        <div className="mt-1 truncate text-sm font-extrabold text-foreground">{value}</div>
       </div>
-      <ChevronDown className="ml-auto size-4 shrink-0 text-[#006AFF]" aria-hidden="true" />
+      <ChevronDown className="ml-auto size-4 shrink-0 text-primary-text" aria-hidden="true" />
     </button>
   );
 }
@@ -3703,7 +3703,7 @@ function RoommatePreferencePanel({
             <CardTitle className="text-display text-2xl font-black">我的偏好</CardTitle>
             <CardDescription className="font-semibold">调整合租筛选条件，应用后才会更新结果</CardDescription>
           </div>
-          <div className="flex size-11 items-center justify-center rounded-full bg-blue-50 text-[#006AFF]">
+          <div className="flex size-11 items-center justify-center rounded-full bg-surface-subtle text-primary-text">
             <SlidersHorizontal className="size-5" aria-hidden="true" />
           </div>
         </div>
@@ -3712,7 +3712,7 @@ function RoommatePreferencePanel({
         <div className="grid grid-cols-[112px_minmax(0,1fr)] items-center gap-4 rounded-[16px] border border-border bg-card p-4">
           <MatchScoreRing score={fitScore} label="匹配度" size="lg" />
           <div className="min-w-0">
-            <div className="text-base font-black text-primary">
+            <div className="text-base font-black text-foreground">
               {fitScore >= 90 ? "非常匹配" : fitScore >= 78 ? "比较匹配" : "建议调整偏好"}
             </div>
             <p className="mt-1 text-sm font-semibold leading-6 text-muted-foreground">
@@ -3736,7 +3736,7 @@ function RoommatePreferencePanel({
               ))}
             </div>
           ) : (
-            <div className="rounded-2xl border border-dashed border-blue-200 bg-blue-50/50 p-3 text-sm font-semibold text-muted-foreground">
+            <div className="rounded-2xl border border-dashed border-primary-soft-hover bg-surface-subtle/50 p-3 text-sm font-semibold text-muted-foreground">
               当前服务未提供可信性别资料，性别筛选暂不可用。
             </div>
           )}
@@ -3745,14 +3745,14 @@ function RoommatePreferencePanel({
         <div>
           <div className="mb-2 flex items-center justify-between gap-3">
             <span className="text-xs font-extrabold uppercase tracking-wide text-muted-foreground">预算</span>
-            <span className="text-xs font-bold text-[#006AFF]">
+            <span className="text-xs font-bold text-primary-text">
               ${preference.budgetMin.toLocaleString("en-US")} - ${preference.budgetMax.toLocaleString("en-US")}
             </span>
           </div>
           <div className="grid grid-cols-2 gap-2">
             <Input
               aria-label="室友最低预算"
-              className="h-11 rounded-2xl border-blue-100 text-sm font-bold"
+              className="h-11 rounded-2xl border-primary-soft text-sm font-bold"
               min={600}
               max={preference.budgetMax}
               onChange={(event) => setBudget("budgetMin", event.target.value)}
@@ -3761,7 +3761,7 @@ function RoommatePreferencePanel({
             />
             <Input
               aria-label="室友最高预算"
-              className="h-11 rounded-2xl border-blue-100 text-sm font-bold"
+              className="h-11 rounded-2xl border-primary-soft text-sm font-bold"
               min={preference.budgetMin}
               max={3000}
               onChange={(event) => setBudget("budgetMax", event.target.value)}
@@ -3819,8 +3819,8 @@ function PreferenceChip({
       className={cn(
         "min-h-10 rounded-full border px-3 py-2 text-sm font-extrabold shadow-sm transition-all hover:-translate-y-0.5",
         selected
-          ? "border-[#006AFF] bg-[#006AFF] text-white shadow-[0_10px_24px_rgba(0,106,255,0.18)]"
-          : "border-blue-100 bg-white text-primary hover:bg-blue-50"
+          ? "border-primary bg-primary text-white shadow-[0_10px_24px_rgba(108,77,255,0.18)]"
+          : "border-primary-soft bg-surface text-foreground hover:bg-surface-subtle"
       )}
       type="button"
       onClick={onClick}
@@ -3843,22 +3843,22 @@ function MatchScoreRing({
 }) {
   const dimensions = size === "lg" ? "size-24" : size === "sm" ? "size-14" : "size-20";
   const valueSize = size === "lg" ? "text-2xl" : size === "sm" ? "text-sm" : "text-xl";
-  const ringTrack = inverted ? "rgba(255,255,255,0.28)" : "rgba(219,234,254,1)";
-  const ringColor = inverted ? "#ffffff" : "#006AFF";
+  const ringTrack = inverted ? "rgba(255,255,255,0.28)" : "rgba(236,234,254,1)";
+  const ringColor = inverted ? "#ffffff" : "#6C4DFF";
 
   return (
     <div
       className={cn(
         "relative grid shrink-0 place-items-center rounded-full",
         dimensions,
-        inverted ? "text-white" : "text-primary"
+        inverted ? "text-white" : "text-foreground"
       )}
       style={{
         background: `conic-gradient(${ringColor} ${score * 3.6}deg, ${ringTrack} 0deg)`
       }}
       aria-label={`${score}% ${label}`}
     >
-      <div className={cn("absolute rounded-full", size === "lg" ? "inset-2" : "inset-1.5", inverted ? "bg-[#006AFF]" : "bg-white")} />
+      <div className={cn("absolute rounded-full", size === "lg" ? "inset-2" : "inset-1.5", inverted ? "bg-primary" : "bg-surface")} />
       <div className="relative text-center leading-none">
         <div className={cn("font-black", valueSize)}>{score}</div>
         <div className={cn("mt-1 font-bold", size === "sm" ? "text-[10px]" : "text-[11px]")}>{label}</div>
@@ -3870,7 +3870,7 @@ function MatchScoreRing({
 function RoommatePathGraphic({ className }: { className?: string }) {
   return (
     <svg
-      className={cn("pointer-events-none absolute h-72 w-72 text-[#006AFF]/25", className)}
+      className={cn("pointer-events-none absolute h-72 w-72 text-primary-text/25", className)}
       viewBox="0 0 260 260"
       fill="none"
       aria-hidden="true"
@@ -3884,7 +3884,7 @@ function RoommatePathGraphic({ className }: { className?: string }) {
       />
       <circle cx="6" cy="30" r="5" fill="white" stroke="currentColor" strokeWidth="4" />
       <circle cx="158" cy="132" r="5" fill="white" stroke="currentColor" strokeWidth="4" />
-      <path d="M226 207l15 33 15-33a17 17 0 10-30 0z" fill="#006AFF" opacity="0.95" />
+      <path d="M226 207l15 33 15-33a17 17 0 10-30 0z" fill="#6C4DFF" opacity="0.95" />
       <circle cx="241" cy="205" r="5" fill="white" />
     </svg>
   );
@@ -3904,9 +3904,9 @@ function SwipeActionButton({
   disabled?: boolean;
 }) {
   const toneClass = {
-    pass: "border-red-100 bg-white text-trust-red hover:bg-red-50",
-    later: "border-blue-100 bg-white text-[#006AFF] hover:bg-blue-50",
-    like: "border-[#006AFF] bg-[#006AFF] text-white shadow-[0_18px_34px_rgba(0,106,255,0.28)] hover:bg-[#0D4599]"
+    pass: "border-danger-soft bg-surface text-trust-red hover:bg-danger-soft",
+    later: "border-primary-soft bg-surface text-primary-text hover:bg-surface-subtle",
+    like: "border-primary bg-primary text-white shadow-[0_18px_34px_rgba(108,77,255,0.28)] hover:bg-primary-pressed"
   }[tone];
 
   return (
@@ -3919,7 +3919,7 @@ function SwipeActionButton({
       >
         <Icon className={cn("size-7", tone === "like" && "fill-current")} aria-hidden="true" />
       </span>
-      <span className={tone === "like" ? "text-[#006AFF]" : "text-primary"}>{label}</span>
+      <span className={tone === "like" ? "text-primary-text" : "text-foreground"}>{label}</span>
     </button>
   );
 }
@@ -3978,23 +3978,23 @@ function SwipeRoommateDeck({
   return (
     <div className="relative mx-auto min-h-[760px] w-full max-w-[660px]">
       {nextRoommate ? (
-        <article className="absolute inset-x-8 top-8 h-[650px] rotate-2 overflow-hidden rounded-[36px] border border-blue-100 bg-white shadow-[0_26px_80px_rgba(15,23,42,0.10)]">
+        <article className="absolute inset-x-8 top-8 h-[650px] rotate-2 overflow-hidden rounded-[36px] border border-primary-soft bg-surface shadow-[0_26px_80px_rgba(29,22,64,0.10)]">
           <div className="h-full bg-cover bg-top opacity-35" style={{ backgroundImage: `url(${nextRoommate.image})` }} />
         </article>
       ) : null}
 
-      <article className="relative overflow-hidden rounded-[36px] border border-blue-100 bg-white shadow-[0_30px_100px_rgba(0,106,255,0.18)]">
+      <article className="relative overflow-hidden rounded-[36px] border border-primary-soft bg-surface shadow-[0_30px_100px_rgba(108,77,255,0.18)]">
         <div className="relative h-[470px] bg-cover bg-top sm:h-[510px]" style={{ backgroundImage: `url(${roommate.image})` }}>
-          <div className="absolute inset-0 bg-gradient-to-t from-slate-950/72 via-slate-950/8 to-transparent" />
+          <div className="absolute inset-0 bg-gradient-to-t from-ink-block/72 via-ink-block/8 to-transparent" />
           <div className="absolute left-4 top-4 flex items-center gap-2">
-            <Badge className="border-white/70 bg-white text-[#006AFF] shadow-sm">
+            <Badge className="border-surface/70 bg-surface text-primary-text shadow-sm">
             匹配度 {roommate.preferenceFit.score}%
             </Badge>
-            <Badge className="border-white/20 bg-[#006AFF] text-white shadow-sm">
+            <Badge className="border-surface/20 bg-primary text-white shadow-sm">
               已认证
             </Badge>
           </div>
-          <Badge className="absolute right-4 top-4 border-white/25 bg-slate-950/45 text-white shadow-sm">
+          <Badge className="absolute right-4 top-4 border-surface/25 bg-ink-block/45 text-white shadow-sm">
             {getRoommateStatusLabel(connectionStatus)}
           </Badge>
           <div className="absolute bottom-8 right-6 hidden sm:block">
@@ -4008,7 +4008,7 @@ function SwipeRoommateDeck({
                 </h2>
                 <p className="mt-2 text-sm font-bold text-white/88 md:text-base">{roommate.role}</p>
               </div>
-              <div className="rounded-2xl border border-white/25 bg-white/14 px-4 py-3 text-right backdrop-blur">
+              <div className="rounded-2xl border border-surface/25 bg-surface/14 px-4 py-3 text-right backdrop-blur">
                 <div className="text-xs font-bold uppercase text-white/70">预算</div>
                 <div className="text-lg font-extrabold">{roommate.budget}</div>
               </div>
@@ -4027,12 +4027,12 @@ function SwipeRoommateDeck({
             <div className="mb-2 text-xs font-extrabold uppercase tracking-wide text-muted-foreground">匹配原因</div>
             <div className="flex flex-wrap gap-2">
               {reasons.map((reason) => (
-                <span key={reason} className="rounded-full bg-blue-50 px-3 py-1.5 text-xs font-extrabold text-[#006AFF]">
+                <span key={reason} className="rounded-full bg-surface-subtle px-3 py-1.5 text-xs font-extrabold text-primary-text">
                   {reason}
                 </span>
               ))}
               {gaps.map((gap) => (
-                <span key={gap} className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-extrabold text-slate-600">
+                <span key={gap} className="rounded-full bg-tag-neutral px-3 py-1.5 text-xs font-extrabold text-ink-secondary">
                   {gap}
                 </span>
               ))}
@@ -4041,7 +4041,7 @@ function SwipeRoommateDeck({
 
           <div className="flex flex-wrap gap-2">
             {roommate.tags.map((tag) => (
-              <span key={tag} className="rounded-full border border-blue-100 bg-white px-3 py-1.5 text-xs font-bold text-primary">
+              <span key={tag} className="rounded-full border border-primary-soft bg-surface px-3 py-1.5 text-xs font-bold text-foreground">
                 {tag}
               </span>
             ))}
@@ -4053,7 +4053,7 @@ function SwipeRoommateDeck({
             <SwipeActionButton icon={Heart} label={pending ? "提交中" : liked ? "已喜欢" : "喜欢"} tone="like" onClick={onLike} disabled={pending} />
           </div>
 
-          <div className="grid gap-3 rounded-[24px] border border-blue-100 bg-blue-50/70 p-3">
+          <div className="grid gap-3 rounded-[24px] border border-primary-soft bg-surface-subtle/70 p-3">
             <Button variant="outline" className="rounded-full font-extrabold" onClick={canOpenDm ? onOpenDm : onSendIntro}>
               <MessageCircle data-icon="inline-start" />
               {canOpenDm ? "打开室友私信" : "室友私信 · 互相喜欢后开放"}
@@ -4113,12 +4113,12 @@ function ProfileMiniStat({
   value: string;
 }) {
   return (
-    <div className="min-w-0 rounded-[22px] border border-blue-100 bg-[linear-gradient(180deg,#ffffff,#f6faff)] p-3 shadow-sm">
-      <div className="mb-2 flex size-8 items-center justify-center rounded-full bg-blue-50 text-[#006AFF]">
+    <div className="min-w-0 rounded-[22px] border border-primary-soft bg-surface p-3 shadow-sm">
+      <div className="mb-2 flex size-8 items-center justify-center rounded-full bg-surface-subtle text-primary-text">
         <Icon className="size-4" aria-hidden="true" />
       </div>
       <div className="text-xs font-bold text-muted-foreground">{label}</div>
-      <div className="mt-1 truncate text-sm font-extrabold text-primary">{value}</div>
+      <div className="mt-1 truncate text-sm font-extrabold text-foreground">{value}</div>
     </div>
   );
 }
@@ -4131,31 +4131,31 @@ function PreferenceMatchRail({
   likedRoommateIds: Set<string>;
 }) {
   return (
-    <div className="mt-5 rounded-[28px] border border-blue-100 bg-white p-4 shadow-sm">
+    <div className="mt-5 rounded-[28px] border border-primary-soft bg-surface p-4 shadow-sm">
       <div className="mb-3 flex items-center justify-between gap-3">
         <div>
-          <div className="text-lg font-extrabold text-primary">接下来的匹配</div>
+          <div className="text-lg font-extrabold text-foreground">接下来的匹配</div>
           <div className="text-xs font-bold text-muted-foreground">按偏好匹配度排序</div>
         </div>
-        <ChevronDown className="size-4 text-[#006AFF]" aria-hidden="true" />
+        <ChevronDown className="size-4 text-primary-text" aria-hidden="true" />
       </div>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         {roommates.map((roommate) => (
-          <div key={getRoommateKey(roommate)} className="min-w-0 rounded-3xl border border-blue-100 bg-blue-50/50 p-3">
+          <div key={getRoommateKey(roommate)} className="min-w-0 rounded-3xl border border-primary-soft bg-surface-subtle/50 p-3">
             <div className="flex items-center gap-3">
               <Avatar className="size-11">
                 <AvatarImage src={roommate.image} alt="" />
                 <AvatarFallback>{roommate.name.slice(0, 1)}</AvatarFallback>
               </Avatar>
               <div className="min-w-0">
-                <div className="truncate text-sm font-extrabold text-primary">{roommate.name}</div>
-                <div className="text-xs font-bold text-[#006AFF]">匹配度 {roommate.preferenceFit.score}%</div>
+                <div className="truncate text-sm font-extrabold text-foreground">{roommate.name}</div>
+                <div className="text-xs font-bold text-primary-text">匹配度 {roommate.preferenceFit.score}%</div>
               </div>
             </div>
             <div className="mt-3 flex items-center justify-between gap-2">
               <span className="truncate text-xs font-bold text-muted-foreground">{roommate.school ?? "其他"}</span>
               {likedRoommateIds.has(getRoommateKey(roommate)) ? (
-                <Heart className="size-4 fill-[#006AFF] text-[#006AFF]" aria-hidden="true" />
+                <Heart className="size-4 fill-primary-text text-primary-text" aria-hidden="true" />
               ) : null}
             </div>
           </div>
@@ -4238,8 +4238,8 @@ function LikeQueueScreen({
           <div>
             <span className="editorial-kicker">01 / 喜欢列表</span>
             <div className="flex items-center gap-2">
-              <Heart className="size-6 fill-[#006AFF] text-[#006AFF]" aria-hidden="true" />
-              <h1 className="text-display text-3xl font-black text-primary">喜欢列表</h1>
+              <Heart className="size-6 fill-primary-text text-primary-text" aria-hidden="true" />
+              <h1 className="text-display text-3xl font-black text-foreground">喜欢列表</h1>
             </div>
             <p className="mt-1 text-sm font-semibold text-muted-foreground">
               {waitingMembers.length} 位等待回应 · {mutualMembers.length} 位互相匹配 · {members.length} 位已组队
@@ -4250,7 +4250,7 @@ function LikeQueueScreen({
               <Users data-icon="inline-start" />
               返回匹配
             </Button>
-            <Button className="rounded-full bg-[#006AFF] font-bold text-white hover:bg-[#0D4599]" onClick={onOpenMessages}>
+            <Button className="rounded-full bg-primary font-bold text-white hover:bg-primary-pressed" onClick={onOpenMessages}>
               <MessageCircle data-icon="inline-start" />
               消息
             </Button>
@@ -4259,12 +4259,12 @@ function LikeQueueScreen({
       </Card>
 
       {dealRooms.length > 1 ? (
-        <Card className="rounded-[18px] border-blue-200 bg-blue-50/40 shadow-card">
+        <Card className="rounded-[18px] border-primary-soft-hover bg-surface-subtle/40 shadow-card">
           <CardContent className="p-4">
-            <label className="grid gap-2 text-sm font-extrabold text-primary sm:grid-cols-[180px_minmax(0,1fr)] sm:items-center">
+            <label className="grid gap-2 text-sm font-extrabold text-foreground sm:grid-cols-[180px_minmax(0,1fr)] sm:items-center">
               选择当前室友小组
               <select
-                className="h-11 rounded-md border border-blue-200 bg-white px-3 text-sm font-bold"
+                className="h-11 rounded-md border border-primary-soft-hover bg-surface px-3 text-sm font-bold"
                 value={activeDealRoomId ?? ""}
                 onChange={(event) => onSelectDealRoom(event.target.value)}
               >
@@ -4331,25 +4331,25 @@ function LikeQueueScreen({
         </QueueColumn>
 
         <QueueColumn title="室友小组" description={ready ? `人均 $${averageBudget.toLocaleString("en-US")}` : "等待服务端确认室友关系"} count={members.length}>
-          <div className="text-3xl font-extrabold text-primary">{ready ? `$${totalBudget.toLocaleString("en-US")} / 月` : "尚未组成"}</div>
+          <div className="text-3xl font-extrabold text-foreground">{ready ? `$${totalBudget.toLocaleString("en-US")} / 月` : "尚未组成"}</div>
           {members.length > 0 ? (
             members.map((member) => (
-              <div key={getRoommateKey(member)} className="flex items-center gap-3 rounded-[22px] border border-blue-100 bg-white p-3">
+              <div key={getRoommateKey(member)} className="flex items-center gap-3 rounded-[22px] border border-primary-soft bg-surface p-3">
                 <Avatar className="size-11">
                   <AvatarImage src={member.image} alt="" />
                   <AvatarFallback>{member.name.slice(0, 1)}</AvatarFallback>
                 </Avatar>
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm font-extrabold text-primary">{member.name}</div>
+                  <div className="truncate text-sm font-extrabold text-foreground">{member.name}</div>
                   <div className="truncate text-xs font-semibold text-muted-foreground">{member.role}</div>
                 </div>
-                <UserCheck className="size-5 text-[#006AFF]" aria-hidden="true" />
+                <UserCheck className="size-5 text-primary-text" aria-hidden="true" />
               </div>
             ))
           ) : (
             <QueueEmptyState>还没有服务端确认的室友小组。</QueueEmptyState>
           )}
-          <Button className="mt-auto h-11 rounded-full bg-[#006AFF] font-extrabold text-white hover:bg-[#0D4599]" disabled={!ready} onClick={onRequestTour}>
+          <Button className="mt-auto h-11 rounded-full bg-primary font-extrabold text-white hover:bg-primary-pressed" disabled={!ready} onClick={onRequestTour}>
             <CalendarDays data-icon="inline-start" />
             {tourRequested && ready ? "小组看房已请求" : "发起小组看房"}
           </Button>
@@ -4387,7 +4387,7 @@ function QueueColumn({
 }
 
 function QueueEmptyState({ children }: { children: ReactNode }) {
-  return <div className="rounded-[22px] border border-dashed border-blue-200 bg-white p-4 text-sm font-semibold text-muted-foreground">{children}</div>;
+  return <div className="rounded-[22px] border border-dashed border-primary-soft-hover bg-surface p-4 text-sm font-semibold text-muted-foreground">{children}</div>;
 }
 
 function RoommateConnectionRow({
@@ -4419,15 +4419,15 @@ function RoommateConnectionRow({
   const status = getRoommateConnectionStatus(key, state);
 
   return (
-    <div className="min-w-0 space-y-3 rounded-[24px] border border-blue-100 bg-white p-3 shadow-sm">
+    <div className="min-w-0 space-y-3 rounded-[24px] border border-primary-soft bg-surface p-3 shadow-sm">
       <div className="grid grid-cols-[1fr_auto] items-center gap-3">
         <div className="flex min-w-0 items-center gap-3">
-          <Avatar className="size-12 ring-2 ring-blue-100">
+          <Avatar className="size-12 ring-2 ring-primary-soft">
             <AvatarImage src={roommate.image} alt="" />
             <AvatarFallback>{roommate.name.slice(0, 1)}</AvatarFallback>
           </Avatar>
           <div className="min-w-0 flex-1">
-            <div className="truncate text-sm font-extrabold text-primary">{roommate.name}</div>
+            <div className="truncate text-sm font-extrabold text-foreground">{roommate.name}</div>
             <div className="mt-1 truncate text-xs font-semibold text-muted-foreground">{getRoommateStatusLabel(status)}</div>
           </div>
         </div>
@@ -4552,7 +4552,7 @@ function DiscoverScreen({
             />
           )}
           {totalListingCount > 0 ? (
-            <nav className="flex items-center justify-between rounded-[18px] border bg-white p-3" aria-label="房源分页">
+            <nav className="flex items-center justify-between rounded-[18px] border bg-surface p-3" aria-label="房源分页">
               <Button variant="outline" disabled={page <= 1} onClick={() => onPageChange(page - 1)}>上一页</Button>
               <span className="text-sm font-bold text-muted-foreground">第 {page} / {pageCount} 页</span>
               <Button variant="outline" disabled={page >= pageCount} onClick={() => onPageChange(page + 1)}>下一页</Button>
@@ -4611,7 +4611,7 @@ function SearchHero({
         <CardContent className="grid grid-cols-4 gap-4 p-4 md:grid-cols-8 md:gap-5 md:p-5 xl:grid-cols-12 xl:items-end xl:gap-6 xl:p-6">
           <div className="col-span-4 min-w-0 md:col-span-8 xl:col-span-3">
             <span className="editorial-kicker">01 / 短租</span>
-            <h2 className="mt-2 text-2xl font-black leading-tight tracking-[-0.035em] text-foreground">
+            <h2 className="mt-2 text-2xl font-black leading-tight tracking-[-0.01em] text-foreground">
               查找适合你的短租
             </h2>
             {previewDataEnabled ? <Badge className="mt-2" variant="warning">开发预览数据</Badge> : null}
@@ -4639,7 +4639,7 @@ function SearchHero({
           <div className="editorial-field col-span-4 md:col-span-4 xl:col-span-2">
             <div className="flex items-center justify-between gap-3">
               <span>价格区间</span>
-              <span className="text-xs font-black text-[#006AFF]">{formatPriceRangeLabel(filters)}</span>
+              <span className="text-xs font-black text-primary-text">{formatPriceRangeLabel(filters)}</span>
             </div>
             <div className="grid grid-cols-2 gap-2">
               <Input
@@ -4665,7 +4665,7 @@ function SearchHero({
             </div>
             <input
               aria-label="最高价格滑杆"
-              className="h-6 w-full accent-[#006AFF]"
+              className="h-6 w-full accent-primary"
               type="range"
               min={priceFilterBounds.min}
               max={priceFilterBounds.max}
@@ -4693,8 +4693,8 @@ function SearchHero({
                   className={cn(
                     "flex h-10 items-center gap-2 rounded-full border px-4 text-sm font-extrabold shadow-sm transition-all hover:-translate-y-0.5",
                     active
-                      ? "border-[#006AFF] bg-[#006AFF] text-white"
-                      : "border-border bg-white text-muted-foreground hover:bg-secondary"
+                      ? "border-primary bg-primary text-white"
+                      : "border-border bg-surface text-muted-foreground hover:bg-secondary"
                   )}
                   type="button"
                   aria-pressed={active}
@@ -4715,8 +4715,8 @@ function SearchHero({
                   className={cn(
                     "flex h-10 items-center gap-2 rounded-full border px-4 text-sm font-extrabold shadow-sm transition-all hover:-translate-y-0.5",
                     active
-                      ? "border-[#006AFF] bg-[#006AFF] text-white"
-                      : "border-border bg-white text-muted-foreground hover:bg-secondary"
+                      ? "border-primary bg-primary text-white"
+                      : "border-border bg-surface text-muted-foreground hover:bg-secondary"
                   )}
                   type="button"
                   aria-pressed={active}
@@ -4729,11 +4729,11 @@ function SearchHero({
             })}
         </div>
         <div className="col-span-full text-sm font-semibold text-muted-foreground md:col-span-3 xl:col-span-2">
-            当前命中 <span className="text-primary">{resultCount}</span> 套房源
+            当前命中 <span className="text-foreground">{resultCount}</span> 套房源
             <label className="mt-2 grid gap-1 text-xs font-bold">
               排序
               <select
-                className="h-9 rounded-md border bg-white px-2 text-sm text-primary"
+                className="h-9 rounded-md border bg-surface px-2 text-sm text-foreground"
                 value={filters.sort}
                 onChange={(event) => onFiltersChange({ ...filters, sort: event.target.value as CatalogSort, page: 1 })}
               >
@@ -4748,7 +4748,7 @@ function SearchHero({
         <div
           className={cn(
             "col-span-full grid min-w-0 grid-cols-1 gap-3 md:col-span-5 xl:col-span-3",
-            insight.status === "healthy" && "border-indigo-100 bg-indigo-50/70",
+            insight.status === "healthy" && "border-primary-soft bg-surface-subtle/70",
             insight.status === "tight" && "border-trust-amber/25 bg-trust-amber/5",
             insight.status === "empty" && "border-trust-red/20 bg-trust-red/5"
           )}
@@ -4763,7 +4763,7 @@ function SearchHero({
               )}
               aria-hidden="true"
             />
-            <span className="text-sm font-extrabold text-primary">{insight.headline}</span>
+            <span className="text-sm font-extrabold text-foreground">{insight.headline}</span>
           </div>
           <div className="flex min-w-0 flex-wrap gap-2">
             {insight.chips.map((chip) => (
@@ -4868,9 +4868,9 @@ function DateRangePicker({
         </Button>
       </div>
       {mounted && open ? createPortal(
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/35 p-3" onMouseDown={closeDialog}>
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-ink-block/35 p-3" onMouseDown={closeDialog}>
         <div
-          className="max-h-[calc(100vh-1.5rem)] w-full max-w-[760px] overflow-y-auto rounded-[24px] border bg-white p-4 shadow-panel sm:p-5"
+          className="max-h-[calc(100vh-1.5rem)] w-full max-w-[760px] overflow-y-auto rounded-[24px] border bg-surface p-4 shadow-panel sm:p-5"
           role="dialog"
           aria-modal="true"
           aria-label="选择入住和退租日期"
@@ -4878,7 +4878,7 @@ function DateRangePicker({
         >
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <div className="text-base font-extrabold text-primary">{formatDateRangeLabel(range)}</div>
+              <div className="text-base font-extrabold text-foreground">{formatDateRangeLabel(range)}</div>
               <div className="text-xs font-semibold text-muted-foreground">
                 {days > 0 ? "先选入住，再选退租；结果会自动更新。" : "请选择入住和退租日期。"}
               </div>
@@ -4911,7 +4911,7 @@ function DateRangePicker({
           <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
             {months.map((month, monthIndex) => (
               <div key={month.key} className={cn("min-w-0", monthIndex === 1 && "hidden sm:block")}>
-                <div className="text-sm font-extrabold text-primary">{month.label}</div>
+                <div className="text-sm font-extrabold text-foreground">{month.label}</div>
                 <div className="mt-3 grid grid-cols-7 gap-1 text-center text-[11px] font-bold text-muted-foreground">
                   {["一", "二", "三", "四", "五", "六", "日"].map((day) => (
                     <div key={day}>{day}</div>
@@ -4933,7 +4933,7 @@ function DateRangePicker({
                         className={cn(
                           "flex aspect-square min-h-9 items-center justify-center rounded-md text-sm font-bold transition-colors",
                           !day.inCurrentMonth && "text-muted-foreground/45",
-                          inRange && "bg-trust-sky/10 text-primary",
+                          inRange && "bg-trust-sky/10 text-foreground",
                           (isStart || isEnd) && "bg-primary text-white",
                           day.inCurrentMonth && !isStart && !isEnd && "hover:bg-secondary"
                         )}
@@ -5054,8 +5054,8 @@ function MessagesScreen({
                   <button
                     key={getInboxContactKey(contact)}
                     className={cn(
-                      "grid grid-cols-[52px_minmax(0,1fr)] gap-3 rounded-[22px] border p-3 text-left transition-all hover:bg-blue-50",
-                      selected ? "border-[#006AFF] bg-blue-50 shadow-sm" : "border-blue-100 bg-white"
+                      "grid grid-cols-[52px_minmax(0,1fr)] gap-3 rounded-[22px] border p-3 text-left transition-all hover:bg-surface-subtle",
+                      selected ? "border-primary bg-surface-subtle shadow-sm" : "border-primary-soft bg-surface"
                     )}
                     type="button"
                     onClick={() => onSelectContact(contact)}
@@ -5066,11 +5066,11 @@ function MessagesScreen({
                     </Avatar>
                     <div className="min-w-0">
                       <div className="flex items-center justify-between gap-2">
-                        <div className="truncate text-sm font-extrabold text-primary">{contact.contactName}</div>
+                        <div className="truncate text-sm font-extrabold text-foreground">{contact.contactName}</div>
                         <span className="flex shrink-0 items-center gap-1.5 text-[10px] font-black text-muted-foreground">
                           {contact.time}
                           {contact.unreadCount && contact.unreadCount > 0 ? (
-                            <span className="flex min-w-5 items-center justify-center rounded-full bg-[#006AFF] px-1.5 py-0.5 text-white">
+                            <span className="flex min-w-5 items-center justify-center rounded-full bg-badge px-1.5 py-0.5 text-on-badge">
                               {contact.unreadCount > 99 ? "99+" : contact.unreadCount}
                             </span>
                           ) : null}
@@ -5088,7 +5088,7 @@ function MessagesScreen({
                 );
               })
             ) : (
-              <div className="rounded-lg border border-dashed border-blue-200 bg-blue-50/50 p-4 text-sm font-semibold text-muted-foreground">
+              <div className="rounded-lg border border-dashed border-primary-soft-hover bg-surface-subtle/50 p-4 text-sm font-semibold text-muted-foreground">
                 还没有联系人。联系房东或与真实用户互相喜欢后，会话会出现在这里。
               </div>
             )}
@@ -5116,7 +5116,7 @@ function MessagesScreen({
                     <Badge variant="trust">{getHostContactName(selectedListing)}</Badge>
                     <Badge variant={latestViewingRequest ? "success" : "secondary"}>{dealStage}</Badge>
                   </div>
-                  <div className="truncate text-xl font-extrabold text-primary">{selectedListing.title}</div>
+                  <div className="truncate text-xl font-extrabold text-foreground">{selectedListing.title}</div>
                   <div className="flex flex-wrap items-center gap-3 text-sm font-bold text-muted-foreground">
                     <span>{selectedListing.area}</span>
                     <span>${selectedListing.price.toLocaleString("en-US")}/月</span>
@@ -5168,7 +5168,7 @@ function MessagesScreen({
               <CardDescription>从左侧选择房东或室友，右侧会打开对应消息。</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="rounded-[24px] border border-dashed border-blue-200 bg-blue-50/50 p-8 text-center text-sm font-semibold text-muted-foreground">
+              <div className="rounded-[24px] border border-dashed border-primary-soft-hover bg-surface-subtle/50 p-8 text-center text-sm font-semibold text-muted-foreground">
                 联系房东或完成双向室友匹配后，会话会在服务端创建并显示在这里。
               </div>
             </CardContent>
@@ -5194,11 +5194,11 @@ function GuestAccessGate({
 }) {
   return (
     <section className="app-shell py-8 md:py-12">
-      <Card className="mx-auto max-w-2xl overflow-hidden border-blue-100 shadow-panel">
+      <Card className="mx-auto max-w-2xl overflow-hidden border-primary-soft shadow-panel">
         <CardContent className="grid gap-6 p-6 md:grid-cols-[minmax(0,1fr)_auto] md:items-center md:p-8">
           <div>
             <span className="editorial-kicker">{kicker}</span>
-            <h1 className="mt-3 text-3xl font-black tracking-[-0.035em] text-primary">
+            <h1 className="mt-3 text-3xl font-black tracking-[-0.01em] text-foreground">
               {title}
             </h1>
             <p className="mt-3 max-w-xl text-sm font-semibold leading-6 text-muted-foreground">
@@ -5253,7 +5253,7 @@ function RoommateConversationPanel({
 
   return (
     <Card className="overflow-hidden shadow-panel" data-testid="roommate-dm-panel">
-      <CardHeader className="border-b border-blue-100 bg-blue-50/40">
+      <CardHeader className="border-b border-primary-soft bg-surface-subtle/40">
         <div className="flex items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-3">
             <Avatar className="size-12">
@@ -5285,7 +5285,7 @@ function RoommateConversationPanel({
           </Button>
         ) : null}
         {error ? (
-          <div className="flex items-center justify-between gap-3 rounded-[20px] border border-red-200 bg-red-50 p-3 text-sm font-semibold text-red-700">
+          <div className="flex items-center justify-between gap-3 rounded-[20px] border border-danger/30 bg-danger-soft p-3 text-sm font-semibold text-danger-text">
             <span>{error}</span>
             <Button variant="outline" size="sm" onClick={() => onLoadOlder(conversation.id)}>
               重试加载
@@ -5293,11 +5293,11 @@ function RoommateConversationPanel({
           </div>
         ) : null}
 
-        <div className="flex max-h-[430px] min-h-[260px] flex-col gap-3 overflow-y-auto rounded-[24px] border bg-blue-50/40 p-3 app-scrollbar">
+        <div className="flex max-h-[430px] min-h-[260px] flex-col gap-3 overflow-y-auto rounded-[24px] border bg-surface-subtle/40 p-3 app-scrollbar">
           {loading && messages.length === 0 ? (
             <div className="m-auto text-sm font-semibold text-muted-foreground">正在加载消息…</div>
           ) : messages.length === 0 ? (
-            <div className="m-auto max-w-md rounded-[20px] border border-dashed bg-white p-5 text-center text-sm font-semibold text-muted-foreground">
+            <div className="m-auto max-w-md rounded-[20px] border border-dashed bg-surface p-5 text-center text-sm font-semibold text-muted-foreground">
               你们已经互相喜欢。可以从入住时间、预算和生活习惯开始聊起。
             </div>
           ) : null}
@@ -5316,8 +5316,8 @@ function RoommateConversationPanel({
                 className={cn(
                   "max-w-[88%] rounded-[22px] border px-3 py-2 text-sm shadow-sm",
                   isSelf
-                    ? "ml-auto border-[#006AFF]/20 bg-[#006AFF] text-white"
-                    : "border-blue-100 bg-white text-primary"
+                    ? "ml-auto border-primary/20 bg-primary text-white"
+                    : "border-primary-soft bg-surface text-foreground"
                 )}
               >
                 <div
@@ -5336,7 +5336,7 @@ function RoommateConversationPanel({
                     {message.deliveryStatus === "failed" ? (
                       <button
                         type="button"
-                        className="rounded-full bg-white/15 px-2 py-1 text-white underline"
+                        className="rounded-full bg-surface/15 px-2 py-1 text-white underline"
                         onClick={() => onRetry(message)}
                       >
                         重新发送
@@ -5367,7 +5367,7 @@ function RoommateConversationPanel({
             <div className="grid grid-cols-[minmax(0,1fr)_56px] items-stretch gap-2">
               <div className="min-w-0">
                 <textarea
-                  className="min-h-20 w-full resize-none rounded-[22px] border border-blue-100 bg-white px-4 py-3 text-sm font-semibold text-primary shadow-sm outline-none transition-colors placeholder:text-muted-foreground focus:border-[#006AFF]"
+                  className="min-h-20 w-full resize-none rounded-[22px] border border-primary-soft bg-surface px-4 py-3 text-sm font-semibold text-foreground shadow-sm outline-none transition-colors placeholder:text-muted-foreground focus:border-primary"
                   value={draft}
                   maxLength={2000}
                   onChange={(event) => setDraft(event.target.value)}
@@ -5378,7 +5378,7 @@ function RoommateConversationPanel({
                 </div>
               </div>
               <Button
-                className="h-20 rounded-[22px] bg-[#006AFF] px-4 text-white hover:bg-[#0D4599]"
+                className="h-20 rounded-[22px] bg-primary px-4 text-white hover:bg-primary-pressed"
                 disabled={!draft.trim() || draft.trim().length > 2000}
                 onClick={submitMessage}
               >
@@ -5388,7 +5388,7 @@ function RoommateConversationPanel({
             </div>
           </>
         ) : (
-          <div className="rounded-[20px] border border-dashed border-blue-200 bg-blue-50 p-4 text-sm font-semibold text-muted-foreground">
+          <div className="rounded-[20px] border border-dashed border-primary-soft-hover bg-surface-subtle p-4 text-sm font-semibold text-muted-foreground">
             这段室友匹配已结束。历史消息仍可查看，但不能继续发送。
           </div>
         )}
@@ -5445,7 +5445,7 @@ export function PublishScreen({
       <div className="app-section editorial-toolbar">
         <div>
           <span className="editorial-kicker">01 / 发布</span>
-          <h1 className="mt-2 text-3xl font-black tracking-[-0.035em] md:text-4xl">发布房源流程</h1>
+          <h1 className="mt-2 text-3xl font-black tracking-[-0.01em] md:text-4xl">发布房源流程</h1>
         </div>
       </div>
       <div className="col-span-full min-w-0 xl:col-span-8">
@@ -5543,11 +5543,11 @@ function LandlordListingsPanel({
           </Button>
         ) : null}
         {!user ? (
-          <div className="rounded-md border bg-secondary p-4 text-sm font-semibold text-primary">
+          <div className="rounded-md border bg-secondary p-4 text-sm font-semibold text-foreground">
             先用邮箱验证码登录，再创建房源并查看审核状态。
           </div>
         ) : listings.length === 0 ? (
-          <div className="rounded-md border bg-white p-4 text-sm font-semibold text-muted-foreground">
+          <div className="rounded-md border bg-surface p-4 text-sm font-semibold text-muted-foreground">
             还没有发布记录。创建后会先进入审核中，审核通过才会出现在租客找房页。
           </div>
         ) : (
@@ -5559,26 +5559,26 @@ function LandlordListingsPanel({
               <div
                 key={listing.id}
                 className={cn(
-                  "rounded-md border bg-white p-3",
+                  "rounded-md border bg-surface p-3",
                   editingListingId === listing.id && "border-trust-sky bg-trust-sky/5"
                 )}
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <div className="truncate text-sm font-extrabold text-primary">{listing.title}</div>
+                    <div className="truncate text-sm font-extrabold text-foreground">{listing.title}</div>
                     <div className="mt-1 truncate text-xs font-semibold text-muted-foreground">
                       {listing.area}
                     </div>
                   </div>
                   <Badge variant={meta.variant}>{meta.label}</Badge>
                 </div>
-                <div className="mt-3 flex items-center justify-between text-sm font-bold text-primary">
+                <div className="mt-3 flex items-center justify-between text-sm font-bold text-foreground">
                   <span>${listing.price.toLocaleString("en-US")}/月</span>
                   <span>{listing.mediaCount ?? listing.media?.length ?? 0} 张媒体</span>
                 </div>
                 <p className="mt-2 text-xs font-semibold text-muted-foreground">{meta.description}</p>
                 {status === "REJECTED" && listing.rejectionReason ? (
-                  <p className="mt-2 rounded-md bg-secondary p-2 text-xs font-semibold text-primary">
+                  <p className="mt-2 rounded-md bg-secondary p-2 text-xs font-semibold text-foreground">
                     {listing.rejectionReason}
                   </p>
                 ) : null}
@@ -5635,7 +5635,7 @@ function TripsScreen({
       <div className="app-section editorial-toolbar">
         <div>
           <span className="editorial-kicker">01 / 看房</span>
-          <h1 className="mt-2 text-3xl font-black tracking-[-0.035em] md:text-4xl">我的看房记录</h1>
+          <h1 className="mt-2 text-3xl font-black tracking-[-0.01em] md:text-4xl">我的看房记录</h1>
         </div>
       </div>
       <aside className="col-span-full min-w-0 lg:col-span-4">
@@ -5658,20 +5658,20 @@ function TripsScreen({
           </div>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
-          <div className="rounded-[24px] border border-blue-100 bg-blue-50/50 p-4">
+          <div className="rounded-[24px] border border-primary-soft bg-surface-subtle/50 p-4">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <div className="text-base font-extrabold text-primary">看房安排</div>
+                <div className="text-base font-extrabold text-foreground">看房安排</div>
                 <div className="text-sm font-semibold text-muted-foreground">仅展示当前登录账户在服务端保存的看房请求</div>
               </div>
-              <CalendarDays className="size-5 text-[#006AFF]" aria-hidden="true" />
+              <CalendarDays className="size-5 text-primary-text" aria-hidden="true" />
             </div>
             <div className="mt-4 grid gap-3">
               {viewingRequests.length > 0 ? (
                 viewingRequests.map((request) => (
-                  <div key={request.id} className="grid gap-3 rounded-[22px] border border-blue-100 bg-white p-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
+                  <div key={request.id} className="grid gap-3 rounded-[22px] border border-primary-soft bg-surface p-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
                     <div className="min-w-0">
-                      <div className="font-extrabold text-primary">{request.timeLabel}</div>
+                      <div className="font-extrabold text-foreground">{request.timeLabel}</div>
                       <div className="mt-1 text-sm font-semibold text-muted-foreground">
                         {request.listingTitle} · {getViewingModeLabel(request.mode)} · {request.participantNames.join(", ")}
                       </div>
@@ -5682,7 +5682,7 @@ function TripsScreen({
                   </div>
                 ))
               ) : (
-                <div className="rounded-[22px] border border-dashed border-blue-200 bg-white p-4 text-sm font-semibold text-muted-foreground">
+                <div className="rounded-[22px] border border-dashed border-primary-soft-hover bg-surface p-4 text-sm font-semibold text-muted-foreground">
                   还没有看房安排。回到房源详情或消息中选择时间。
                 </div>
               )}
@@ -5775,14 +5775,14 @@ function ListingDetailScreen({
                     <Badge variant="success">{listing.score} 分</Badge>
                     <Badge variant="secondary">{detail.stayLabel}</Badge>
                   </div>
-                  <h1 className="mt-3 text-3xl font-extrabold text-primary">{listing.title}</h1>
+                  <h1 className="mt-3 text-3xl font-extrabold text-foreground">{listing.title}</h1>
                   <p className="mt-2 flex items-center gap-2 text-sm font-semibold text-muted-foreground">
                     <MapPin className="size-4" aria-hidden="true" />
                     {listing.area}
                   </p>
                 </div>
                 <div className="text-left md:text-right">
-                  <div className="text-3xl font-extrabold text-primary">${listing.price.toLocaleString("en-US")}</div>
+                  <div className="text-3xl font-extrabold text-foreground">${listing.price.toLocaleString("en-US")}</div>
                   <div className="text-sm font-semibold text-muted-foreground">
                     <span className="line-through">${listing.originalPrice.toLocaleString("en-US")}</span>
                     <span> / 月</span>
@@ -5814,9 +5814,9 @@ function ListingDetailScreen({
               <CardDescription>根据当前室友、收藏和日期实时更新</CardDescription>
             </CardHeader>
             <CardContent className="grid grid-cols-1 gap-3 md:grid-cols-3">
-              <div className="rounded-md border bg-white p-4">
+              <div className="rounded-md border bg-surface p-4">
                 <div className="text-xs font-bold text-muted-foreground">当前小组</div>
-                <div className="mt-2 text-lg font-extrabold text-primary">
+                <div className="mt-2 text-lg font-extrabold text-foreground">
                   {groupMembers.length > 0
                     ? groupMembers.map((member) => member.name).join("、")
                     : "尚未组成小组"}
@@ -5827,14 +5827,14 @@ function ListingDetailScreen({
                     : "不会自动加入目录中的室友"}
                 </div>
               </div>
-              <div className="rounded-md border bg-white p-4">
+              <div className="rounded-md border bg-surface p-4">
                 <div className="text-xs font-bold text-muted-foreground">小组人均</div>
-                <div className="mt-2 text-lg font-extrabold text-primary">${perPersonPrice.toLocaleString("en-US")}/月</div>
+                <div className="mt-2 text-lg font-extrabold text-foreground">${perPersonPrice.toLocaleString("en-US")}/月</div>
                 <div className="mt-1 text-sm font-semibold text-muted-foreground">{roommateCount} 人预算估算</div>
               </div>
-              <div className="rounded-md border bg-white p-4">
+              <div className="rounded-md border bg-surface p-4">
                 <div className="text-xs font-bold text-muted-foreground">流程状态</div>
-                <div className="mt-2 text-lg font-extrabold text-primary">
+                <div className="mt-2 text-lg font-extrabold text-foreground">
                   {dealStage}
                 </div>
                 <div className="mt-1 text-sm font-semibold text-muted-foreground">操作会即时同步到本页</div>
@@ -5887,7 +5887,7 @@ function ListingDetailScreen({
                 找室友一起租
                 <Users data-icon="inline-end" />
               </Button>
-              <div className="rounded-md bg-secondary p-3 text-sm font-semibold text-primary">
+              <div className="rounded-md bg-secondary p-3 text-sm font-semibold text-foreground">
                 <div className="flex justify-between">
                   <span>月租</span>
                   <span>${listing.price.toLocaleString("en-US")}</span>
@@ -5992,9 +5992,9 @@ function DealCommunicationPanel({
           ))}
         </div>
 
-        <div className="flex max-h-[320px] flex-col gap-3 overflow-y-auto rounded-[24px] border bg-blue-50/50 p-3 app-scrollbar">
+        <div className="flex max-h-[320px] flex-col gap-3 overflow-y-auto rounded-[24px] border bg-surface-subtle/50 p-3 app-scrollbar">
           {visibleMessages.length === 0 ? (
-            <div className="rounded-[18px] border border-dashed bg-white p-4 text-center text-sm font-semibold text-muted-foreground">
+            <div className="rounded-[18px] border border-dashed bg-surface p-4 text-center text-sm font-semibold text-muted-foreground">
               暂无消息。只有你真正发送成功的内容才会显示在这里。
             </div>
           ) : null}
@@ -6004,8 +6004,8 @@ function DealCommunicationPanel({
               className={cn(
                 "max-w-[88%] rounded-[22px] border px-3 py-2 text-sm shadow-sm",
                 message.align === "right"
-                  ? "ml-auto border-[#006AFF]/20 bg-[#006AFF] text-white"
-                  : "border-blue-100 bg-white text-primary"
+                  ? "ml-auto border-primary/20 bg-primary text-white"
+                  : "border-primary-soft bg-surface text-foreground"
               )}
             >
               <div className={cn("flex items-center justify-between gap-3 text-[11px] font-black", message.align === "right" ? "text-white/80" : "text-muted-foreground")}>
@@ -6027,12 +6027,12 @@ function DealCommunicationPanel({
 
         <div className="grid grid-cols-[minmax(0,1fr)_56px] items-stretch gap-2">
           <textarea
-            className="min-h-20 resize-none rounded-[22px] border border-blue-100 bg-white px-4 py-3 text-sm font-semibold text-primary shadow-sm outline-none transition-colors placeholder:text-muted-foreground focus:border-[#006AFF]"
+            className="min-h-20 resize-none rounded-[22px] border border-primary-soft bg-surface px-4 py-3 text-sm font-semibold text-foreground shadow-sm outline-none transition-colors placeholder:text-muted-foreground focus:border-primary"
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
             placeholder="输入给房东的消息"
           />
-          <Button className="h-20 rounded-[22px] bg-[#006AFF] px-4 text-white hover:bg-[#0D4599]" onClick={() => void submitMessage()} disabled={messagePending || !draft.trim()}>
+          <Button className="h-20 rounded-[22px] bg-primary px-4 text-white hover:bg-primary-pressed" onClick={() => void submitMessage()} disabled={messagePending || !draft.trim()}>
             <Send aria-hidden="true" />
             <span className="sr-only">{messagePending ? "消息提交中" : "发送消息"}</span>
           </Button>
@@ -6043,7 +6043,7 @@ function DealCommunicationPanel({
         <div>
           <div className="mb-3 flex items-center justify-between gap-3">
             <div>
-              <div className="text-sm font-extrabold text-primary">预约看房</div>
+              <div className="text-sm font-extrabold text-foreground">预约看房</div>
               <div className="text-xs font-semibold text-muted-foreground">
                 {latestViewingRequest
                   ? `${latestViewingRequest.timeLabel} · ${getViewingModeLabel(latestViewingRequest.mode)}`
@@ -6090,8 +6090,8 @@ function DealCommunicationPanel({
                   className={cn(
                     "flex items-center justify-between rounded-[20px] border px-3 py-3 text-left text-sm font-extrabold transition-all",
                     selected
-                      ? "border-[#006AFF] bg-[#006AFF]/10 text-[#006AFF]"
-                      : "border-blue-100 bg-white text-primary hover:bg-blue-50"
+                      ? "border-primary bg-primary/10 text-primary-text"
+                      : "border-primary-soft bg-surface text-foreground hover:bg-surface-subtle"
                   )}
                   data-testid={`viewing-slot-${slot.id}`}
                   type="button"
@@ -6105,7 +6105,7 @@ function DealCommunicationPanel({
                 })}
               </div>
               <Button
-                className="mt-3 h-11 w-full rounded-full bg-gradient-to-r from-[#006AFF] to-[#0D4599] font-extrabold text-white hover:brightness-95"
+                className="mt-3 h-11 w-full rounded-full bg-primary font-extrabold text-white hover:bg-primary-hover"
                 data-testid="confirm-viewing-button"
                 disabled={tourPending || !selectedSlot}
                 onClick={async () => {
@@ -6147,8 +6147,8 @@ function getViewingStatusLabel(status: ViewingRequest["status"]) {
 
 function DetailList({ title, items }: { title: string; items: string[] }) {
   return (
-    <div className="rounded-md border bg-white p-4">
-      <h2 className="text-sm font-extrabold text-primary">{title}</h2>
+    <div className="rounded-md border bg-surface p-4">
+      <h2 className="text-sm font-extrabold text-foreground">{title}</h2>
       <div className="mt-3 flex flex-col gap-2">
         {items.map((item, index) => (
           <div key={`${title}-${index}`} className="flex gap-2 text-sm font-semibold text-muted-foreground">
@@ -6185,7 +6185,7 @@ function MarketToolbar({
       <CardContent className="editorial-toolbar p-0">
         <div>
           <span className="editorial-kicker">02 / 找房</span>
-          <h1 className="mt-2 break-words text-3xl font-black tracking-[-0.035em] md:text-4xl">{heading}</h1>
+          <h1 className="mt-2 break-words text-3xl font-black tracking-[-0.01em] md:text-4xl">{heading}</h1>
           <p className="text-sm font-medium text-muted-foreground">
             {summary} · 本页 {listingCount} 套 · {favoriteCount} 个本机收藏
           </p>
@@ -6273,7 +6273,7 @@ function MapCanvas({
   return (
     <Card className={cn("overflow-hidden shadow-panel", className)}>
       <div className="grid min-h-[520px] grid-cols-1">
-        <div ref={mapRef} className="relative min-h-[360px] overflow-hidden bg-[#DCE7EA]">
+        <div ref={mapRef} className="relative min-h-[360px] overflow-hidden bg-tag-neutral">
           <div className="absolute inset-0">
             {tiles.map((tile) => (
               <div
@@ -6287,7 +6287,7 @@ function MapCanvas({
             <Button
               variant="outline"
               size="icon"
-              className="bg-white/95"
+              className="bg-surface/95"
               aria-label="放大地图"
               onClick={() => setZoom((current) => Math.min(13, current + 1))}
             >
@@ -6296,7 +6296,7 @@ function MapCanvas({
             <Button
               variant="outline"
               size="icon"
-              className="bg-white/95"
+              className="bg-surface/95"
               aria-label="缩小地图"
               onClick={() => setZoom((current) => Math.max(9, current - 1))}
             >
@@ -6305,14 +6305,14 @@ function MapCanvas({
             <Button
               variant="outline"
               size="icon"
-              className="bg-white/95"
+              className="bg-surface/95"
               aria-label="重置地图"
               onClick={resetMap}
             >
               <LocateFixed />
             </Button>
           </div>
-          <div className="absolute right-3 top-3 grid grid-cols-3 overflow-hidden rounded-[18px] border bg-white/95 text-center shadow-card">
+          <div className="absolute right-3 top-3 grid grid-cols-3 overflow-hidden rounded-[18px] border bg-surface/95 text-center shadow-card">
 	            <MapStat label="总结果" value={`${totalResultCount}`} />
 	            <MapStat label="本页标记" value={`${mapSummary.count}`} />
 	            <MapStat label="最低" value={mapSummary.minimumPrice ? `$${mapSummary.minimumPrice.toLocaleString("en-US")}` : "--"} />
@@ -6335,19 +6335,19 @@ function MapCanvas({
             />
           ))}
           {mapListings.length === 0 ? (
-            <div className="absolute inset-x-6 top-1/2 -translate-y-1/2 rounded-md border bg-white/95 p-4 text-center shadow-card">
-              <div className="text-sm font-extrabold text-primary">当前地图没有可显示房源</div>
+            <div className="absolute inset-x-6 top-1/2 -translate-y-1/2 rounded-md border bg-surface/95 p-4 text-center shadow-card">
+              <div className="text-sm font-extrabold text-foreground">当前地图没有可显示房源</div>
               <p className="mt-1 text-xs font-semibold text-muted-foreground">
                 放宽预算、设施或地点后，地图会重新显示价格标记。
               </p>
             </div>
           ) : null}
-          <div className="absolute bottom-2 right-3 rounded bg-white/90 px-2 py-1 text-[10px] font-semibold text-muted-foreground">
+          <div className="absolute bottom-2 right-3 rounded bg-surface/90 px-2 py-1 text-[10px] font-semibold text-muted-foreground">
             © OpenStreetMap contributors
           </div>
           {mapListings.length > 0 ? (
-            <div className="absolute bottom-5 left-5 rounded-md border bg-white/94 p-3 shadow-card">
-              <div className="flex items-center gap-2 text-sm font-bold text-primary">
+            <div className="absolute bottom-5 left-5 rounded-md border bg-surface/94 p-3 shadow-card">
+              <div className="flex items-center gap-2 text-sm font-bold text-foreground">
                 <Navigation className="size-4 text-trust-sky" aria-hidden="true" />
                 {selectedListing.commute}
               </div>
@@ -6357,7 +6357,7 @@ function MapCanvas({
             </div>
           ) : null}
         </div>
-        <div className="flex flex-col justify-between gap-4 border-t bg-white p-5">
+        <div className="flex flex-col justify-between gap-4 border-t bg-surface p-5">
           {mapListings.length > 0 ? (
             <>
               <div>
@@ -6365,7 +6365,7 @@ function MapCanvas({
                   <Badge variant="trust">地标通勤</Badge>
                   <Badge variant="secondary">{mapSummary.count} 个地图价格标记</Badge>
                 </div>
-                <h2 className="mt-3 text-xl font-bold text-primary">
+                <h2 className="mt-3 text-xl font-bold text-foreground">
                   {selectedListing.title}
                 </h2>
                 <p className="mt-1 text-sm font-medium text-muted-foreground">
@@ -6380,7 +6380,7 @@ function MapCanvas({
               </div>
             </>
           ) : (
-            <div className="rounded-md border bg-secondary p-4 text-sm font-semibold text-primary">
+            <div className="rounded-md border bg-secondary p-4 text-sm font-semibold text-foreground">
               地图会跟随筛选条件更新。当前没有价格标记时，先回到左侧调整关键词、预算或设施。
             </div>
           )}
@@ -6411,7 +6411,7 @@ function MapMarker({
         "absolute -translate-x-1/2 -translate-y-1/2 rounded-full border px-3 py-1 text-sm font-bold shadow-card transition-transform hover:scale-105",
         active
           ? "border-primary bg-primary text-primary-foreground"
-          : "border-white bg-white text-primary"
+          : "border-surface bg-surface text-foreground"
       )}
       onClick={onClick}
       style={{ left, top }}
@@ -6427,7 +6427,7 @@ function MapStat({ label, value }: { label: string; value: string }) {
   return (
     <div className="min-w-[72px] px-3 py-2">
       <div className="text-[10px] font-black uppercase text-muted-foreground">{label}</div>
-      <div className="mt-0.5 text-sm font-black text-primary">{value}</div>
+      <div className="mt-0.5 text-sm font-black text-foreground">{value}</div>
     </div>
   );
 }
@@ -6447,7 +6447,7 @@ function Metric({
         <Icon className="size-4" aria-hidden="true" />
         {label}
       </div>
-      <div className="mt-1 line-clamp-2 break-words text-sm font-bold text-primary">{value}</div>
+      <div className="mt-1 line-clamp-2 break-words text-sm font-bold text-foreground">{value}</div>
     </div>
   );
 }
@@ -6528,21 +6528,21 @@ function ListingCard({
           onClick={() => onPreview(listing)}
           aria-label={`在地图上选中 ${listing.title}`}
         />
-        <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-slate-950/38 via-transparent to-transparent" />
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-ink-block/38 via-transparent to-transparent" />
         <div className="absolute left-3 top-3 flex gap-2">
-          <Badge className="border-white/60 bg-white/95 text-[#006AFF] shadow-sm" title={`来源：${listing.trust}`}>
+          <Badge className="border-surface/60 bg-surface/95 text-primary-text shadow-sm" title={`来源：${listing.trust}`}>
             <ShieldCheck className="size-3.5" aria-hidden="true" />
             {getTrustSourceLabel(listing.trust)}
           </Badge>
           {listing.tags.some((tag) => tag.includes("Group")) ? (
-            <Badge className="border-indigo-100 bg-indigo-50 text-indigo-700 shadow-sm">小组匹配</Badge>
+            <Badge className="border-primary-soft bg-surface-subtle text-primary-text shadow-sm">小组匹配</Badge>
           ) : null}
         </div>
         <div className="absolute inset-x-3 top-1/2 flex -translate-y-1/2 items-center justify-between">
           <Button
             variant="outline"
             size="icon"
-            className="size-9 border-white/70 bg-white/95 shadow-sm"
+            className="size-9 border-surface/70 bg-surface/95 shadow-sm"
             aria-label={`上一张照片：${listing.title}`}
             onClick={() => moveGallery(-1)}
           >
@@ -6551,7 +6551,7 @@ function ListingCard({
           <Button
             variant="outline"
             size="icon"
-            className="size-9 border-white/70 bg-white/95 shadow-sm"
+            className="size-9 border-surface/70 bg-surface/95 shadow-sm"
             aria-label={`下一张照片：${listing.title}`}
             onClick={() => moveGallery(1)}
           >
@@ -6563,8 +6563,8 @@ function ListingCard({
             <span
               key={image}
               className={cn(
-                "size-1.5 rounded-full border border-white/80",
-                index === galleryIndex ? "bg-white" : "bg-white/45"
+                "size-1.5 rounded-full border border-surface/80",
+                index === galleryIndex ? "bg-surface" : "bg-surface/45"
               )}
             />
           ))}
@@ -6572,13 +6572,13 @@ function ListingCard({
         <Button
           variant={favorite ? "accept" : "outline"}
           size="icon"
-          className="absolute right-3 top-3 border-white/70 bg-white/95 shadow-sm"
+          className="absolute right-3 top-3 border-surface/70 bg-surface/95 shadow-sm"
           aria-label={favorite ? "取消收藏" : "收藏房源"}
           onClick={() => onFavorite(listing.id)}
         >
           <Heart className={cn(favorite && "fill-current")} />
         </Button>
-        <div className="absolute bottom-3 right-3 flex items-center gap-1 rounded-full border border-white/30 bg-white/95 px-3 py-1.5 text-sm font-black text-primary shadow-sm">
+        <div className="absolute bottom-3 right-3 flex items-center gap-1 rounded-full border border-surface/30 bg-surface/95 px-3 py-1.5 text-sm font-black text-foreground shadow-sm">
           <Star className="size-4 fill-current text-trust-amber" aria-hidden="true" />
           {listing.score}
         </div>
@@ -6586,7 +6586,7 @@ function ListingCard({
       <div className="flex flex-1 flex-col gap-3 p-4">
         <div className="flex items-start justify-between gap-3">
           <button className="min-w-0 text-left" type="button" onClick={() => onPreview(listing)}>
-            <div className="line-clamp-2 text-lg font-black leading-tight text-primary">{listing.title}</div>
+            <div className="line-clamp-2 text-lg font-black leading-tight text-foreground">{listing.title}</div>
             <div className="mt-1 flex items-center gap-1 text-sm font-semibold text-muted-foreground">
               <MapPin className="size-4" aria-hidden="true" />
               {listing.area}
@@ -6594,7 +6594,7 @@ function ListingCard({
           </button>
         </div>
         <div className="flex items-baseline gap-2">
-          <span className="text-2xl font-black text-primary">${listing.price}</span>
+          <span className="text-2xl font-black text-foreground">${listing.price}</span>
           <span className="text-sm font-semibold text-muted-foreground line-through">
             ${listing.originalPrice}
           </span>
@@ -6634,11 +6634,11 @@ function EmptyResults({ filters, onClear }: { filters: SearchFilters; onClear: (
   return (
     <Card className="shadow-panel">
       <CardContent className="flex min-h-[240px] flex-col items-center justify-center gap-4 p-8 text-center">
-        <div className="flex size-14 items-center justify-center rounded-md bg-secondary text-primary">
+        <div className="flex size-14 items-center justify-center rounded-md bg-secondary text-foreground">
           <Search className="size-6" aria-hidden="true" />
         </div>
         <div>
-          <h2 className="text-xl font-bold text-primary">没有命中的房源</h2>
+          <h2 className="text-xl font-bold text-foreground">没有命中的房源</h2>
           <p className="mt-2 max-w-md text-sm font-medium text-muted-foreground">
             {insight.suggestion}
           </p>
@@ -6781,11 +6781,11 @@ export function PublishingFlow({
     return (
       <Card className="shadow-panel">
         <CardContent className="flex min-h-[320px] flex-col items-center justify-center gap-4 p-8 text-center">
-          <div className="flex size-14 items-center justify-center rounded-full bg-indigo-50 text-trust-verified">
+          <div className="flex size-14 items-center justify-center rounded-full bg-surface-subtle text-trust-verified">
             <CheckCircle2 className="size-7" aria-hidden="true" />
           </div>
           <div>
-            <h2 className="text-xl font-black text-primary">房源已提交审核</h2>
+            <h2 className="text-xl font-black text-foreground">房源已提交审核</h2>
             <p className="mt-2 max-w-md text-sm font-semibold text-muted-foreground">
               当前房源及图片已锁定，审核完成前不能继续编辑。你可以在“我的房源”查看审核状态。
             </p>
@@ -6838,7 +6838,7 @@ export function PublishingFlow({
             <button
               key={item.key}
               className={cn(
-                "rounded-md border bg-white p-4 text-left transition-colors",
+                "rounded-md border bg-surface p-4 text-left transition-colors",
                 index === stepIndex && "border-trust-sky bg-trust-sky/5"
               )}
               type="button"
@@ -6846,12 +6846,12 @@ export function PublishingFlow({
               onClick={() => void goToStep(index)}
             >
               <div className="text-xs font-extrabold text-trust-sky">{item.code}</div>
-              <div className="mt-2 text-sm font-bold text-primary">{item.title}</div>
+              <div className="mt-2 text-sm font-bold text-foreground">{item.title}</div>
               <div className="mt-1 text-sm font-medium text-muted-foreground">{item.detail}</div>
             </button>
           ))}
         </div>
-        <div ref={formRef} className="mt-4 rounded-md border bg-white p-4">
+        <div ref={formRef} className="mt-4 rounded-md border bg-surface p-4">
           {step.key === "basic" ? (
             <div className="grid gap-3 md:grid-cols-2">
               <PublishField name="title" label="房源标题" value={draft.title} onChange={(value) => updateDraft({ title: value })} />
@@ -6914,7 +6914,7 @@ export function PublishingFlow({
                 <PublishReviewItem label="Trust 来源" value={draft.landlordAware ? "用户声明 · 待平台审核" : "未声明 · 待平台审核"} />
               </div>
               {confirmSubmit ? (
-                <div className="rounded-md border border-trust-amber bg-amber-50 p-4 text-sm font-semibold text-primary">
+                <div className="rounded-md border border-trust-amber bg-warning-soft p-4 text-sm font-semibold text-foreground">
                   请再次确认提交。提交后房源进入平台审核，在审核完成前不会标记为“平台已审核”。
                 </div>
               ) : null}
@@ -6928,7 +6928,7 @@ export function PublishingFlow({
           ) : null}
 
           {errors.length > 0 ? (
-            <div className="mt-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm font-semibold text-red-700" role="alert">
+            <div className="mt-4 rounded-md border border-danger/30 bg-danger-soft p-3 text-sm font-semibold text-danger-text" role="alert">
               {errors.map((error) => <div key={error}>{error}</div>)}
             </div>
           ) : null}
@@ -7010,7 +7010,7 @@ function PublishReviewItem({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-md border bg-secondary p-3">
       <div className="text-xs font-bold text-muted-foreground">{label}</div>
-      <div className="mt-1 break-words text-sm font-extrabold text-primary">{value}</div>
+      <div className="mt-1 break-words text-sm font-extrabold text-foreground">{value}</div>
     </div>
   );
 }
@@ -7019,7 +7019,7 @@ function StatusToast({ message }: { message: string }) {
   if (!message) return null;
 
   return (
-    <div className="pointer-events-none fixed bottom-4 left-1/2 z-40 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 rounded-md border bg-white/96 px-4 py-3 text-sm font-semibold text-primary shadow-panel backdrop-blur">
+    <div className="pointer-events-none fixed bottom-4 left-1/2 z-40 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 rounded-md border bg-surface/96 px-4 py-3 text-sm font-semibold text-foreground shadow-panel backdrop-blur">
       <div className="flex items-center gap-2">
         <CheckCircle2 className="size-4 text-trust-verified" aria-hidden="true" />
         <span className="min-w-0 truncate">{message}</span>

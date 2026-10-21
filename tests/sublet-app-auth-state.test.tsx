@@ -344,7 +344,7 @@ describe("SubletApp auth state flow", () => {
       authIntent: "messages"
     });
 
-    expect(renderedText(renderer.root)).toContain("登录 Sublet Pipeline");
+    expect(renderedText(renderer.root)).toContain("登录 psw");
     expect(renderedText(renderer.root)).toContain("登录后即可查看房东与室友消息");
     expect(renderedText(renderer.root)).not.toContain("查找适合你的短租");
     expect(renderedText(renderer.root)).not.toContain("房东发布");

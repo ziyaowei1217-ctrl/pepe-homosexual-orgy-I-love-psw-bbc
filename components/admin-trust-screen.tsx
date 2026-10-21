@@ -218,7 +218,7 @@ export function AdminTrustScreen({
       <div className="editorial-toolbar">
         <div>
           <span className="editorial-kicker">01 / 信任</span>
-          <h1 id="admin-trust-title" className="mt-2 text-3xl font-black tracking-[-0.035em] md:text-4xl">
+          <h1 id="admin-trust-title" className="mt-2 text-3xl font-black tracking-[-0.01em] md:text-4xl">
             房源审核队列
           </h1>
           <p className="mt-1 text-sm font-semibold text-muted-foreground">逐项核验待发布房源，决定会立即同步到公开目录。</p>
@@ -234,7 +234,7 @@ export function AdminTrustScreen({
             {trustMetrics.map((metric) => (
               <div key={metric.id ?? metric.label} className="rounded-md border bg-secondary/40 p-3">
                 <div className="text-xs font-bold text-muted-foreground">{metric.label}</div>
-                <div className="mt-1 text-2xl font-black text-primary">{metric.value}</div>
+                <div className="mt-1 text-2xl font-black text-foreground">{metric.value}</div>
               </div>
             ))}
           </div>
@@ -260,13 +260,13 @@ export function AdminTrustScreen({
                 <dl className="grid gap-3 rounded-md border bg-secondary/30 p-3 sm:grid-cols-2">
                   <div>
                     <dt className="text-xs font-bold text-muted-foreground">发布者编号</dt>
-                    <dd className="mt-1 break-all text-sm font-semibold text-primary">
+                    <dd className="mt-1 break-all text-sm font-semibold text-foreground">
                       {displayText(listing.ownerId, "未提供")}
                     </dd>
                   </div>
                   <div>
                     <dt className="text-xs font-bold text-muted-foreground">信任声明</dt>
-                    <dd className="mt-1 text-sm font-semibold text-primary">
+                    <dd className="mt-1 text-sm font-semibold text-foreground">
                       {displayText(listing.trust, "未提供信任声明")}
                     </dd>
                   </div>
@@ -317,7 +317,7 @@ export function AdminTrustScreen({
                   />
                 ) : (
                   <div className="grid gap-3 rounded-md border border-destructive/30 bg-destructive/5 p-4">
-                    <label className="grid gap-1 text-sm font-bold text-primary">
+                    <label className="grid gap-1 text-sm font-bold text-foreground">
                       拒绝原因
                       <Input
                         name="rejection-reason"
@@ -360,7 +360,7 @@ function DecisionConfirmation({
   return (
     <div className="flex flex-wrap items-center gap-2 rounded-md border bg-secondary/40 p-3">
       <ShieldAlert className="size-4 text-warning" aria-hidden="true" />
-      <span className="mr-auto text-sm font-semibold text-primary">此决定会改变公开房源状态。</span>
+      <span className="mr-auto text-sm font-semibold text-foreground">此决定会改变公开房源状态。</span>
       <Button type="button" variant="trust" disabled={disabled || submitting} onClick={onConfirm}>{label}</Button>
       <Button type="button" variant="ghost" disabled={submitting} onClick={onCancel}>取消</Button>
     </div>
@@ -372,7 +372,7 @@ function AdminTrustGate({ title, detail }: { title: string; detail: string }) {
     <section className="app-shell py-10">
       <Card className="mx-auto max-w-3xl shadow-panel">
         <CardContent className="p-8">
-          <h1 className="text-3xl font-black text-primary">{title}</h1>
+          <h1 className="text-3xl font-black text-foreground">{title}</h1>
           <p className="mt-2 text-sm font-semibold text-muted-foreground">{detail}</p>
         </CardContent>
       </Card>

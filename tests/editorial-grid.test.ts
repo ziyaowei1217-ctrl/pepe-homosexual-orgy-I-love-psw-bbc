@@ -24,11 +24,12 @@ describe("editorial grid redesign", () => {
     const card = readFileSync("components/ui/card.tsx", "utf8");
     const input = readFileSync("components/ui/input.tsx", "utf8");
 
-    expect(button).toContain("rounded-[12px]");
+    // psw: buttons are fully round, cards use radius-xl and sit flat, inputs use radius-md.
+    expect(button).toContain("rounded-full");
     expect(button).toContain("bg-primary text-primary-foreground");
-    expect(card).toContain("rounded-[18px]");
-    expect(card).toContain("shadow-card");
-    expect(input).toContain("rounded-[12px]");
+    expect(card).toContain("rounded-psw-xl");
+    expect(card).not.toContain("shadow-card");
+    expect(input).toContain("rounded-psw-md");
     expect(input).toContain("bg-card");
   });
 

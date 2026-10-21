@@ -1,5 +1,9 @@
 import type { Config } from "tailwindcss";
 
+import { pswColors, pswRadii, pswShadows } from "./design/psw/theme";
+
+const { primarySemantic, ...pswSemanticColors } = pswColors;
+
 const config: Config = {
   darkMode: ["class"],
   content: [
@@ -10,6 +14,7 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
+        // shadcn/ui variables, set to the psw values in app/globals.css.
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",
@@ -17,7 +22,8 @@ const config: Config = {
         foreground: "hsl(var(--foreground))",
         primary: {
           DEFAULT: "hsl(var(--primary))",
-          foreground: "hsl(var(--primary-foreground))"
+          foreground: "hsl(var(--primary-foreground))",
+          ...primarySemantic
         },
         secondary: {
           DEFAULT: "hsl(var(--secondary))",
@@ -26,10 +32,6 @@ const config: Config = {
         muted: {
           DEFAULT: "hsl(var(--muted))",
           foreground: "hsl(var(--muted-foreground))"
-        },
-        accent: {
-          DEFAULT: "hsl(var(--accent))",
-          foreground: "hsl(var(--accent-foreground))"
         },
         destructive: {
           DEFAULT: "hsl(var(--destructive))",
@@ -40,23 +42,39 @@ const config: Config = {
           foreground: "hsl(var(--card-foreground))"
         },
         trust: {
-          navy: "#002244",
-          blue: "#0D4599",
-          sky: "#006AFF",
-          verified: "#4338CA",
-          amber: "#B45309",
-          red: "#D9381E",
-          slate: "#41748D"
-        }
+          navy: pswColors.ink.DEFAULT,
+          blue: pswColors.primarySemantic.text,
+          sky: pswColors.purple["500"],
+          verified: pswColors.success.text,
+          amber: pswColors.warning.text,
+          red: pswColors.danger.text,
+          slate: pswColors.ink.secondary
+        },
+        // psw design system (design/psw/tokens.json): semantic colours named as in the design system.
+        // `accent` is psw 青柠 and only belongs on ink-block or primary.
+        ...pswSemanticColors
+      },
+      fontFamily: {
+        sans: ["-apple-system", "BlinkMacSystemFont", "\"PingFang SC\"", "\"Hiragino Sans GB\"", "\"Microsoft YaHei\"", "\"Noto Sans SC\"", "\"Segoe UI\"", "sans-serif"],
+        // 资源圆体 Bold: titles and buttons in the app.
+        rounded: ["var(--font-rounded)", "\"PingFang SC\"", "\"Microsoft YaHei\"", "sans-serif"],
+        // 资源圆体 Heavy: covers and big slogans only.
+        slogan: ["var(--font-slogan)", "var(--font-rounded)", "\"PingFang SC\"", "sans-serif"],
+        // Nunito: prices, dates and other numbers.
+        num: ["var(--font-num)", "var(--font-rounded)", "\"PingFang SC\"", "sans-serif"]
       },
       borderRadius: {
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",
-        sm: "calc(var(--radius) - 4px)"
+        sm: "calc(var(--radius) - 4px)",
+        // psw radii: 全圆 (rounded-full) = 能点; 小圆角 (rounded-psw-sm) = 只是标注
+        ...pswRadii
       },
       boxShadow: {
-        panel: "0 18px 48px rgba(20, 26, 38, 0.07)",
-        card: "0 8px 24px rgba(20, 26, 38, 0.055)"
+        // psw: cards and panels lie flat on the page; only hover, menus and dialogs lift.
+        panel: "none",
+        card: "none",
+        ...pswShadows
       }
     }
   },

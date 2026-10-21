@@ -110,7 +110,7 @@ export function AdminStepUpPanel({
     >
       <div className="editorial-panel mx-auto max-w-xl p-4 md:p-6">
         <div className="editorial-kicker">管理员安全验证</div>
-        <h2 id={`${panelId}-title`} className="mt-2 text-xl font-black text-primary">
+        <h2 id={`${panelId}-title`} className="mt-2 text-xl font-black text-foreground">
           再次验证管理员邮箱
         </h2>
         <p className="mt-1 text-sm font-semibold text-muted-foreground">
