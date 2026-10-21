@@ -35,7 +35,7 @@ export function HostShell({ active, children }: { active: HostNavKey; children: 
   return (
     <WorkspaceShell
       title="房东工作台"
-      eyebrow="Host workspace"
+      eyebrow="管理房源和申请"
       active={active}
       items={hostNav}
       accent="blue"
@@ -50,7 +50,7 @@ export function AdminShell({ active, children }: { active: AdminNavKey; children
   return (
     <WorkspaceShell
       title="运营后台"
-      eyebrow="Operations"
+      eyebrow="审核与运营"
       active={active}
       items={adminNav}
       accent="navy"
@@ -75,7 +75,7 @@ function WorkspaceShell<Key extends string>({ title, eyebrow, active, items, acc
       <aside className={cn("hidden min-h-dvh flex-col border-r px-4 py-5 text-white lg:sticky lg:top-0 lg:flex lg:h-dvh", accent === "blue" ? "border-ink/20 bg-ink-block" : "border-ink bg-ink-block")}>
         <Link href="/" className="flex items-center gap-3 rounded-[18px] px-2 py-2">
           <PswMark size={40} title="psw" />
-          <span><span className="block text-sm font-black">{title}</span><span className="mt-0.5 block text-[9px] font-black uppercase tracking-[0.16em] text-on-dark-secondary">{eyebrow}</span></span>
+          <span><span className="block font-rounded text-[15px] font-bold">{title}</span><span className="mt-0.5 block text-[11px] font-semibold text-on-dark-secondary">{eyebrow}</span></span>
         </Link>
         <nav className="mt-8 space-y-1" aria-label={`${title}导航`}>
           {items.map((item) => {
@@ -84,8 +84,8 @@ function WorkspaceShell<Key extends string>({ title, eyebrow, active, items, acc
           })}
         </nav>
         <div className="mt-auto space-y-2">
-          <Link href="/" className="flex items-center gap-2 rounded-[14px] px-3 py-2.5 text-xs font-bold text-on-dark-secondary hover:bg-surface/10 hover:text-white"><ArrowLeft className="size-4" />返回租客端</Link>
-          <Link href="/account" className="flex items-center gap-3 rounded-[16px] border border-surface/10 bg-surface/[0.06] p-3"><span className="grid size-9 place-items-center rounded-full bg-surface/10"><UserRound className="size-4" /></span><span className="min-w-0"><span className="block text-xs font-black">{accountLabel}</span><span className="mt-0.5 block truncate text-[10px] text-on-dark-secondary">查看账户与权限</span></span></Link>
+          <Link href="/" className="flex min-h-11 items-center gap-2 rounded-psw-md px-3 text-sm font-bold text-on-dark-secondary hover:bg-surface/10 hover:text-white"><ArrowLeft className="size-4" />返回租客端</Link>
+          <Link href="/account" className="flex items-center gap-3 rounded-[16px] border border-surface/10 bg-surface/[0.06] p-3"><span className="grid size-9 place-items-center rounded-full bg-surface/10"><UserRound className="size-4" /></span><span className="min-w-0"><span className="block text-xs font-black">{accountLabel}</span><span className="mt-0.5 block truncate text-[11px] text-on-dark-secondary">查看账户与权限</span></span></Link>
         </div>
       </aside>
 

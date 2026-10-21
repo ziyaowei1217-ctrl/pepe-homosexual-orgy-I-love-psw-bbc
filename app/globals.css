@@ -25,6 +25,10 @@
     --input: 247.5 9.7% 51.4%;
     --ring: 250 48.8% 16.9%;
     --radius: 16px;
+    /* 资源圆体, split into small files by unicode-range (app/psw-fonts.css): Bold for titles and buttons,
+       Heavy only for the slogan glyphs. Characters outside the files fall back to the system sans. */
+    --font-rounded: "psw Rounded";
+    --font-slogan: "psw Slogan", "psw Rounded";
   }
 
   * {
@@ -48,9 +52,19 @@
     overflow-x: hidden;
   }
 
-  /* psw: titles use the rounded face (资源圆体); body and trust details stay on the system sans. */
+  /* psw: titles use the rounded face (资源圆体); body and trust details stay on the system sans.
+     Balanced wrapping keeps short Chinese titles from leaving a single character on the last line. */
   h1, h2, h3, h4 {
     font-family: var(--font-rounded), "PingFang SC", "Microsoft YaHei", sans-serif;
+    text-wrap: balance;
+  }
+
+  /* psw focus ring (shadow-focus): a 2px white gap inside a 3px 夜墨 ring, so it shows on light pages
+     and on 夜墨 blocks alike. */
+  :is(a, button, input, select, textarea, summary, [tabindex]:not([tabindex="-1"])):focus-visible {
+    outline: 3px solid theme("colors.focus.ring");
+    outline-offset: 2px;
+    box-shadow: 0 0 0 2px theme("colors.focus.gap");
   }
 }
 
@@ -76,7 +90,17 @@
   }
 
   .editorial-kicker {
-    @apply text-[11px] font-bold uppercase tracking-[0.14em] text-muted-foreground;
+    @apply text-[13px] font-bold leading-5 text-primary-text;
+  }
+
+  /* psw page frame: content 1200 wide (layout-content-max), 16 / 32 side margins. */
+  .page-container {
+    @apply mx-auto w-full max-w-[1264px] px-4 sm:px-8;
+  }
+
+  /* psw page title: m-large-title 34/44 on phones, d-large-title 40/52 on desktop. */
+  .page-title {
+    @apply font-rounded text-[34px] font-bold leading-[44px] text-ink sm:text-[40px] sm:leading-[52px];
   }
 
   .editorial-title {
@@ -157,20 +181,30 @@
 }
 
 @layer components {
+  /* psw filter chip (Chip): 15px on phones, 14px on desktop, 44 tall. */
   .search-pill {
-    @apply inline-flex min-h-11 shrink-0 items-center gap-2 whitespace-nowrap rounded-full border-[1.5px] border-outline bg-surface px-4 py-2.5 text-[13px] font-semibold text-ink transition-colors hover:border-control-border;
+    @apply inline-flex min-h-11 shrink-0 items-center gap-2 whitespace-nowrap rounded-full border-[1.5px] border-outline bg-surface px-4 py-2.5 text-[15px] font-bold text-ink transition-colors hover:border-control-border sm:text-sm;
   }
   .search-pill-active {
     @apply border-primary bg-primary text-white hover:border-primary-hover;
+  }
+  /* Grows a small control's tap area to at least 44 × 44 without changing how it looks. */
+  .tap-target {
+    @apply relative after:absolute after:left-1/2 after:top-1/2 after:size-11 after:min-h-full after:min-w-full after:-translate-x-1/2 after:-translate-y-1/2 after:content-[''];
   }
   .marketplace-shell :is(button, a) {
     transition-property: color, background-color, border-color, box-shadow, opacity, transform;
     transition-duration: 160ms;
     transition-timing-function: cubic-bezier(0.2, 0.7, 0.2, 1);
   }
-  .marketplace-shell :is(button, a, input, select, textarea, summary):focus-visible {
-    outline: 3px solid theme("colors.focus.ring");
-    outline-offset: 2px;
+  /* Map tiles in quiet greys with a hint of 薰衣草, so prices and pins carry the colour. */
+  .map-tiles {
+    filter: grayscale(1) contrast(0.92) brightness(1.06);
+  }
+  .map-tint {
+    background: theme("colors.purple.200");
+    mix-blend-mode: multiply;
+    opacity: 0.35;
   }
 }
 

@@ -18,10 +18,21 @@ The site follows the **psw 设计系统** (the psw Design System artifact). This
 - **Shapes:** `rounded-full` means tappable (buttons, chips, search), `rounded-psw-sm` means a label, cards
   `rounded-psw-xl`, inputs `rounded-psw-md`. Outlines only on things you can tap.
 - **Type:** titles and buttons use 资源圆体 Bold (`font-rounded`, set on h1–h4 globally); Heavy (`font-slogan`) only for
-  big slogans; prices and dates use Nunito (`font-display` / `font-num`); body text and trust details stay on the
-  system sans.
-- **Cards lie flat**; desktop hover lifts 4px with `shadow-card-hover`. Booking box and map pins use `shadow-menu`.
-- **States:** hover one shade darker, press scales to 97%, focus is a 3px `focus-ring` outline.
+  the home slogan; prices and dates use Nunito (`font-display` / `font-num`); body text and trust details stay on the
+  system sans. Sizes come from the design system's scale as Tailwind classes: `text-m-*` on phones, `text-d-*` on
+  desktop (`text-m-subhead sm:text-d-subhead`). Nothing below 13px except the tab bar (11). Inputs are 16px on phones so
+  iPhone does not zoom.
+- **Page frame:** `page-container` (content 1200 wide, 16 / 32 margins) and `PageHeader` for every page title
+  (`page-title`, 34 / 40). No English eyebrows.
+- **Cards:** one `ListingCard` for home, search and saved. Cards lie flat; desktop hover lifts 4px with
+  `shadow-card-hover`. Booking box and map pins use `shadow-menu`.
+- **窝窝:** `Wowo` / `EmptyState` for empty lists (`sleepy`), no results (`curious`) and errors (`sorry`, with a retry).
+  One per screen.
+- **夜墨:** the home hero and the booking decision block (desktop box, phone bar). Other panels stay light.
+- **Dates:** `lib/date-format.ts`. Long「11月1日 – 1月15日」where people choose or confirm, short「11/1 – 1/15」on
+  cards; the year only when it is not this year.
+- **States:** hover one shade darker, press scales to 97%, focus is the design system's `shadow-focus`: a 2px white
+  gap inside a 3px 夜墨 ring, visible on light pages and on 夜墨 blocks. Small controls use `tap-target` to reach 44px.
 
 ## Price display
 

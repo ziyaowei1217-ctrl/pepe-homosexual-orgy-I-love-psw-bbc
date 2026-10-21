@@ -1,6 +1,6 @@
 import type { Config } from "tailwindcss";
 
-import { pswColors, pswRadii, pswShadows } from "./design/psw/theme";
+import { pswColors, pswRadii, pswShadows, pswTypeScale } from "./design/psw/theme";
 
 const { primarySemantic, ...pswSemanticColors } = pswColors;
 
@@ -63,6 +63,8 @@ const config: Config = {
         // Nunito: prices, dates and other numbers.
         num: ["var(--font-num)", "var(--font-rounded)", "\"PingFang SC\"", "sans-serif"]
       },
+      // psw type scale: text-d-large-title, text-d-title, text-d-subhead, text-m-body, text-m-footnote …
+      fontSize: pswTypeScale,
       borderRadius: {
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",

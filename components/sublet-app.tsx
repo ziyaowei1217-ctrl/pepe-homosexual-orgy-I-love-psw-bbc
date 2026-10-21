@@ -3144,7 +3144,7 @@ function AppHeader({
                 <Icon className="size-4" aria-hidden="true" />
                 {item.label}
                 {item.section === "Messages" && messageUnreadCount > 0 ? (
-                  <span className="flex min-w-5 items-center justify-center rounded-full bg-badge px-1.5 text-[10px] font-black text-on-badge">
+                  <span className="flex min-w-5 items-center justify-center rounded-full bg-badge px-1.5 text-[11px] font-black text-on-badge">
                     {messageUnreadCount > 99 ? "99+" : messageUnreadCount}
                   </span>
                 ) : null}
@@ -3160,7 +3160,7 @@ function AppHeader({
           {user ? (
             <Button variant={notificationsOpen ? "secondary" : "ghost"} size="icon" className="relative hidden rounded-full sm:inline-flex" aria-label="本机提醒" aria-expanded={notificationsOpen} onClick={onNotifications}>
               <Bell />
-              {unreadCount > 0 ? <span className="absolute right-0 top-0 flex size-4 items-center justify-center rounded-full bg-badge text-[10px] font-black text-on-badge">{unreadCount}</span> : null}
+              {unreadCount > 0 ? <span className="absolute right-0 top-0 flex size-4 items-center justify-center rounded-full bg-badge text-[11px] font-black text-on-badge">{unreadCount}</span> : null}
             </Button>
           ) : null}
           <button
@@ -3274,7 +3274,7 @@ function AppHeader({
                 <Icon className="size-3.5" aria-hidden="true" />
                 {item.label}
                 {item.section === "Messages" && messageUnreadCount > 0 ? (
-                  <span className="rounded-full bg-badge px-1.5 text-[10px] font-black text-on-badge">
+                  <span className="rounded-full bg-badge px-1.5 text-[11px] font-black text-on-badge">
                     {messageUnreadCount > 99 ? "99+" : messageUnreadCount}
                   </span>
                 ) : null}
@@ -3861,7 +3861,7 @@ function MatchScoreRing({
       <div className={cn("absolute rounded-full", size === "lg" ? "inset-2" : "inset-1.5", inverted ? "bg-primary" : "bg-surface")} />
       <div className="relative text-center leading-none">
         <div className={cn("font-black", valueSize)}>{score}</div>
-        <div className={cn("mt-1 font-bold", size === "sm" ? "text-[10px]" : "text-[11px]")}>{label}</div>
+        <div className={cn("mt-1 font-bold", size === "sm" ? "text-[11px]" : "text-[11px]")}>{label}</div>
       </div>
     </div>
   );
@@ -5067,7 +5067,7 @@ function MessagesScreen({
                     <div className="min-w-0">
                       <div className="flex items-center justify-between gap-2">
                         <div className="truncate text-sm font-extrabold text-foreground">{contact.contactName}</div>
-                        <span className="flex shrink-0 items-center gap-1.5 text-[10px] font-black text-muted-foreground">
+                        <span className="flex shrink-0 items-center gap-1.5 text-[11px] font-black text-muted-foreground">
                           {contact.time}
                           {contact.unreadCount && contact.unreadCount > 0 ? (
                             <span className="flex min-w-5 items-center justify-center rounded-full bg-badge px-1.5 py-0.5 text-on-badge">
@@ -6342,7 +6342,7 @@ function MapCanvas({
               </p>
             </div>
           ) : null}
-          <div className="absolute bottom-2 right-3 rounded bg-surface/90 px-2 py-1 text-[10px] font-semibold text-muted-foreground">
+          <div className="absolute bottom-2 right-3 rounded bg-surface/90 px-2 py-1 text-[11px] font-semibold text-muted-foreground">
             © OpenStreetMap contributors
           </div>
           {mapListings.length > 0 ? (
@@ -6426,7 +6426,7 @@ function MapMarker({
 function MapStat({ label, value }: { label: string; value: string }) {
   return (
     <div className="min-w-[72px] px-3 py-2">
-      <div className="text-[10px] font-black uppercase text-muted-foreground">{label}</div>
+      <div className="text-[11px] font-black uppercase text-muted-foreground">{label}</div>
       <div className="mt-0.5 text-sm font-black text-foreground">{value}</div>
     </div>
   );

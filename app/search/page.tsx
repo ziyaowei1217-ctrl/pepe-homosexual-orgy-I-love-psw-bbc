@@ -19,7 +19,7 @@ export default async function SearchPage({
   const listings = await loadMarketplaceListings();
 
   return (
-    <PublicShell active="discover">
+    <PublicShell active="discover" wide stickyHeaderOnPhone={false}>
       <SearchExperience
         key={searchHref(initialState)}
         listings={listings}

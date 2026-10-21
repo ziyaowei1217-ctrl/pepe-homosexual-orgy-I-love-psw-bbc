@@ -26,6 +26,19 @@ describe("search map positions", () => {
     expect(clusters[0].y).toBe(300);
   });
 
+  it("merges a pin into a nearby group once the group's wider pill would cover it", () => {
+    // c and b group at x 460 and show "2 套房源"; a, 100px away, clears a price pill but not that wider pill.
+    const at = (id: string, x: number, y = 300) => ({ id, x, y, lat: 0, lng: 0, price: 1500, label: "$1,500", area: "Area" });
+    const clusters = clusterSearchMarkers([at("c", 500), at("a", 360), at("b", 420)]);
+    expect(clusters).toHaveLength(1);
+    expect(clusters[0].items.map((item) => item.id).sort()).toEqual(["a", "b", "c"]);
+  });
+
+  it("leaves pins apart when their pills do not touch", () => {
+    const at = (id: string, x: number, y: number) => ({ id, x, y, lat: 0, lng: 0, price: 1500, label: "$1,500", area: "Area" });
+    expect(clusterSearchMarkers([at("a", 100, 100), at("b", 220, 100), at("c", 100, 160)])).toHaveLength(3);
+  });
+
   it("keeps offscreen homes at their projected locations rather than pinning them to the edge", () => {
     const [marker] = getMapMarkers([{ id: "ny", area: "New York", price: 2000, latitude: 40.71, longitude: -74 }], { lat: 34, lng: -118 }, 11, { width: 400, height: 600 }, false);
     expect(marker.x).toBeGreaterThan(400);

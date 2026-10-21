@@ -95,7 +95,7 @@ describe("marketplace search", () => {
     expect(pageText).toContain("Boston的可租房源");
     expect(pageText).toContain("Back Bay 阳光一居");
     expect(pageText).not.toContain(losAngelesListing.title);
-    expect(pageText).toContain("1 个地图结果");
+    expect(pageText).toContain("地图上是本页 1 套");
   });
 
   it("lets keyboard users choose a location suggestion with ArrowDown and Enter", async () => {
@@ -164,7 +164,7 @@ describe("marketplace search", () => {
     expect(pageText).toContain("Seattle的可租房源");
     expect(pageText).toContain("South Lake Union 科技通勤一居");
     expect(pageText).not.toContain(losAngelesListing.title);
-    expect(pageText).toContain("1 个地图结果");
+    expect(pageText).toContain("地图上是本页 1 套");
   });
 });
 

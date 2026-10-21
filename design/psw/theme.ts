@@ -97,6 +97,20 @@ export const pswRadii = Object.fromEntries(
     .map((token) => [token.name.replace("radius-", "psw-"), token.value as string])
 );
 
+type TypeStyle = { name: string; fontSize: string; lineHeight: string; fontWeight: number; family?: string };
+
+/**
+ * The design system's type scale as Tailwind sizes: `text-d-large-title`, `text-m-body`, `text-d-subhead` …
+ * (`m-` = phone, `d-` = desktop). Each sets size, line height and weight; pair the title styles with `font-rounded`
+ * and the prices with `font-display`, as the design system's `family` says. Cover styles stay in the design system.
+ */
+export const pswTypeScale = Object.fromEntries(
+  (tokens.type.groups as { styles: TypeStyle[] }[])
+    .flatMap((group) => group.styles)
+    .filter((style) => !style.name.startsWith("cover-"))
+    .map((style) => [style.name, [style.fontSize, { lineHeight: style.lineHeight, fontWeight: String(style.fontWeight) }]])
+) as Record<string, [string, { lineHeight: string; fontWeight: string }]>;
+
 /** `shadow-card-hover`, `shadow-menu`, `shadow-dialog`, `shadow-focus` … (light theme values). */
 export const pswShadows = Object.fromEntries(
   list(tokens.shadow as { tokens: ListToken[] }).map((token) => [

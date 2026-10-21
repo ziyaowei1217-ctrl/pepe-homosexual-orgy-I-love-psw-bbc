@@ -1,3 +1,5 @@
+import { readFileSync, readdirSync } from "node:fs";
+
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 // @ts-expect-error Next.js loads its JavaScript configuration directly.
@@ -19,6 +21,14 @@ describe("production web configuration", () => {
     expect(csp).toContain("script-src 'self' 'unsafe-inline' 'unsafe-eval'");
     expect(csp).not.toContain("upgrade-insecure-requests");
     expect(values).toContainEqual(expect.objectContaining({ key: "X-Content-Type-Options", value: "nosniff" }));
+  });
+
+  it("ships the self-hosted psw fonts with the standalone server", () => {
+    // The standalone output leaves public/ behind, so the image must copy it or every font request 404s.
+    expect(readFileSync("Dockerfile.web", "utf8")).toContain("COPY --from=build /app/public ./public");
+    const css = readFileSync("app/psw-fonts.css", "utf8");
+    const files = readdirSync("public/fonts/psw");
+    for (const [, file] of css.matchAll(/url\("\/fonts\/psw\/([^"]+)"\)/g)) expect(files).toContain(file);
   });
 
   it("allows direct development images from the public API without exposing its internal address", async () => {

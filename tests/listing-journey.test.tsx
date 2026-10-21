@@ -5,6 +5,7 @@ import { ListingDetailExperience } from "../components/marketplace/listing-detai
 import { ApplicationFormExperience } from "../components/marketplace/application-experiences";
 import { SavedListingsProvider } from "../components/marketplace/saved-listings-provider";
 import { createPreviewListings } from "../lib/preview-data";
+import { formatRangeLong } from "../lib/date-format";
 
 const listing = { ...createPreviewListings()[0], availableFrom: "2026-09-01", availableTo: "2027-06-01", images: ["https://images.example/one.jpg", "https://images.example/two.jpg", "https://images.example/three.jpg"] };
 const stay = { moveIn: "2026-10-01", moveOut: "2026-12-01" };
@@ -25,7 +26,8 @@ describe("listing to application journey", () => {
 
   it("lets mobile renters edit dates in a sheet and discard unfinished changes", () => {
     render(<SavedListingsProvider><ListingDetailExperience listing={listing} initialStay={stay} /></SavedListingsProvider>);
-    const trigger = screen.getByRole("button", { name: "编辑租期" });
+    // The bottom bar button is named by the dates it shows (label in name, WCAG 2.5.3).
+    const trigger = screen.getByRole("button", { name: formatRangeLong(stay.moveIn, stay.moveOut) });
     trigger.focus(); fireEvent.click(trigger);
     const dialog = screen.getByRole("dialog", { name: "选择租期" });
     fireEvent.change(within(dialog).getByLabelText("退租日期"), { target: { value: "2027-01-01" } });

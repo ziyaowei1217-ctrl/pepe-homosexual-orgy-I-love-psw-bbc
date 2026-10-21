@@ -3,6 +3,9 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
+import { EmptyState } from "@/components/marketplace/empty-state";
+import { PageHeader } from "@/components/marketplace/page-header";
+
 import { useAuthSessionToken } from "@/lib/use-auth-session-token";
 
 import { authRoute } from "@/lib/app-routes";
@@ -66,14 +69,10 @@ function RoommateTeamSessionExperience({ token }: { token: string | null }) {
     void run((value) => leaveRoommateTeam(value, team.id));
   }
 
-  return <main className="min-h-[calc(100dvh-72px)] bg-surface-subtle px-4 py-6 sm:px-6 sm:py-10 lg:px-8">
-    <div className="mx-auto max-w-5xl">
-      <header className="border-b border-line-strong pb-6">
-        <p className="text-xs font-black uppercase tracking-[.14em] text-primary-text">Co-rent team</p>
-        <h1 className="mt-2 text-3xl font-black tracking-[-.05em] sm:text-5xl">合租小组</h1>
-        <p className="mt-3 text-sm leading-6 text-ink-secondary">查看组队邀请和成员，找到合拍的室友后一起找房。</p>
-      </header>
-      {!token ? <section className="mt-7 rounded-[26px] border border-dashed border-outline bg-surface p-8 text-center"><h2 className="text-xl font-black">登录后查看小组</h2><Link href={authRoute({ returnTo: "/roommates/teams" })} className="primary-action mt-5">登录</Link></section> : null}
+  return <main className="min-h-[calc(100dvh-72px)] bg-background">
+    <div className="page-container pb-16 pt-8 sm:pt-12">
+      <PageHeader title="合租小组" description="查看组队邀请和成员，找到合拍的室友后一起找房。" />
+      {!token ? <EmptyState className="mt-7" mood="default" title="登录后查看小组" body="登录后可以看到组队邀请和已经确认的合租成员。" action={<Link href={authRoute({ returnTo: "/roommates/teams" })} className="primary-action">登录</Link>} /> : null}
       {loading ? <p role="status" className="mt-7 rounded-[24px] border border-line-strong bg-surface p-6 text-sm text-ink-secondary">正在加载小组和邀请…</p> : null}
       {error ? <div className="mt-6 rounded-[16px] bg-danger-soft p-4"><p role="alert" className="text-sm font-bold text-danger-text">{error}</p><button type="button" disabled={loading || pending} onClick={() => setLoadAttempt((value) => value + 1)} className="mt-3 text-sm font-bold text-danger-text underline underline-offset-4">重新加载</button></div> : null}
       {team ? <section className="mt-7 rounded-[26px] border border-line-strong bg-surface p-6">

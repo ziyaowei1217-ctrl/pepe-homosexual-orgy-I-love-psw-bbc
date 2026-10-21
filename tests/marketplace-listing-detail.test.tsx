@@ -42,7 +42,7 @@ describe("marketplace listing detail", () => {
     const html = renderToStaticMarkup(<SavedListingsProvider><ListingDetailExperience listing={listing} /></SavedListingsProvider>);
 
     expect(html).toContain('value="2026-09-03"');
-    expect(html).toContain("2026-09-03 可入住");
+    expect(html).toContain("9月3日起可入住");
     expect(html).not.toContain('value="2026-08-01"');
     expect(html).not.toContain("可 8/20 入住");
   });

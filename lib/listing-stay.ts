@@ -1,8 +1,14 @@
+import { formatRangeLong } from "./date-format";
+
 export type ListingStay = { moveIn: string; moveOut: string };
 type Availability = { availableFrom: string; availableTo: string };
 
+let dayFormat: Intl.DateTimeFormat | undefined;
+
 export function localDate(now = new Date()) {
-  return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Los_Angeles", year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
+  // One formatter for the whole page: every card and date check asks for today.
+  dayFormat ??= new Intl.DateTimeFormat("en-CA", { timeZone: "America/Los_Angeles", year: "numeric", month: "2-digit", day: "2-digit" });
+  return dayFormat.format(now);
 }
 
 function dateOnly(value: string | undefined) {
@@ -30,7 +36,7 @@ export function listingStayError(stay: ListingStay, listing: Availability, today
   if (!dateOnly(stay.moveOut)) return "请选择有效的退租日期。";
   if (stay.moveOut <= stay.moveIn) return "退租日期必须晚于入住日期。";
   if (stay.moveIn < today) return "入住日期不能早于今天。";
-  if (stay.moveIn < from || stay.moveOut > to) return `所选租期须在可租日期 ${earliest} 至 ${to} 内。`;
+  if (stay.moveIn < from || stay.moveOut > to) return `这段日期不能租。可租日期是 ${formatRangeLong(earliest, to)}。`;
   return null;
 }
 

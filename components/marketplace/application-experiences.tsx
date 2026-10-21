@@ -15,6 +15,8 @@ import { SmartImage } from "@/components/ui/smart-image";
 import Link from "next/link";
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 
+import { PageHeader } from "@/components/marketplace/page-header";
+
 import { ApplicationCancellation } from "@/components/application-cancellation";
 import { useAuthSessionToken } from "@/lib/use-auth-session-token";
 import { PaymentPanel } from "@/components/payment-panel";
@@ -175,18 +177,17 @@ function ApplicationFormSession({ listing, initialStay, selectionId }: Applicati
   }
 
   return (
-    <main className="min-h-[calc(100dvh-72px)] bg-surface-subtle">
-      <div className="mx-auto max-w-[1180px] px-4 py-4 sm:px-6 sm:py-8 lg:px-8 lg:py-12">
-        <Link href={listingHref(listing.id, draft)} className="inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm font-bold text-ink-secondary hover:bg-surface"><ArrowLeft className="size-4" />返回房源</Link>
+    <main className="min-h-[calc(100dvh-72px)] bg-background">
+      <div className="page-container pb-16 pt-4 sm:pt-8">
+        <Link href={listingHref(listing.id, draft)} className="-ml-3 inline-flex min-h-11 items-center gap-2 rounded-full px-3 text-[15px] font-bold text-ink-secondary hover:bg-surface sm:text-sm"><ArrowLeft className="size-4" aria-hidden="true" />返回房源</Link>
         <div className="mt-3 grid gap-4 sm:mt-5 sm:gap-8 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start">
-          <form noValidate onSubmit={submit} className="overflow-hidden rounded-[30px] border border-line-strong bg-surface shadow-[0_20px_65px_rgba(29,22,64,0.08)]">
+          <form noValidate onSubmit={submit} className="overflow-hidden rounded-psw-xl bg-surface">
             <header className="border-b border-line-strong px-5 py-5 sm:px-8 sm:py-8">
-              <p className="hidden text-xs font-black uppercase tracking-[0.15em] text-primary-text sm:block">Rental application</p>
-              <h1 className="text-2xl font-black tracking-[-0.01em] sm:mt-2 sm:text-4xl">申请租住</h1>
-              <p className="mt-2 hidden text-sm text-ink-secondary lg:block">{listing.title}</p>
-              {draftReady && !token ? <p className="mt-3 rounded-xl bg-surface-subtle px-3 py-2 text-xs leading-5 text-ink">提交前需要登录，目前仅支持受邀邮箱或已有账户。</p> : null}
+              <h1 className="page-title">申请租住</h1>
+              <p className="mt-2 hidden text-d-subhead text-ink-secondary lg:block">{listing.title}</p>
+              {draftReady && !token ? <p className="mt-3 rounded-psw-md bg-primary-soft px-3 py-2 text-m-footnote text-ink">提交前需要登录，目前仅支持受邀邮箱或已有账户。</p> : null}
               <ol className="mt-4 grid grid-cols-4 gap-2 sm:mt-7" aria-label="申请进度">
-                {applicationSteps.map((label, index) => <li key={label} aria-current={index === step ? "step" : undefined} className="min-w-0"><div className={cn("h-1.5 rounded-full transition-colors duration-200", index <= step ? "bg-primary" : "bg-line-strong")} /><p className={cn("mt-2 text-xs font-bold", index === step ? "text-primary-text" : "text-ink-secondary")}>{label}</p></li>)}
+                {applicationSteps.map((label, index) => <li key={label} aria-current={index === step ? "step" : undefined} className="min-w-0"><div className={cn("h-1.5 rounded-full transition-colors duration-200", index <= step ? "bg-primary" : "bg-line-strong")} /><p className={cn("mt-2 text-m-footnote font-bold", index === step ? "text-primary-text" : "text-ink-secondary")}>{label}</p></li>)}
               </ol>
             </header>
 
@@ -249,14 +250,14 @@ function ApplicationsSession() {
   }, []);
 
   return (
-    <main className="min-h-[calc(100dvh-72px)] bg-surface-subtle">
-      <div className="mx-auto max-w-[1180px] px-4 py-10 sm:px-6 lg:px-8 lg:py-14">
-        <div className="flex flex-col justify-between gap-6 border-b border-line-strong pb-7 sm:flex-row sm:items-end"><div><p className="text-xs font-black uppercase tracking-[0.15em] text-primary-text">Application center</p><h1 className="mt-2 text-4xl font-black tracking-[-0.01em] sm:text-5xl">我的申请</h1><p className="mt-3 text-sm text-ink-secondary">草稿、已提交和需要补充的申请都在这里。</p></div><Link href="/trips" className="flex items-center gap-2 rounded-full border border-line-strong bg-surface px-4 py-3 text-sm font-black text-ink-secondary">查看已接受的租住<ChevronRight className="size-4" /></Link></div>
+    <main className="min-h-[calc(100dvh-72px)] bg-background">
+      <div className="page-container pb-16 pt-8 sm:pt-12">
+        <PageHeader title="我的申请" description="草稿、已提交和需要补充的申请都在这里。" action={<Link href="/trips" className="secondary-action">查看已接受的租住<ChevronRight className="size-4" aria-hidden="true" /></Link>} />
         <div className="mt-7 grid gap-5">
           {applications.map((application, index) => {
             const copy = getRentalApplicationStatusCopy(application.status);
             const statusLabel = application.status === "SUBMITTED" ? "审核中" : copy.label;
-            return <article key={application.id} className="grid gap-5 rounded-[26px] border border-line-strong bg-surface p-5 shadow-sm sm:grid-cols-[1fr_auto] sm:items-center sm:p-6"><div className="flex min-w-0 gap-4"><span className={cn("grid size-12 shrink-0 place-items-center rounded-[16px]", index === 0 ? "bg-surface-subtle text-primary-text" : "bg-tag-neutral text-ink-secondary")}><FileText className="size-5" /></span><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h2 className="truncate text-lg font-black">{application.listingTitle}</h2><span className={cn("rounded-full px-2.5 py-1 text-[10px] font-black", application.status === "SUBMITTED" ? "bg-warning-soft text-warning-text" : "bg-tag-neutral text-ink-secondary")}>{statusLabel}</span></div><p className="mt-2 text-sm text-ink-secondary">{application.moveIn.slice(0, 10)} 至 {application.moveOut.slice(0, 10)} · 个人申请</p><div className="mt-4 flex items-center gap-2 text-xs font-bold text-ink-secondary"><Clock3 className="size-3.5" />{copy.description}</div></div></div><div className="flex items-center gap-2 sm:justify-end"><Link href={`/inbox?listingId=${encodeURIComponent(application.listingId)}`} className="grid size-10 place-items-center rounded-full border border-line-strong" aria-label="打开相关消息"><MessageCircle className="size-4" /></Link><Link href={`/applications/${encodeURIComponent(application.id)}`} className="flex items-center gap-1 rounded-full bg-primary px-4 py-2.5 font-rounded text-xs font-bold text-white hover:bg-primary-hover">查看详情<ChevronRight className="size-3.5" /></Link></div></article>;
+            return <article key={application.id} className="grid gap-5 rounded-psw-xl bg-surface p-5 sm:grid-cols-[1fr_auto] sm:items-center sm:p-6"><div className="flex min-w-0 gap-4"><span className={cn("grid size-12 shrink-0 place-items-center rounded-[16px]", index === 0 ? "bg-surface-subtle text-primary-text" : "bg-tag-neutral text-ink-secondary")}><FileText className="size-5" /></span><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h2 className="truncate text-lg font-black">{application.listingTitle}</h2><span className={cn("rounded-full px-2.5 py-1 text-[11px] font-black", application.status === "SUBMITTED" ? "bg-warning-soft text-warning-text" : "bg-tag-neutral text-ink-secondary")}>{statusLabel}</span></div><p className="mt-2 text-sm text-ink-secondary">{application.moveIn.slice(0, 10)} 至 {application.moveOut.slice(0, 10)} · 个人申请</p><div className="mt-4 flex items-center gap-2 text-xs font-bold text-ink-secondary"><Clock3 className="size-3.5" />{copy.description}</div></div></div><div className="flex items-center gap-2 sm:justify-end"><Link href={`/inbox?listingId=${encodeURIComponent(application.listingId)}`} className="grid size-10 place-items-center rounded-full border border-line-strong" aria-label="打开相关消息"><MessageCircle className="size-4" /></Link><Link href={`/applications/${encodeURIComponent(application.id)}`} className="flex items-center gap-1 rounded-full bg-primary px-4 py-2.5 font-rounded text-xs font-bold text-white hover:bg-primary-hover">查看详情<ChevronRight className="size-3.5" /></Link></div></article>;
           })}
           {!loading && !authenticated ? <EmptyApplications title="登录后查看真实申请状态" detail="登录后可查看草稿、审核进度和房东决定。" actionHref={authRoute({ returnTo: "/applications" })} action="登录" /> : null}
           {!loading && authenticated && applications.length === 0 && !loadError ? <EmptyApplications title="还没有申请" detail="找到合适房源后，可以从房源详情页发起申请。" actionHref="/search" action="浏览房源" /> : null}

@@ -21,7 +21,7 @@ function setup() {
 
 describe("search refinement journey", () => {
   it.each([
-    { trigger: "租期", label: "入住与退租", container: "section" },
+    { trigger: "选日期", label: "入住与退租", container: "section" },
     { trigger: "卧室", label: "卧室数量", container: "fieldset" }
   ])("focuses the requested $trigger section instead of starting at budget", ({ trigger, label, container }) => {
     setup();

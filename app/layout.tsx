@@ -3,27 +3,11 @@ import localFont from "next/font/local";
 
 import { SavedListingsProvider } from "@/components/marketplace/saved-listings-provider";
 
-import "./globals.css";
-
-// psw design system fonts. 资源圆体: the app uses Bold only (titles, buttons); Heavy is kept for covers and big slogans.
+// psw design system fonts. 资源圆体 Bold (titles, buttons) and Heavy (the slogan only) come from app/psw-fonts.css,
+// split by unicode-range so a page downloads only the small files its characters need (design/psw/fonts/subset.py).
 // Nunito for numbers. Body text and trust details stay on the system sans.
-const pswRounded = localFont({
-  // One Bold face answers every bold weight (600–900), so font-black titles render Bold rather than Heavy or faux bold.
-  src: [{ path: "./fonts/psw-rounded-bold.woff2", weight: "600 900", style: "normal" }],
-  variable: "--font-rounded",
-  display: "swap",
-  // The CJK subsets are large; let the browser fetch them when a title needs them instead of preloading.
-  preload: false,
-  fallback: ["PingFang SC", "Microsoft YaHei", "sans-serif"]
-});
-
-const pswSlogan = localFont({
-  src: [{ path: "./fonts/psw-rounded-heavy.woff2", weight: "600 900", style: "normal" }],
-  variable: "--font-slogan",
-  display: "swap",
-  preload: false,
-  fallback: ["PingFang SC", "Microsoft YaHei", "sans-serif"]
-});
+import "./psw-fonts.css";
+import "./globals.css";
 
 const nunito = localFont({
   src: "./fonts/nunito-variable.woff2",
@@ -46,7 +30,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="zh-CN" data-scroll-behavior="smooth" className={`${pswRounded.variable} ${pswSlogan.variable} ${nunito.variable}`}>
+    <html lang="zh-CN" data-scroll-behavior="smooth" className={nunito.variable}>
       <body><SavedListingsProvider>{children}</SavedListingsProvider></body>
     </html>
   );

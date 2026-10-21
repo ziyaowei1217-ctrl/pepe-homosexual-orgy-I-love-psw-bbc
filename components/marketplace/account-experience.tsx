@@ -16,6 +16,7 @@ import {
 import Link from "next/link";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 
+import { PageHeader } from "@/components/marketplace/page-header";
 import {
   getMyProfile,
   getSessionUser,
@@ -99,20 +100,16 @@ function AccountSessionExperience({ mode, returnTo = null, authIntent = "account
 
   const authenticated = Boolean(token && user);
   return (
-    <main className="mx-auto max-w-[1280px] px-4 py-5 sm:px-6 sm:py-7 lg:px-8 lg:py-10">
-      <header>
-        <p className="hidden text-xs font-black uppercase tracking-[.16em] text-primary-text lg:block">Your space</p>
-        <h1 className="text-2xl font-black tracking-[-.04em] sm:text-4xl lg:mt-2">我的账户</h1>
-        <p className="mt-2 text-sm leading-6 text-ink-secondary lg:mt-3 lg:text-ink-secondary"><span className="lg:hidden">管理资料，查看认证与通知方式。</span><span className="hidden lg:inline">更新个人资料，查看认证状态、申请和消息。</span></p>
-      </header>
-      {notice ? <div className="mt-5 rounded-[16px] bg-surface-subtle px-4 py-3 text-sm font-bold text-ink">{notice}</div> : null}
+    <main className="page-container pb-16 pt-8 sm:pt-12">
+      <PageHeader title="我的账户" description="更新个人资料，查看认证状态、申请和消息。" />
+      {notice ? <div role="status" className="mt-5 rounded-psw-md bg-success-soft px-4 py-3 text-d-subhead font-semibold text-success-text">{notice}</div> : null}
       <div className="mt-5 grid items-start gap-4 lg:mt-8 lg:grid-cols-[250px_minmax(0,1fr)] lg:gap-6">
-        <aside className="flex min-w-0 items-center overflow-hidden rounded-[18px] border border-line-strong bg-surface p-1 shadow-sm lg:block lg:rounded-[24px] lg:p-2">
+        <aside className="flex min-w-0 items-center overflow-hidden rounded-psw-lg bg-surface p-1 lg:block lg:rounded-psw-xl lg:p-2">
           <div className="hidden items-center gap-3 p-3 lg:flex"><span className="grid size-11 place-items-center rounded-full bg-surface-subtle text-primary-text"><UserRound className="size-5" /></span><span className="min-w-0"><span className="block truncate text-sm font-black">{user?.email ?? "访客账户"}</span><span className="mt-0.5 block text-xs text-ink-secondary">{authenticated ? "账户已连接" : loading ? "正在检查登录状态" : "登录后同步进度"}</span></span></div>
           <nav className="grid min-w-0 flex-1 grid-cols-4 lg:mt-2 lg:block lg:space-y-1" aria-label="账户导航">
             {accountNav.map((item) => {
               const Icon = item.icon;
-              return <Link key={item.mode} href={item.href} aria-label={item.label} aria-current={mode === item.mode ? "page" : undefined} className={cn("flex min-h-11 items-center justify-center gap-1.5 rounded-[14px] px-1 text-sm font-bold text-ink-secondary hover:bg-surface-subtle lg:justify-start lg:gap-3 lg:px-3 lg:py-3", mode === item.mode && "bg-surface-subtle text-primary-text hover:bg-surface-subtle")}>
+              return <Link key={item.mode} href={item.href} aria-label={item.label} aria-current={mode === item.mode ? "page" : undefined} className={cn("flex min-h-11 items-center justify-center gap-1.5 rounded-psw-md px-1 text-[15px] font-bold text-ink-secondary hover:bg-surface-subtle sm:text-sm lg:justify-start lg:gap-3 lg:px-3 lg:py-3", mode === item.mode && "bg-primary-soft text-primary-text hover:bg-primary-soft")}>
                 <Icon className="size-4 shrink-0" aria-hidden="true" /><span className="lg:hidden">{item.mobileLabel}</span><span className="hidden lg:inline">{item.label}</span><ChevronRight className="ml-auto hidden size-4 opacity-40 lg:block" aria-hidden="true" />
               </Link>;
             })}
@@ -121,7 +118,7 @@ function AccountSessionExperience({ mode, returnTo = null, authIntent = "account
         </aside>
 
         {authenticated && token && user ? <AuthenticatedAccount mode={mode} token={token} user={user} profile={profile} applications={applications} onProfileChange={setProfile} onNotice={setNotice} />
-          : token ? <section className="rounded-[28px] border border-line-strong bg-surface p-6 shadow-sm sm:p-8">{loading ? <p role="status" className="text-sm font-bold text-ink-secondary">正在加载账户资料…</p> : <><p role="alert" className="text-sm font-bold text-danger-text">{loadError}</p><button type="button" onClick={() => setLoadAttempt((attempt) => attempt + 1)} className="primary-action mt-4">重新加载账户</button></>}</section>
+          : token ? <section className="rounded-psw-xl bg-surface p-6 sm:p-8">{loading ? <p role="status" className="text-d-subhead text-ink-secondary">正在加载账户资料…</p> : <><p role="alert" className="text-d-subhead font-semibold text-danger-text">{loadError}</p><button type="button" onClick={() => setLoadAttempt((attempt) => attempt + 1)} className="primary-action mt-4">重新加载账户</button></>}</section>
           : <GuestAccount mode={mode} returnTo={returnTo} authIntent={authIntent} onAuthenticated={handleAuthenticated} />}
       </div>
     </main>
@@ -177,9 +174,9 @@ function GuestAccount({ mode, returnTo, authIntent, onAuthenticated }: { mode: A
 
   const sectionLabel = mode === "profile" ? "个人资料" : mode === "verification" ? "身份与认证" : mode === "settings" ? "通知与隐私" : "账户首页";
   const resumingApplication = authIntent === "application" && returnTo?.startsWith("/applications/new");
-  return <section className="grid overflow-hidden rounded-[28px] border border-line-strong bg-surface shadow-sm xl:grid-cols-[minmax(0,1fr)_320px]">
-    <div className="p-5 sm:p-9"><span className="inline-flex items-center gap-2 rounded-full bg-surface-subtle px-3 py-1.5 text-xs font-black text-primary-text"><LockKeyhole className="size-3.5" />{sectionLabel}</span><h2 className="mt-4 text-2xl font-black tracking-[-.04em] sm:mt-6 sm:text-3xl">{resumingApplication ? "登录后继续申请" : "欢迎回来"}</h2><p className="mt-2 max-w-lg text-sm leading-6 text-ink-secondary sm:mt-3">{resumingApplication ? "申请尚未提交。登录后会返回申请页面，继续确认和提交。" : "使用邮箱验证码登录，查看申请、消息和租住进度。"}</p><p className="mt-3 rounded-xl bg-surface-subtle px-3 py-2 text-xs leading-5 text-ink">目前仅支持受邀邮箱或已有账户。请使用收到邀请的邮箱登录。</p>{resumingApplication && returnTo ? <Link href={returnTo} className="mt-3 inline-flex min-h-10 items-center text-sm font-bold text-primary-text underline underline-offset-4">返回申请</Link> : null}{step === "email" ? <form className="mt-5 max-w-md sm:mt-8" onSubmit={submitEmail}><label className="text-sm font-black" htmlFor="account-email">邮箱地址</label><div className="mt-2 flex flex-col gap-3 sm:flex-row"><input id="account-email" type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="name@example.com" className="application-input flex-none sm:flex-1" /><button disabled={pending} className="h-12 shrink-0 rounded-full bg-primary px-5 font-rounded text-sm font-bold text-white hover:bg-primary-hover disabled:opacity-60">{pending ? "发送中…" : "发送验证码"}</button></div></form> : <form className="mt-5 max-w-md sm:mt-8" onSubmit={submitCode}><label className="text-sm font-black" htmlFor="account-code">验证码</label><p className="mt-2 text-xs leading-5 text-ink-secondary">若 {email} 已获邀或已有账户，验证码会发送至该邮箱。未收到时请检查垃圾邮件或修改邮箱后重试。</p><input id="account-code" inputMode="numeric" value={code} maxLength={6} onChange={(event) => setCode(normalizeVerificationCode(event.target.value))} placeholder="六位验证码" className="application-input mt-2 tracking-[.3em]" />{developmentHint ? <p className="mt-2 text-xs font-bold text-primary-text">{developmentHint}</p> : null}<div className="mt-3 flex gap-3"><button disabled={pending} className="h-12 rounded-full bg-primary px-5 font-rounded text-sm font-bold text-white hover:bg-primary-hover">{pending ? "验证中…" : "验证并登录"}</button><button type="button" disabled={pending} onClick={() => { if (!busy.current) setStep("email"); }} className="px-3 text-sm font-black text-ink-secondary">修改邮箱</button></div></form>}{error ? <p role="alert" className="mt-3 text-sm font-bold text-danger-text">{error}</p> : null}<div className="mt-5 flex items-center gap-2 text-xs font-bold text-ink-secondary sm:mt-8"><ShieldCheck className="size-4 text-primary-text" />无需密码，验证码短时有效</div></div>
-    <div className="border-t border-line-strong bg-ink-block p-6 text-white sm:p-8 xl:border-l xl:border-t-0"><p className="text-xs font-black uppercase tracking-[.15em] text-on-dark-secondary">登录后解锁</p><div className="mt-6 space-y-5"><Benefit icon={Heart} title="查看找房进度" detail="申请状态与已接受租住" /><Benefit icon={Mail} title="集中处理消息" detail="房东、预约与室友对话" /><Benefit icon={FileCheck2} title="提高信任度" detail="完善资料与身份认证" /></div></div>
+  return <section className="grid overflow-hidden rounded-psw-xl bg-surface xl:grid-cols-[minmax(0,1fr)_320px]">
+    <div className="p-5 sm:p-9"><span className="inline-flex items-center gap-1.5 rounded-psw-sm bg-primary-soft px-2.5 py-1 text-m-footnote font-bold text-primary-text"><LockKeyhole className="size-3.5" aria-hidden="true" />{sectionLabel}</span><h2 className="mt-4 text-2xl font-black tracking-[-.04em] sm:mt-6 sm:text-3xl">{resumingApplication ? "登录后继续申请" : "欢迎回来"}</h2><p className="mt-2 max-w-lg text-sm leading-6 text-ink-secondary sm:mt-3">{resumingApplication ? "申请尚未提交。登录后会返回申请页面，继续确认和提交。" : "使用邮箱验证码登录，查看申请、消息和租住进度。"}</p><p className="mt-3 rounded-xl bg-surface-subtle px-3 py-2 text-xs leading-5 text-ink">目前仅支持受邀邮箱或已有账户。请使用收到邀请的邮箱登录。</p>{resumingApplication && returnTo ? <Link href={returnTo} className="mt-3 inline-flex min-h-10 items-center text-sm font-bold text-primary-text underline underline-offset-4">返回申请</Link> : null}{step === "email" ? <form className="mt-5 max-w-md sm:mt-8" onSubmit={submitEmail}><label className="text-sm font-black" htmlFor="account-email">邮箱地址</label><div className="mt-2 flex flex-col gap-3 sm:flex-row"><input id="account-email" type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="name@example.com" className="application-input flex-none sm:flex-1" /><button disabled={pending} className="h-12 shrink-0 rounded-full bg-primary px-5 font-rounded text-sm font-bold text-white hover:bg-primary-hover disabled:opacity-60">{pending ? "发送中…" : "发送验证码"}</button></div></form> : <form className="mt-5 max-w-md sm:mt-8" onSubmit={submitCode}><label className="text-sm font-black" htmlFor="account-code">验证码</label><p className="mt-2 text-xs leading-5 text-ink-secondary">若 {email} 已获邀或已有账户，验证码会发送至该邮箱。未收到时请检查垃圾邮件或修改邮箱后重试。</p><input id="account-code" inputMode="numeric" value={code} maxLength={6} onChange={(event) => setCode(normalizeVerificationCode(event.target.value))} placeholder="六位验证码" className="application-input mt-2 tracking-[.3em]" />{developmentHint ? <p className="mt-2 text-xs font-bold text-primary-text">{developmentHint}</p> : null}<div className="mt-3 flex gap-3"><button disabled={pending} className="h-12 rounded-full bg-primary px-5 font-rounded text-sm font-bold text-white hover:bg-primary-hover">{pending ? "验证中…" : "验证并登录"}</button><button type="button" disabled={pending} onClick={() => { if (!busy.current) setStep("email"); }} className="px-3 text-sm font-black text-ink-secondary">修改邮箱</button></div></form>}{error ? <p role="alert" className="mt-3 text-sm font-bold text-danger-text">{error}</p> : null}<div className="mt-5 flex items-center gap-2 text-xs font-bold text-ink-secondary sm:mt-8"><ShieldCheck className="size-4 text-primary-text" />无需密码，验证码短时有效</div></div>
+    <div className="border-t border-line-strong bg-primary-soft p-6 sm:p-8 xl:border-l xl:border-t-0"><h3 className="text-d-label text-primary-text">登录后可以</h3><div className="mt-6 space-y-5"><Benefit icon={Heart} title="查看找房进度" detail="申请状态与已接受租住" /><Benefit icon={Mail} title="集中处理消息" detail="房东、预约与室友对话" /><Benefit icon={FileCheck2} title="提高信任度" detail="完善资料与身份认证" /></div></div>
   </section>;
 }
 
@@ -198,16 +195,15 @@ function AuthenticatedAccount({ mode, token, user, profile, applications, onProf
   const missingFields = profileFields.filter((field) => !field.value?.trim());
   const completion = Math.round((profileFields.length - missingFields.length) / profileFields.length * 100);
   return <section className="min-w-0 space-y-6">
-    <div className="rounded-[28px] bg-ink-block p-7 text-white sm:p-9">
-      <p className="text-xs font-black uppercase tracking-[.15em] text-on-dark-secondary">Account overview</p>
-      <h2 className="mt-3 break-words text-3xl font-black tracking-tight">你好，{profile?.displayName || user.email.split("@")[0]}</h2>
-      <p className="mt-3 text-sm leading-6 text-on-dark-secondary">{missingFields.length ? `还可以补充：${missingFields.map((field) => field.label).join("、")}。` : "个人资料已完善，你可以随时更新。"}</p>
-      <div role="progressbar" aria-label="资料完成度" aria-valuenow={completion} aria-valuemin={0} aria-valuemax={100} className="mt-7 h-2 overflow-hidden rounded-full bg-surface/10">
+    <div className="rounded-psw-xl bg-surface p-7 sm:p-9">
+      <h2 className="break-words text-m-title sm:text-d-title">你好，{profile?.displayName || user.email.split("@")[0]}</h2>
+      <p className="mt-2 text-m-subhead text-ink-secondary sm:text-d-subhead">{missingFields.length ? `还可以补充：${missingFields.map((field) => field.label).join("、")}。` : "个人资料已完善，你可以随时更新。"}</p>
+      <div role="progressbar" aria-label="资料完成度" aria-valuenow={completion} aria-valuemin={0} aria-valuemax={100} className="mt-6 h-2 overflow-hidden rounded-full bg-primary-soft">
         <div className="h-full rounded-full bg-primary" style={{ width: `${completion}%` }} />
       </div>
       <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-        <p className="text-xs font-bold text-on-dark-secondary">资料完成度 {completion}%</p>
-        <Link href="/account/profile" className="inline-flex min-h-11 items-center gap-2 rounded-full bg-surface/10 px-4 text-sm font-bold hover:bg-surface/20">{completion === 100 ? "编辑资料" : "完善资料"}<ChevronRight className="size-4" aria-hidden="true" /></Link>
+        <p className="text-m-footnote font-semibold text-ink-secondary">资料完成度 {completion}%</p>
+        <Link href="/account/profile" className="secondary-action">{completion === 100 ? "编辑资料" : "完善资料"}<ChevronRight className="size-4" aria-hidden="true" /></Link>
       </div>
     </div>
     <div className="grid gap-4 sm:grid-cols-3"><QuickLink href="/applications" title="我的申请" detail={activeApplications === undefined ? "暂时无法读取" : `${activeApplications} 个进行中`} /><QuickLink href="/trips" title="租住进度" detail={acceptedApplications === undefined ? "暂时无法读取" : `${acceptedApplications} 个已接受`} /><QuickLink href="/saved" title="收藏清单" detail="当前设备" /></div>
@@ -259,8 +255,8 @@ function SettingsPanel() {
     </div>
   </section>;
 }
-function Benefit({ icon: Icon, title, detail }: { icon: typeof Heart; title: string; detail: string }) { return <div className="flex gap-3"><span className="grid size-10 shrink-0 place-items-center rounded-[13px] bg-surface/10 text-on-dark-secondary"><Icon className="size-4.5" /></span><span><span className="block text-sm font-black">{title}</span><span className="mt-1 block text-xs leading-5 text-ink-placeholder">{detail}</span></span></div>; }
-function QuickLink({ href, title, detail }: { href: string; title: string; detail: string }) { return <Link href={href} className="rounded-[22px] border border-line-strong bg-surface p-5 shadow-sm"><span className="text-sm font-black">{title}</span><span className="mt-2 block text-xs text-ink-secondary">{detail}</span><ChevronRight className="mt-5 size-4 text-primary-text" /></Link>; }
+function Benefit({ icon: Icon, title, detail }: { icon: typeof Heart; title: string; detail: string }) { return <div className="flex gap-3"><span className="grid size-10 shrink-0 place-items-center rounded-full bg-surface text-primary-text"><Icon className="size-[18px]" aria-hidden="true" /></span><span><span className="block text-d-label text-ink">{title}</span><span className="mt-0.5 block text-m-footnote text-ink-secondary">{detail}</span></span></div>; }
+function QuickLink({ href, title, detail }: { href: string; title: string; detail: string }) { return <Link href={href} className="rounded-psw-xl bg-surface p-5 transition-[box-shadow,transform] hover:-translate-y-1 hover:shadow-card-hover"><span className="font-rounded text-d-label">{title}</span><span className="mt-1 block text-m-footnote text-ink-secondary">{detail}</span><ChevronRight className="mt-4 size-4 text-primary-text" aria-hidden="true" /></Link>; }
 function Field({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) { return <label className="grid gap-2 text-sm font-black">{label}<input className="application-input" value={value} onChange={(event) => onChange(event.target.value)} /></label>; }
 function VerificationRow({ icon: Icon, title, detail, done }: { icon: typeof Mail; title: string; detail: string; done: boolean }) {
   return <div className="flex items-center gap-3 py-5 sm:gap-4">

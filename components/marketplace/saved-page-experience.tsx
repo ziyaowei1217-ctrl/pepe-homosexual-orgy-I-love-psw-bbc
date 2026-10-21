@@ -1,22 +1,12 @@
 "use client";
 
-import {
-  FolderHeart,
-  Heart,
-  Info,
-  List,
-  Map,
-  MapPin,
-  Plus,
-  Search,
-  ShieldCheck,
-  Star,
-  X
-} from "lucide-react";
-import { SmartImage } from "@/components/ui/smart-image";
+import { Info, List, Map, Plus, Search, X } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 
+import { EmptyState } from "@/components/marketplace/empty-state";
+import { ListingCard } from "@/components/marketplace/listing-card";
+import { PageHeader } from "@/components/marketplace/page-header";
 import { useSavedListings } from "@/components/marketplace/saved-listings-provider";
 import { useModalFocus } from "@/components/marketplace/use-modal-focus";
 import { defaultMapAttribution, getMapCenterForListings, getMapMarkers, getMapTiles } from "@/lib/listing-map";
@@ -54,71 +44,58 @@ export function SavedPageExperience({ listings }: { listings: PreviewListing[] }
   }
 
   return (
-    <main className="min-h-[calc(100dvh-72px)] bg-surface-subtle">
-      <section className="border-b border-line-strong bg-surface">
-        <div className="mx-auto max-w-[1520px] px-4 py-6 sm:px-6 sm:py-10 lg:px-8 lg:py-14">
-          <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-3 sm:flex sm:items-end sm:justify-between sm:gap-6">
-            <div className="contents sm:block">
-              <div className="hidden items-center gap-2 text-xs font-black uppercase tracking-[0.15em] text-primary-text sm:flex"><FolderHeart className="size-4" />你的空间</div>
-              <h1 className="col-start-1 row-start-1 text-3xl font-black tracking-[-0.01em] text-ink sm:mt-3 sm:text-6xl">收藏清单</h1>
-              <p className="col-span-2 row-start-2 max-w-2xl text-sm leading-6 text-ink-secondary sm:mt-4 sm:text-base">把喜欢的房放在一起比较。清单、备注与排序都只保存在当前设备。</p>
-              <div className="col-span-2 row-start-3 inline-flex w-fit items-center gap-2 rounded-full bg-warning-soft px-3 py-1.5 text-xs font-bold text-warning-text sm:mt-4"><Info className="size-3.5 shrink-0" />{accountLabel}，暂不跨设备同步</div>
-            </div>
-            <button type="button" onClick={() => setCreateOpen(true)} className="col-start-2 row-start-1 flex min-h-11 shrink-0 items-center justify-center gap-1.5 rounded-full bg-primary px-4 py-2.5 font-rounded text-sm font-bold text-white shadow-lg transition-transform hover:-translate-y-0.5 sm:gap-2 sm:px-5 sm:py-3"><Plus className="size-4" />新建清单</button>
-          </div>
-        </div>
-      </section>
+    <main className="min-h-[calc(100dvh-72px)] bg-background">
+      <div className="page-container pb-16 pt-8 sm:pt-12">
+        <PageHeader
+          title="收藏清单"
+          description="把喜欢的房放在一起比较。清单、备注和排序都只保存在这台设备上。"
+          action={<button type="button" onClick={() => setCreateOpen(true)} className="flex min-h-11 items-center justify-center gap-1.5 rounded-full bg-primary px-5 font-rounded text-[15px] font-bold text-on-primary transition-colors hover:bg-primary-hover active:scale-[0.97] sm:text-sm"><Plus className="size-4" aria-hidden="true" />新建清单</button>}
+        >
+          <p className="mt-3 inline-flex w-fit items-center gap-1.5 rounded-psw-sm bg-warning-soft px-2.5 py-1 text-m-footnote font-semibold text-warning-text"><Info className="size-3.5 shrink-0" aria-hidden="true" />{accountLabel}，暂不跨设备同步</p>
+        </PageHeader>
 
-      <div className="mx-auto max-w-[1520px] px-4 py-5 sm:px-6 sm:py-8 lg:px-8">
-        <div className="flex items-center gap-2 overflow-x-auto pb-2 [scrollbar-width:none]" aria-label="收藏分组">
+        <div className="mt-6 flex items-center gap-2 overflow-x-auto pb-1 [scrollbar-width:none]" aria-label="收藏分组">
           {state.collections.map((collection) => {
             const count = collection.id === DEFAULT_SAVED_COLLECTION_ID ? savedIds.size : collection.listingIds.length;
             return (
-              <button key={collection.id} type="button" onClick={() => setActiveCollectionId(collection.id)} className={cn("shrink-0 rounded-full border px-4 py-2.5 text-sm font-bold transition-colors", activeCollectionId === collection.id ? "border-primary bg-primary text-white" : "border-line-strong bg-surface text-ink-secondary hover:border-outline")}>
-                {collection.name} <span className={cn("ml-1", activeCollectionId === collection.id ? "text-on-primary" : "text-ink-placeholder")}>{count}</span>
+              <button key={collection.id} type="button" aria-pressed={activeCollectionId === collection.id} onClick={() => setActiveCollectionId(collection.id)} className={cn("search-pill", activeCollectionId === collection.id && "search-pill-active")}>
+                {collection.name} <span className={cn("font-display", activeCollectionId === collection.id ? "text-on-primary" : "text-ink-secondary")}>{count}</span>
               </button>
             );
           })}
         </div>
 
-        <div className="mt-4 flex items-center justify-between gap-3 border-b border-line-strong pb-4 sm:mt-7 sm:gap-4 sm:pb-5">
-          <div className="min-w-0"><h2 className="truncate text-base font-black tracking-[-0.01em] sm:text-xl">{activeCollection?.name ?? "全部收藏"}</h2><p className="mt-1 text-xs text-ink-secondary">{savedListings.length} 套房源</p></div>
+        <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-b border-line-strong pb-4">
+          <div className="min-w-0"><h2 className="truncate text-m-headline sm:text-d-headline">{activeCollection?.name ?? "全部收藏"}</h2><p className="mt-0.5 text-m-footnote text-ink-secondary">{savedListings.length} 套房源</p></div>
           <div className="flex shrink-0 items-center gap-2">
-            <label className="rounded-full border border-line-strong bg-surface px-3 py-2 text-xs font-bold text-ink-secondary"><span className="hidden sm:inline">排序 </span><select value={sort} onChange={(event) => setSort(event.target.value as typeof sort)} className="bg-transparent text-ink outline-none sm:ml-1" aria-label="收藏排序"><option value="recent">最近收藏</option><option value="price-low">价格从低到高</option><option value="price-high">价格从高到低</option></select></label>
-            <button type="button" onClick={() => setMapView((current) => !current)} aria-pressed={mapView} className={cn("flex items-center gap-2 rounded-full border px-3.5 py-2 text-xs font-bold", mapView ? "border-primary bg-surface-subtle text-primary-text" : "border-line-strong bg-surface text-ink-secondary")}>{mapView ? <List className="size-4" /> : <Map className="size-4" />}{mapView ? "列表" : "地图"}</button>
+            <label className="flex items-center gap-2 text-m-footnote text-ink-secondary"><span className="hidden sm:inline">排序</span><select value={sort} onChange={(event) => setSort(event.target.value as typeof sort)} className="min-h-11 rounded-full border-[1.5px] border-outline bg-surface px-4 text-base font-bold text-ink outline-none sm:text-sm" aria-label="收藏排序"><option value="recent">最近收藏</option><option value="price-low">价格从低到高</option><option value="price-high">价格从高到低</option></select></label>
+            <button type="button" onClick={() => setMapView((current) => !current)} aria-pressed={mapView} className={cn("search-pill", mapView && "search-pill-active")}>{mapView ? <List className="size-4" aria-hidden="true" /> : <Map className="size-4" aria-hidden="true" />}{mapView ? "列表" : "地图"}</button>
           </div>
         </div>
 
         {savedListings.length ? (
-          <div className={cn("mt-5 grid gap-6 sm:mt-7", mapView ? "lg:grid-cols-[minmax(0,1fr)_minmax(420px,0.85fr)]" : "")}>
-            <div className={cn("gap-6 sm:grid-cols-2", mapView ? "hidden lg:grid" : "grid lg:grid-cols-3 xl:grid-cols-4")}>
+          <div className={cn("mt-6 grid gap-6", mapView ? "lg:grid-cols-[minmax(0,1fr)_minmax(420px,0.85fr)]" : "")}>
+            <div className={cn("gap-6", mapView ? "hidden lg:grid lg:grid-cols-2" : "grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))]")}>
               {savedListings.map((listing) => (
-                <article key={listing.id} className="group overflow-hidden rounded-[24px] border border-line-strong bg-surface shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-lg">
-                  <Link href={`/listing/${encodeURIComponent(listing.id)}`} className="relative block aspect-[4/3] overflow-hidden bg-line-strong">
-                    <SmartImage src={listing.image} alt={listing.title} fill sizes="(max-width: 640px) 100vw, 33vw" className="object-cover transition-transform duration-300 group-hover:scale-[1.035]" />
-                    <span className="absolute left-3 top-3 rounded-full bg-surface/92 px-2.5 py-1.5 text-[11px] font-black text-primary-text shadow-sm"><ShieldCheck className="mr-1 inline size-3.5" />信任信息</span>
-                  </Link>
-                  <div className="relative p-4">
-                    <button type="button" onClick={() => toggleSaved(listing.id)} className="absolute right-3 top-3 grid size-9 place-items-center rounded-full border border-line-strong bg-surface text-primary-text" aria-label={`取消收藏 ${listing.title}`}><Heart className="size-4 fill-current" /></button>
-                    <Link href={`/listing/${encodeURIComponent(listing.id)}`} className="block pr-10"><h3 className="line-clamp-2 text-base font-black leading-snug text-ink group-hover:text-primary-text">{listing.title}</h3><p className="mt-1 flex items-center gap-1 truncate text-xs text-ink-secondary"><MapPin className="size-3.5" />{listing.area}</p></Link>
-                    <div className="mt-3 flex items-end justify-between"><p className="text-lg font-black">${listing.price.toLocaleString("en-US")} <span className="text-xs font-medium text-ink-placeholder">/ 月</span></p><span className="flex items-center gap-1 text-xs font-bold"><Star className="size-3.5 fill-warning text-warning" />{listing.score}</span></div>
-                    <textarea defaultValue={state.notes[listing.id] ?? ""} onBlur={(event) => setNote(listing.id, event.target.value)} aria-label={`${listing.title} 的收藏备注`} placeholder="添加仅自己可见的备注…" className="mt-4 min-h-16 w-full resize-none rounded-[14px] border border-line-strong bg-surface-muted px-3 py-2 text-xs leading-5 outline-none focus:border-primary-soft-pressed focus:bg-surface" />
-                    {state.collections.length > 1 ? <label className="mt-3 flex items-center justify-between text-xs font-bold text-ink-secondary">加入清单<select aria-label={`${listing.title} 所属清单`} className="max-w-[150px] rounded-full border border-line-strong bg-surface px-2 py-1.5 text-ink-secondary" value="" onChange={(event) => { if (event.target.value) toggleInCollection(listing.id, event.target.value); }}><option value="">选择清单</option>{state.collections.filter((collection) => collection.id !== DEFAULT_SAVED_COLLECTION_ID).map((collection) => <option key={collection.id} value={collection.id}>{collection.listingIds.includes(listing.id) ? "✓ " : ""}{collection.name}</option>)}</select></label> : null}
+                <div key={listing.id} className="flex min-w-0 flex-col gap-2">
+                  <ListingCard listing={listing} href={`/listing/${encodeURIComponent(listing.id)}`} saved onToggleSave={() => toggleSaved(listing.id)} sizes="(max-width: 640px) 100vw, 33vw" />
+                  <div className="flex flex-col gap-2 rounded-psw-lg bg-surface p-3">
+                    <textarea defaultValue={state.notes[listing.id] ?? ""} onBlur={(event) => setNote(listing.id, event.target.value)} aria-label={`${listing.title} 的收藏备注`} placeholder="添加只有自己看得到的备注…" className="min-h-16 w-full resize-none rounded-psw-md border border-control-border bg-surface px-3 py-2 text-base outline-none focus:border-primary sm:text-d-subhead" />
+                    {state.collections.length > 1 ? <label className="flex items-center justify-between gap-3 text-m-footnote font-semibold text-ink-secondary">加入清单<select aria-label={`${listing.title} 所属清单`} className="min-h-11 max-w-[170px] rounded-full border-[1.5px] border-outline bg-surface px-3 text-base text-ink sm:text-sm" value="" onChange={(event) => { if (event.target.value) toggleInCollection(listing.id, event.target.value); }}><option value="">选择清单</option>{state.collections.filter((collection) => collection.id !== DEFAULT_SAVED_COLLECTION_ID).map((collection) => <option key={collection.id} value={collection.id}>{collection.listingIds.includes(listing.id) ? "✓ " : ""}{collection.name}</option>)}</select></label> : null}
                   </div>
-                </article>
+                </div>
               ))}
             </div>
             {mapView ? <SavedMap listings={savedListings} /> : null}
           </div>
         ) : (
-          <section className="mt-8 grid min-h-[440px] place-items-center rounded-[30px] border border-dashed border-outline bg-surface px-6 py-14 text-center">
-            <div>
-              <span className="mx-auto grid size-16 place-items-center rounded-full bg-surface-subtle text-primary-text"><Heart className="size-7" /></span>
-              <h2 className="mt-5 text-2xl font-black tracking-[-0.01em]">还没有收藏房源</h2>
-              <p className="mx-auto mt-3 max-w-md text-sm leading-6 text-ink-secondary">浏览房源时点击爱心，这里就会成为一个干净、好比较的收藏空间。</p>
-              <Link href="/search" className="mt-6 inline-flex items-center gap-2 rounded-full bg-primary px-5 py-3 text-sm font-black text-white"><Search className="size-4" />去找房</Link>
-            </div>
-          </section>
+          <EmptyState
+            className="mt-8"
+            mood="sleepy"
+            title="还没有收藏房源"
+            body="浏览房源时点一下爱心，房子就会收进这里，方便放在一起比较。"
+            action={<Link href="/search" className="inline-flex min-h-12 items-center gap-2 rounded-full bg-primary px-6 font-rounded text-base font-bold text-on-primary hover:bg-primary-hover active:scale-[0.97]"><Search className="size-4" aria-hidden="true" />去找房</Link>}
+          />
         )}
       </div>
 
@@ -140,10 +117,10 @@ function NewCollectionDialog({ name, onNameChange, onSubmit, onClose }: {
 
   return (
     <div className="marketplace-modal-backdrop fixed inset-0 z-[80] grid place-items-center bg-ink-block/35 p-4 backdrop-blur-sm" role="presentation" onMouseDown={() => onClose()}>
-      <form ref={dialog} onSubmit={onSubmit} onMouseDown={(event) => event.stopPropagation()} className="marketplace-modal-panel max-h-[calc(100dvh-32px)] w-full max-w-md overflow-y-auto rounded-[28px] bg-surface p-6 shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="create-list-title">
-        <div className="flex items-center justify-between"><div><p className="text-xs font-black uppercase tracking-[0.14em] text-primary-text">整理收藏</p><h2 id="create-list-title" className="mt-1 text-2xl font-black">新建清单</h2></div><button type="button" onClick={onClose} className="grid size-10 place-items-center rounded-full border border-line-strong" aria-label="关闭"><X className="size-4" /></button></div>
-        <label className="mt-6 block text-sm font-black">清单名称<input value={name} onChange={(event) => onNameChange(event.target.value)} placeholder="例如：九月入住" className="mt-2 h-12 w-full rounded-[16px] border border-line-strong px-4 text-sm outline-none focus:border-primary" /></label>
-        <button type="submit" className="mt-6 w-full rounded-full bg-primary px-5 py-3 font-rounded text-sm font-bold text-white hover:bg-primary-hover">创建清单</button>
+      <form ref={dialog} onSubmit={onSubmit} onMouseDown={(event) => event.stopPropagation()} className="marketplace-modal-panel max-h-[calc(100dvh-32px)] w-full max-w-md overflow-y-auto rounded-psw-2xl bg-surface p-6 shadow-dialog" role="dialog" aria-modal="true" aria-labelledby="create-list-title">
+        <div className="flex items-center justify-between"><h2 id="create-list-title" className="text-m-title sm:text-d-title">新建清单</h2><button type="button" onClick={onClose} className="grid size-11 place-items-center rounded-full bg-tag-neutral hover:bg-line-strong" aria-label="关闭"><X className="size-4" /></button></div>
+        <label className="mt-6 block text-d-label">清单名称<input value={name} onChange={(event) => onNameChange(event.target.value)} placeholder="例如：九月入住" className="application-input mt-2" /></label>
+        <button type="submit" className="mt-6 min-h-12 w-full rounded-full bg-primary px-5 font-rounded text-base font-bold text-on-primary hover:bg-primary-hover active:scale-[0.97]">创建清单</button>
       </form>
     </div>
   );
@@ -177,13 +154,14 @@ export function SavedMap({ listings }: { listings: PreviewListing[] }) {
   }, []);
 
   return (
-    <aside ref={canvas} className="relative h-[60dvh] min-h-[360px] overflow-hidden rounded-[24px] bg-line-strong sm:rounded-[28px] lg:sticky lg:top-[96px] lg:h-[calc(100dvh-120px)] lg:min-h-[620px]" aria-label="收藏房源地图">
-      <div className="absolute inset-0" aria-hidden="true">
+    <aside ref={canvas} className="relative h-[60dvh] min-h-[360px] overflow-hidden rounded-psw-xl bg-line-strong lg:sticky lg:top-[96px] lg:h-[calc(100dvh-120px)] lg:min-h-[620px]" aria-label="收藏房源地图">
+      <div className="map-tiles absolute inset-0" aria-hidden="true">
         {tiles.map((tile) => <div key={tile.id} className="absolute size-64 select-none bg-cover bg-center" style={{ backgroundImage: `url(${tile.url})`, left: tile.x, top: tile.y }} />)}
       </div>
-      {markers.map((marker) => <Link key={marker.id} href={`/listing/${encodeURIComponent(marker.id)}`} style={{ left: marker.x, top: marker.y }} className="absolute z-20 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-surface bg-surface px-3 py-2 font-display text-xs font-extrabold text-ink shadow-xl">{marker.label}</Link>)}
-      <div className="absolute left-4 top-4 z-30 rounded-full bg-surface/94 px-4 py-2 text-xs font-black shadow-lg">{listings.length} 个收藏位置</div>
-      <span className="absolute bottom-2 right-3 z-30 rounded bg-surface/85 px-1.5 py-0.5 text-[10px] font-semibold text-ink-secondary">{attribution}</span>
+      <div className="map-tint pointer-events-none absolute inset-0" aria-hidden="true" />
+      {markers.map((marker) => <Link key={marker.id} href={`/listing/${encodeURIComponent(marker.id)}`} style={{ left: marker.x, top: marker.y }} className="absolute z-20 flex min-h-9 -translate-x-1/2 -translate-y-1/2 items-center rounded-full border-2 border-surface bg-surface px-3.5 font-display text-[13px] font-bold text-ink shadow-menu hover:bg-primary hover:text-on-primary">{marker.label}</Link>)}
+      <p className="absolute left-4 top-4 z-30 rounded-full bg-surface px-4 py-2 text-m-footnote font-semibold shadow-menu">{listings.length} 个收藏位置</p>
+      <span className="absolute bottom-2 right-3 z-30 rounded bg-surface/90 px-1.5 py-0.5 text-[11px] font-semibold text-ink-secondary">{attribution}</span>
     </aside>
   );
 }

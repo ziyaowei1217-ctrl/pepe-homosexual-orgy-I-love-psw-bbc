@@ -12,7 +12,8 @@ describe("marketplace home", () => {
       <HomeExperience listings={createPreviewListings().slice(0, 4)} />
     );
 
-    expect(html).toContain("更轻松地找到全美主要城市的下一处住所");
+    expect(html).toContain("留学生之间的转租。选好日期，总价一次算清。");
+    expect(html).not.toContain("比原价低");
     expect(html).toContain('action="/search"');
     expect(html).toContain('name="q"');
     expect(html).toContain('role="combobox"');
