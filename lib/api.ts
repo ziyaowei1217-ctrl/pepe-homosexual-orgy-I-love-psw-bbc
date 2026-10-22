@@ -24,6 +24,7 @@ export type ApiListing = {
   submittedAt?: string | null;
   reviewedAt?: string | null;
   rejectionReason?: string | null;
+  createdAt?: string;
   updatedAt?: string;
   mediaCount?: number;
   media?: Array<{

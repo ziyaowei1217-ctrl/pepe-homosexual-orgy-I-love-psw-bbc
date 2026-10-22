@@ -21,10 +21,12 @@ import {
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
+import { SimilarListings } from "@/components/marketplace/listing-feeds";
 import { useSavedListings } from "@/components/marketplace/saved-listings-provider";
 import { ListingPhotoGallery } from "@/components/marketplace/listing-photo-gallery";
 import { ListingStayDialog, ListingStayFields } from "@/components/marketplace/listing-stay-selector";
 import { MatchPreferencesDialog } from "@/components/marketplace/match-preferences-dialog";
+import { useFeedSignals } from "@/components/marketplace/use-feed-signals";
 import { useListingMatches } from "@/components/marketplace/use-listing-matches";
 import { formatDateLong, formatRangeLong } from "@/lib/date-format";
 import { defaultMapAttribution, getListingCoordinates, getMapTiles } from "@/lib/listing-map";
@@ -74,6 +76,10 @@ export function ListingDetailExperience({ listing, listings, initialStay }: { li
   const catalog = useMemo(() => [listing, ...(listings ?? []).filter((item) => item.id !== listing.id)], [listing, listings]);
   const { savedPreferences, savePreferences, matches } = useListingMatches(catalog, lastSearch);
   const match = matches.get(listing.id);
+  const { viewListing } = useFeedSignals();
+
+  // Feeds the home page's 最近浏览 and the interest that matches rank against.
+  useEffect(() => { viewListing(listing.id); }, [listing.id, viewListing]);
 
   useEffect(() => {
     try { setReturnHref(safeSearchReturn(sessionStorage.getItem("sublet:last-search"))); } catch { /* The search route remains available without storage. */ }
@@ -242,6 +248,8 @@ export function ListingDetailExperience({ listing, listings, initialStay }: { li
               </div>
             </div>
           </aside>
+
+          <SimilarListings listing={listing} listings={catalog} matches={matches} className="border-t border-line-strong pt-10 lg:col-span-2" />
         </div>
       </div>
 

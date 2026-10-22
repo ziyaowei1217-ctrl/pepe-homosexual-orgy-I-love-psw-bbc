@@ -34,6 +34,8 @@ type SavedListingsContextValue = {
   state: SavedCollectionsState;
   savedIds: ReadonlySet<string>;
   hydrated: boolean;
+  /** Whose lists these are on this device: the user id, or "guest". Null until known. Feed signals use the same scope. */
+  accountKey: string | null;
   accountLabel: string;
   toggleSaved: (listingId: string) => void;
   toggleInCollection: (listingId: string, collectionId: string) => void;
@@ -51,6 +53,7 @@ export function SavedListingsProvider({ children }: { children: ReactNode }) {
 function SessionSavedListingsProvider({ children, token }: { children: ReactNode; token: string | null }) {
   const [state, setState] = useState(() => normalizeSavedCollectionsState(null));
   const [storageKey, setStorageKey] = useState<string | null>(null);
+  const [accountKey, setAccountKey] = useState<string | null>(null);
   const [accountLabel, setAccountLabel] = useState("此设备上的访客收藏");
   const guestMigration = useRef<{ raw: string | null; legacyRaw: string | null } | null>(null);
 
@@ -94,6 +97,7 @@ function SessionSavedListingsProvider({ children, token }: { children: ReactNode
 
       setState(next);
       setStorageKey(key);
+      setAccountKey(userId ?? "guest");
     }
 
     void hydrate().catch(() => {
@@ -169,12 +173,13 @@ function SessionSavedListingsProvider({ children, token }: { children: ReactNode
     state,
     savedIds,
     hydrated: Boolean(storageKey),
+    accountKey,
     accountLabel,
     toggleSaved,
     toggleInCollection,
     createCollection,
     setNote
-  }), [accountLabel, createCollection, savedIds, setNote, state, storageKey, toggleInCollection, toggleSaved]);
+  }), [accountKey, accountLabel, createCollection, savedIds, setNote, state, storageKey, toggleInCollection, toggleSaved]);
 
   return <SavedListingsContext.Provider value={value}>{children}</SavedListingsContext.Provider>;
 }

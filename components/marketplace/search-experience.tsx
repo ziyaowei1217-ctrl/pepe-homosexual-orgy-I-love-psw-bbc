@@ -11,6 +11,7 @@ import { MatchPreferencesDialog } from "@/components/marketplace/match-preferenc
 import { useSavedListings } from "@/components/marketplace/saved-listings-provider";
 import { SearchFiltersDialog, type SearchFilterSection } from "@/components/marketplace/search-filters";
 import { SearchResultsMap } from "@/components/marketplace/search-results-map";
+import { useFeedSignals } from "@/components/marketplace/use-feed-signals";
 import { useListingMatches } from "@/components/marketplace/use-listing-matches";
 import { formatRangeLong } from "@/lib/date-format";
 import type { CatalogSort } from "@/lib/listing-catalog";
@@ -39,6 +40,10 @@ export function SearchExperience({ listings, initialQuery, initialMoveIn, initia
   const activeId = hoveredId ?? state.selected;
   const activeListing = catalog.items.find((listing) => listing.id === activeId);
   const filterCount = state.amenities.length + Number(Boolean(state.priceMin || state.priceMax)) + Number(Boolean(state.beds));
+  const { rememberLastSearch } = useFeedSignals();
+
+  // The home page's 为你推荐 and 新上架 pick up from the last search.
+  useEffect(() => { rememberLastSearch(state); }, [rememberLastSearch, state]);
 
   useEffect(() => {
     // Read the address bar after commit, not during render: on a client navigation the router has not

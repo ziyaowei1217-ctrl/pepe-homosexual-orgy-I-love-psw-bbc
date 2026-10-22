@@ -19,6 +19,8 @@ export type PreviewListing = {
   availableTo: string;
   latitude: number;
   longitude: number;
+  /** When the listing last went live (its approval time); feeds use it for 新上架 and freshness. */
+  listedAt?: string;
 };
 
 const neighborhoods = [
