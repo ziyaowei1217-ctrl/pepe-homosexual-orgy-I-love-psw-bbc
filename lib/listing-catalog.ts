@@ -1,3 +1,5 @@
+import { getListingPoint, isWithinBounds, type MapBounds } from "./listing-map";
+
 export type CatalogSort =
   | "recommended"
   | "price-low"
@@ -14,6 +16,8 @@ export type CatalogQuery = {
   sort: CatalogSort;
   page: number;
   pageSize: number;
+  /** Only listings inside this map area go on the pages; the map still gets every match. */
+  bounds?: MapBounds | null;
 };
 
 export type CatalogListing = {
@@ -29,10 +33,13 @@ export type CatalogListing = {
   trust?: string;
   availableFrom?: string;
   availableTo?: string;
+  latitude?: number;
+  longitude?: number;
 };
 
 export type CatalogPage<T extends CatalogListing> = {
   items: T[];
+  /** Every match, ignoring the map area and paging, so the map can show what lies outside the current view. */
   mapItems: T[];
   total: number;
   page: number;
@@ -82,21 +89,23 @@ export function buildCatalogPage<T extends CatalogListing>(
     return matchesQuery && matchesPrice && matchesAmenity && matchesDate;
   });
   const sorted = sortCatalogListings(filtered, query.sort);
+  const bounds = query.bounds;
+  const inArea = bounds ? sorted.filter((listing) => isWithinBounds(getListingPoint(listing), bounds)) : sorted;
   const pageSize = Math.max(1, Math.floor(query.pageSize));
-  const pageCount = Math.max(1, Math.ceil(sorted.length / pageSize));
+  const pageCount = Math.max(1, Math.ceil(inArea.length / pageSize));
   const page = Math.min(Math.max(1, Math.floor(query.page)), pageCount);
-  const items = sorted.slice((page - 1) * pageSize, page * pageSize);
+  const items = inArea.slice((page - 1) * pageSize, page * pageSize);
 
   return {
     items,
-    mapItems: items,
-    total: sorted.length,
+    mapItems: sorted,
+    total: inArea.length,
     page,
     pageSize,
     pageCount,
     dateFilterAvailable,
     heading: buildCatalogHeading(query),
-    summary: `${sorted.length} 套符合条件 · 第 ${page}/${pageCount} 页`
+    summary: `${inArea.length} 套符合条件 · 第 ${page}/${pageCount} 页`
   };
 }
 
@@ -140,7 +149,7 @@ function sortCatalogListings<T extends CatalogListing>(listings: readonly T[], s
 }
 
 function buildCatalogHeading(query: CatalogQuery) {
-  const location = query.query.trim() || "全部地区";
+  const location = query.bounds ? "地图区域内" : query.query.trim() || "全部地区";
   const amenity = query.amenity && query.amenity !== "全部" ? ` · ${query.amenity}` : "";
   return `${location}的可租房源${amenity}`;
 }

@@ -58,7 +58,7 @@ describe("listing catalog", () => {
     expect(page.dateFilterAvailable).toBe(true);
   });
 
-  it("sorts, paginates by 12 and gives the map the exact current page", () => {
+  it("sorts, paginates by 12 and gives the map every match", () => {
     const page = buildCatalogPage(listings, {
       ...baseQuery,
       sort: "price-high",
@@ -69,7 +69,20 @@ describe("listing catalog", () => {
     expect(page.pageCount).toBe(2);
     expect(page.items).toHaveLength(3);
     expect(page.items.map((item) => item.id)).toEqual(["3", "2", "1"]);
-    expect(page.mapItems).toEqual(page.items);
+    expect(page.mapItems).toHaveLength(15);
+  });
+
+  it("limits the pages, not the map, to the map area", () => {
+    const westwood = { latitude: 34.0635, longitude: -118.4455 };
+    const page = buildCatalogPage(listings.map((listing, index) => (index < 3 ? { ...listing, ...westwood } : { ...listing, latitude: 34.058, longitude: -118.3004 })), {
+      ...baseQuery,
+      bounds: [-118.46, 34.05, -118.43, 34.07]
+    });
+
+    expect(page.items.map((item) => item.id)).toEqual(["3", "2", "1"]);
+    expect(page.total).toBe(3);
+    expect(page.mapItems).toHaveLength(15);
+    expect(page.heading).toBe("地图区域内的可租房源");
   });
 
   it("only advertises date filtering when every listing has both availability fields", () => {

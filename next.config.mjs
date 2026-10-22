@@ -1,6 +1,10 @@
 const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000/api/v1";
 const apiOrigin = safeOrigin(apiBaseUrl);
-const connectSources = ["'self'", apiOrigin, apiOrigin.replace(/^http/, "ws")].filter(Boolean).join(" ");
+// MapLibre fetches the basemap style and tiles itself; keep in step with getMapStyle in lib/listing-map.ts.
+const mapStyleUrl = process.env.NEXT_PUBLIC_MAP_STYLE_URL || "";
+const mapTileTemplate = process.env.NEXT_PUBLIC_MAP_TILE_URL_TEMPLATE || "";
+const mapOrigins = mapStyleUrl || mapTileTemplate ? [safeOrigin(mapStyleUrl), safeOrigin(mapTileTemplate)] : ["https://tiles.openfreemap.org"];
+const connectSources = [...new Set(["'self'", apiOrigin, apiOrigin.replace(/^http/, "ws"), ...mapOrigins].filter(Boolean))].join(" ");
 const production = process.env.NODE_ENV === "production";
 const contentSecurityPolicy = [
   "default-src 'self'",
@@ -13,6 +17,8 @@ const contentSecurityPolicy = [
   `img-src 'self' data: blob: https: ${apiOrigin}`.trim(),
   "font-src 'self' data:",
   `connect-src ${connectSources}`,
+  // MapLibre renders tiles in a web worker it starts from a blob.
+  "worker-src 'self' blob:",
   ...(production ? ["upgrade-insecure-requests"] : [])
 ].join("; ");
 

@@ -1,6 +1,6 @@
 import { apiGet } from "./api";
 import type { ApiListing } from "./api";
-import { getListingCoordinates } from "./listing-map";
+import { getApproximateListingCoordinates } from "./listing-map";
 import { getListingCoverUrl, getListingImageUrls } from "./listing-media";
 import {
   createPreviewListings,
@@ -19,7 +19,7 @@ type LoadMarketplaceListingOptions = {
 };
 
 export function normalizeMarketplaceListing(listing: ApiListing): PreviewListing {
-  const coordinates = getListingCoordinates(listing.area);
+  const coordinates = getApproximateListingCoordinates(listing.id, listing.area);
 
   return {
     id: listing.id,
