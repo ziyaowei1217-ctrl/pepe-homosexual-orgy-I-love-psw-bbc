@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronLeft, ChevronRight, Grid2X2, ImageIcon, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Expand, Grid2X2, ImageIcon, X } from "lucide-react";
 import { SmartImage } from "@/components/ui/smart-image";
 import { useRef, useState } from "react";
 import { buildListingGallery, getGalleryIndex } from "@/lib/listing-detail";
@@ -17,7 +17,7 @@ export function ListingPhotoGallery({ listing }: { listing: PreviewListing }) {
       {images.slice(0, 5).map((src, index) => <button key={src} type="button" aria-label={`查看图片 ${index + 1}`} onClick={() => setActive(index)} className={cn("group relative overflow-hidden bg-line-strong focus-visible:z-10 focus-visible:ring-inset", index === 0 ? "col-span-4 row-span-2" : "hidden sm:block", index === 0 && count > 1 && "sm:col-span-2", index > 0 && count <= 3 && "sm:col-span-2", count === 2 && index === 1 && "sm:row-span-2", count === 4 && index === 3 && "sm:col-span-2")}>
         <SmartImage src={src} alt={index === 0 ? listing.title : `${listing.title} 图片 ${index + 1}`} fill priority={index === 0} sizes={count === 1 ? "100vw" : index === 0 ? "(max-width: 640px) 100vw, 50vw" : "25vw"} className="object-cover transition duration-300 group-hover:scale-[1.025] group-hover:brightness-95" />
       </button>)}
-      {!images.length ? <div className="col-span-4 row-span-2 grid place-content-center gap-3 text-center text-ink-secondary"><ImageIcon className="mx-auto size-10" /><p className="text-sm">房东暂未提供图片</p></div> : <button type="button" onClick={() => setActive(0)} className="absolute bottom-4 right-4 flex items-center gap-2 rounded-xl border border-surface/70 bg-surface/95 px-4 py-2.5 text-xs font-bold text-ink shadow-lg"><Grid2X2 className="size-4" />查看全部图片<span className="text-ink-secondary">· {images.length}</span></button>}
+      {!images.length ? <div className="col-span-4 row-span-2 grid place-content-center gap-3 text-center text-ink-secondary"><ImageIcon className="mx-auto size-10" /><p className="text-d-subhead">转租人暂未提供图片</p></div> : <button type="button" onClick={() => setActive(0)} className="tap-target absolute bottom-4 right-4 flex h-9 items-center gap-2 rounded-full bg-photo-button px-4 text-m-footnote font-semibold text-ink shadow-menu">{images.length > 1 ? <><Grid2X2 className="size-4" aria-hidden="true" />查看全部 {images.length} 张</> : <><Expand className="size-4" aria-hidden="true" />放大看照片</>}</button>}
     </section>
     {active !== null ? <PhotoViewer title={listing.title} images={images} initialIndex={active} onClose={() => setActive(null)} /> : null}
   </>;

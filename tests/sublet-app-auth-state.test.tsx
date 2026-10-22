@@ -610,7 +610,7 @@ describe("SubletApp auth state flow", () => {
     const renderer = await renderSubletApp("Trips");
 
     expect(renderedText(renderer.root)).toContain("租房申请行程");
-    expect(renderedText(renderer.root)).toContain("等待房东处理");
+    expect(renderedText(renderer.root)).toContain("等待转租人处理");
     expect(renderedText(renderer.root)).not.toContain("在线申请 · 暂未开放");
     expect(api.apiGet).toHaveBeenCalledWith("/applications/mine", "stored-renter-token");
     await unmount(renderer);
@@ -625,7 +625,7 @@ describe("SubletApp auth state flow", () => {
 
     const renderer = await renderSubletApp("Publish");
 
-    expect(renderedText(renderer.root)).toContain("房东申请箱");
+    expect(renderedText(renderer.root)).toContain("收到的申请");
     expect(renderedText(renderer.root)).toContain("Lin");
     expect(api.apiGet).toHaveBeenCalledWith("/applications/host-inbox", "stored-host-token");
     await unmount(renderer);

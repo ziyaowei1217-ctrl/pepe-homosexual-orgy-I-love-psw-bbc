@@ -34,12 +34,12 @@ const adminNav = [
 export function HostShell({ active, children }: { active: HostNavKey; children: ReactNode }) {
   return (
     <WorkspaceShell
-      title="房东工作台"
+      title="我发布的房间"
       eyebrow="管理房源和申请"
       active={active}
       items={hostNav}
       accent="blue"
-      accountLabel="房东账户"
+      accountLabel="我的账户"
     >
       {children}
     </WorkspaceShell>
@@ -84,7 +84,7 @@ function WorkspaceShell<Key extends string>({ title, eyebrow, active, items, acc
           })}
         </nav>
         <div className="mt-auto space-y-2">
-          <Link href="/" className="flex min-h-11 items-center gap-2 rounded-psw-md px-3 text-sm font-bold text-on-dark-secondary hover:bg-surface/10 hover:text-white"><ArrowLeft className="size-4" />返回租客端</Link>
+          <Link href="/" className="flex min-h-11 items-center gap-2 rounded-psw-md px-3 text-sm font-bold text-on-dark-secondary hover:bg-surface/10 hover:text-white"><ArrowLeft className="size-4" />返回找房</Link>
           <Link href="/account" className="flex items-center gap-3 rounded-[16px] border border-surface/10 bg-surface/[0.06] p-3"><span className="grid size-9 place-items-center rounded-full bg-surface/10"><UserRound className="size-4" /></span><span className="min-w-0"><span className="block text-xs font-black">{accountLabel}</span><span className="mt-0.5 block truncate text-[11px] text-on-dark-secondary">查看账户与权限</span></span></Link>
         </div>
       </aside>

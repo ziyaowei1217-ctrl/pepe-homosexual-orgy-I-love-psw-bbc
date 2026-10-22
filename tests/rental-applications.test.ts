@@ -42,7 +42,7 @@ describe("rental application client contract", () => {
 
   it("maps every persisted status to renter-facing copy", () => {
     expect(getRentalApplicationStatusCopy("DRAFT").label).toBe("草稿");
-    expect(getRentalApplicationStatusCopy("SUBMITTED").label).toBe("等待房东处理");
+    expect(getRentalApplicationStatusCopy("SUBMITTED").label).toBe("等待转租人处理");
     expect(getRentalApplicationStatusCopy("ACCEPTED").label).toBe("申请已接受");
     expect(getRentalApplicationStatusCopy("COMPLETED").label).toBe("入住已确认");
   });

@@ -9,7 +9,7 @@ describe("role workspace shells", () => {
   it("gives hosts a task-specific workspace instead of renter discovery navigation", () => {
     const html = renderToStaticMarkup(<HostShell active="applications"><main>申请审核</main></HostShell>);
 
-    for (const label of ["房东工作台", "概览", "房源", "申请", "消息"]) expect(html).toContain(label);
+    for (const label of ["我发布的房间", "概览", "房源", "申请", "消息"]) expect(html).toContain(label);
     expect(html).toContain('aria-current="page"');
     expect(html).toContain('aria-label="打开账户"');
     expect(html).not.toContain("找室友");

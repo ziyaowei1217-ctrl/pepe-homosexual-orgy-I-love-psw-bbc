@@ -16,7 +16,7 @@ afterEach(() => {
 describe("account experience", () => {
   it("keeps sign-in focused while showing the account structure", () => {
     const html = renderToStaticMarkup(<AccountExperience mode="overview" />);
-    expect(html).toContain("欢迎回来");
+    expect(html).toContain("登录 psw");
     expect(html).toContain("邮箱地址");
     expect(html).toContain("发送验证码");
     expect(html).toContain('href="/account/profile"');

@@ -6896,7 +6896,7 @@ export function PublishingFlow({
               </fieldset>
               <label className="flex items-start gap-3 rounded-md border bg-secondary p-3 text-sm font-semibold">
                 <input name="landlordAware" type="checkbox" className="mt-1" checked={draft.landlordAware} onChange={(event) => updateDraft({ landlordAware: event.target.checked })} />
-                <span>我声明房东已知情。此信息仅为用户声明，发布后统一显示“待平台审核”。</span>
+                <span>我声明房东知道并同意这次转租。这是你的声明，平台不核验租约，租客可能会请你出示租约。</span>
               </label>
             </div>
           ) : null}
@@ -6911,7 +6911,7 @@ export function PublishingFlow({
                 <PublishReviewItem label="价格" value={`$${draft.price.toLocaleString("en-US")} / 月`} />
                 <PublishReviewItem label="图片" value={`${mediaSummary.readyCount} 张已保存图片`} />
                 <PublishReviewItem label="设施" value={draft.tags.join("、") || "未选择"} />
-                <PublishReviewItem label="Trust 来源" value={draft.landlordAware ? "用户声明 · 待平台审核" : "未声明 · 待平台审核"} />
+                <PublishReviewItem label="信任信息" value={draft.landlordAware ? "房东知情：转租人声明 · 待平台审核" : "房东是否知情：未声明 · 待平台审核"} />
               </div>
               {confirmSubmit ? (
                 <div className="rounded-md border border-trust-amber bg-warning-soft p-4 text-sm font-semibold text-foreground">

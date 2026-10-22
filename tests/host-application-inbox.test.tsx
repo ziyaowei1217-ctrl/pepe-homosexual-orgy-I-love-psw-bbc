@@ -27,7 +27,7 @@ describe("HostApplicationInbox", () => {
       );
     });
 
-    expect(text(renderer.root)).toContain("等待房东处理");
+    expect(text(renderer.root)).toContain("等待转租人处理");
     expect(text(renderer.root)).toContain("Westwood 阳光主卧");
     expect(text(renderer.root)).not.toContain("房源 listing-1");
     const accept = renderer.root.findAllByType("button").find((node) => text(node).includes("接受申请"))!;

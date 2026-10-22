@@ -14,7 +14,8 @@ describe("trips experience", () => {
     expect(html).toContain("签约");
     expect(html).toContain("付款");
     expect(html).toContain("入住");
-    expect(html).toContain('href="/applications"');
+    // The link to other applications appears once signed in; signed out the page offers sign-in only.
+    expect(html).not.toContain('href="/applications"');
     expect(html).not.toContain("房源筛选");
   });
 });

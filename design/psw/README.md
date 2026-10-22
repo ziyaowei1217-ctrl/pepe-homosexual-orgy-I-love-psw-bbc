@@ -39,3 +39,26 @@ The site follows the **psw 设计系统** (the psw Design System artifact). This
 With dates chosen, the headline is the rent for exactly those dates (`lib/stay-price.ts`): whole months from the
 move-in date at the monthly rent, remaining days prorated by the actual length of that month. Without dates the monthly
 rent is the headline. Cards, map pins, the booking box and the phone bottom bar show the same number.
+The page never picks dates for the renter: a listing opened without dates shows the monthly rent and asks for dates.
+The 青柠 number in the decision block is only ever a total. The application page shows the same total and dates, and
+dates the listing cannot be rented for send the renter back to the listing.
+
+## Who is who
+
+- **转租人:** the person posting the room (usually a student subletting). Buttons say「联系转租人」; their area is
+  「我发布的房间」.
+- **房东:** only the actual landlord, as in「房东知情」.
+
+## Trust
+
+Show only what the platform knows (`lib/listing-trust.ts`, `TrustBadge`):
+
+- 「平台已审核」/「待平台审核」: the platform reviewed the listing's details. Public catalog listings are reviewed, so
+  cards do not carry the badge; the listing page does.
+- 「房东知情：转租人声明」: a declaration made when publishing. The platform does not check leases, so no copy may say
+  a lease or consent letter was verified; the listing page tells renters to ask for the lease before signing.
+
+## Dead ends
+
+Missing pages, removed listings and load errors use `DeadEnd` inside the site shell: 窝窝 sorry, one sentence on what
+happened, one way forward and「回首页」. A removed listing also shows listings that can still be rented.

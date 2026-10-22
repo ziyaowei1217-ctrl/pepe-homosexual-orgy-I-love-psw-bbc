@@ -3,6 +3,8 @@
 import { ArrowLeft, CalendarDays, FileText, Search, Send, UsersRound } from "lucide-react";
 import { SmartImage } from "@/components/ui/smart-image";
 import Link from "next/link";
+
+import { EmptyState } from "@/components/marketplace/empty-state";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 
 import { Wowo } from "@/components/brand/wowo";
@@ -331,6 +333,14 @@ function InboxSessionExperience({ initialConversationId, initialListingId, initi
     setConversations((current) => current.map((item) => item.id === id ? withMessages(item, messages) : item));
   }
 
+  // Signed out there is nothing to search, filter or open: one sign-in state instead of the two-pane inbox.
+  if (!authenticated && !loading) {
+    return <main className="min-h-[calc(100dvh-72px)] bg-background"><div className="page-container pb-16 pt-8 sm:pt-12">
+      <h1 className="page-title">收件箱</h1>
+      <EmptyState className="mt-7" mood="sleepy" title="登录后查看你的消息" body="和转租人、室友的消息都在这里。用邮箱验证码登录，不需要密码。" action={<Link href={authRoute({ returnTo: inboxReturnTo({ initialConversationId, initialListingId, initialApplicantId, initialRoommateId, initialTour }) })} className="primary-action">登录</Link>} />
+    </div></main>;
+  }
+
   return (
     <main className="min-h-[calc(100dvh-72px)] bg-background">
       <div className="mx-auto max-w-[1264px] px-0 sm:px-8 sm:py-6">
@@ -342,7 +352,6 @@ function InboxSessionExperience({ initialConversationId, initialListingId, initi
               <div className="mt-4 flex gap-2 overflow-x-auto [scrollbar-width:none]">{(["all", "application", "tour", "roommate"] as const).map((value) => <button key={value} type="button" onClick={() => setFilter(value)} aria-pressed={filter === value} className={cn("search-pill min-h-9 px-3.5", filter === value && "search-pill-active")}>{value === "all" ? "全部" : kindLabels[value]}</button>)}</div>
             </div>
             <div className="max-h-[calc(100dvh-300px)] overflow-y-auto p-3">
-              {!authenticated && !loading ? <EmptyInbox title="登录后查看真实消息" actionHref={authRoute({ returnTo: inboxReturnTo({ initialConversationId, initialListingId, initialApplicantId, initialRoommateId, initialTour }) })} action="登录" /> : null}
               {!authenticated && loading ? <p className="p-5 text-center text-d-subhead text-ink-secondary">正在检查登录状态…</p> : null}
               {authenticated && !loading && conversations.length === 0 && !error ? <EmptyInbox title="还没有消息" actionHref="/search" action="浏览房源" /> : null}
               {loading && authenticated ? <p className="p-5 text-center text-d-subhead text-ink-secondary">正在同步消息…</p> : null}
@@ -362,7 +371,7 @@ function InboxSessionExperience({ initialConversationId, initialListingId, initi
               <div className="min-h-0 flex-1 overflow-y-auto px-4 py-6 sm:px-8"><div className="mx-auto max-w-3xl space-y-4">{active.messages.length ? active.messages.map((message) => <MessageBubble key={message.id} message={message} />) : <p className="py-16 text-center text-d-subhead text-ink-secondary">发送第一条消息开始对话</p>}</div></div>
               {error ? <p role="alert" className="mx-4 mb-3 shrink-0 rounded-psw-md bg-danger-soft p-4 text-d-subhead font-semibold text-danger-text">{error}</p> : null}
               <form onSubmit={sendMessage} className="shrink-0 border-t border-line-strong p-4"><div className="mx-auto flex max-w-3xl items-end gap-2 rounded-[22px] border border-line-strong bg-surface-muted p-2 pl-4"><textarea value={draft} onChange={(event) => setDraft(event.target.value)} rows={1} placeholder="输入消息…" className="min-h-9 min-w-0 flex-1 resize-none bg-transparent py-2 text-base outline-none sm:text-sm" aria-label="消息内容" /><button type="submit" disabled={sending || !draft.trim()} className="grid size-11 shrink-0 place-items-center rounded-full bg-primary text-white disabled:opacity-40" aria-label="发送消息"><Send className="size-4" /></button></div></form>
-            </> : loading ? <p role="status" className="p-8 text-center text-sm text-ink-secondary">正在同步消息…</p> : <div className="grid flex-1 place-items-center p-8 text-center"><div><h2 className="text-m-headline sm:text-d-headline">选择一条对话</h2><p className="mt-2 text-d-subhead text-ink-secondary">和房东、室友的消息都会显示在这里。</p></div></div>}
+            </> : loading ? <p role="status" className="p-8 text-center text-sm text-ink-secondary">正在同步消息…</p> : <div className="grid flex-1 place-items-center p-8 text-center"><div><h2 className="text-m-headline sm:text-d-headline">选择一条对话</h2><p className="mt-2 text-d-subhead text-ink-secondary">和转租人、室友的消息都会显示在这里。</p></div></div>}
           </section>
         </div>
       </div>
@@ -401,7 +410,7 @@ function ViewingRequestSummary({ request, viewerRole, pending, onDecision }: { r
 }
 
 function viewingStatusLabel(status: ApiViewingRequest["status"]) {
-  return { REQUESTED: "等待房东确认", CONFIRMED: "已确认", COMPLETED: "已完成", CANCELLED: "已取消" }[status];
+  return { REQUESTED: "等待转租人确认", CONFIRMED: "已确认", COMPLETED: "已完成", CANCELLED: "已取消" }[status];
 }
 
 function defaultTourDateTime() {

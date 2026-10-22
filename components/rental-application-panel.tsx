@@ -155,7 +155,7 @@ function RentalApplicationSession({
                 <span>{draft.moveIn} 至 {draft.moveOut}</span>
                 <span>{draft.schoolOrOccupation}</span>
               </div>
-              <p className="text-sm text-muted-foreground">提交后会进入房东申请箱；页面刷新后仍以服务端状态为准。</p>
+              <p className="text-sm text-muted-foreground">提交后会进入收到的申请；页面刷新后仍以服务端状态为准。</p>
               <div className="flex gap-2"><Button variant="outline" disabled={pending} onClick={() => setStep(1)}>上一步</Button><Button className="flex-1" disabled={pending} onClick={() => void submit()}>{pending ? "提交中…" : "提交申请"}</Button></div>
             </section>
           ) : null}

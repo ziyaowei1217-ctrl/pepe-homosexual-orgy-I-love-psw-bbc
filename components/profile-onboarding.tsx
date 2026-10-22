@@ -141,8 +141,8 @@ export function ProfileOnboarding({
                   }
                 >
                   <option value="renter">租客</option>
-                  <option value="lister">房东</option>
-                  <option value="both">租客兼房东</option>
+                  <option value="lister">转租人</option>
+                  <option value="both">租客兼转租人</option>
                 </select>
               </label>
 

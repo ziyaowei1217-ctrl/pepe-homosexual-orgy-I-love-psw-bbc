@@ -91,9 +91,9 @@ export function HostApplicationInbox({
   }
 
   return (
-    <section className="space-y-4" aria-label="房东申请箱">
+    <section className="space-y-4" aria-label="收到的申请">
       <Card className="shadow-panel">
-        <CardHeader><CardTitle>房东申请箱</CardTitle><CardDescription>仅显示当前账户所拥有房源的服务端申请</CardDescription></CardHeader>
+        <CardHeader><CardTitle>收到的申请</CardTitle><CardDescription>仅显示当前账户所拥有房源的服务端申请</CardDescription></CardHeader>
         <CardContent className="space-y-4">
           {applications.length === 0 ? <p className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">暂时没有租房申请。</p> : applications.map((application) => {
             const copy = getRentalApplicationStatusCopy(application.status);

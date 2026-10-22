@@ -2,6 +2,7 @@ import { apiGet } from "./api";
 import type { ApiListing } from "./api";
 import { getListingCoordinates } from "./listing-map";
 import { getListingCoverUrl, getListingImageUrls } from "./listing-media";
+import { ProductApiError } from "./product-errors";
 import {
   createPreviewListings,
   isPreviewDataEnabled,
@@ -70,7 +71,13 @@ export async function loadMarketplaceListing(
   const fetchListing = options.fetchListing ?? (
     (id: string) => apiGet<ApiListing>(`/listings/${encodeURIComponent(id)}`)
   );
-  return normalizeMarketplaceListing(await fetchListing(listingId));
+  try {
+    return normalizeMarketplaceListing(await fetchListing(listingId));
+  } catch (error) {
+    // Preview builds run without the API, so an id that is not a preview listing does not exist there.
+    if (previewEnabled) throw new ProductApiError({ category: "validation", message: "Listing not found", retryable: false, status: 404 });
+    throw error;
+  }
 }
 
 function toDateOnly(value: string | undefined) {

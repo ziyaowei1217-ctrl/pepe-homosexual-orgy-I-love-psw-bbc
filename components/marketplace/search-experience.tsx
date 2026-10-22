@@ -120,12 +120,16 @@ export function SearchExperience({ listings, initialQuery, initialMoveIn, initia
 
   const dateLabel = state.moveIn && state.moveOut ? formatRangeLong(state.moveIn, state.moveOut) : "选日期";
   const budgetLabel = state.priceMin || state.priceMax ? `$${state.priceMin.toLocaleString("en-US")} – ${state.priceMax ? `$${state.priceMax.toLocaleString("en-US")}` : "不限"}` : "每月预算";
+  // Dates are not repeated here: the toolbar's date button already shows them and clears them.
   const chips = [
-    ...(state.moveIn || state.moveOut ? [{ label: dateLabel, clear: () => update({ moveIn: "", moveOut: "" }) }] : []),
     ...(state.priceMin || state.priceMax ? [{ label: budgetLabel, clear: () => update({ priceMin: 0, priceMax: 0 }) }] : []),
     ...(state.beds ? [{ label: `${state.beds}+ 间卧室`, clear: () => update({ beds: 0 }) }] : []),
     ...state.amenities.map((amenity) => ({ label: amenity, clear: () => update({ amenities: state.amenities.filter((value) => value !== amenity) }) }))
   ];
+
+  const viewSwitch = <div className="flex rounded-full bg-ink-block p-1 text-white shadow-menu" role="group" aria-label="浏览方式">
+    {([["split", "分屏", LayoutGrid], ["list", "列表", List], ["map", "地图", Map]] as const).map(([view, label, Icon]) => <button key={view} type="button" onClick={() => update({ view, page: state.page, selected: state.selected })} aria-pressed={state.view === view} className={cn("flex min-h-11 items-center gap-2 rounded-full px-4 text-d-subhead font-semibold", state.view === view ? "bg-surface text-ink" : "text-on-dark-secondary hover:bg-on-dark/10", view === "split" && "hidden lg:flex")}><Icon className="size-4" aria-hidden="true" />{label}</button>)}
+  </div>;
 
   return <main className="search-workspace min-h-[calc(100dvh-72px)] bg-background">
     {/* On phones the site header scrolls away and only this toolbar stays, so results keep most of the screen. */}
@@ -148,19 +152,20 @@ export function SearchExperience({ listings, initialQuery, initialMoveIn, initia
     </section>
 
     <div className={cn("mx-auto grid max-w-[1920px]", state.view === "split" && "lg:grid-cols-[minmax(480px,0.95fr)_minmax(0,1.05fr)]")}>
-      <section className={cn("min-w-0 px-4 pb-28 pt-5 sm:px-6 sm:pt-6 lg:px-8", state.view === "map" && "hidden")} aria-labelledby="result-heading">
+      <section className={cn("min-w-0 px-4 pb-28 pt-1 sm:px-6 sm:pt-6 lg:px-8", state.view === "map" && "hidden")} aria-labelledby="result-heading">
         <div className="hidden items-center gap-2 text-m-footnote text-ink-secondary sm:flex"><Link href="/" className="flex min-h-6 items-center hover:text-ink">首页</Link><span aria-hidden="true">/</span><span>房源列表</span>{state.query ? <><span aria-hidden="true">/</span><span className="truncate">{state.query}</span></> : null}</div>
-        <div className="mt-1 sm:mt-3">
-          <h1 id="result-heading" className="page-title">{catalog.heading}</h1>
-          <p className="mt-1 text-m-subhead text-ink-secondary sm:text-d-subhead" role="status" aria-live="polite"><strong className="font-display font-bold text-ink">{catalog.total}</strong> 套符合条件{stayIn ? ` · ${formatRangeLong(stayIn, stayOut)}` : ""}</p>
-        </div>
+        {/* Phones get a title-size heading so the first price is on the first screen. */}
+        <h1 id="result-heading" className="font-rounded text-m-title text-ink sm:mt-3 sm:text-d-large-title">{catalog.heading}</h1>
         {dateError ? <p role="alert" className="mt-3 rounded-psw-md bg-warning-soft px-3 py-2 text-d-subhead text-warning-text">{dateError}</p> : null}
         {chips.length ? <div className="mt-4 flex flex-wrap items-center gap-2" aria-label="已选条件">{chips.map((chip) => <button key={chip.label} type="button" aria-label={`移除 ${chip.label}`} onClick={chip.clear} className="tap-target flex h-9 items-center gap-1.5 rounded-full bg-primary px-3.5 text-m-footnote font-semibold text-on-primary hover:bg-primary-hover">{chip.label}<X className="size-3.5" aria-hidden="true" /></button>)}<button type="button" onClick={() => update({ ...emptyFilters, moveIn: "", moveOut: "" })} className="min-h-11 px-2 text-m-footnote font-semibold text-ink-secondary underline underline-offset-4">重置条件</button></div> : null}
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-b border-line-strong pb-4">
-          <p className="flex items-center gap-2 text-m-footnote text-ink-secondary"><span className="size-1.5 shrink-0 rounded-full bg-primary" aria-hidden="true" />{stayIn ? "总价：整月按月租，零头按当月天数折算" : "价格按月租显示，选好日期后显示总价"}</p>
-          <label className="flex shrink-0 items-center gap-2 whitespace-nowrap text-m-footnote text-ink-secondary">排序<select value={state.sort} onChange={(event) => update({ sort: event.target.value as CatalogSort })} aria-label="结果排序" className="min-h-11 max-w-[170px] rounded-full border-[1.5px] border-outline bg-surface px-4 text-base font-bold text-ink outline-none sm:text-sm"><option value="recommended">推荐优先</option><option value="price-low">价格从低到高</option><option value="price-high">价格从高到低</option></select></label>
+        <div className="mt-2 flex items-center justify-between gap-3 border-b border-line-strong pb-2 sm:mt-4 sm:pb-4">
+          <div className="min-w-0">
+            <p className="text-m-subhead text-ink-secondary sm:text-d-subhead" role="status" aria-live="polite"><strong className="font-display font-bold text-ink">{catalog.total}</strong> 套符合条件</p>
+            <p className="text-m-footnote text-ink-secondary">{stayIn ? "总价：整月按月租，零头按天折算" : "按月租显示，选好日期看总价"}</p>
+          </div>
+          <label className="flex shrink-0 items-center gap-2 whitespace-nowrap text-m-footnote text-ink-secondary"><span className="sr-only sm:not-sr-only">排序</span><select value={state.sort} onChange={(event) => update({ sort: event.target.value as CatalogSort })} aria-label="结果排序" className="min-h-11 max-w-[170px] rounded-full border-[1.5px] border-outline bg-surface px-4 text-base font-bold text-ink outline-none sm:text-sm"><option value="recommended">推荐优先</option><option value="price-low">价格从低到高</option><option value="price-high">价格从高到低</option></select></label>
         </div>
-        {catalog.items.length ? <div className={cn("mt-5 grid gap-x-5 gap-y-7", state.view === "list" ? "grid-cols-[repeat(auto-fill,minmax(260px,1fr))]" : "sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2")}>
+        {catalog.items.length ? <div className={cn("mt-2 grid gap-x-5 gap-y-7 sm:mt-5", state.view === "list" ? "grid-cols-[repeat(auto-fill,minmax(260px,1fr))]" : "sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2")}>
           {catalog.items.map((listing, index) => <ListingCard
             key={listing.id}
             id={`result-${listing.id}`}
@@ -184,11 +189,12 @@ export function SearchExperience({ listings, initialQuery, initialMoveIn, initia
         </div> : <EmptyState className="mt-7" mood="curious" title="没有找到符合条件的房源" body="试试调整预算、换一段日期，或者扩大找房区域。" action={<button type="button" onClick={() => update({ ...defaultSearch, view: state.view })} className="min-h-12 rounded-full bg-primary px-6 font-rounded text-base font-bold text-on-primary hover:bg-primary-hover active:scale-[0.97]">清除筛选</button>} />}
         {catalog.pageCount > 1 ? <nav aria-label="房源分页" className="mt-10 flex items-center justify-center gap-5"><button type="button" disabled={catalog.page <= 1} onClick={() => { update({ page: catalog.page - 1 }); window.scrollTo({ top: 0 }); }} aria-label="上一页" className="grid size-11 place-items-center rounded-full border-[1.5px] border-outline bg-surface disabled:opacity-30"><ArrowLeft className="size-4" /></button><span className="text-d-subhead text-ink-secondary">第 {catalog.page} / {catalog.pageCount} 页</span><button type="button" disabled={catalog.page >= catalog.pageCount} onClick={() => { update({ page: catalog.page + 1 }); window.scrollTo({ top: 0 }); }} aria-label="下一页" className="grid size-11 place-items-center rounded-full border-[1.5px] border-outline bg-surface disabled:opacity-30"><ArrowRight className="size-4" /></button></nav> : null}
       </section>
-      <SearchResultsMap key={`${catalog.items.map((item) => item.id).join(",")}:${state.view}`} listings={catalog.items} total={catalog.total} activeListing={activeListing} stay={state} view={state.view} onSelect={(id) => selectListing(id, state.view === "split")} onOpen={rememberSearch} onClose={() => update({ selected: "", page: state.page }, "replace")} page={catalog.page} pageCount={catalog.pageCount} onPageChange={(page) => update({ page })} />
+      <SearchResultsMap key={`${catalog.items.map((item) => item.id).join(",")}:${state.view}`} listings={catalog.items} total={catalog.total} activeListing={activeListing} stay={state} view={state.view} onSelect={(id) => selectListing(id, state.view === "split")} onOpen={rememberSearch} onClose={() => update({ selected: "", page: state.page }, "replace")} page={catalog.page} pageCount={catalog.pageCount} onPageChange={(page) => update({ page })} controls={viewSwitch} />
     </div>
-    <div className="fixed bottom-[82px] left-1/2 z-40 flex -translate-x-1/2 rounded-full bg-ink-block p-1 text-white shadow-menu md:bottom-6" aria-label="浏览方式">
-      {([["split", "分屏", LayoutGrid], ["list", "列表", List], ["map", "地图", Map]] as const).map(([view, label, Icon]) => <button key={view} type="button" onClick={() => update({ view, page: state.page, selected: state.selected })} aria-pressed={state.view === view} className={cn("flex min-h-11 items-center gap-2 rounded-full px-4 text-d-subhead font-semibold", state.view === view ? "bg-surface text-ink" : "text-on-dark-secondary hover:bg-on-dark/10", view === "split" && "hidden lg:flex")}><Icon className="size-4" aria-hidden="true" />{label}</button>)}
-    </div>
+    {/* Phones and tablets have two views, so one button to the other view, on the right where it does not cover a card's price. */}
+    <button type="button" onClick={() => update({ view: state.view === "map" ? "list" : "map", page: state.page, selected: state.selected })} className="fixed bottom-[82px] right-4 z-40 flex min-h-12 items-center gap-2 rounded-full bg-ink-block px-5 text-d-subhead font-semibold text-white shadow-menu active:scale-[0.97] md:bottom-6 lg:hidden">{state.view === "map" ? <><List className="size-4" aria-hidden="true" />列表</> : <><Map className="size-4" aria-hidden="true" />地图</>}</button>
+    {/* Desktop: floating over the list in list view; with a map on screen it sits at the bottom of the map instead. */}
+    {state.view === "list" ? <div className="fixed bottom-6 left-1/2 z-40 hidden -translate-x-1/2 lg:block">{viewSwitch}</div> : null}
     {notice ? <div role="status" className="fixed bottom-[144px] left-1/2 z-[70] flex -translate-x-1/2 items-center gap-2 whitespace-nowrap rounded-psw-md bg-toast-bg px-5 py-3 text-d-subhead text-on-toast shadow-menu md:bottom-24"><Check className="size-4 text-toast-success" aria-hidden="true" />{notice}<Link href="/saved" className="ml-2 flex min-h-6 items-center font-semibold text-toast-action underline">查看</Link></div> : null}
     {filterOpen ? <SearchFiltersDialog initialSection={filterOpen} initial={state} prices={searchCatalog(listings, { ...state, ...emptyFilters, page: 1 }, Number.MAX_SAFE_INTEGER).items.map((listing) => listing.price)} getCount={(draft) => searchCatalog(listings, draft).total} onApply={(draft) => { update({ ...draft, page: 1, selected: "" }); setFilterOpen(null); }} onClose={() => setFilterOpen(null)} /> : null}
   </main>;

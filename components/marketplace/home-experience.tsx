@@ -34,12 +34,12 @@ export function HomeExperience({ listings, totalListings = listings.length }: { 
           <form action="/search" method="get" aria-label="搜索房源" className="relative z-10 mt-6 flex flex-col gap-1 rounded-psw-xl bg-surface p-2 text-ink shadow-search sm:mt-8 lg:max-w-[720px] lg:flex-row lg:items-center lg:rounded-full lg:p-2 lg:pl-3">
             <label className="flex min-w-0 flex-1 items-center gap-3 rounded-full px-3 py-2 focus-within:bg-surface-subtle lg:flex-[1.3]">
               <MapPin className="size-5 shrink-0 text-primary-text" aria-hidden="true" />
-              <span className="min-w-0 flex-1"><span className="block text-xs font-bold text-ink">城市</span><LocationAutocomplete name="q" ariaLabel="想住在哪里？" placeholder="城市、学校或公司" inputClassName="text-base font-semibold text-ink lg:text-sm" /></span>
+              <span className="min-w-0 flex-1"><span className="block text-m-footnote font-bold text-ink">城市</span><LocationAutocomplete name="q" ariaLabel="想住在哪里？" placeholder="城市、学校或公司" inputClassName="text-base font-semibold text-ink lg:text-sm" /></span>
             </label>
             <span className="hidden h-8 w-px bg-line-strong lg:block" aria-hidden="true" />
             <div className="grid grid-cols-2 gap-1 border-t border-line-strong pt-1 lg:flex lg:flex-1 lg:border-0 lg:pt-0">
-              <label className="min-w-0 rounded-full px-3 py-2 focus-within:bg-surface-subtle lg:flex-1"><span className="flex items-center gap-1.5 text-xs font-bold text-ink"><CalendarDays className="size-3.5" aria-hidden="true" />入住</span><input type="date" name="moveIn" min={today} aria-label="入住日期" className="mt-0.5 block w-full min-w-0 bg-transparent text-base font-semibold text-ink outline-none lg:text-sm" /></label>
-              <label className="min-w-0 rounded-full px-3 py-2 focus-within:bg-surface-subtle lg:flex-1"><span className="flex items-center gap-1.5 text-xs font-bold text-ink"><CalendarDays className="size-3.5" aria-hidden="true" />退租</span><input type="date" name="moveOut" min={today} aria-label="退租日期" className="mt-0.5 block w-full min-w-0 bg-transparent text-base font-semibold text-ink outline-none lg:text-sm" /></label>
+              <label className="min-w-0 rounded-full px-3 py-2 focus-within:bg-surface-subtle lg:flex-1"><span className="flex items-center gap-1.5 text-m-footnote font-bold text-ink"><CalendarDays className="size-3.5" aria-hidden="true" />入住</span><input type="date" name="moveIn" min={today} aria-label="入住日期" className="mt-0.5 block w-full min-w-0 bg-transparent text-base font-semibold text-ink outline-none lg:text-sm" /></label>
+              <label className="min-w-0 rounded-full px-3 py-2 focus-within:bg-surface-subtle lg:flex-1"><span className="flex items-center gap-1.5 text-m-footnote font-bold text-ink"><CalendarDays className="size-3.5" aria-hidden="true" />退租</span><input type="date" name="moveOut" min={today} aria-label="退租日期" className="mt-0.5 block w-full min-w-0 bg-transparent text-base font-semibold text-ink outline-none lg:text-sm" /></label>
             </div>
             <button type="submit" className="flex min-h-12 items-center justify-center gap-2 rounded-full bg-primary px-6 font-rounded text-base font-bold text-on-primary transition-colors hover:bg-primary-hover active:scale-[0.97] lg:min-h-12 lg:shrink-0"><Search className="size-[18px]" aria-hidden="true" />搜索房源</button>
           </form>
@@ -79,7 +79,7 @@ export function HomeExperience({ listings, totalListings = listings.length }: { 
         <div className="min-w-0 flex-1">
           <p className="text-d-subhead text-ink-secondary">寒暑假要回国？</p>
           <h2 id="home-post" className="mt-0.5 text-[22px] font-bold leading-[30px] text-primary-text sm:text-d-title">把房间挂出来，别让空房白交房租</h2>
-          <p className="mt-1 text-m-subhead text-ink-secondary sm:text-d-subhead">上传租约和房东同意书，核对通过后带上「租约已核验」。</p>
+          <p className="mt-1 text-m-subhead text-ink-secondary sm:text-d-subhead">填好可租日期和月租，声明房东知情，平台审核通过后就会出现在搜索里。</p>
         </div>
         <Link href="/host/listings/new" className="flex min-h-12 shrink-0 items-center justify-center rounded-full bg-primary px-6 font-rounded text-base font-bold text-on-primary transition-colors hover:bg-primary-hover active:scale-[0.97]">发布我的房间</Link>
       </section>

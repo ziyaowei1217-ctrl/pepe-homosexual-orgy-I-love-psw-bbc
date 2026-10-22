@@ -50,14 +50,14 @@ export function buildListingDetail(listing: DetailListing, dateRange: DateRange)
       ],
       houseRules: [
         listing.trust,
-        listing.trust.includes("平台已审核") ? "平台已审核房东授权" : "房东知情为用户声明，待平台审核",
+        listing.trust.includes("平台已审核") ? "平台已审核转租人授权" : "房东知情为用户声明，待平台审核",
         listing.tags.includes("宠物友好") ? "宠物可谈" : "入住前完成室友偏好确认",
         listing.tags.includes("无烟") ? "无烟房源" : "公共区保持安静整洁"
       ],
       moveIn: [
         dateRange.checkIn ? `${formatDateRangeLabel(dateRange)} 已用于核对可租范围` : "选择日期可核对房源可租范围",
-        "联系房东并预约看房",
-        "在线申请后由房东处理，接受后进入签约与付款流程"
+        "联系转租人并预约看房",
+        "在线申请后由转租人处理，接受后进入签约与付款流程"
       ]
     }
   };

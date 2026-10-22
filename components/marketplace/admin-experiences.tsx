@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { AdminRoommatesScreen } from "@/components/admin-roommates-screen";
+import { PageHeader } from "@/components/marketplace/page-header";
 import { AdminStepUpPanel } from "@/components/admin-step-up-panel";
 import { AdminTrustScreen } from "@/components/admin-trust-screen";
 import { apiGet, getAdminListingReviewQueue, getAdminRoommates } from "@/lib/api";
@@ -97,6 +98,6 @@ function AdminAccess({ session, returnTo }: { session: ReturnType<typeof useMark
   return <section className="m-8 rounded-[24px] border border-dashed border-outline bg-surface p-10 text-center"><h2 className="text-xl font-black">{session.token ? "此账户没有管理员权限" : "登录管理员账户后继续"}</h2>{!session.token ? <Link href={authRoute({ returnTo })} className="primary-action mt-5">登录</Link> : null}</section>;
 }
 
-function AdminPage({ title, description, action, children }: { title: string; description: string; action?: React.ReactNode; children: React.ReactNode }) { return <main className="mx-auto max-w-[1460px] px-4 py-7 sm:px-7 lg:px-10"><header className="flex flex-col justify-between gap-5 sm:flex-row sm:items-end"><div><p className="text-xs font-black uppercase tracking-[.16em] text-primary-text">Operations</p><h1 className="mt-2 text-4xl font-black">{title}</h1><p className="mt-3 text-sm text-ink-secondary">{description}</p></div>{action}</header>{children}</main>; }
+function AdminPage({ title, description, action, children }: { title: string; description: string; action?: React.ReactNode; children: React.ReactNode }) { return <main className="mx-auto max-w-[1460px] px-4 py-7 sm:px-7 lg:px-10"><PageHeader title={title} description={description} action={action} />{children}</main>; }
 function Metric({ icon: Icon, label, value }: { icon: typeof CheckCircle2; label: string; value: number | null }) { return <div className="rounded-[24px] border border-line-strong bg-surface p-5 shadow-sm"><span className="grid size-10 place-items-center rounded-[13px] bg-surface-subtle text-primary-text"><Icon className="size-5" /></span><strong className="mt-5 block text-3xl font-black">{value ?? "—"}</strong><span className="mt-1 block text-sm font-bold text-ink-secondary">{label}</span></div>; }
 function ErrorNotice({ text }: { text: string }) { return <p role="alert" className="mt-6 rounded-[16px] bg-danger-soft p-4 text-sm font-bold text-danger-text">{text}</p>; }

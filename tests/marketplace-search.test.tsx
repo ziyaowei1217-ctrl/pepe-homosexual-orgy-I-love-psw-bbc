@@ -34,7 +34,8 @@ describe("marketplace search", () => {
     expect(html).not.toContain("示意地图");
     expect(html).toContain('href="/listing/preview-01"');
     expect(html).toContain(">筛选<");
-    expect(html).toContain("bottom-[136px]");
+    // Map sheets sit above the phone view switch (82px + 52px from the bottom of the screen).
+    expect(html).toContain("bottom-[146px]");
     expect(html).not.toContain("申请材料");
     expect(html).not.toContain("室友偏好");
   });

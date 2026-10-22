@@ -6,9 +6,8 @@ vi.mock("next/font/local", () => ({ default: () => ({ className: "font", variabl
 import { metadata } from "../app/layout";
 
 describe("root metadata", () => {
-  it("describes nationwide rental market coverage", () => {
-    expect((metadata.title as { default: string }).default).toBe(
-      "psw｜全美学生与职场租房及室友匹配"
-    );
+  it("names the brand's positioning: sublets between international students", () => {
+    expect((metadata.title as { default: string }).default).toBe("psw｜留学生之间的转租");
+    expect(metadata.description).toContain("这段日期的总价");
   });
 });

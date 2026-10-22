@@ -71,16 +71,16 @@ function HostDashboardExperienceSession() {
   const totalsReady = Boolean(session.user && !session.loading && !session.error && !loading && !error);
 
   return <HostPage title="今天需要处理什么" description="查看待审核申请、待确认预约与已发布房源。" action={<Link href="/host/listings/new" className="primary-action"><Plus className="size-4" />发布新房源</Link>}>
-    {!session.token ? <LoginGate text="登录后读取实时数据" returnTo="/host" /> : null}
+    {!session.token ? <LoginGate text="登录后查看你发布的房间" returnTo="/host" /> : null}
     {error || session.error ? <ErrorNotice text={error ?? session.error!} /> : null}
     {error || session.error ? <button type="button" onClick={() => { if (session.error) session.reload(); setLoadAttempt((attempt) => attempt + 1); }} className="secondary-action mt-4">重新加载工作台</button> : null}
     {session.token && (session.loading || loading) ? <p role="status" className="mt-6 text-sm font-bold text-ink-secondary">正在加载工作台…</p> : null}
-    <section className="mt-7 grid gap-4 sm:grid-cols-3" aria-label="关键指标">
+    {session.token ? <><section className="mt-7 grid gap-4 sm:grid-cols-3" aria-label="关键指标">
       <Metric icon={ClipboardCheck} label="待处理申请" value={totalsReady ? String(pendingApplications) : "—"} href="/host/applications" />
       <Metric icon={CalendarDays} label="待确认预约" value={totalsReady ? String(pendingTours) : "—"} href="/inbox" />
       <Metric icon={Building2} label="在线房源" value={totalsReady ? String(publishedListings) : "—"} href="/host/listings" />
     </section>
-    <section className="mt-6 rounded-[26px] border border-line-strong bg-surface p-6 shadow-sm"><h2 className="text-lg font-black">优先待办</h2><p className="mt-2 text-sm text-ink-secondary">先查看申请人的资料，再到消息中确认看房安排。</p><div className="mt-5 flex flex-wrap gap-3"><Link href="/host/applications" className="secondary-action">查看申请</Link><Link href="/inbox" className="secondary-action">打开消息</Link><Link href="/host/listings" className="secondary-action">管理房源</Link></div></section>
+    <section className="mt-6 rounded-[26px] border border-line-strong bg-surface p-6 shadow-sm"><h2 className="text-lg font-black">优先待办</h2><p className="mt-2 text-sm text-ink-secondary">先查看申请人的资料，再到消息中确认看房安排。</p><div className="mt-5 flex flex-wrap gap-3"><Link href="/host/applications" className="secondary-action">查看申请</Link><Link href="/inbox" className="secondary-action">打开消息</Link><Link href="/host/listings" className="secondary-action">管理房源</Link></div></section></> : null}
   </HostPage>;
 }
 
@@ -111,8 +111,8 @@ function HostListingsExperienceSession() {
   const visible = listings.filter((listing) => tab === "all" || statusKey(listing.status) === tab);
 
   return <HostPage title="我的房源" description="按生命周期查看草稿、审核和发布状态。" action={<Link href="/host/listings/new" className="primary-action"><Plus className="size-4" />发布新房源</Link>}>
-    <div className="mt-6 flex gap-2 overflow-x-auto">{[["all","全部"],["draft","草稿"],["review","审核中"],["published","已发布"],["rented","已出租"],["suspended","已下架"]].map(([value,label]) => <button key={value} onClick={() => setTab(value)} className={cn("rounded-full border px-4 py-2.5 text-xs font-black", tab === value ? "border-primary bg-primary text-white" : "border-line-strong bg-surface")}>{label}</button>)}</div>
-    {!session.token ? <LoginGate text="登录后读取真实房源" returnTo="/host/listings" /> : null}
+    {session.token ? <div className="mt-6 flex gap-2 overflow-x-auto">{[["all","全部"],["draft","草稿"],["review","审核中"],["published","已发布"],["rented","已出租"],["suspended","已下架"]].map(([value,label]) => <button key={value} type="button" onClick={() => setTab(value)} aria-pressed={tab === value} className={cn("search-pill min-h-9 px-3.5", tab === value && "search-pill-active")}>{label}</button>)}</div> : null}
+    {!session.token ? <LoginGate text="登录后查看你发布的房间" returnTo="/host/listings" /> : null}
     {error || session.error ? <ErrorNotice text={error ?? session.error!} /> : null}
     {error || session.error ? <button type="button" onClick={() => { if (session.error) session.reload(); setLoadAttempt((attempt) => attempt + 1); }} className="secondary-action mt-4">重新加载房源</button> : null}
     {session.token && (session.loading || loading) ? <p role="status" className="mt-6 text-sm font-bold text-ink-secondary">正在加载房源…</p> : null}
@@ -211,7 +211,7 @@ function HostApplicationsExperienceSession() {
 
   return <HostPage title="申请审核" description="比较候选资料、联系申请人，再做决定。" action={session.token ? <button type="button" disabled={loading || session.loading || Boolean(pendingId)} onClick={() => { if (session.error) session.reload(); setDecisionError(null); void load(); }} className="secondary-action">{loading || session.loading ? "正在刷新…" : loadError || session.error ? "重新加载申请" : "刷新申请"}</button> : undefined}>
     <span className="sr-only">申请资料 要求补充 接受申请</span>
-    {!session.token ? <LoginGate text="登录后读取真实申请" returnTo="/host/applications" /> : null}
+    {!session.token ? <LoginGate text="登录后查看收到的申请" returnTo="/host/applications" /> : null}
     {loadError || session.error ? <ErrorNotice text={loadError ?? session.error!} /> : null}
     {session.token && (session.loading || loading) ? <p role="status" className="mt-6 text-sm font-bold text-ink-secondary">正在加载申请…</p> : null}
     {session.user && !loading && applications.length === 0 && !loadError && !session.error ? <EmptyState text="暂时没有租房申请。" /> : null}
@@ -278,7 +278,7 @@ function HostListingEditorSession({ listingId }: { listingId?: string }) {
 
   const canEdit = Boolean(session.profile && ["lister", "both"].includes(session.profile.role));
   return <HostPage title={listingId ? "管理房源" : "发布新房源"} description="完善房源资料与照片，保存草稿后提交审核。">
-    {!session.token ? <LoginGate text="登录房东账户后继续" returnTo={listingId ? `/host/listings/${listingId}` : "/host/listings/new"} /> : null}
+    {!session.token ? <LoginGate text="登录后继续发布" returnTo={listingId ? `/host/listings/${listingId}` : "/host/listings/new"} /> : null}
     {session.profile && !["lister", "both"].includes(session.profile.role) ? <RoleGate /> : null}
     {session.error ? <><ErrorNotice text={session.error} /><button type="button" onClick={session.reload} className="secondary-action mt-4">重新加载账户</button></> : null}
     {session.token && (session.loading || (canEdit && loadingListing)) ? <p role="status" className="mt-6 text-sm font-bold text-ink-secondary">正在加载房源…</p> : null}
@@ -293,7 +293,7 @@ function HostPage({ title, description, action, children }: { title: string; des
 function LoginGate({ text, returnTo }: { text: string; returnTo: string }) { return <SharedEmptyState className="mt-6" mood="default" title={text} body="用邮箱验证码登录后，就能看到你发布的房源和收到的申请。" action={<Link href={authRoute({ returnTo })} className="primary-action">登录</Link>} />; }
 function ErrorNotice({ text }: { text: string }) { return <p role="alert" className="mt-6 rounded-psw-md bg-danger-soft p-4 text-d-subhead font-semibold text-danger-text">{text}</p>; }
 function EmptyState({ text }: { text: string }) { return <SharedEmptyState className="mt-6" mood="sleepy" title={text} />; }
-function RoleGate() { return <section className="mt-6 rounded-[20px] border border-dashed border-outline bg-surface p-8 text-center"><p className="text-sm font-bold text-ink-secondary">请先在账户资料中将身份设置为房东或租客兼房东。</p><Link href="/account/profile" className="primary-action mt-5">前往账户资料</Link></section>; }
+function RoleGate() { return <section className="mt-6 rounded-[20px] border border-dashed border-outline bg-surface p-8 text-center"><p className="text-sm font-bold text-ink-secondary">请先在账户资料中将身份设置为转租人或租客兼转租人。</p><Link href="/account/profile" className="primary-action mt-5">前往账户资料</Link></section>; }
 function Metric({ icon: Icon, label, value, href }: { icon: typeof Building2; label: string; value: string; href: string }) { return <Link href={href} className="rounded-[24px] border border-line-strong bg-surface p-5 shadow-sm"><span className="grid size-10 place-items-center rounded-[14px] bg-surface-subtle text-primary-text"><Icon className="size-5" /></span><p className="mt-5 text-xs font-black text-ink-secondary">{label}</p><p className="mt-2 text-3xl font-black">{value}</p></Link>; }
 function statusKey(status?: ApiListing["status"]) { return status === "DRAFT" || status === "REJECTED" ? "draft" : status === "SUBMITTED" ? "review" : status === "APPROVED" ? "published" : status === "SUSPENDED" ? "suspended" : "rented"; }
 function statusLabel(status?: ApiListing["status"]) { return status === "DRAFT" ? "草稿" : status === "SUBMITTED" ? "审核中" : status === "APPROVED" ? "已发布" : status === "REJECTED" ? "已退回" : status === "SUSPENDED" ? "已下架" : "已出租"; }

@@ -28,7 +28,7 @@ describe("rental application experiences", () => {
     expect(html).toContain("申请租住");
     expect(html).toContain("基本资料");
     expect(html).toContain("租住信息");
-    expect(html).toContain("身份与材料");
+    expect(html).toContain("身份材料");
     expect(html).toContain("确认提交");
     expect(html).not.toContain("支付房租");
   });
@@ -37,10 +37,20 @@ describe("rental application experiences", () => {
     const html = renderToStaticMarkup(<ApplicationsExperience />);
 
     expect(html).toContain("我的申请");
-    expect(html).toContain("登录后查看真实申请状态");
+    expect(html).toContain("登录后查看你的申请");
     expect(html).not.toContain("Westwood 校园步行圈阳光主卧");
-    expect(html).toContain('href="/trips"');
+    // Signed out the page only offers sign-in; the link to accepted stays appears once signed in.
+    expect(html).not.toContain('href="/trips"');
     expect(html).not.toContain("管理员审核");
+  });
+
+  it("links signed-in renters from pending applications to accepted stays", async () => {
+    writeStoredAuthSession("renter-token");
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse([])));
+    let renderer!: TestRenderer.ReactTestRenderer;
+    await act(async () => { renderer = TestRenderer.create(<ApplicationsExperience />); });
+    expect(text(renderer.root)).toContain("查看已接受的租住");
+    expect(text(renderer.root)).toContain("还没有申请");
   });
 
   it("opens the review step without submitting until the renter explicitly submits", async () => {
@@ -95,7 +105,7 @@ describe("rental application experiences", () => {
     await clickContinue(renderer);
     await clickContinue(renderer);
     // Old saved drafts can exceed today's input limit; keep them editable.
-    change(renderer, "介绍入住计划或想让房东了解的信息…", "a".repeat(1001));
+    change(renderer, "介绍入住计划或想让转租人了解的信息…", "a".repeat(1001));
     await act(async () => findButton(renderer, "上一步").props.onClick());
     if (reload) {
       renderer.unmount();
@@ -110,7 +120,7 @@ describe("rental application experiences", () => {
     await act(async () => findButton(renderer, "上一步").props.onClick());
     expect(renderer.root.findAll((node) => node.props.role === "alert")).toHaveLength(0);
     await clickContinue(renderer);
-    change(renderer, "介绍入住计划或想让房东了解的信息…", "a".repeat(1000));
+    change(renderer, "介绍入住计划或想让转租人了解的信息…", "a".repeat(1000));
     await clickContinue(renderer);
     expect(findButton(renderer, "提交申请")).toBeDefined();
   });
@@ -140,7 +150,7 @@ describe("rental application experiences", () => {
     const [income, guarantor] = renderer.root.findAllByType("select");
     act(() => income.props.onChange({ target: { value: "ABOVE_FOUR_X" } }));
     act(() => guarantor.props.onChange({ target: { value: "NOT_AVAILABLE" } }));
-    change(renderer, "介绍入住计划或想让房东了解的信息…", "请确认房间网络。");
+    change(renderer, "介绍入住计划或想让转租人了解的信息…", "请确认房间网络。");
     await clickContinue(renderer);
     const review = renderer.root.findByProps({ "aria-labelledby": "review-title" });
     expect(text(review)).toContain("高于月租 4 倍");
@@ -190,7 +200,7 @@ describe("rental application experiences", () => {
     });
 
     expect(renderer.root.findAll((node) => node.props.placeholder === "你的姓名")[0]?.props.value).toBe("");
-    expect(text(renderer.root)).toContain("这些信息用于房东联系和识别申请。");
+    expect(text(renderer.root)).toContain("这些信息用于转租人联系和识别申请。");
   });
 
   it("clears visible private edits when another account signs in in another tab", async () => {
@@ -229,7 +239,7 @@ describe("rental application experiences", () => {
     await act(async () => { renderer = TestRenderer.create(<ApplicationDetailExperience applicationId="application-1" />); });
     expect(text(renderer.root)).toContain("撤回申请");
     await act(async () => findButton(renderer, "继续提交").props.onClick());
-    expect(text(renderer.root)).toContain("等待房东处理");
+    expect(text(renderer.root)).toContain("等待转租人处理");
   });
 
   it("uses production checkout and status without calling demo routes", async () => {

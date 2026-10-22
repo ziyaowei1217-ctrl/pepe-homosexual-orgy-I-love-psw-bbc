@@ -56,7 +56,7 @@ describe("ApplicationStatusPanel", () => {
     await act(async () => {
       renderer = TestRenderer.create(<ApplicationStatusPanel token="token-1" currentUserId="renter-1" />);
     });
-    expect(text(renderer.root)).toContain("等待房东处理");
+    expect(text(renderer.root)).toContain("等待转租人处理");
 
     await act(async () => {
       focusWindow.focus();
