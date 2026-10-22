@@ -93,6 +93,6 @@ export function SearchFiltersDialog({ initial, initialSection = "budget", prices
   </div>;
 }
 
-function BudgetField({ label, value, placeholder, onChange }: { label: string; value: number; placeholder: string; onChange: (value: number) => void }) {
+export function BudgetField({ label, value, placeholder, onChange }: { label: string; value: number; placeholder: string; onChange: (value: number) => void }) {
   return <label className="min-w-0 rounded-psw-md border border-control-border px-4 py-3 text-m-footnote font-semibold text-ink-secondary">{label}<span className="mt-1 flex items-center gap-2 text-base text-ink">$<input type="number" aria-label={label} min="0" max="1000000" step="100" value={value || ""} placeholder={placeholder} onChange={(event) => onChange(Math.min(1_000_000, Math.max(0, Number(event.target.value))))} className="w-full min-w-0 bg-transparent font-semibold outline-none" /></span></label>;
 }

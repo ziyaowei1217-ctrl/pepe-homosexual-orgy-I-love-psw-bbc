@@ -7,13 +7,16 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { EmptyState } from "@/components/marketplace/empty-state";
 import { ListingCard } from "@/components/marketplace/listing-card";
 import { LocationAutocomplete } from "@/components/marketplace/location-autocomplete";
+import { MatchPreferencesDialog } from "@/components/marketplace/match-preferences-dialog";
 import { useSavedListings } from "@/components/marketplace/saved-listings-provider";
 import { SearchFiltersDialog, type SearchFilterSection } from "@/components/marketplace/search-filters";
 import { SearchResultsMap } from "@/components/marketplace/search-results-map";
+import { useListingMatches } from "@/components/marketplace/use-listing-matches";
 import { formatRangeLong } from "@/lib/date-format";
 import type { CatalogSort } from "@/lib/listing-catalog";
 import type { PreviewListing } from "@/lib/preview-data";
 import { listingHref } from "@/lib/listing-stay";
+import { describeRenterPreferences, hasRenterPreferences } from "@/lib/renter-preferences";
 import { defaultSearch, emptyFilters, parseSearchState, searchCatalog, searchDateError, searchHref, type SearchState } from "@/lib/search-state";
 import { cn } from "@/lib/utils";
 
@@ -24,9 +27,11 @@ export function SearchExperience({ listings, initialQuery, initialMoveIn, initia
   const [filterOpen, setFilterOpen] = useState<SearchFilterSection | null>(null);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
+  const [preferencesOpen, setPreferencesOpen] = useState(false);
   const cards = useRef(new globalThis.Map<string, HTMLElement>());
   const { savedIds, toggleSaved } = useSavedListings();
-  const catalog = useMemo(() => searchCatalog(listings, state), [listings, state]);
+  const { savedPreferences, savePreferences, preferences, matches } = useListingMatches(listings, state);
+  const catalog = useMemo(() => searchCatalog(listings, state, 24, (listing) => matches.get(listing.id)?.score), [listings, state, matches]);
   const dateError = searchDateError(state.moveIn, state.moveOut);
   // psw: once dates are chosen every card shows the rent for exactly those dates, so totals compare directly.
   const stayIn = state.moveIn && state.moveOut && !dateError ? state.moveIn : "";
@@ -143,6 +148,7 @@ export function SearchExperience({ listings, initialQuery, initialMoveIn, initia
           <p className="flex items-center gap-2 text-m-footnote text-ink-secondary"><span className="size-1.5 shrink-0 rounded-full bg-primary" aria-hidden="true" />{stayIn ? "总价：整月按月租，零头按当月天数折算" : "价格按月租显示，选好日期后显示总价"}</p>
           <label className="flex shrink-0 items-center gap-2 whitespace-nowrap text-m-footnote text-ink-secondary">排序<select value={state.sort} onChange={(event) => update({ sort: event.target.value as CatalogSort })} aria-label="结果排序" className="min-h-11 max-w-[170px] rounded-full border-[1.5px] border-outline bg-surface px-4 text-base font-bold text-ink outline-none sm:text-sm"><option value="recommended">推荐优先</option><option value="price-low">价格从低到高</option><option value="price-high">价格从高到低</option></select></label>
         </div>
+        {state.sort === "recommended" ? <p className="mt-3 flex flex-wrap items-center gap-x-2 text-m-footnote text-ink-secondary">{hasRenterPreferences(preferences) ? <span>按匹配度排序：<span className="font-semibold text-ink">{describeRenterPreferences(preferences).join(" · ")}</span></span> : <span>填写学校或公司、预算和日期后，推荐按匹配度排序。</span>}<button type="button" onClick={() => setPreferencesOpen(true)} className="min-h-11 font-semibold text-primary-text underline underline-offset-4">{hasRenterPreferences(savedPreferences) ? "修改匹配偏好" : "设置匹配偏好"}</button></p> : null}
         {catalog.items.length ? <div className={cn("mt-5 grid gap-x-5 gap-y-7", state.view === "list" ? "grid-cols-[repeat(auto-fill,minmax(260px,1fr))]" : "sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2")}>
           {catalog.items.map((listing, index) => <ListingCard
             key={listing.id}
@@ -153,6 +159,7 @@ export function SearchExperience({ listings, initialQuery, initialMoveIn, initia
             href={listingHref(listing.id, state)}
             moveIn={stayIn}
             moveOut={stayOut}
+            match={matches.get(listing.id)}
             headingLevel={2}
             priority={index < 2}
             sizes={state.view === "list" ? "(max-width: 640px) 100vw, 30vw" : "(max-width: 640px) 100vw, (max-width: 1200px) 45vw, 25vw"}
@@ -175,6 +182,7 @@ export function SearchExperience({ listings, initialQuery, initialMoveIn, initia
       {([["split", "分屏", LayoutGrid], ["list", "列表", List], ["map", "地图", Map]] as const).map(([view, label, Icon]) => <button key={view} type="button" onClick={() => update({ view, page: state.page, selected: state.selected })} aria-pressed={state.view === view} className={cn("flex min-h-11 items-center gap-2 rounded-full px-4 text-d-subhead font-semibold", state.view === view ? "bg-surface text-ink" : "text-on-dark-secondary hover:bg-on-dark/10", view === "split" && "hidden lg:flex")}><Icon className="size-4" aria-hidden="true" />{label}</button>)}
     </div>
     {notice ? <div role="status" className="fixed bottom-[144px] left-1/2 z-[70] flex -translate-x-1/2 items-center gap-2 whitespace-nowrap rounded-psw-md bg-toast-bg px-5 py-3 text-d-subhead text-on-toast shadow-menu md:bottom-24"><Check className="size-4 text-toast-success" aria-hidden="true" />{notice}<Link href="/saved" className="ml-2 flex min-h-6 items-center font-semibold text-toast-action underline">查看</Link></div> : null}
+    {preferencesOpen ? <MatchPreferencesDialog initial={savedPreferences} onSave={(next) => { savePreferences(next); setPreferencesOpen(false); }} onClose={() => setPreferencesOpen(false)} /> : null}
     {filterOpen ? <SearchFiltersDialog initialSection={filterOpen} initial={state} prices={searchCatalog(listings, { ...state, ...emptyFilters, page: 1 }, Number.MAX_SAFE_INTEGER).items.map((listing) => listing.price)} getCount={(draft) => searchCatalog(listings, draft).total} onApply={(draft) => { update({ ...draft, page: 1, selected: "" }); setFilterOpen(null); }} onClose={() => setFilterOpen(null)} /> : null}
   </main>;
 }

@@ -15,25 +15,29 @@ import {
   Sparkles,
   TrainFront,
   UserRound,
-  Wallet
+  Wallet,
+  X
 } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { useSavedListings } from "@/components/marketplace/saved-listings-provider";
 import { ListingPhotoGallery } from "@/components/marketplace/listing-photo-gallery";
 import { ListingStayDialog, ListingStayFields } from "@/components/marketplace/listing-stay-selector";
+import { MatchPreferencesDialog } from "@/components/marketplace/match-preferences-dialog";
+import { useListingMatches } from "@/components/marketplace/use-listing-matches";
 import { formatDateLong, formatRangeLong } from "@/lib/date-format";
 import { defaultMapAttribution, getListingCoordinates, getMapTiles } from "@/lib/listing-map";
 import { applicationHref, earliestListingDate, initialListingStay, listingHref, listingStayError, type ListingStay } from "@/lib/listing-stay";
 import type { PreviewListing } from "@/lib/preview-data";
-import { safeSearchReturn } from "@/lib/search-state";
+import { parseSearchState, safeSearchReturn } from "@/lib/search-state";
 import { formatStayLength, formatUsd, stayPrice } from "@/lib/stay-price";
 import { cn } from "@/lib/utils";
 
 const sections = [["listing-overview", "房源概况"], ["listing-highlights", "租期与亮点"], ["listing-amenities", "设施"], ["listing-location", "位置与通勤"]] as const;
 
-export function ListingDetailExperience({ listing, initialStay }: { listing: PreviewListing; initialStay?: Partial<ListingStay> }) {
+/** listings is the whole catalog: the match is scored against the same saved homes as on the search page. */
+export function ListingDetailExperience({ listing, listings, initialStay }: { listing: PreviewListing; listings?: PreviewListing[]; initialStay?: Partial<ListingStay> }) {
   const { savedIds, toggleSaved } = useSavedListings();
   const saved = savedIds.has(listing.id);
   const [stay, setStay] = useState(() => {
@@ -64,6 +68,12 @@ export function ListingDetailExperience({ listing, initialStay }: { listing: Pre
   const hostVerified = listing.trust.includes("平台已审核");
   const [shareStatus, setShareStatus] = useState<string | null>(null);
   const [returnHref, setReturnHref] = useState("/search");
+  const [preferencesOpen, setPreferencesOpen] = useState(false);
+  // Score with the search the renter came from, so the match equals the one on the card they opened.
+  const lastSearch = useMemo(() => parseSearchState(new URLSearchParams(returnHref.split("?")[1] ?? "")), [returnHref]);
+  const catalog = useMemo(() => [listing, ...(listings ?? []).filter((item) => item.id !== listing.id)], [listing, listings]);
+  const { savedPreferences, savePreferences, matches } = useListingMatches(catalog, lastSearch);
+  const match = matches.get(listing.id);
 
   useEffect(() => {
     try { setReturnHref(safeSearchReturn(sessionStorage.getItem("sublet:last-search"))); } catch { /* The search route remains available without storage. */ }
@@ -144,6 +154,16 @@ export function ListingDetailExperience({ listing, initialStay }: { listing: Pre
                 <span className="flex items-center gap-1.5"><BedDouble className="size-4" aria-hidden="true" />{listing.beds} 间卧室</span>
                 <span className="flex items-center gap-1.5"><Bath className="size-4" aria-hidden="true" />{listing.baths} 间卫浴</span>
               </div>
+              {match && (match.reasons.length || match.gaps.length) ? <div className="mt-6 rounded-psw-lg bg-surface-subtle p-4">
+                <div className="flex flex-wrap items-center justify-between gap-x-3">
+                  <h2 className="text-m-headline text-ink sm:text-d-headline">和你的匹配度 <span className="font-display text-primary-text">{match.score}%</span></h2>
+                  <button type="button" onClick={() => setPreferencesOpen(true)} className="min-h-11 text-m-footnote font-semibold text-primary-text underline underline-offset-4">修改匹配偏好</button>
+                </div>
+                <ul className="mt-1 space-y-1.5 text-m-subhead sm:text-d-subhead">
+                  {match.reasons.map((reason) => <li key={reason} className="flex items-start gap-2 text-ink"><Check className="mt-1 size-4 shrink-0 text-primary-text" aria-hidden="true" />{reason}</li>)}
+                  {match.gaps.map((gap) => <li key={gap} className="flex items-start gap-2 text-ink-secondary"><X className="mt-1 size-4 shrink-0" aria-hidden="true" />{gap}</li>)}
+                </ul>
+              </div> : null}
               <div className="mt-6 grid grid-cols-2 gap-3 lg:hidden">
                 <Link href={`${inboxHref}&tour=1`} className="flex min-h-12 items-center justify-center gap-2 rounded-full bg-primary-soft px-3 font-rounded text-[15px] font-bold text-primary-text"><CalendarDays className="size-4" aria-hidden="true" />预约看房</Link>
                 <Link href={inboxHref} className="flex min-h-12 items-center justify-center gap-2 rounded-full bg-primary-soft px-3 font-rounded text-[15px] font-bold text-primary-text"><MessageCircle className="size-4" aria-hidden="true" />联系房东</Link>
@@ -236,6 +256,7 @@ export function ListingDetailExperience({ listing, initialStay }: { listing: Pre
         </div>
       </div>
 
+      {preferencesOpen ? <MatchPreferencesDialog initial={savedPreferences} onSave={(next) => { savePreferences(next); setPreferencesOpen(false); }} onClose={() => setPreferencesOpen(false)} /> : null}
       {stayOpen ? <ListingStayDialog listing={listing} stay={stay} onClose={() => setStayOpen(false)} onApply={(value) => { updateStay(value); setStayOpen(false); }} /> : null}
     </main>
   );

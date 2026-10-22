@@ -50,14 +50,17 @@ export function hasRenterPreferences(preferences: RenterPreferences) {
   return Boolean(preferences.destination || preferences.budgetMax || preferences.moveIn || preferences.beds || preferences.mustHave.length);
 }
 
-/** The search's own budget, dates and bedrooms win; its amenities add to the must-haves. */
+/**
+ * The search's own budget, dates and bedrooms win and its amenities add to the must-haves. Its place only
+ * fills in a missing destination: a search names a city, a destination is where the renter goes every day.
+ */
 export function withSearchState(
   preferences: RenterPreferences,
-  search: Pick<SearchState, "priceMax" | "moveIn" | "moveOut" | "beds" | "amenities">
+  search: Pick<SearchState, "query" | "priceMax" | "moveIn" | "moveOut" | "beds" | "amenities">
 ): RenterPreferences {
   const searchDates = Boolean(search.moveIn && search.moveOut > search.moveIn);
   return {
-    ...preferences,
+    destination: preferences.destination || search.query.trim(),
     budgetMax: search.priceMax || preferences.budgetMax,
     moveIn: searchDates ? search.moveIn : preferences.moveIn,
     moveOut: searchDates ? search.moveOut : preferences.moveOut,

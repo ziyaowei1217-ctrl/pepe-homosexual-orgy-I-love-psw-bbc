@@ -23,9 +23,11 @@ describe("renter preferences", () => {
     expect(hasRenterPreferences(emptyRenterPreferences)).toBe(false);
   });
 
-  it("lets the open search's budget, dates and bedrooms win and adds its amenities", () => {
+  it("lets the open search's budget, dates and bedrooms win, adds its amenities and fills a missing destination", () => {
     const saved = { destination: "USC", budgetMax: 2000, moveIn: "2026-08-01", moveOut: "2026-12-20", beds: 1, mustHave: ["独卫"] };
     expect(withSearchState(saved, defaultSearch)).toEqual(saved);
+    expect(withSearchState(saved, { ...defaultSearch, query: "Los Angeles" }).destination).toBe("USC");
+    expect(withSearchState(emptyRenterPreferences, { ...defaultSearch, query: " Boston " }).destination).toBe("Boston");
     expect(withSearchState(saved, { ...defaultSearch, priceMax: 1600, moveIn: "2026-09-01", moveOut: "2027-01-01", beds: 2, amenities: ["洗烘"] }))
       .toEqual({ destination: "USC", budgetMax: 1600, moveIn: "2026-09-01", moveOut: "2027-01-01", beds: 2, mustHave: ["独卫", "洗烘"] });
     expect(withSearchState(saved, { ...defaultSearch, moveIn: "2026-09-01", moveOut: "" }).moveIn).toBe("2026-08-01");
