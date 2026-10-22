@@ -1,19 +1,24 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 
-import { useInterestListings } from "@/components/marketplace/use-feed-signals";
+import { useSavedListings } from "@/components/marketplace/saved-listings-provider";
+import { useFeedSignals } from "@/components/marketplace/use-feed-signals";
+import { interestListings } from "@/lib/listing-feeds";
 import { rankListingsByMatch, type ListingMatch } from "@/lib/listing-match";
 import type { PreviewListing } from "@/lib/preview-data";
 import { useRenterPreferences, withSearchState } from "@/lib/renter-preferences";
-import type { SearchState } from "@/lib/search-state";
 
-type SearchConditions = Pick<SearchState, "query" | "priceMax" | "moveIn" | "moveOut" | "beds" | "amenities">;
-
-/** Each listing's match for this renter: saved preferences, overlaid by the search they are in or came from. */
-export function useListingMatches(listings: readonly PreviewListing[], search: SearchConditions) {
+/** Each listing's match for this renter: saved preferences, minus what the search they are in or came from guarantees. */
+export function useListingMatches(listings: readonly PreviewListing[], search: Parameters<typeof withSearchState>[1]) {
   const [saved, savePreferences] = useRenterPreferences();
-  const interest = useInterestListings(listings);
+  const { savedIds, hydrated } = useSavedListings();
+  const { signals } = useFeedSignals();
+  // Saved and viewed homes as they were when the page loaded, so a heart tap or a recorded view does not
+  // reshuffle the list being read.
+  const [seen, setSeen] = useState<{ savedIds: string[]; viewedIds: string[] }>();
+  if (hydrated && !seen) setSeen({ savedIds: [...savedIds], viewedIds: signals.viewedIds });
+  const interest = useMemo(() => seen ? interestListings(listings, seen.savedIds, seen.viewedIds) : [], [listings, seen]);
   const { query, priceMax, moveIn, moveOut, beds, amenities } = search;
   const preferences = useMemo(
     () => withSearchState(saved, { query, priceMax, moveIn, moveOut, beds, amenities }),

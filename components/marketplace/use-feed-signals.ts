@@ -4,8 +4,6 @@ import { useCallback, useMemo, useSyncExternalStore } from "react";
 
 import { useSavedListings } from "@/components/marketplace/saved-listings-provider";
 import { feedSignalsStorageKey, normalizeFeedSignals, recordListingView, recordSearch, type FeedSignals } from "@/lib/feed-signals";
-import { interestListings } from "@/lib/listing-feeds";
-import type { PreviewListing } from "@/lib/preview-data";
 import type { SearchState } from "@/lib/search-state";
 
 const changedEvent = "sublet:feed-signals-changed";
@@ -31,13 +29,6 @@ export function useFeedSignals() {
   const rememberLastSearch = useCallback((state: SearchState) => update((current) => recordSearch(current, state)), [update]);
   const clearViewed = useCallback(() => update((current) => current.viewedIds.length ? { ...current, viewedIds: [] } : current), [update]);
   return { signals, viewListing, rememberLastSearch, clearViewed };
-}
-
-/** Saved and recently viewed listings, the interest that match scores and feeds rank against. */
-export function useInterestListings(listings: readonly PreviewListing[]) {
-  const { savedIds } = useSavedListings();
-  const { signals } = useFeedSignals();
-  return useMemo(() => interestListings(listings, [...savedIds], signals.viewedIds), [listings, savedIds, signals.viewedIds]);
 }
 
 function subscribe(onChange: () => void) {

@@ -11,8 +11,9 @@ export function localDate(now = new Date()) {
   return dayFormat.format(now);
 }
 
-function dateOnly(value: string | undefined) {
-  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return "";
+/** The value if it is a real YYYY-MM-DD date, else "". */
+export function dateOnly(value: unknown) {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return "";
   const date = new Date(`${value}T00:00:00Z`);
   return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value ? value : "";
 }

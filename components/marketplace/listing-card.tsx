@@ -17,7 +17,7 @@ import { cn } from "@/lib/utils";
  * Answers "is it worth opening": photo, title, where, commute, the listing's own dates and the price.
  * With valid dates the big number is the rent for exactly those dates; without dates it is the monthly rent.
  * The title link stretches over the whole card; save and map stay separate buttons above it.
- * With a match (lib/listing-match.ts) that can say why, the card shows the score and its first reason.
+ * With a match (lib/listing-match.ts) that can say why, the card shows the score and its biggest gap, or else its first reason.
  */
 export function ListingCard({
   listing, href, moveIn = "", moveOut = "", match, saved, onToggleSave, onShowOnMap, onOpen, active = false,
@@ -32,8 +32,7 @@ export function ListingCard({
   const availableFrom = listing.availableFrom ? earliestListingDate(listing) : "";
   const facts = [`${listing.beds} 卧`, `${listing.baths} 卫`, ...listing.tags.filter((tag) => !tag.includes("入住") && tag !== "房东知情").slice(0, 2)];
   // The commute line below already shows the listing's commute, so the match line skips it.
-  const matchNote = match ? [...match.reasons, ...match.gaps].find((note) => note !== listing.commute) : undefined;
-  const showMatch = Boolean(match && (match.reasons.length || match.gaps.length));
+  const matchNote = match ? [...match.gaps, ...match.reasons].find((note) => note !== listing.commute) : undefined;
   return (
     <article
       ref={cardRef}
@@ -64,7 +63,7 @@ export function ListingCard({
           <Link href={href} onClick={onOpen} className="line-clamp-2 text-ink after:absolute after:inset-0 after:rounded-psw-xl after:content-[''] group-hover:text-primary-text">{listing.title}</Link>
         </Heading>
         <p className="truncate text-m-subhead text-ink-secondary sm:text-d-subhead">{listing.area}</p>
-        {match && showMatch ? <p className="flex min-w-0 items-center gap-2"><span className="shrink-0 rounded-psw-sm bg-primary-soft px-2 py-0.5 text-m-footnote font-bold text-primary-text">匹配 <span className="font-display">{match.score}</span>%</span>{matchNote ? <span className="truncate text-m-footnote text-ink-secondary">{matchNote}</span> : null}</p> : null}
+        {match && (match.reasons.length || match.gaps.length) ? <p className="flex min-w-0 items-center gap-2"><span className="shrink-0 rounded-psw-sm bg-primary-soft px-2 py-0.5 text-m-footnote font-bold text-primary-text">匹配 <span className="font-display">{match.score}</span>%</span>{matchNote ? <span className="truncate text-m-footnote text-ink-secondary">{matchNote}</span> : null}</p> : null}
         {listing.commute ? <p className="flex items-center gap-1.5 text-m-subhead text-ink-secondary sm:text-d-subhead"><TrainFront className="size-4 shrink-0" aria-hidden="true" /><span className="truncate">{listing.commute}</span></p> : null}
         <p className="truncate text-m-footnote text-ink-secondary">{facts.join(" · ")}</p>
         {availableFrom && listing.availableTo > availableFrom ? <p className="flex items-center gap-1.5 text-m-footnote font-semibold text-ink"><CalendarDays className="size-4 shrink-0" aria-hidden="true" />{formatRangeShort(availableFrom, listing.availableTo)} 可住</p> : null}
