@@ -39,6 +39,17 @@ describe("marketplace search", () => {
     expect(html).not.toContain("室友偏好");
   });
 
+  it("does not draw map tiles or pins while the list view hides the map", () => {
+    const html = renderToStaticMarkup(
+      <SavedListingsProvider>
+        <SearchExperience listings={createPreviewListings()} initialState={{ ...defaultSearch, view: "list" }} initialQuery="" initialMoveIn="" initialMoveOut="" />
+      </SavedListingsProvider>
+    );
+    expect(html).toContain('aria-label="房源地图"');
+    expect(html).not.toContain("tile.openstreetmap.de");
+    expect(html).toContain('href="/listing/');
+  });
+
   it("labels the budget control inside the filter panel", async () => {
     let renderer!: TestRenderer.ReactTestRenderer;
     await act(async () => {

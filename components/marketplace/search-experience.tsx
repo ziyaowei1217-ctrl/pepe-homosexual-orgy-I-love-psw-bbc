@@ -101,6 +101,23 @@ export function SearchExperience({ listings, initialQuery, initialMoveIn, initia
     selectListing(id);
   }
 
+  // The cards are memoised, so they get the same handlers on every render; the handlers read the latest state.
+  const latest = useRef({ save: (_id: string) => {}, showOnMap: (_id: string) => {}, open: (_id: string) => {} });
+  useEffect(() => {
+    latest.current = {
+      save: (id) => { const listing = listings.find((item) => item.id === id); if (listing) saveListing(listing); },
+      showOnMap: (id) => update({ view: "map", selected: id, page: state.page }),
+      open: (id) => rememberSearch(id)
+    };
+  });
+  const cardActions = useMemo(() => ({
+    toggleSave: (id: string) => latest.current.save(id),
+    showOnMap: (id: string) => latest.current.showOnMap(id),
+    open: (id: string) => latest.current.open(id),
+    hover: (id: string | null) => setHoveredId(id),
+    register: (id: string, node: HTMLElement | null) => { if (node) cards.current.set(id, node); else cards.current.delete(id); }
+  }), []);
+
   const dateLabel = state.moveIn && state.moveOut ? formatRangeLong(state.moveIn, state.moveOut) : "选日期";
   const budgetLabel = state.priceMin || state.priceMax ? `$${state.priceMin.toLocaleString("en-US")} – ${state.priceMax ? `$${state.priceMax.toLocaleString("en-US")}` : "不限"}` : "每月预算";
   const chips = [
@@ -147,8 +164,9 @@ export function SearchExperience({ listings, initialQuery, initialMoveIn, initia
           {catalog.items.map((listing, index) => <ListingCard
             key={listing.id}
             id={`result-${listing.id}`}
-            cardRef={(node) => { if (node) cards.current.set(listing.id, node); else cards.current.delete(listing.id); }}
-            className="scroll-mt-[210px]"
+            registerCard={cardActions.register}
+            // Cards below the fold skip layout and paint until they scroll near the screen.
+            className="scroll-mt-[210px] [contain-intrinsic-size:auto_440px] [content-visibility:auto]"
             listing={listing}
             href={listingHref(listing.id, state)}
             moveIn={stayIn}
@@ -158,13 +176,10 @@ export function SearchExperience({ listings, initialQuery, initialMoveIn, initia
             sizes={state.view === "list" ? "(max-width: 640px) 100vw, 30vw" : "(max-width: 640px) 100vw, (max-width: 1200px) 45vw, 25vw"}
             active={activeId === listing.id}
             saved={savedIds.has(listing.id)}
-            onToggleSave={() => saveListing(listing)}
-            onShowOnMap={() => update({ view: "map", selected: listing.id, page: state.page })}
-            onOpen={() => rememberSearch(listing.id)}
-            onMouseEnter={() => setHoveredId(listing.id)}
-            onMouseLeave={() => setHoveredId(null)}
-            onFocus={() => setHoveredId(listing.id)}
-            onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setHoveredId(null); }}
+            onToggleSave={cardActions.toggleSave}
+            onShowOnMap={cardActions.showOnMap}
+            onOpen={cardActions.open}
+            onHoverChange={cardActions.hover}
           />)}
         </div> : <EmptyState className="mt-7" mood="curious" title="没有找到符合条件的房源" body="试试调整预算、换一段日期，或者扩大找房区域。" action={<button type="button" onClick={() => update({ ...defaultSearch, view: state.view })} className="min-h-12 rounded-full bg-primary px-6 font-rounded text-base font-bold text-on-primary hover:bg-primary-hover active:scale-[0.97]">清除筛选</button>} />}
         {catalog.pageCount > 1 ? <nav aria-label="房源分页" className="mt-10 flex items-center justify-center gap-5"><button type="button" disabled={catalog.page <= 1} onClick={() => { update({ page: catalog.page - 1 }); window.scrollTo({ top: 0 }); }} aria-label="上一页" className="grid size-11 place-items-center rounded-full border-[1.5px] border-outline bg-surface disabled:opacity-30"><ArrowLeft className="size-4" /></button><span className="text-d-subhead text-ink-secondary">第 {catalog.page} / {catalog.pageCount} 页</span><button type="button" disabled={catalog.page >= catalog.pageCount} onClick={() => { update({ page: catalog.page + 1 }); window.scrollTo({ top: 0 }); }} aria-label="下一页" className="grid size-11 place-items-center rounded-full border-[1.5px] border-outline bg-surface disabled:opacity-30"><ArrowRight className="size-4" /></button></nav> : null}

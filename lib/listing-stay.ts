@@ -4,11 +4,16 @@ export type ListingStay = { moveIn: string; moveOut: string };
 type Availability = { availableFrom: string; availableTo: string };
 
 let dayFormat: Intl.DateTimeFormat | undefined;
+let cachedDay = { minute: Number.NaN, day: "" };
 
 export function localDate(now = new Date()) {
-  // One formatter for the whole page: every card and date check asks for today.
-  dayFormat ??= new Intl.DateTimeFormat("en-CA", { timeZone: "America/Los_Angeles", year: "numeric", month: "2-digit", day: "2-digit" });
-  return dayFormat.format(now);
+  // Every card and date check asks for today; formatting with a time zone is slow, so answer once per minute.
+  const minute = Math.floor(now.getTime() / 60_000);
+  if (minute !== cachedDay.minute) {
+    dayFormat ??= new Intl.DateTimeFormat("en-CA", { timeZone: "America/Los_Angeles", year: "numeric", month: "2-digit", day: "2-digit" });
+    cachedDay = { minute, day: dayFormat.format(now) };
+  }
+  return cachedDay.day;
 }
 
 function dateOnly(value: string | undefined) {

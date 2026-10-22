@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { currentYear, formatDateLong, formatDateShort, formatRangeLong, formatRangeShort } from "@/lib/date-format";
 
@@ -17,6 +17,18 @@ describe("psw date display", () => {
   it("leaves values that are not ISO dates alone", () => {
     expect(formatDateLong("待确认", 2026)).toBe("待确认");
     expect(formatDateShort("", 2026)).toBe("");
+  });
+
+  afterEach(() => { vi.useRealTimers(); });
+
+  it("notices the new year even though it remembers the year between calls", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-12-31T20:00:00Z"));
+    expect(currentYear()).toBe(2026);
+    expect(formatDateLong("2027-01-15")).toBe("2027年1月15日");
+    vi.setSystemTime(new Date("2027-01-01T09:00:00Z"));
+    expect(currentYear()).toBe(2027);
+    expect(formatDateLong("2027-01-15")).toBe("1月15日");
   });
 
   it("reads the year in the marketplace's time zone", () => {

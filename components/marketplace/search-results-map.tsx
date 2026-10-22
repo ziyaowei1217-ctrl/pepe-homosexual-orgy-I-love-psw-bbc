@@ -23,19 +23,26 @@ export function SearchResultsMap({ listings, total = listings.length, activeList
   const drag = useRef<{ x: number; y: number; center: MapPoint } | null>(null);
   const [size, setSize] = useState<MapSize>({ width: 720, height: 640 });
   const fittedCenter = useMemo(() => getMapCenterForListings(listings), [listings]);
+  // In list view the map is not on screen: skip fitting, tiles and pins (they were costly on phones).
+  const offscreen = view === "list";
   const fittedZoom = useMemo(() => {
+    if (offscreen) return 2;
     for (let zoom = 12; zoom >= 2; zoom--) {
       const points = getMapMarkers(listings, fittedCenter, zoom, size, false);
       if (points.every((point) => point.x > 65 && point.x < size.width - 65 && point.y > 80 && point.y < size.height - 140)) return zoom;
     }
     return 2;
-  }, [fittedCenter, listings, size]);
+  }, [fittedCenter, listings, offscreen, size]);
   const [viewport, setViewport] = useState<{ center: MapPoint; zoom: number } | null>(null);
   const center = viewport?.center ?? fittedCenter;
   const zoom = viewport?.zoom ?? fittedZoom;
-  const tiles = getMapTiles(center, zoom, size);
-  const markers = getMapMarkers(listings, center, zoom, size, false);
-  const clusters = clusterSearchMarkers(markers.filter((marker) => marker.x > 0 && marker.x < size.width && marker.y > 0 && marker.y < size.height));
+  // Tiles and pins depend on the view, not on which listing is hovered, so hovering a card does not recompute them.
+  const tiles = useMemo(() => (offscreen ? [] : getMapTiles(center, zoom, size)), [offscreen, center, zoom, size]);
+  const clusters = useMemo(() => {
+    if (offscreen) return [];
+    const markers = getMapMarkers(listings, center, zoom, size, false);
+    return clusterSearchMarkers(markers.filter((marker) => marker.x > 0 && marker.x < size.width && marker.y > 0 && marker.y < size.height));
+  }, [offscreen, listings, center, zoom, size]);
   const [clusterIds, setClusterIds] = useState<string[]>([]);
   const clusterListings = listings.filter((listing) => clusterIds.includes(listing.id));
   const attribution = process.env.NEXT_PUBLIC_MAP_ATTRIBUTION ?? defaultMapAttribution;
@@ -56,11 +63,13 @@ export function SearchResultsMap({ listings, total = listings.length, activeList
     return () => observer.disconnect();
   }, []);
 
+  if (offscreen) return <section ref={canvas} aria-label="房源地图" className="search-map hidden" />;
+
   return <section ref={canvas} aria-label="房源地图" tabIndex={0} onKeyDown={(event) => {
     if (event.target !== event.currentTarget) return;
     const shift = { ArrowLeft: [80, 0], ArrowRight: [-80, 0], ArrowUp: [0, 80], ArrowDown: [0, -80] }[event.key];
     if (shift) { event.preventDefault(); setViewport({ center: panMapCenter(center, zoom, shift[0], shift[1]), zoom }); }
-  }} className={cn("search-map relative min-h-[calc(100dvh-112px)] touch-none overflow-hidden border-l border-line-strong bg-line-strong lg:sticky lg:top-[153px] lg:h-[calc(100dvh-153px)] lg:min-h-0", view === "list" && "hidden", view === "split" && "hidden lg:block")} onPointerDown={(event) => {
+  }} className={cn("search-map relative min-h-[calc(100dvh-112px)] touch-none overflow-hidden border-l border-line-strong bg-line-strong lg:sticky lg:top-[153px] lg:h-[calc(100dvh-153px)] lg:min-h-0", view === "split" && "hidden lg:block")} onPointerDown={(event) => {
     if ((event.target as HTMLElement).closest("button, a") || event.button !== 0) return;
     drag.current = { x: event.clientX, y: event.clientY, center };
     event.currentTarget.setPointerCapture(event.pointerId);
