@@ -42,6 +42,12 @@ describe("listing match on the card", () => {
     expect(html.match(/步行 12 分钟到 UCLA/g)).toHaveLength(1);
   });
 
+  it("explains a lower score with its biggest gap before any reason", () => {
+    const html = renderToStaticMarkup(<ListingCard listing={westwood} href="/x" match={{ score: 55, reasons: ["比预算低 $1,005/月"], gaps: ["11/28 后不可租"] }} />);
+    expect(html).toContain("11/28 后不可租");
+    expect(html).not.toContain("比预算低");
+  });
+
   it("hides the score when the match cannot say why", () => {
     expect(renderToStaticMarkup(<ListingCard listing={westwood} href="/x" match={{ score: 100, reasons: [], gaps: [] }} />)).not.toContain("匹配");
     expect(renderToStaticMarkup(<ListingCard listing={westwood} href="/x" match={null} />)).not.toContain("匹配");
@@ -58,6 +64,7 @@ describe("listing match in search", () => {
     expect(titles()).toEqual(["Westwood 主卧", "Koreatown 次卧", "Pasadena 一居"]);
     expect(screen.getByText("按匹配度排序：", { exact: false }).textContent).toContain("UCLA");
     expect(document.body.textContent).toContain("匹配 100%");
+    expect(document.body.textContent).toContain("匹配 37%距 UCLA 约 13 公里");
     expect(document.body.textContent).toContain("距 UCLA 约 29 公里");
 
     await act(async () => fireEvent.click(screen.getByRole("button", { name: "修改匹配偏好" })));
@@ -73,7 +80,8 @@ describe("listing match in search", () => {
     expect(JSON.parse(localStorage.getItem("sublet_renter_preferences_v1") ?? "{}").budgetMax).toBe(1450);
   });
 
-  it("keeps the generic order and offers to set preferences when there are none", async () => {
+  it("keeps the generic order and offers to set preferences when there are none, even with filters set", async () => {
+    window.history.replaceState(null, "", "/search?priceMax=2000");
     await act(async () => {
       render(<SavedListingsProvider><SearchExperience listings={listings} initialQuery="" initialMoveIn="" initialMoveOut="" /></SavedListingsProvider>);
     });
@@ -81,20 +89,57 @@ describe("listing match in search", () => {
     expect(screen.getByRole("button", { name: "设置匹配偏好" })).toBeTruthy();
     expect(document.body.textContent).not.toContain("匹配 ");
   });
+
+  it("does not change scores or order when the renter saves a listing", async () => {
+    writeRenterPreferences({ ...emptyRenterPreferences, destination: "UCLA" });
+    await act(async () => {
+      render(<SavedListingsProvider><SearchExperience listings={listings} initialQuery="" initialMoveIn="" initialMoveOut="" /></SavedListingsProvider>);
+    });
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "收藏 Westwood 主卧" })));
+    expect(screen.getByRole("button", { name: "取消收藏 Westwood 主卧" })).toBeTruthy();
+    expect(titles()).toEqual(["Westwood 主卧", "Koreatown 次卧", "Pasadena 一居"]);
+    expect(document.body.textContent).toContain("匹配 37%");
+  });
 });
 
 describe("listing match on the listing page", () => {
-  it("explains the match with the search the renter came from", async () => {
-    writeRenterPreferences({ ...emptyRenterPreferences, destination: "UCLA" });
-    sessionStorage.setItem("sublet:last-search", "/search?priceMax=1500");
+  async function open(lastSearch: string) {
+    sessionStorage.setItem("sublet:last-search", lastSearch);
     window.history.replaceState(null, "", "/listing/westwood");
     await act(async () => {
       render(<SavedListingsProvider><ListingDetailExperience listing={westwood} listings={listings} /></SavedListingsProvider>);
     });
+  }
+
+  it("explains the match with the search the renter opened it from", async () => {
+    writeRenterPreferences({ ...emptyRenterPreferences, destination: "UCLA", budgetMax: 1600 });
+    await open("/search?q=Los+Angeles&selected=westwood");
 
     const block = screen.getByRole("heading", { name: /和你的匹配度/ }).parentElement!.parentElement!;
-    expect(block.textContent).toContain("和你的匹配度 71%");
+    expect(block.textContent).toContain("和你的匹配度 86%");
     expect(block.textContent).toContain("步行 12 分钟到 UCLA");
-    expect(block.textContent).toContain("超出预算 $200/月");
+    expect(block.textContent).toContain("超出预算 $100/月");
+  });
+
+  it("ignores a search that opened a different listing", async () => {
+    writeRenterPreferences({ ...emptyRenterPreferences, destination: "UCLA", budgetMax: 1600 });
+    await open("/search?q=Boston&selected=koreatown");
+    expect(screen.getByRole("heading", { name: /和你的匹配度/ }).textContent).toContain("86%");
+    expect(document.body.textContent).not.toContain("不在 Boston");
+  });
+
+  it("keeps the preferences button, and focus on it, after the preferences are cleared", async () => {
+    writeRenterPreferences({ ...emptyRenterPreferences, destination: "UCLA" });
+    await open("/search");
+    const opener = screen.getByRole("button", { name: "修改匹配偏好" });
+    opener.focus();
+    await act(async () => fireEvent.click(opener));
+    const dialog = screen.getByRole("dialog", { name: "匹配偏好" });
+    await act(async () => fireEvent.click(within(dialog).getByRole("button", { name: "全部重置" })));
+    await act(async () => fireEvent.click(within(dialog).getByRole("button", { name: "保存偏好" })));
+
+    expect(screen.queryByRole("heading", { name: /和你的匹配度/ })).toBeNull();
+    expect(document.activeElement).toBe(opener);
+    expect(opener.textContent).toBe("设置匹配偏好");
   });
 });

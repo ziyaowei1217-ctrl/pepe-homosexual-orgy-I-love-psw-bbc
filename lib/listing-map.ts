@@ -1,4 +1,4 @@
-import { findUSMarketByArea, getMarketNeighborhoodCoordinates } from "./us-market-catalog";
+import { areaNeighborhood, findUSMarketByArea, getMarketNeighborhoodCoordinates } from "./us-market-catalog";
 
 export type MapPoint = {
   lat: number;
@@ -79,13 +79,18 @@ const neighborhoodCoordinates: Record<string, MapPoint> = {
   "Seaport": { lat: 42.3519, lng: -71.0496 }
 };
 
+/** The neighborhood's surveyed point, or undefined where getListingCoordinates would only estimate one. */
+export function knownNeighborhoodPoint(area: string): MapPoint | undefined {
+  const neighborhood = areaNeighborhood(area);
+  return Object.hasOwn(neighborhoodCoordinates, neighborhood) ? neighborhoodCoordinates[neighborhood] : undefined;
+}
+
 export function getListingCoordinates(area: string): MapPoint {
-  const neighborhood = area.split("·").at(1)?.trim() ?? area.trim();
-  const knownNeighborhood = neighborhoodCoordinates[neighborhood];
+  const knownNeighborhood = knownNeighborhoodPoint(area);
   if (knownNeighborhood) return knownNeighborhood;
 
   const market = findUSMarketByArea(area);
-  if (market) return getMarketNeighborhoodCoordinates(market, neighborhood);
+  if (market) return getMarketNeighborhoodCoordinates(market, areaNeighborhood(area));
 
   return laCenter;
 }

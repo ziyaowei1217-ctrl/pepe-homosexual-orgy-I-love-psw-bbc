@@ -1,22 +1,23 @@
 import { formatDateShort } from "./date-format";
 import { matchesListingAmenity } from "./listing-catalog";
-import { getListingCoordinates, type MapPoint } from "./listing-map";
+import { knownNeighborhoodPoint, type MapPoint } from "./listing-map";
 import type { PreviewListing } from "./preview-data";
 import type { RenterPreferences } from "./renter-preferences";
 import { formatUsd, stayDays } from "./stay-price";
-import { findUSMarketByArea, usMarkets, type USMarket } from "./us-market-catalog";
+import { areaNeighborhood, findUSMarketByArea, normalize, usMarkets, type USMarket } from "./us-market-catalog";
 
 /**
  * Property matching: how well a listing fits one renter, as a 0–100 score with plain reasons and gaps.
  * Pure and synchronous, so search, the home feed and the listing page all rank with the same numbers.
  *
- * Each signal the renter has given is scored 0–1 and weighted; signals they have not given are left out
- * rather than guessed. The host's self-set rating is not used.
+ * Each signal the renter has given is scored 0–1 and weighted; signals they have not given, or that cannot
+ * be judged for a listing, are left out rather than guessed. Similarity to saved homes only adds a bonus.
+ * The host's self-set rating is not used.
  */
 export type MatchableListing = Pick<
   PreviewListing,
   "id" | "area" | "price" | "beds" | "tags" | "commute" | "transit" | "availableFrom" | "availableTo"
-> & Partial<Pick<PreviewListing, "latitude" | "longitude">>;
+>;
 
 export type ListingMatch = {
   /** 0–100. */
@@ -28,14 +29,16 @@ export type ListingMatch = {
 };
 
 export type MatchContext = {
-  /** Listings the renter saved or opened; listings like them rank higher. */
+  /** Listings the renter saved; listings like them get a bonus of up to 10 points. */
   interest?: readonly MatchableListing[];
 };
 
 type Signal = { weight: number; fit: number; reason?: string; gap?: string };
-type Destination = { label: string; names: string[]; market?: USMarket; point?: MapPoint };
+/** city: the destination is the whole market ("Boston", "洛杉矶"), not a place in it. */
+type Destination = { label: string; names: string[]; market?: USMarket; point?: MapPoint; city?: boolean };
 
-const weights = { location: 25, budget: 30, dates: 25, mustHave: 10, beds: 10, interest: 10 };
+const weights = { location: 25, budget: 30, dates: 25, mustHave: 10, beds: 10 };
+const interestBonus = 10;
 
 /** Campuses and employers with known coordinates, in the markets whose neighborhoods have real map points. */
 const places: Array<{ label: string; aliases: string[]; marketId: string; point: MapPoint }> = [
@@ -49,12 +52,13 @@ const places: Array<{ label: string; aliases: string[]; marketId: string; point:
   { label: "Northeastern", aliases: ["东北大学"], marketId: "boston", point: { lat: 42.3398, lng: -71.0892 } }
 ];
 
-/** Destinations to suggest while typing: the campuses above plus every market's schools and employers. */
-export const destinationSuggestions = [...new Set([...places.map((place) => place.label), ...usMarkets.flatMap((market) => market.highlights)])];
+const highlights = usMarkets.flatMap((market) => market.highlights);
 
-export function scoreListingMatch(listing: MatchableListing, preferences: RenterPreferences, context: MatchContext = {}): ListingMatch | null {
-  return createMatcher(preferences, context)(listing);
-}
+/** Schools and employers to suggest while typing: those that name one market, so the matcher can place them. */
+export const destinationSuggestions = [...new Set(highlights.filter((name) => highlights.indexOf(name) === highlights.lastIndexOf(name)))];
+
+/** The market a destination or search text names, if exactly one. */
+export const destinationMarket = (text: string) => resolveDestination(text)?.market;
 
 /** Highest score first; listings without a match keep their order at the end. Ties go to the lower rent. */
 export function rankListingsByMatch<T extends MatchableListing>(
@@ -79,7 +83,7 @@ export function rankListingsByMatch<T extends MatchableListing>(
  */
 export function listingSimilarity(left: MatchableListing, right: MatchableListing) {
   if (city(left.area) !== city(right.area)) return 0;
-  const neighborhood = neighborhoodOf(left.area) === neighborhoodOf(right.area) ? 1 : 0;
+  const neighborhood = areaNeighborhood(left.area) === areaNeighborhood(right.area) ? 1 : 0;
   const rent = Math.max(0, 1 - Math.abs(left.price - right.price) / (0.3 * Math.max(left.price, right.price, 1)));
   const bedrooms = left.beds === right.beds ? 1 : Math.abs(left.beds - right.beds) === 1 ? 0.5 : 0;
   const leftTags = new Set(left.tags);
@@ -99,15 +103,16 @@ function createMatcher(preferences: RenterPreferences, context: MatchContext) {
       preferences.mustHave.length ? mustHaveSignal(listing, preferences.mustHave) : null,
       preferences.beds ? bedsSignal(listing.beds, preferences.beds) : null
     ].filter((signal): signal is Signal => signal !== null);
-    // Saved and viewed homes refine a match; on their own they are not a preference to score against.
+    // Saved homes refine a match; on their own they are not a preference to score against.
     if (!stated.length) return null;
+    const total = stated.reduce((sum, signal) => sum + signal.weight, 0);
+    const score = (100 * stated.reduce((sum, signal) => sum + signal.weight * signal.fit, 0)) / total;
     const others = interest.filter((item) => item.id !== listing.id);
-    const signals = others.length ? [...stated, interestSignal(listing, others)] : stated;
-    const total = signals.reduce((sum, signal) => sum + signal.weight, 0);
+    const similarity = others.length ? Math.max(...others.map((item) => listingSimilarity(listing, item))) : 0;
     return {
-      score: Math.round((100 * signals.reduce((sum, signal) => sum + signal.weight * signal.fit, 0)) / total),
-      reasons: signals.flatMap((signal) => signal.reason ?? []),
-      gaps: signals.flatMap((signal) => signal.gap ?? [])
+      score: Math.min(100, Math.round(score + interestBonus * similarity)),
+      reasons: [...stated.flatMap((signal) => signal.reason ?? []), ...(similarity >= 0.6 ? ["和你收藏的房源相似"] : [])],
+      gaps: stated.flatMap((signal) => signal.gap ?? [])
     };
   };
 }
@@ -127,40 +132,40 @@ function resolveDestination(value: string): Destination | null {
   }
   // A city, neighborhood, school or employer that names exactly one market; ambiguous names (Google,
   // University City) stay city-less.
-  const markets = usMarkets.filter((market) =>
-    [market.label, ...market.aliases, ...market.highlights, ...market.neighborhoods].some((name) => normalize(name) === key)
-  );
-  return { label: text, names: [key], market: markets.length === 1 ? markets[0] : undefined };
+  const named = (names: string[]) => names.some((name) => normalize(name) === key);
+  const markets = usMarkets.filter((market) => named([market.label, ...market.aliases, ...market.highlights, ...market.neighborhoods]));
+  const market = markets.length === 1 ? markets[0] : undefined;
+  // Some aliases are also neighborhoods (Cambridge, Palo Alto); those mean the neighborhood.
+  const city = Boolean(market && named([market.label, ...market.aliases]) && !named(market.neighborhoods));
+  return { label: text, names: [key], market, city };
 }
 
-function locationSignal(listing: MatchableListing, destination: Destination): Signal {
+/** Null when the destination names no single market and the listing does not mention it: nothing to judge. */
+function locationSignal(listing: MatchableListing, destination: Destination): Signal | null {
   const weight = weights.location;
-  const listingMarket = findUSMarketByArea(listing.area);
-  const neighborhood = neighborhoodOf(listing.area);
+  const { label, market } = destination;
+  // The city comes first, so a commute to "Northwestern Mutual" in Milwaukee never counts for Northwestern.
+  if (market && findUSMarketByArea(listing.area)?.id !== market.id) return { weight, fit: 0, gap: `不在 ${market.label}` };
+  if (destination.city) return { weight, fit: 1 };
   const commute = [listing.commute, listing.transit]
     .map((text) => ({ text, found: /(\d+)\s*分钟到\s*(.+)$/.exec(text) }))
     .find(({ found }) => found && destination.names.some((name) => mentions(found[2], name)));
   if (commute?.found) {
     const minutes = Number(commute.found[1]);
     const fit = minutes <= 15 ? 1 : Math.max(0.1, 1 - (minutes - 15) / 50);
-    return { weight, fit, reason: fit >= 0.6 ? commute.text : undefined, gap: fit < 0.3 ? commute.text : undefined };
+    return fit >= 0.6 ? { weight, fit, reason: commute.text } : { weight, fit, gap: commute.text };
   }
+  const neighborhood = areaNeighborhood(listing.area);
   if (destination.names.some((name) => mentions(neighborhood, name))) return { weight, fit: 1, reason: `位于 ${neighborhood}` };
-  if (destination.market && listingMarket?.id !== destination.market.id) {
-    return { weight, fit: 0, gap: `不在 ${destination.market.label}` };
-  }
-  if (destination.point && destination.market) {
-    const point = Number.isFinite(listing.latitude) && Number.isFinite(listing.longitude)
-      ? { lat: listing.latitude as number, lng: listing.longitude as number }
-      : getListingCoordinates(listing.area);
+  // Distance only from surveyed neighborhood points, never from an estimated one.
+  const point = knownNeighborhoodPoint(listing.area);
+  if (destination.point && point) {
     const km = distanceKm(point, destination.point);
     const fit = km <= 2 ? 1 : Math.max(0, 1 - (km - 2) / 18);
-    const label = km < 1 ? `距 ${destination.label} 不到 1 公里` : `距 ${destination.label} 约 ${Math.round(km)} 公里`;
-    return { weight, fit, reason: fit >= 0.6 ? label : undefined, gap: fit < 0.3 ? label : undefined };
+    const text = km < 1 ? `距 ${label} 不到 1 公里` : `距 ${label} 约 ${Math.round(km)} 公里`;
+    return fit >= 0.6 ? { weight, fit, reason: text } : { weight, fit, gap: text };
   }
-  // The destination is a whole city, or a place we cannot locate: being in that city is all we can tell.
-  if (destination.market) return { weight, fit: isCityDestination(destination) ? 1 : 0.5 };
-  return { weight, fit: 0.3 };
+  return market ? { weight, fit: 0.5, gap: `未注明到 ${label} 的通勤` } : null;
 }
 
 function budgetSignal(price: number, budgetMax: number): Signal {
@@ -207,16 +212,6 @@ function bedsSignal(beds: number, wanted: number): Signal {
   return { weight, fit: wanted - beds === 1 ? 0.4 : 0, gap: `少 ${wanted - beds} 间卧室` };
 }
 
-function interestSignal(listing: MatchableListing, interest: readonly MatchableListing[]): Signal {
-  const fit = Math.max(...interest.map((item) => listingSimilarity(listing, item)));
-  return { weight: weights.interest, fit, reason: fit >= 0.6 ? "和你看过或收藏的房源相似" : undefined };
-}
-
-function isCityDestination(destination: Destination) {
-  const key = destination.names[0];
-  return Boolean(destination.market && [destination.market.label, ...destination.market.aliases].some((name) => normalize(name) === key));
-}
-
 /** Whole-word match for Latin names (so "MIT" is not found in "Smith"); substring match for Chinese. */
 function mentions(text: string, name: string) {
   const haystack = normalize(text);
@@ -233,16 +228,9 @@ function distanceKm(from: MapPoint, to: MapPoint) {
   return 12_742 * Math.asin(Math.sqrt(a));
 }
 
+/** The market for a known city ("LA" and "Los Angeles" agree), otherwise the city text itself. */
 function city(area: string) {
-  return normalize(area.split("·")[0] ?? "");
-}
-
-function neighborhoodOf(area: string) {
-  return (area.split("·")[1] ?? area).trim();
-}
-
-function normalize(value: string) {
-  return value.trim().toLowerCase();
+  return findUSMarketByArea(area)?.id ?? normalize(area.split("·")[0] ?? "");
 }
 
 function round2(value: number) {

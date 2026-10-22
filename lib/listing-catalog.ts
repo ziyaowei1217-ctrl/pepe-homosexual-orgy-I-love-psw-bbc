@@ -137,8 +137,11 @@ function sortCatalogListings<T extends CatalogListing>(listings: readonly T[], s
     if (sort === "price-low") return left.price - right.price || compareIds(left.id, right.id);
     if (sort === "price-high") return right.price - left.price || compareIds(left.id, right.id);
     if (sort === "rating") return right.score - left.score || left.price - right.price;
-    return (matchScore ? (matchScore(right) ?? -1) - (matchScore(left) ?? -1) : 0) ||
-      right.score - left.score || left.price - right.price || compareIds(left.id, right.id);
+    // Equal matches go to the lower rent, as in rankListingsByMatch; the host's rating only orders unmatched listings.
+    const leftMatch = matchScore?.(left) ?? -1;
+    const rightMatch = matchScore?.(right) ?? -1;
+    return rightMatch - leftMatch ||
+      (leftMatch < 0 && right.score - left.score) || left.price - right.price || compareIds(left.id, right.id);
   });
 }
 
