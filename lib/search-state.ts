@@ -42,7 +42,7 @@ export function searchHref(state: SearchState) {
   return `/search${params.size ? `?${params}` : ""}`;
 }
 
-export function searchCatalog(listings: PreviewListing[], state: SearchState, pageSize = 24) {
+export function searchCatalog(listings: PreviewListing[], state: SearchState, pageSize = 24, matchScore?: (listing: PreviewListing) => number | undefined) {
   const candidates = listings.filter((listing) =>
     listing.beds >= state.beds &&
     state.amenities.every((amenity) => matchesListingAmenity(listing, amenity)) &&
@@ -54,7 +54,7 @@ export function searchCatalog(listings: PreviewListing[], state: SearchState, pa
     query: state.query, checkIn: state.moveIn, checkOut: state.moveOut, amenity: "全部",
     priceMin: state.priceMin, priceMax: state.priceMax || Number.MAX_SAFE_INTEGER,
     sort: state.sort, page: state.page, pageSize
-  });
+  }, matchScore);
 }
 
 export function searchDateError(moveIn: string, moveOut: string) {

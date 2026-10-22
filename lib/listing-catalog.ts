@@ -43,9 +43,11 @@ export type CatalogPage<T extends CatalogListing> = {
   summary: string;
 };
 
+/** matchScore (lib/listing-match.ts) ranks the "recommended" sort for the renter; without it the sort is generic. */
 export function buildCatalogPage<T extends CatalogListing>(
   listings: readonly T[],
-  query: CatalogQuery
+  query: CatalogQuery,
+  matchScore?: (listing: T) => number | undefined
 ): CatalogPage<T> {
   const dateFilterAvailable = canFilterCatalogByDate(listings);
   const normalizedQuery = normalizeText(query.query);
@@ -81,7 +83,7 @@ export function buildCatalogPage<T extends CatalogListing>(
 
     return matchesQuery && matchesPrice && matchesAmenity && matchesDate;
   });
-  const sorted = sortCatalogListings(filtered, query.sort);
+  const sorted = sortCatalogListings(filtered, query.sort, matchScore);
   const pageSize = Math.max(1, Math.floor(query.pageSize));
   const pageCount = Math.max(1, Math.ceil(sorted.length / pageSize));
   const page = Math.min(Math.max(1, Math.floor(query.page)), pageCount);
@@ -113,7 +115,7 @@ export function canFilterCatalogByDate(listings: readonly CatalogListing[]) {
   );
 }
 
-export function matchesListingAmenity(listing: CatalogListing, amenity: string) {
+export function matchesListingAmenity(listing: Pick<CatalogListing, "tags" | "transit">, amenity: string) {
   if (!amenity || amenity === "全部") return true;
 
   const normalizedAmenity = normalizeText(amenity);
@@ -130,12 +132,13 @@ export function matchesListingAmenity(listing: CatalogListing, amenity: string) 
   );
 }
 
-function sortCatalogListings<T extends CatalogListing>(listings: readonly T[], sort: CatalogSort) {
+function sortCatalogListings<T extends CatalogListing>(listings: readonly T[], sort: CatalogSort, matchScore?: (listing: T) => number | undefined) {
   return [...listings].sort((left, right) => {
     if (sort === "price-low") return left.price - right.price || compareIds(left.id, right.id);
     if (sort === "price-high") return right.price - left.price || compareIds(left.id, right.id);
     if (sort === "rating") return right.score - left.score || left.price - right.price;
-    return right.score - left.score || left.price - right.price || compareIds(left.id, right.id);
+    return (matchScore ? (matchScore(right) ?? -1) - (matchScore(left) ?? -1) : 0) ||
+      right.score - left.score || left.price - right.price || compareIds(left.id, right.id);
   });
 }
 
