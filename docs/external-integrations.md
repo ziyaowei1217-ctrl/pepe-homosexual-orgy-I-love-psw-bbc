@@ -123,8 +123,14 @@ tests use a controlled adapter boundary and cannot certify an external provider'
 
 ## 3. Map
 
-The web app uses raster XYZ tiles in search, listing detail, and saved-list maps. Set these values
-before building the web image:
+Search, saved-list and listing maps run on MapLibre GL (`components/marketplace/listing-map.tsx`). The
+basemap is chosen in `getMapStyle` (`lib/listing-map.ts`):
+
+1. `NEXT_PUBLIC_MAP_STYLE_URL`: a MapLibre vector style URL (for example a MapTiler or Stadia style).
+2. `NEXT_PUBLIC_MAP_TILE_URL_TEMPLATE`: raster XYZ tiles, shown with `NEXT_PUBLIC_MAP_ATTRIBUTION`.
+3. Neither set: OpenFreeMap's free vector style (`https://tiles.openfreemap.org/styles/liberty`).
+
+Production builds require the raster values, set before building the web image:
 
 ```text
 NEXT_PUBLIC_MAP_TILE_URL_TEMPLATE=https://maps.example.com/tiles/{z}/{x}/{y}.png?key=...
@@ -132,8 +138,8 @@ NEXT_PUBLIC_MAP_ATTRIBUTION=© Your map provider
 ```
 
 The URL must be HTTPS and contain `{z}`, `{x}`, and `{y}`. These are public build-time values, so use
-a browser-restricted map key. The local fallback is OpenStreetMap and is not intended to replace a
-production tile plan.
+a browser-restricted map key. `next.config.mjs` adds the style or tile origin to the CSP `connect-src`;
+a vector style must serve its tiles, glyphs and sprites from that same origin.
 
 ## 4. Messages
 

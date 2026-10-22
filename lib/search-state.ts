@@ -1,4 +1,5 @@
 import { buildCatalogPage, matchesListingAmenity, type CatalogSort } from "./listing-catalog";
+import { formatMapBounds, parseMapBounds, type MapBounds } from "./listing-map";
 import type { PreviewListing } from "./preview-data";
 
 export const searchAmenities = ["Wi-Fi", "独卫", "带家具", "宠物", "近地铁", "洗烘"];
@@ -6,10 +7,12 @@ export type SearchView = "split" | "list" | "map";
 export type SearchFilters = { priceMin: number; priceMax: number; beds: number; amenities: string[] };
 export type SearchState = SearchFilters & {
   query: string; moveIn: string; moveOut: string; sort: CatalogSort; view: SearchView; page: number; selected: string;
+  /** The map area the results are limited to, set by moving the map. */
+  bounds: MapBounds | null;
 };
 export const emptyFilters: SearchFilters = { priceMin: 0, priceMax: 0, beds: 0, amenities: [] };
 export const defaultSearch: SearchState = {
-  ...emptyFilters, query: "", moveIn: "", moveOut: "", sort: "recommended", view: "split", page: 1, selected: ""
+  ...emptyFilters, query: "", moveIn: "", moveOut: "", sort: "recommended", view: "split", page: 1, selected: "", bounds: null
 };
 
 export function parseSearchState(params: URLSearchParams): SearchState {
@@ -26,7 +29,8 @@ export function parseSearchState(params: URLSearchParams): SearchState {
     amenities: [...new Set((params.get("amenities") ?? "").split(","))].filter((value) => searchAmenities.includes(value)),
     sort: sort === "price-low" || sort === "price-high" || sort === "rating" ? sort : "recommended",
     view: view === "list" || view === "map" ? view : "split",
-    page: Math.max(1, positiveNumber(params.get("page"))), selected: params.get("selected") ?? ""
+    page: Math.max(1, positiveNumber(params.get("page"))), selected: params.get("selected") ?? "",
+    bounds: parseMapBounds(params.get("bbox"))
   };
 }
 
@@ -39,6 +43,7 @@ export function searchHref(state: SearchState) {
   if (state.sort !== "recommended") params.set("sort", state.sort);
   if (state.view !== "split") params.set("view", state.view);
   if (state.page > 1) params.set("page", String(state.page));
+  if (state.bounds) params.set("bbox", formatMapBounds(state.bounds));
   return `/search${params.size ? `?${params}` : ""}`;
 }
 
@@ -53,7 +58,7 @@ export function searchCatalog(listings: PreviewListing[], state: SearchState, pa
   return buildCatalogPage(candidates, {
     query: state.query, checkIn: state.moveIn, checkOut: state.moveOut, amenity: "全部",
     priceMin: state.priceMin, priceMax: state.priceMax || Number.MAX_SAFE_INTEGER,
-    sort: state.sort, page: state.page, pageSize
+    sort: state.sort, page: state.page, pageSize, bounds: state.bounds
   }, matchScore);
 }
 

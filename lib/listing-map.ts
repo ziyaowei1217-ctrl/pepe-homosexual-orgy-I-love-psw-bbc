@@ -1,4 +1,6 @@
-import { areaNeighborhood, findUSMarketByArea, getMarketNeighborhoodCoordinates } from "./us-market-catalog";
+import type { StyleSpecification } from "maplibre-gl";
+
+import { areaNeighborhood, findUSMarketByArea, getMarketNeighborhoodCoordinates, stableHash } from "./us-market-catalog";
 
 export type MapPoint = {
   lat: number;
@@ -95,6 +97,20 @@ export function getListingCoordinates(area: string): MapPoint {
   return laCenter;
 }
 
+/**
+ * Listings only carry a neighbourhood, so each one is placed up to about 300 m from the neighbourhood centre,
+ * the same spot every time. Listings in one neighbourhood then get their own pins, and the map shows an
+ * approximate location rather than an address.
+ */
+export function getApproximateListingCoordinates(listingId: string, area: string): MapPoint {
+  const centre = getListingCoordinates(area);
+  const hash = stableHash(listingId);
+  return {
+    lat: Number((centre.lat + ((hash % 1001) / 1000 - 0.5) * 0.005).toFixed(5)),
+    lng: Number((centre.lng + ((Math.floor(hash / 1001) % 1001) / 1000 - 0.5) * 0.006).toFixed(5))
+  };
+}
+
 export function getMapCenterForListings(listings: MappableListing[], fallback: MapPoint = laCenter): MapPoint {
   if (listings.length === 0) return fallback;
 
@@ -128,15 +144,7 @@ export function getMapMarkers(
   });
 }
 
-export function panMapCenter(center: MapPoint, zoom: number, dx: number, dy: number): MapPoint {
-  const pixel = lngLatToWorldPixel(center, zoom);
-  const scale = tileSize * 2 ** zoom;
-  const lng = (pixel.x - dx) / scale * 360 - 180;
-  const n = Math.PI - 2 * Math.PI * (pixel.y - dy) / scale;
-  return { lat: Math.max(-80, Math.min(80, 180 / Math.PI * Math.atan(Math.sinh(n)))), lng: Math.max(-179, Math.min(179, lng)) };
-}
-
-function getListingPoint(listing: MappableListing): MapPoint {
+export function getListingPoint(listing: MappableListing): MapPoint {
   if (Number.isFinite(listing.latitude) && Number.isFinite(listing.longitude)) {
     return { lat: listing.latitude as number, lng: listing.longitude as number };
   }
@@ -229,4 +237,52 @@ function keepInsideViewport(value: number, dimension: number, inset: number) {
   if (dimension <= inset * 2) return dimension / 2;
 
   return Math.min(dimension - inset, Math.max(inset, value));
+}
+
+/** [west, south, east, north] in degrees: the order MapLibre and the search page's `bbox` parameter use. */
+export type MapBounds = [number, number, number, number];
+
+export function isWithinBounds(point: MapPoint, [west, south, east, north]: MapBounds) {
+  return point.lng >= west && point.lng <= east && point.lat >= south && point.lat <= north;
+}
+
+export function getListingBounds(listings: MappableListing[]): MapBounds | null {
+  if (!listings.length) return null;
+  const points = listings.map(getListingPoint);
+  const lngs = points.map((point) => point.lng);
+  const lats = points.map((point) => point.lat);
+  return [Math.min(...lngs), Math.min(...lats), Math.max(...lngs), Math.max(...lats)];
+}
+
+export function parseMapBounds(value: string | null): MapBounds | null {
+  const parts = value?.split(",").map(Number);
+  if (parts?.length !== 4 || !parts.every(Number.isFinite)) return null;
+  const [west, south, east, north] = parts;
+  if (west < -180 || east > 180 || south < -85 || north > 85 || west >= east || south >= north) return null;
+  return [west, south, east, north];
+}
+
+export function formatMapBounds(bounds: MapBounds) {
+  return bounds.map((value) => value.toFixed(4)).join(",");
+}
+
+/** OpenFreeMap's vector style: OpenStreetMap streets, buildings, parks, transit and place labels; free, no key. */
+export const defaultMapStyleUrl = "https://tiles.openfreemap.org/styles/liberty";
+
+/**
+ * The basemap for MapLibre: a vector style URL when NEXT_PUBLIC_MAP_STYLE_URL is set, else a raster style built from
+ * NEXT_PUBLIC_MAP_TILE_URL_TEMPLATE, else OpenFreeMap.
+ */
+export function getMapStyle(
+  styleUrl = process.env.NEXT_PUBLIC_MAP_STYLE_URL,
+  tileTemplate = process.env.NEXT_PUBLIC_MAP_TILE_URL_TEMPLATE,
+  attribution = process.env.NEXT_PUBLIC_MAP_ATTRIBUTION || defaultMapAttribution
+): string | StyleSpecification {
+  if (styleUrl) return styleUrl;
+  if (!tileTemplate) return defaultMapStyleUrl;
+  return {
+    version: 8,
+    sources: { basemap: { type: "raster", tiles: [tileTemplate], tileSize: 256, maxzoom: 19, attribution } },
+    layers: [{ id: "basemap", type: "raster", source: "basemap" }]
+  };
 }

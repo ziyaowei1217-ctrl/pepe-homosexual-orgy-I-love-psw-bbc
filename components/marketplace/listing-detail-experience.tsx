@@ -4,7 +4,6 @@ import {
   ArrowLeft,
   Bath,
   BedDouble,
-  Building2,
   CalendarDays,
   Check,
   Heart,
@@ -23,12 +22,13 @@ import { useEffect, useMemo, useState } from "react";
 
 import { SimilarListings } from "@/components/marketplace/listing-feeds";
 import { useSavedListings } from "@/components/marketplace/saved-listings-provider";
+import { ListingLocationMap } from "@/components/marketplace/listing-map";
 import { ListingPhotoGallery } from "@/components/marketplace/listing-photo-gallery";
 import { ListingStayDialog, ListingStayFields } from "@/components/marketplace/listing-stay-selector";
 import { MatchPreferencesDialog } from "@/components/marketplace/match-preferences-dialog";
 import { useListingMatches } from "@/components/marketplace/use-listing-matches";
 import { formatDateLong, formatRangeLong } from "@/lib/date-format";
-import { defaultMapAttribution, getListingCoordinates, getMapTiles } from "@/lib/listing-map";
+import { getListingPoint } from "@/lib/listing-map";
 import { rememberListingView } from "@/lib/feed-signals";
 import { applicationHref, earliestListingDate, initialListingStay, isListingBookable, listingHref, listingStayError, type ListingStay } from "@/lib/listing-stay";
 import type { PreviewListing } from "@/lib/preview-data";
@@ -60,8 +60,6 @@ export function ListingDetailExperience({ listing, listings, initialStay }: { li
   const stayDates = stayError ? (hasDates ? "这段日期不可租，改日期" : "选择可租日期") : formatRangeLong(stay.moveIn, stay.moveOut);
   const applyHref = applicationHref(listing.id, stay, selectionId);
   const inboxHref = `/inbox?listingId=${encodeURIComponent(listing.id)}`;
-  const mapTiles = getMapTiles(getListingCoordinates(listing.area), 12, { width: 900, height: 340 });
-  const mapAttribution = process.env.NEXT_PUBLIC_MAP_ATTRIBUTION ?? defaultMapAttribution;
   const earliestMoveIn = earliestListingDate(listing);
   const bookable = isListingBookable(listing);
   // One availability range everywhere on the page: from today or the listing's start, whichever is later.
@@ -214,15 +212,7 @@ export function ListingDetailExperience({ listing, listings, initialStay }: { li
 
             <section className="py-8">
               <h2 id="listing-location" className="scroll-mt-40 text-[22px] font-bold leading-[30px] sm:text-d-title">位置与通勤</h2>
-              <div className="relative mt-5 h-[340px] overflow-hidden rounded-psw-xl bg-line-strong" aria-label="房源位置地图">
-                <div className="map-tiles absolute left-1/2 top-0 h-[340px] w-[900px] -translate-x-1/2">
-                  {mapTiles.map((tile) => <div key={tile.id} className="absolute size-64 select-none bg-cover bg-center" style={{ backgroundImage: `url(${tile.url})`, left: tile.x, top: tile.y }} />)}
-                </div>
-                <div className="map-tint pointer-events-none absolute inset-0" aria-hidden="true" />
-                <div className="absolute left-1/2 top-1/2 grid size-14 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border-4 border-surface bg-primary text-white shadow-menu"><Building2 className="size-6" aria-hidden="true" /></div>
-                <div className="absolute bottom-4 left-4 rounded-psw-lg bg-surface p-4 shadow-menu"><p className="text-d-label text-ink">{listing.area}</p><p className="mt-1 text-m-footnote text-ink-secondary">准确地址将在申请流程中按规则展示</p></div>
-                <span className="absolute bottom-2 right-3 rounded bg-surface/90 px-1.5 py-0.5 text-[11px] font-semibold text-ink-secondary">{mapAttribution}</span>
-              </div>
+              <ListingLocationMap point={getListingPoint(listing)} area={listing.area} />
             </section>
           </div>
 

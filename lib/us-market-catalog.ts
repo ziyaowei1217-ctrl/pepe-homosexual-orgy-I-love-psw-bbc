@@ -113,7 +113,7 @@ export function normalize(value: string) {
   return value.trim().toLowerCase();
 }
 
-function stableHash(value: string) {
+export function stableHash(value: string) {
   let hash = 0;
   for (const character of value) hash = (hash * 31 + character.charCodeAt(0)) >>> 0;
   return hash;
