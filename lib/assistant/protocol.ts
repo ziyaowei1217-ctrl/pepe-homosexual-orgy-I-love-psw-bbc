@@ -5,6 +5,8 @@ import type { PreviewListing } from "../preview-data";
 export const assistantLimits = {
   messages: 20,
   messageChars: 4000,
+  /** Characters of conversation sent to the model per request. */
+  historyChars: 12_000,
   savedListings: 30,
   shownListings: 12,
   draftChars: 300,
@@ -12,6 +14,18 @@ export const assistantLimits = {
 } as const;
 
 export type AssistantTurn = { role: "user" | "assistant"; content: string };
+
+/** The newest turns within the history limits, starting with a user turn; `turns` must end with one. */
+export function recentTurns(turns: AssistantTurn[]) {
+  let start = turns.length - 1;
+  let size = turns[start].content.length;
+  while (start > 0 && turns.length - start < assistantLimits.messages && size + turns[start - 1].content.length <= assistantLimits.historyChars) {
+    start -= 1;
+    size += turns[start].content.length;
+  }
+  while (turns[start].role !== "user") start += 1;
+  return turns.slice(start);
+}
 
 export type AssistantContext = {
   /** The listing page the user is on. */

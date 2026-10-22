@@ -125,6 +125,13 @@ describe("assistant UI", () => {
       });
     }
 
+    expect(document.activeElement).toBe(input);
+    // Enter that commits an IME candidate (Safari: keyCode 229) is not a send.
+    fireEvent.change(input, { target: { value: "UCLA 附近" } });
+    fireEvent.keyDown(input, { key: "Enter", keyCode: 229 });
+    expect(requests).toHaveLength(0);
+    expect((input as HTMLTextAreaElement).value).toBe("UCLA 附近");
+
     await ask("找房");
     await ask("第二套呢");
     expect(await within(dialog).findByText("这个问题 AI 助手无法回答，请换个问法。")).toBeTruthy();
@@ -137,6 +144,10 @@ describe("assistant UI", () => {
       { role: "user", content: "那第一套呢" }
     ]);
     expect(requests[2].body.context.shownListingIds).toEqual(["westwood-a", "westwood-b"]);
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "清空" }));
+    expect(within(dialog).getByText("可以这样问：")).toBeTruthy();
+    expect(document.activeElement).toBe(input);
   });
 });
 

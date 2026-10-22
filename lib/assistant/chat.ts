@@ -5,7 +5,7 @@ import { loadMarketplaceListings } from "../marketplace-data";
 import type { PreviewListing } from "../preview-data";
 import { parseSearchState, searchAmenities, searchCatalog, searchDateError, searchHref } from "../search-state";
 import { formatStayLength, stayPrice } from "../stay-price";
-import { assistantLimits, type AssistantChatRequest, type AssistantContext, type AssistantEvent, type AssistantTurn } from "./protocol";
+import { assistantLimits, recentTurns, type AssistantChatRequest, type AssistantContext, type AssistantEvent, type AssistantTurn } from "./protocol";
 import {
   assistantModel,
   defaultGateDeps,
@@ -19,12 +19,10 @@ import {
   type AssistantGateDeps
 } from "./server";
 
-// Cost caps: a request is at most 4 model calls and about 8K output tokens, over at most 12K characters of history.
+// Cost caps: a request is at most 4 model calls of at most 4K output tokens each, over at most 12K characters of history.
 const maxRounds = 4;
 const maxTokensPerRound = 4_000;
-const outputBudget = 8_000;
 const maxToolCallsPerRound = 5;
-const historyChars = 12_000;
 const searchPageSize = 6;
 
 const systemPrompt = `你是 psw 的 AI 助手。psw 是面向在美留学生和年轻上班族的租房、转租与室友匹配网站。你帮用户找房、比较房源、核算租期总价、起草发给房东的消息。
@@ -111,10 +109,11 @@ const defaultChatDeps: ChatDeps = { ...defaultGateDeps, loadListings: () => load
 
 export function createChatHandler(deps: ChatDeps = defaultChatDeps) {
   return async function POST(request: Request): Promise<Response> {
-    const opened = await openAssistantRequest(request, deps, "chat");
-    if (opened instanceof Response) return opened;
+    // Parsed before the quota is claimed, so a malformed request costs the user nothing.
     const input = parseChatRequest(await readJsonBody(request, 128 * 1024));
     if (!input) return jsonError(400, "ASSISTANT_BAD_REQUEST");
+    const opened = await openAssistantRequest(request, deps, "chat");
+    if (opened instanceof Response) return opened;
 
     // Stop the model call (and its billing) when the browser goes away.
     const abort = new AbortController();
@@ -186,11 +185,10 @@ async function runChat(
     emit({ type: "text", text: chunk });
   };
 
-  let outputTokens = 0;
   for (let round = 0; round < maxRounds && !signal.aborted; round += 1) {
     newRound = true;
-    // The last round, or one past the output budget, must answer with what it has.
-    const finalRound = round === maxRounds - 1 || outputTokens >= outputBudget;
+    // The last round must answer with what it has.
+    const finalRound = round === maxRounds - 1;
     const stream = client.beta.messages.stream(
       {
         model: assistantModel,
@@ -209,7 +207,6 @@ async function runChat(
     );
     stream.on("text", write);
     const message = await stream.finalMessage();
-    outputTokens += message.usage.output_tokens;
 
     if (message.stop_reason === "refusal") {
       emit({ type: "error", code: "ASSISTANT_DECLINED" });
@@ -238,18 +235,6 @@ async function runChat(
 function replayable(content: Anthropic.Beta.BetaContentBlock[]) {
   const boundary = content.findLastIndex((block) => block.type === "fallback");
   return content.filter((block, index) => index >= boundary || block.type === "text");
-}
-
-/** The latest turns that fit in `historyChars`, starting with a user turn. */
-function recentTurns(messages: AssistantTurn[]) {
-  let start = messages.length - 1;
-  let size = messages[start].content.length;
-  while (start > 0 && size + messages[start - 1].content.length <= historyChars) {
-    start -= 1;
-    size += messages[start].content.length;
-  }
-  while (messages[start].role !== "user") start += 1;
-  return messages.slice(start);
 }
 
 async function contextBlock(context: AssistantContext, session: Session) {

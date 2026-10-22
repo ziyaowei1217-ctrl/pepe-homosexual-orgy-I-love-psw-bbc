@@ -5,6 +5,7 @@ import TestRenderer, { act } from "./support/dom-test-renderer";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { InboxExperience } from "../components/marketplace/inbox-experience";
+import { setPendingDraft } from "../lib/assistant/client";
 import { writeStoredAuthSession } from "../lib/auth-session";
 
 afterEach(() => {
@@ -51,6 +52,32 @@ describe("marketplace inbox", () => {
     expect(fetchMock.mock.calls.some(([input, init]) => String(input).endsWith("/deal-threads") && (init as RequestInit)?.method === "POST")).toBe(true);
     expect(text(renderer.root)).toContain("Westwood room");
     expect(text(renderer.root)).toContain("发送第一条消息开始对话");
+  });
+
+  it("puts an AI assistant draft in the composer of the inbox opened for that listing only", async () => {
+    writeStoredAuthSession("renter-token");
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/deal-threads")) return jsonResponse([dealThread()]);
+      if (url.endsWith("/roommate-conversations")) return jsonResponse([]);
+      return new Response(null, { status: 404 });
+    }));
+    setPendingDraft({ token: "renter-token", listingId: "listing-1", body: "你好，还能看房吗？" });
+    const composer = (renderer: TestRenderer.ReactTestRenderer) => renderer.root.findByProps({ "aria-label": "消息内容" }).props.value;
+
+    // An inbox showing the same thread under another URL leaves the draft for the inbox being opened.
+    let other!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      other = TestRenderer.create(<InboxExperience initialConversationId="thread-1" />);
+    });
+    expect(composer(other)).toBe("");
+    await act(async () => other.unmount());
+
+    let target!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      target = TestRenderer.create(<InboxExperience initialConversationId={null} initialListingId="listing-1" />);
+    });
+    expect(composer(target)).toBe("你好，还能看房吗？");
   });
 
   it("shows the viewing request composer when opened from the tour action", async () => {

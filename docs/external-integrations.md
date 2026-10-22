@@ -179,7 +179,7 @@ ANTHROPIC_API_KEY=...
 - Limits: the web server asks `POST /api/v1/assistant/quota/:kind` before each model call. It counts
   requests per user (chat 20 per 10 minutes and 100 per day; listing writer 10 per 10 minutes and 30
   per day) and across all users (1,000 and 300 per hour) in Valkey. A chat request makes at most four
-  model calls with about 8K output tokens in total.
+  model calls of at most 4K output tokens each and sends at most 12K characters of conversation.
 - Set a monthly spend limit on the key's workspace in the Anthropic Console as the final cap.
 
 ## Configuration gate

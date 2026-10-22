@@ -16,7 +16,12 @@ export function ListingCopyHelper({ token, draft, onApply }: { token: string; dr
   const [pending, setPending] = useState(false);
   const [result, setResult] = useState<{ text: string; error: boolean } | null>(null);
   const request = useRef<AbortController | null>(null);
+  const notesInput = useRef<HTMLTextAreaElement>(null);
   useEffect(() => () => request.current?.abort(), []);
+  // The button that opened the form is gone; keep keyboard focus in the form.
+  useEffect(() => {
+    if (open) notesInput.current?.focus();
+  }, [open]);
   if (!enabled) return null;
 
   async function fill() {
@@ -61,6 +66,7 @@ export function ListingCopyHelper({ token, draft, onApply }: { token: string; dr
           <label className="grid gap-2 text-d-label">
             用几句话描述房间
             <textarea
+              ref={notesInput}
               value={notes}
               onChange={(event) => setNotes(event.target.value)}
               rows={3}
@@ -73,7 +79,8 @@ export function ListingCopyHelper({ token, draft, onApply }: { token: string; dr
             <button type="button" onClick={() => void fill()} disabled={pending || !notes.trim()} className="primary-action">
               <Sparkles className="size-4" aria-hidden="true" />{pending ? "正在填写…" : "填入表单"}
             </button>
-            {result ? <p role={result.error ? "alert" : "status"} className={result.error ? "text-m-subhead font-semibold text-danger-text" : "text-m-subhead text-ink-secondary"}>{result.text}</p> : null}
+            <p role="status" className="text-m-subhead text-ink-secondary">{result && !result.error ? result.text : ""}</p>
+            {result?.error ? <p role="alert" className="text-m-subhead font-semibold text-danger-text">{result.text}</p> : null}
           </div>
         </div>
       ) : (

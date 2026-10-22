@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { createChatHandler, parseChatRequest, type ChatDeps } from "../lib/assistant/chat";
+import { recentTurns } from "../lib/assistant/protocol";
 import { jsonError } from "../lib/assistant/server";
 import { assistantRequest, fakeAnthropic, fixtureListings, readEvents } from "./support/assistant-fixtures";
 
@@ -40,12 +41,14 @@ describe("assistant chat handler", () => {
     expect(response.status).toBe(429);
     expect(response.headers.get("Retry-After")).toBe("120");
 
-    const { handler, requests } = setup([]);
+    const { handler, requests, quotaCalls } = setup([]);
     const lastFromAssistant = assistantRequest("/api/assistant/chat", { messages: [{ role: "user", content: "a" }, { role: "assistant", content: "b" }] });
     expect((await handler(lastFromAssistant)).status).toBe(400);
     const systemRole = assistantRequest("/api/assistant/chat", { messages: [{ role: "system", content: "x" }] });
     expect((await handler(systemRole)).status).toBe(400);
     expect(requests).toEqual([]);
+    // A malformed request does not use up the user's quota.
+    expect(quotaCalls).toEqual([]);
   });
 
   it("searches with the search page's rules and streams cards, text and done", async () => {
@@ -165,6 +168,7 @@ describe("assistant chat handler", () => {
     const events = await readEvents(await handler(assistantRequest("/api/assistant/chat", { messages })));
     expect(events.at(-1)).toEqual({ type: "done" });
     expect(requests).toHaveLength(4);
+    expect(requests.map((request) => request.max_tokens)).toEqual([4000, 4000, 4000, 4000]);
     expect(requests[3].tool_choice).toEqual({ type: "none" });
     const results = requests[1].messages.at(-1).content;
     expect(results.filter((result: { is_error?: boolean }) => result.is_error)).toHaveLength(2);
@@ -181,5 +185,14 @@ describe("assistant chat handler", () => {
     expect(parseChatRequest({ messages: [{ role: "user", content: "hi" }] })?.context).toEqual({
       listingId: "", savedListingIds: [], shownListingIds: [], moveIn: "", moveOut: ""
     });
+  });
+
+  it("trims history the same way in the browser and on the server", () => {
+    const turn = (role: "user" | "assistant", size: number) => ({ role, content: "x".repeat(size) });
+    // Newest first until 12K characters, then never starting with an answer.
+    expect(recentTurns([turn("user", 5000), turn("assistant", 5000), turn("user", 4000), turn("assistant", 4000), turn("user", 10)]).map((t) => t.content.length)).toEqual([4000, 4000, 10]);
+    const many = Array.from({ length: 25 }, (_, index) => turn(index % 2 ? "assistant" : "user", 10));
+    expect(recentTurns(many)).toHaveLength(19);
+    expect(recentTurns(many)[0].role).toBe("user");
   });
 });

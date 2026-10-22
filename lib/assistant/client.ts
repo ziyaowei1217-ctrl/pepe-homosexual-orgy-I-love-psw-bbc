@@ -6,6 +6,7 @@ import { readSafeErrorCode } from "../api";
 import { productErrorForStatus, toProductApiError } from "../product-errors";
 import {
   assistantLimits,
+  recentTurns,
   type AssistantChatRequest,
   type AssistantContext,
   type AssistantDraftEvent,
@@ -93,6 +94,11 @@ export function clearAssistantConversation() {
   conversation.set({ token: null, items: [], running: null });
 }
 
+/** Signing out, or into another account, drops the old conversation and stops its request. */
+export function forgetOtherAccounts(token: string | null) {
+  if (conversation.get().token !== token && conversation.get().items.length) clearAssistantConversation();
+}
+
 export async function askAssistant(token: string, text: string, context: Omit<AssistantContext, "shownListingIds">) {
   stopAssistant();
   const current = conversation.get();
@@ -132,7 +138,7 @@ export async function askAssistant(token: string, text: string, context: Omit<As
   }
 }
 
-/** Completed question-and-answer pairs plus the new question, newest last. */
+/** Completed question-and-answer pairs plus the new question, within the history limits. */
 function chatHistory(items: AssistantItem[], question: string): AssistantTurn[] {
   const turns: AssistantTurn[] = [];
   items.forEach((item, index) => {
@@ -140,7 +146,7 @@ function chatHistory(items: AssistantItem[], question: string): AssistantTurn[] 
     if (item.role !== "user" || answer?.role !== "assistant" || answer.pending || answer.error || !answer.text.trim()) return;
     turns.push({ role: "user", content: item.text }, { role: "assistant", content: answer.text.trim().slice(0, assistantLimits.messageChars) });
   });
-  return [...turns.slice(-(assistantLimits.messages - 1)), { role: "user", content: question }];
+  return recentTurns([...turns, { role: "user", content: question }]);
 }
 
 function lastShownListingIds(items: AssistantItem[]) {
@@ -211,9 +217,4 @@ export function useAssistantDraftHandoff(
     pendingDraft.set(null);
     apply(draft.body);
   }, [draft, token, listingId, apply]);
-}
-
-/** Signing out, or into another account, drops the old conversation and stops its request. */
-export function forgetOtherAccounts(token: string | null) {
-  if (conversation.get().token !== token && conversation.get().items.length) clearAssistantConversation();
 }

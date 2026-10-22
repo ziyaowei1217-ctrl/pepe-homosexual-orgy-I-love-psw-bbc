@@ -116,8 +116,9 @@ function InboxSessionExperience({ initialConversationId, initialListingId, initi
   }, [initialConversationId, initialListingId, initialApplicantId, initialRoommateId, token, loadAttempt]);
 
   const selectedConversation = conversations.find((item) => item.id === selectedId) ?? null;
-  // A draft the user picked in the AI assistant lands in this composer; the user still edits and sends it.
-  useAssistantDraftHandoff(token, selectedConversation, setDraft);
+  // A draft the user picked in the AI assistant lands in the composer of the inbox opened for that listing
+  // (not an inbox that is about to be replaced by the navigation); the user still edits and sends it.
+  useAssistantDraftHandoff(token, selectedConversation?.listingId === initialListingId ? selectedConversation : null, setDraft);
   const activeId = selectedConversation?.id;
   const activeSource = selectedConversation?.source;
 

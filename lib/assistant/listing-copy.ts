@@ -38,10 +38,10 @@ const outputSchema = {
 
 export function createListingCopyHandler(deps: AssistantGateDeps = defaultGateDeps) {
   return async function POST(request: Request): Promise<Response> {
-    const opened = await openAssistantRequest(request, deps, "listing-copy");
-    if (opened instanceof Response) return opened;
     const input = parseListingCopyRequest(await readJsonBody(request, 16 * 1024));
     if (!input) return jsonError(400, "ASSISTANT_BAD_REQUEST");
+    const opened = await openAssistantRequest(request, deps, "listing-copy");
+    if (opened instanceof Response) return opened;
 
     try {
       const message = await opened.client.beta.messages.create(
