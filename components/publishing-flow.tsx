@@ -1,0 +1,370 @@
+"use client";
+
+import { Building2, CheckCircle2 } from "lucide-react";
+import { useRef, useState } from "react";
+import { ListingMediaUploader } from "@/components/listing-media-uploader";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
+import type { ListingMediaSummary } from "@/lib/listing-media";
+import { ListingCopyHelper } from "@/components/assistant/listing-copy-helper";
+import { getPublishStepErrors, publishAmenities, type PublishDraft, type PublishSaveResult, type PublishStep } from "@/lib/publish-listing";
+
+function createEmptyPublishDraft(): PublishDraft {
+  return {
+    title: "",
+    area: "",
+    availableFrom: "",
+    availableTo: "",
+    beds: 1,
+    baths: 1,
+    commute: "",
+    transit: "",
+    price: 0,
+    originalPrice: 0,
+    tags: [],
+    landlordAware: false,
+    remoteListingId: null
+  };
+}
+
+export function PublishingFlow({
+  initialDraft,
+  isPublishing,
+  token,
+  onSave
+}: {
+  initialDraft: PublishDraft | null;
+  isPublishing: boolean;
+  token: string;
+  onSave: (draft: PublishDraft, shouldSubmit: boolean) => Promise<PublishSaveResult | null>;
+}) {
+  const steps: Array<{ key: PublishStep; code: string; title: string; detail: string }> = [
+    { key: "basic", code: "01", title: "基础信息", detail: "标题、区域、可租期、房型与交通" },
+    { key: "pricing", code: "02", title: "价格与设施", detail: "月租、原价、设施与声明" },
+    { key: "media", code: "03", title: "图片与分类", detail: "文件上传、排序与封面" },
+    { key: "review", code: "04", title: "预览与提交", detail: "检查信息、照片与发布须知" }
+  ];
+  const [stepIndex, setStepIndex] = useState(0);
+  const [draft, setDraft] = useState<PublishDraft>(
+    () => initialDraft ?? createEmptyPublishDraft()
+  );
+  const [mediaSummary, setMediaSummary] = useState<ListingMediaSummary>({
+    totalCount: 0,
+    readyCount: 0,
+    pendingCount: 0,
+    failedCount: 0,
+    mutationPending: false
+  });
+  const [errors, setErrors] = useState<string[]>([]);
+  const [confirmSubmit, setConfirmSubmit] = useState(false);
+  const [submittedResult, setSubmittedResult] = useState<PublishSaveResult | null>(null);
+  const formRef = useRef<HTMLDivElement>(null);
+  const step = steps[stepIndex];
+
+  function updateDraft(patch: Partial<PublishDraft>) {
+    setDraft((current) => ({ ...current, ...patch }));
+    if (errors.length) setErrors([]);
+  }
+
+  function showPublishErrors(nextErrors: string[]) {
+    setErrors(nextErrors);
+    const fieldName = getPublishErrorFieldName(nextErrors[0]);
+    if (fieldName) formRef.current?.querySelector<HTMLElement>(`[name="${fieldName}"]`)?.focus();
+  }
+
+  async function goToStep(nextIndex: number) {
+    if (nextIndex > stepIndex) {
+      const nextErrors = getPublishStepErrors(draft, step.key, mediaSummary);
+      if (nextErrors.length > 0) {
+        showPublishErrors(nextErrors);
+        return;
+      }
+      if (step.key === "pricing" && !draft.remoteListingId) {
+        const result = await onSave(draft, false);
+        if (!result) return;
+        setDraft((current) => ({ ...current, remoteListingId: result.remoteListingId }));
+      }
+    }
+    setErrors([]);
+    setConfirmSubmit(false);
+    setStepIndex(Math.min(Math.max(0, nextIndex), steps.length - 1));
+  }
+
+  async function save(shouldSubmit: boolean) {
+    const nextErrors = shouldSubmit
+      ? getPublishStepErrors(draft, "review", mediaSummary)
+      : [
+          ...getPublishStepErrors(draft, "basic", mediaSummary),
+          ...getPublishStepErrors(draft, "pricing", mediaSummary)
+        ];
+    if (nextErrors.length > 0) {
+      showPublishErrors(nextErrors);
+      return;
+    }
+    if (shouldSubmit && !confirmSubmit) {
+      setConfirmSubmit(true);
+      return;
+    }
+
+    const result = await onSave(draft, shouldSubmit);
+    if (!result) return;
+    if (result.status === "submitted") {
+      setSubmittedResult(result);
+      setConfirmSubmit(false);
+      return;
+    }
+    setDraft((current) => ({
+      ...current,
+      remoteListingId: result.remoteListingId
+    }));
+    setConfirmSubmit(false);
+  }
+
+  function toggleTag(tag: string) {
+    updateDraft({
+      tags: draft.tags.includes(tag)
+        ? draft.tags.filter((item) => item !== tag)
+        : [...draft.tags, tag]
+    });
+  }
+
+  if (submittedResult) {
+    return (
+      <Card className="shadow-panel">
+        <CardContent className="flex min-h-[320px] flex-col items-center justify-center gap-4 p-8 text-center">
+          <div className="flex size-14 items-center justify-center rounded-full bg-surface-subtle text-trust-verified">
+            <CheckCircle2 className="size-7" aria-hidden="true" />
+          </div>
+          <div>
+            <h2 className="text-xl font-black text-foreground">房源已提交审核</h2>
+            <p className="mt-2 max-w-md text-sm font-semibold text-muted-foreground">
+              当前房源及图片已锁定，审核完成前不能继续编辑。你可以在“我的房源”查看审核状态。
+            </p>
+            <p className="mt-2 text-xs font-semibold text-muted-foreground">
+              房源编号：{submittedResult.remoteListingId}
+            </p>
+          </div>
+          <Button
+            variant="outline"
+            onClick={() => {
+              setSubmittedResult(null);
+              setDraft(createEmptyPublishDraft());
+              setMediaSummary({
+                totalCount: 0,
+                readyCount: 0,
+                pendingCount: 0,
+                failedCount: 0,
+                mutationPending: false
+              });
+              setErrors([]);
+              setStepIndex(0);
+            }}
+          >
+            发布另一套房源
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card className="shadow-panel">
+      <CardHeader>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <CardTitle>房源资料</CardTitle>
+            <CardDescription>
+              填写房源信息并添加照片。提交审核后，照片将暂时锁定。
+            </CardDescription>
+          </div>
+          <Button variant="outline" size="sm" onClick={() => void save(false)} disabled={isPublishing}>
+            <Building2 data-icon="inline-start" />
+            {isPublishing ? "保存中" : "保存草稿"}
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+          {steps.map((item, index) => (
+            <button
+              key={item.key}
+              className={cn(
+                "rounded-md border bg-surface p-4 text-left transition-colors",
+                index === stepIndex && "border-trust-sky bg-trust-sky/5"
+              )}
+              type="button"
+              aria-current={index === stepIndex ? "step" : undefined}
+              onClick={() => void goToStep(index)}
+            >
+              <div className="text-xs font-extrabold text-trust-sky">{item.code}</div>
+              <div className="mt-2 text-sm font-bold text-foreground">{item.title}</div>
+              <div className="mt-1 text-sm font-medium text-muted-foreground">{item.detail}</div>
+            </button>
+          ))}
+        </div>
+        <div ref={formRef} className="mt-4 rounded-md border bg-surface p-4">
+          {step.key === "basic" ? (
+            <div className="grid gap-3 md:grid-cols-2">
+              <ListingCopyHelper token={token} draft={draft} onApply={updateDraft} />
+              <PublishField name="title" label="房源标题" value={draft.title} onChange={(value) => updateDraft({ title: value })} />
+              <PublishField name="area" label="区域" value={draft.area} onChange={(value) => updateDraft({ area: value })} />
+              <PublishField name="availableFrom" type="date" label="可入住日期" value={draft.availableFrom} onChange={(value) => updateDraft({ availableFrom: value })} />
+              <PublishField name="availableTo" type="date" label="最晚退租日期" value={draft.availableTo} onChange={(value) => updateDraft({ availableTo: value })} />
+              <PublishNumberField name="beds" label="卧室" value={draft.beds} min={0} onChange={(value) => updateDraft({ beds: value })} />
+              <PublishNumberField name="baths" label="卫浴" value={draft.baths} min={0} onChange={(value) => updateDraft({ baths: value })} />
+              <PublishField name="commute" label="通勤说明" value={draft.commute} onChange={(value) => updateDraft({ commute: value })} />
+              <PublishField name="transit" label="交通说明" value={draft.transit} onChange={(value) => updateDraft({ transit: value })} />
+            </div>
+          ) : null}
+
+          {step.key === "media" ? (
+            draft.remoteListingId && token ? (
+              <ListingMediaUploader
+                listingId={draft.remoteListingId}
+                token={token}
+                disabled={isPublishing}
+                onSummaryChange={setMediaSummary}
+              />
+            ) : (
+              <div className="rounded-md border border-dashed bg-secondary p-4 text-sm font-semibold text-muted-foreground">
+                请先完成基础信息和价格设置，系统会保存草稿后开放图片上传。
+              </div>
+            )
+          ) : null}
+
+          {step.key === "pricing" ? (
+            <div className="grid gap-4">
+              <div className="grid gap-3 md:grid-cols-2">
+                <PublishNumberField name="price" label="月租" value={draft.price} min={1} onChange={(value) => updateDraft({ price: value })} />
+                <PublishNumberField name="originalPrice" label="原价" value={draft.originalPrice} min={1} onChange={(value) => updateDraft({ originalPrice: value })} />
+              </div>
+              <fieldset>
+                <legend className="text-sm font-semibold">设施</legend>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {publishAmenities.map((tag) => (
+                    <Button key={tag} name={tag === "Wi-Fi" ? "tags" : undefined} variant={draft.tags.includes(tag) ? "secondary" : "outline"} aria-pressed={draft.tags.includes(tag)} onClick={() => toggleTag(tag)}>{tag}</Button>
+                  ))}
+                </div>
+              </fieldset>
+              <label className="flex items-start gap-3 rounded-md border bg-secondary p-3 text-sm font-semibold">
+                <input name="landlordAware" type="checkbox" className="mt-1" checked={draft.landlordAware} onChange={(event) => updateDraft({ landlordAware: event.target.checked })} />
+                <span>我声明房东已知情。此信息仅为用户声明，发布后统一显示“待平台审核”。</span>
+              </label>
+            </div>
+          ) : null}
+
+          {step.key === "review" ? (
+            <div className="grid gap-4">
+              <div className="grid gap-3 md:grid-cols-2">
+                <PublishReviewItem label="标题" value={draft.title || "未填写"} />
+                <PublishReviewItem label="区域" value={draft.area || "未填写"} />
+                <PublishReviewItem label="可入住日期" value={draft.availableFrom || "未填写"} />
+                <PublishReviewItem label="最晚退租日期" value={draft.availableTo || "未填写"} />
+                <PublishReviewItem label="价格" value={`$${draft.price.toLocaleString("en-US")} / 月`} />
+                <PublishReviewItem label="图片" value={`${mediaSummary.readyCount} 张已保存图片`} />
+                <PublishReviewItem label="设施" value={draft.tags.join("、") || "未选择"} />
+                <PublishReviewItem label="Trust 来源" value={draft.landlordAware ? "用户声明 · 待平台审核" : "未声明 · 待平台审核"} />
+              </div>
+              {confirmSubmit ? (
+                <div className="rounded-md border border-trust-amber bg-warning-soft p-4 text-sm font-semibold text-foreground">
+                  请再次确认提交。提交后房源进入平台审核，在审核完成前不会标记为“平台已审核”。
+                </div>
+              ) : null}
+              <div className="flex flex-wrap gap-2">
+                <Button variant="outline" onClick={() => void save(false)} disabled={isPublishing}>保存草稿</Button>
+                <Button variant="trust" onClick={() => void save(true)} disabled={isPublishing || mediaSummary.mutationPending}>
+                  {isPublishing ? "提交中" : confirmSubmit ? "确认提交审核" : "提交审核"}
+                </Button>
+              </div>
+            </div>
+          ) : null}
+
+          {errors.length > 0 ? (
+            <div className="mt-4 rounded-md border border-danger/30 bg-danger-soft p-3 text-sm font-semibold text-danger-text" role="alert">
+              {errors.map((error) => <div key={error}>{error}</div>)}
+            </div>
+          ) : null}
+          <div className="mt-4 flex items-center justify-between">
+            <Button variant="ghost" disabled={stepIndex === 0 || isPublishing} onClick={() => void goToStep(stepIndex - 1)}>上一步</Button>
+            {stepIndex < steps.length - 1 ? (
+              <Button variant="trust" disabled={isPublishing || mediaSummary.mutationPending} onClick={() => void goToStep(stepIndex + 1)}>下一步</Button>
+            ) : null}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function PublishField({
+  name,
+  label,
+  value,
+  type = "text",
+  disabled = false,
+  onChange
+}: {
+  name: string;
+  label: string;
+  value: string;
+  type?: "text" | "date";
+  disabled?: boolean;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label className="grid gap-2 text-sm font-semibold">
+      {label}
+      <Input name={name} type={type} value={value} disabled={disabled} onChange={(event) => onChange(event.target.value)} />
+    </label>
+  );
+}
+
+function PublishNumberField({
+  name,
+  label,
+  value,
+  min,
+  onChange
+}: {
+  name: string;
+  label: string;
+  value: number;
+  min: number;
+  onChange: (value: number) => void;
+}) {
+  return (
+    <label className="grid gap-2 text-sm font-semibold">
+      {label}
+      <Input name={name} type="number" min={min} value={value} onChange={(event) => onChange(Number(event.target.value))} />
+    </label>
+  );
+}
+
+function getPublishErrorFieldName(error?: string) {
+  return {
+    "请填写房源标题。": "title",
+    "请填写房源区域。": "area",
+    "请选择可入住日期。": "availableFrom",
+    "请选择最晚退租日期。": "availableTo",
+    "最晚退租日期必须晚于可入住日期。": "availableTo",
+    "请填写有效卧室数。": "beds",
+    "请填写有效卫浴数。": "baths",
+    "请填写通勤说明。": "commute",
+    "请填写交通说明。": "transit",
+    "请填写有效月租。": "price",
+    "请填写有效原价。": "originalPrice",
+    "请至少选择一项设施。": "tags",
+    "请确认房东知情声明。": "landlordAware"
+  }[error ?? ""];
+}
+
+function PublishReviewItem({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-md border bg-secondary p-3">
+      <div className="text-xs font-bold text-muted-foreground">{label}</div>
+      <div className="mt-1 break-words text-sm font-extrabold text-foreground">{value}</div>
+    </div>
+  );
+}

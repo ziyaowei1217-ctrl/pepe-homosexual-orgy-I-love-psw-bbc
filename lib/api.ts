@@ -67,21 +67,6 @@ export type ApiRoommate = {
   archivedAt?: string | null;
 };
 
-export type ApiGroup = {
-  id: string;
-  name: string;
-  budget: string;
-  members: ApiRoommate[];
-};
-
-export type ApiTrip = {
-  id: string;
-  listingId: string;
-  title: string;
-  amount: number;
-  status: string;
-};
-
 export type ApiTrustQueue = {
   id: string;
   label: string;
@@ -274,18 +259,6 @@ export type ApiDealThread = {
   viewingRequests: ApiViewingRequest[];
   createdAt: string;
   updatedAt: string;
-};
-
-export type CreateDealThreadInput = {
-  listingId: string;
-  dealRoomId?: string;
-};
-
-export type CreateViewingRequestInput = {
-  timeLabel: string;
-  iso: string;
-  mode: "in-person" | "video";
-  participantNames: string[];
 };
 
 export async function apiGet<T>(path: string, token?: string) {

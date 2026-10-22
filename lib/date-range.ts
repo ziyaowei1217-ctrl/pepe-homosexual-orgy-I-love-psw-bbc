@@ -16,11 +16,6 @@ export type CalendarMonth = {
 };
 
 const dayMs = 24 * 60 * 60 * 1000;
-const monthFormatter = new Intl.DateTimeFormat("zh-CN", {
-  month: "long",
-  year: "numeric",
-  timeZone: "UTC"
-});
 
 export function selectDateRange(range: DateRange, isoDate: string): DateRange {
   if (!range.checkIn || range.checkOut || compareIsoDates(isoDate, range.checkIn) <= 0) {
@@ -59,13 +54,6 @@ export function formatDateRangeLabel(range: DateRange) {
   return `${formatShortDate(range.checkIn)} - ${formatShortDate(range.checkOut)} · ${countNights(range)} 天`;
 }
 
-export function buildCalendarMonths(startIso: string, count: number): CalendarMonth[] {
-  const start = parseIsoDate(startIso || toIsoDate(new Date()));
-  const firstMonth = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), 1));
-
-  return Array.from({ length: count }, (_, index) => buildCalendarMonth(addMonths(firstMonth, index)));
-}
-
 export function addDays(isoDate: string, days: number) {
   const date = parseIsoDate(isoDate);
   date.setUTCDate(date.getUTCDate() + days);
@@ -75,40 +63,6 @@ export function addDays(isoDate: string, days: number) {
 
 export function compareIsoDates(left: string, right: string) {
   return parseIsoDate(left).getTime() - parseIsoDate(right).getTime();
-}
-
-function buildCalendarMonth(monthStart: Date): CalendarMonth {
-  const year = monthStart.getUTCFullYear();
-  const month = monthStart.getUTCMonth();
-  const firstDay = monthStart.getUTCDay();
-  const daysInMonth = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
-  const leadingDays = firstDay === 0 ? 6 : firstDay - 1;
-  const days: CalendarDay[] = [];
-
-  for (let offset = leadingDays; offset > 0; offset -= 1) {
-    const date = new Date(Date.UTC(year, month, 1 - offset));
-    days.push({ iso: toIsoDate(date), day: date.getUTCDate(), inCurrentMonth: false });
-  }
-
-  for (let day = 1; day <= daysInMonth; day += 1) {
-    const date = new Date(Date.UTC(year, month, day));
-    days.push({ iso: toIsoDate(date), day, inCurrentMonth: true });
-  }
-
-  for (let nextDay = 1; days.length % 7 !== 0; nextDay += 1) {
-    const date = new Date(Date.UTC(year, month + 1, nextDay));
-    days.push({ iso: toIsoDate(date), day: date.getUTCDate(), inCurrentMonth: false });
-  }
-
-  return {
-    key: `${year}-${String(month + 1).padStart(2, "0")}`,
-    label: monthFormatter.format(monthStart),
-    days
-  };
-}
-
-function addMonths(date: Date, months: number) {
-  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + months, 1));
 }
 
 function parseIsoDate(isoDate: string) {

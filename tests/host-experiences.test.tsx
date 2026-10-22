@@ -11,7 +11,7 @@ import {
   HostListingEditorExperience,
   HostListingsExperience
 } from "../components/marketplace/host-experiences";
-import { PublishingFlow } from "../components/sublet-app";
+import { PublishingFlow } from "../components/publishing-flow";
 import { writeStoredAuthSession } from "../lib/auth-session";
 
 afterEach(() => {

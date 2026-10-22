@@ -6,7 +6,8 @@ import TestRenderer, { act } from "./support/dom-test-renderer";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ListingMediaUploader } from "../components/listing-media-uploader";
-import { PublishScreen } from "../components/sublet-app";
+import { PublishingFlow } from "../components/publishing-flow";
+import { mapApiListingToPublishDraft } from "../lib/publish-listing";
 import type { ListingMediaSummary } from "../lib/listing-media";
 
 describe("ListingMediaUploader", () => {
@@ -83,9 +84,8 @@ describe("ListingMediaUploader", () => {
     let renderer!: TestRenderer.ReactTestRenderer;
     await act(async () => {
       renderer = TestRenderer.create(
-        <PublishScreen
-          isPublishing={false}
-          listings={[{
+        <PublishingFlow
+          initialDraft={mapApiListingToPublishDraft({
             id: "listing-1",
             title: "Westwood 主卧短租",
             area: "Los Angeles · Westwood",
@@ -102,11 +102,9 @@ describe("ListingMediaUploader", () => {
             tags: ["带家具", "Wi-Fi", "房东知情"],
             score: 4.8,
             status: "DRAFT"
-          }]}
-          user={{ id: "owner-1", email: "owner@example.edu", role: "USER" }}
-          publishAccess={{ status: "allowed", message: "" }}
-          editingListingId="listing-1"
-          onEditListing={() => undefined}
+          })}
+          isPublishing={false}
+          token=""
           onSave={vi.fn()}
         />
       );
@@ -144,14 +142,10 @@ describe("ListingMediaUploader", () => {
     let renderer!: TestRenderer.ReactTestRenderer;
     await act(async () => {
       renderer = TestRenderer.create(
-        <PublishScreen
+        <PublishingFlow
+          initialDraft={mapApiListingToPublishDraft(editableListing())}
           isPublishing={false}
           token="token-1"
-          listings={[editableListing()]}
-          user={{ id: "owner-1", email: "owner@example.edu", role: "USER" }}
-          publishAccess={{ status: "allowed", message: "" }}
-          editingListingId="listing-1"
-          onEditListing={() => undefined}
           onSave={onSave}
         />
       );
