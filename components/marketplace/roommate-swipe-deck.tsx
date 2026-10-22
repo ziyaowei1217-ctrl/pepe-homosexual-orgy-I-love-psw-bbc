@@ -208,7 +208,7 @@ export function RoommateSwipeDeck({ token, initial }: { token: string | null; in
               </div>
             ))}
           </div>
-          <div className="sticky bottom-[calc(5rem+env(safe-area-inset-bottom))] z-10 flex items-center justify-center gap-4 md:bottom-6">
+          <div className="sticky bottom-[calc(5rem+env(safe-area-inset-bottom))] z-10 flex items-center justify-center gap-4 md:bottom-6 lg:static">
             <button type="button" onClick={undo} disabled={!last} aria-label={undoButton} className={smallButton}><Undo2 className="size-5" aria-hidden="true" /></button>
             <button type="button" onClick={() => decide("PASS")} aria-label={`跳过 ${top.name}`} className="grid size-14 place-items-center rounded-full border-[1.5px] border-outline bg-surface text-ink hover:border-control-border active:scale-[0.97]"><X className="size-6" aria-hidden="true" /></button>
             <button type="button" onClick={() => decide("LATER")} aria-label={`稍后再看 ${top.name}`} className={smallButton}><Clock className="size-5" aria-hidden="true" /></button>
@@ -224,7 +224,7 @@ export function RoommateSwipeDeck({ token, initial }: { token: string | null; in
       )}
       {top ? <RoommateDetailPanel card={top} /> : null}
       {toast ? (
-        <div role="status" className="fixed bottom-[calc(9.5rem+env(safe-area-inset-bottom))] left-1/2 z-[70] flex w-max max-w-[calc(100vw-32px)] -translate-x-1/2 items-center gap-3 rounded-psw-md bg-toast-bg px-5 py-3 text-m-subhead text-on-toast shadow-menu sm:text-d-subhead md:bottom-24">
+        <div role="status" className="fixed bottom-[calc(9.5rem+env(safe-area-inset-bottom))] left-1/2 z-[70] flex w-max max-w-[calc(100vw-32px)] -translate-x-1/2 items-center gap-3 rounded-psw-md bg-toast-bg px-5 py-3 text-m-subhead text-on-toast shadow-menu sm:text-d-subhead md:bottom-24 lg:bottom-8">
           {toast.error ? <CircleAlert className="size-4 shrink-0 text-toast-danger" aria-hidden="true" /> : <Check className="size-4 shrink-0 text-toast-success" aria-hidden="true" />}
           <span className="min-w-0">{toast.text}</span>
           {toast.undo ? <button type="button" onClick={undo} className="tap-target shrink-0 font-semibold text-toast-action underline">撤回</button> : null}

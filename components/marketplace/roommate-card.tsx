@@ -43,8 +43,8 @@ export function RoommateCardFace({ card, priority, children }: { card: RoommateC
   ].filter((fact) => fact.value);
   return (
     <article className="overflow-hidden rounded-psw-xl bg-surface">
-      {/* Capped so the name and the deck's buttons stay near the first screen. */}
-      <RoommatePhoto card={card} priority={priority} className="max-h-[50dvh] lg:max-h-[calc(100dvh-26rem)]">{children}</RoommatePhoto>
+      {/* Full width but capped in height, so the name and the deck's buttons stay near the first screen. */}
+      <RoommatePhoto card={card} priority={priority} className="w-full max-h-[50dvh] lg:max-h-[calc(100dvh-32rem)]">{children}</RoommatePhoto>
       <div className="p-4 sm:p-5">
         <h2 className="text-m-title sm:text-d-title">{card.name}<span className="font-display">, {card.age}</span></h2>
         {card.school ? <p className="mt-0.5 text-m-subhead text-ink-secondary sm:text-d-subhead">{card.school}</p> : null}
@@ -57,7 +57,8 @@ export function RoommateCardFace({ card, priority, children }: { card: RoommateC
             ))}
           </ul>
         ) : null}
-        <NoteList items={card.reasons.slice(0, 2)} className="mt-3" />
+        {/* On large screens the detail panel beside the card lists the reasons. */}
+        <NoteList items={card.reasons.slice(0, 2)} className="mt-3 lg:hidden" />
       </div>
     </article>
   );
