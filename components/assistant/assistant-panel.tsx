@@ -96,7 +96,7 @@ export function AssistantPanel({ token, onClose }: { token: string | null; onClo
 
         {token ? (
           <form onSubmit={submit} className="shrink-0 border-t border-line-strong p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-            <div className="flex items-end gap-2 rounded-[22px] border border-line-strong bg-surface-muted p-2 pl-4">
+            <div className="flex items-end gap-2 rounded-[22px] border border-line-strong bg-surface-muted p-2 pl-4 focus-within:border-primary">
               <textarea
                 value={question}
                 onChange={(event) => setQuestion(event.target.value)}
@@ -111,7 +111,7 @@ export function AssistantPanel({ token, onClose }: { token: string | null; onClo
                 maxLength={4000}
                 placeholder="输入问题…"
                 aria-label="问 AI 助手"
-                className="min-h-9 min-w-0 flex-1 resize-none bg-transparent py-1.5 text-base outline-none sm:text-sm"
+                className="min-h-9 min-w-0 flex-1 resize-none bg-transparent py-1.5 text-base outline-none focus-visible:shadow-none focus-visible:outline-none sm:text-sm"
               />
               <button
                 type="submit"
@@ -166,7 +166,7 @@ function ListingResults({ event, savedIds, onToggleSave, onLeave }: {
   if (!event.listings.length) return null;
   return (
     <div>
-      <div className="-mx-4 flex snap-x gap-3 overflow-x-auto px-4 py-1 sm:-mx-5 sm:px-5">
+      <div className="-mx-4 flex snap-x scroll-px-4 gap-3 overflow-x-auto px-4 py-1 sm:-mx-5 sm:scroll-px-5 sm:px-5">
         {event.listings.map((listing) => (
           <ListingCard
             key={listing.id}
