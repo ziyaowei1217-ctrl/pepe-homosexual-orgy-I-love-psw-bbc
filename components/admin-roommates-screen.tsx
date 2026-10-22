@@ -220,7 +220,7 @@ export function AdminRoommatesScreen({
                 </Badge>
               </div>
               <div className="mt-3 flex flex-wrap gap-2 text-xs font-bold text-primary-text">
-                <span>基础匹配度 {profile.match}%</span>
+                <span>排序权重 {profile.match}</span>
                 <span>{profile.budget}</span>
                 <span>{profile.commute}</span>
               </div>
@@ -246,7 +246,7 @@ export function AdminRoommatesScreen({
               onChange={(age) => setDraft((current) => ({ ...current, age: Number(age) || current.age }))}
             />
             <AdminRoommateInput
-              label="基础匹配度"
+              label="排序权重"
               type="number"
               value={String(draft.match)}
               onChange={(match) => setDraft((current) => ({ ...current, match: Math.max(0, Math.min(100, Number(match) || current.match)) }))}

@@ -50,8 +50,8 @@ Each entry briefly notes what the file contributes or what changed in the final 
 - `api/src/prisma/prisma.module.ts` — NestJS backend source file for API modules, services, controllers, auth, seed data, or launch workflows.
 - `api/src/prisma/prisma.service.ts` — NestJS backend source file for API modules, services, controllers, auth, seed data, or launch workflows.
 - `api/src/roommates/admin-roommates.controller.ts` — NestJS backend source file for API modules, services, controllers, auth, seed data, or launch workflows.
-- `api/src/roommates/dto.ts` — API validation for roommate deck query parameters, including multi-preference and strategy inputs.
-- `api/src/roommates/matching.ts` — Core roommate matching engine: compatibility dimensions, ranking strategy, recommendation actions, confidence, diversity, and exploration scoring.
+- `api/src/roommates/dto.ts` — API validation for the roommate deck query (limit only) and the admin roommate card payloads.
+- `api/src/roommates/matching.ts` — Roommate matching engine: two-sided hard filters, weighted feature scores, learning from swipes, ranking, diversity and the card copy.
 - `api/src/roommates/roommates.controller.ts` — NestJS backend source file for API modules, services, controllers, auth, seed data, or launch workflows.
 - `api/src/roommates/roommates.module.ts` — NestJS backend source file for API modules, services, controllers, auth, seed data, or launch workflows.
 - `api/src/roommates/roommates.service.ts` — NestJS backend source file for API modules, services, controllers, auth, seed data, or launch workflows.
@@ -82,7 +82,7 @@ Each entry briefly notes what the file contributes or what changed in the final 
 - `api/test/marketplace-api.e2e.spec.ts` — Backend automated test covering API, service, validation, launch-readiness, or workflow behavior.
 - `api/test/match-transaction-flow.spec.ts` — Backend automated test covering API, service, validation, launch-readiness, or workflow behavior.
 - `api/test/minimal-database-schema.spec.ts` — Backend automated test covering API, service, validation, launch-readiness, or workflow behavior.
-- `api/test/roommate-matching.spec.ts` — Backend tests covering deck ranking, multi-preference matching, discovery strategy, and pass/like/later recommendations.
+- `api/test/roommate-matching.spec.ts` — Backend tests for the matching engine: hard filters, two-sided scores, explanations, learning and deck order.
 - `api/test/roommates-admin.spec.ts` — Backend automated test covering API, service, validation, launch-readiness, or workflow behavior.
 - `api/test/seed-backed-read-endpoints.spec.ts` — Backend automated test covering API, service, validation, launch-readiness, or workflow behavior.
 - `api/test/support/launch-prisma-mock.ts` — Backend automated test covering API, service, validation, launch-readiness, or workflow behavior.
@@ -150,7 +150,7 @@ Each entry briefly notes what the file contributes or what changed in the final 
 - `eslint.config.mjs` — Tooling/configuration file for TypeScript, Next.js, Tailwind, ESLint, Vitest, or UI components.
 - `gemini-code-1780982196644.html` — Original/reference HTML artifact retained for project context.
 - `lib/api-status.ts` — Frontend utility or domain logic module used by app state, routing, matching, listings, messages, or workflow behavior.
-- `lib/api.ts` — Shared frontend API types for roommate dimensions, recommendations, ranking signals, and deck discovery metadata.
+- `lib/api.ts` — Shared frontend API client and response types (roommate deck types live in `lib/roommate-matching.ts`).
 - `lib/app-routes.ts` — Frontend utility or domain logic module used by app state, routing, matching, listings, messages, or workflow behavior.
 - `lib/auth-session.ts` — Frontend utility or domain logic module used by app state, routing, matching, listings, messages, or workflow behavior.
 - `lib/date-range.ts` — Frontend utility or domain logic module used by app state, routing, matching, listings, messages, or workflow behavior.
@@ -164,11 +164,8 @@ Each entry briefly notes what the file contributes or what changed in the final 
 - `lib/message-inbox.ts` — Frontend utility or domain logic module used by app state, routing, matching, listings, messages, or workflow behavior.
 - `lib/notification-center.ts` — Frontend utility or domain logic module used by app state, routing, matching, listings, messages, or workflow behavior.
 - `lib/price-filter.ts` — Frontend utility or domain logic module used by app state, routing, matching, listings, messages, or workflow behavior.
-- `lib/roommate-compatibility.ts` — Frontend compatibility helpers aligned with backend dimensions, local fallback scoring, recommendation, and ranking metadata.
-- `lib/roommate-deck-client.ts` — Client helper for building roommate deck API requests with full school/hobby preference lists.
 - `lib/roommate-dm.ts` — Frontend utility or domain logic module used by app state, routing, matching, listings, messages, or workflow behavior.
 - `lib/roommate-match-flow.ts` — Frontend utility or domain logic module used by app state, routing, matching, listings, messages, or workflow behavior.
-- `lib/roommate-preference-storage.ts` — Frontend utility or domain logic module used by app state, routing, matching, listings, messages, or workflow behavior.
 - `lib/roommate-preferences.ts` — Frontend utility or domain logic module used by app state, routing, matching, listings, messages, or workflow behavior.
 - `lib/roommate-queue.ts` — Frontend utility or domain logic module used by app state, routing, matching, listings, messages, or workflow behavior.
 - `lib/search-insights.ts` — Frontend utility or domain logic module used by app state, routing, matching, listings, messages, or workflow behavior.
@@ -195,8 +192,6 @@ Each entry briefly notes what the file contributes or what changed in the final 
 - `tests/message-inbox.test.ts` — Frontend/unit test validating UI helpers, domain logic, storage behavior, or workflow utilities.
 - `tests/notification-center.test.ts` — Frontend/unit test validating UI helpers, domain logic, storage behavior, or workflow utilities.
 - `tests/price-filter.test.ts` — Frontend/unit test validating UI helpers, domain logic, storage behavior, or workflow utilities.
-- `tests/roommate-compatibility.test.ts` — Frontend helper tests for local scoring, dimensions, recommendation, and ranking metadata.
-- `tests/roommate-deck-client.test.ts` — Frontend tests for deck URL construction, hydration, action targeting, and display score behavior.
 - `tests/roommate-dm.test.ts` — Frontend/unit test validating UI helpers, domain logic, storage behavior, or workflow utilities.
 - `tests/roommate-match-flow.test.ts` — Frontend/unit test validating UI helpers, domain logic, storage behavior, or workflow utilities.
 - `tests/roommate-preferences.test.ts` — Frontend/unit test validating UI helpers, domain logic, storage behavior, or workflow utilities.

@@ -1,6 +1,7 @@
 import { Transform } from "class-transformer";
 import {
   ArrayMaxSize,
+  ArrayUnique,
   IsArray,
   IsDateString,
   IsDefined,
@@ -16,8 +17,9 @@ import {
   ValidateIf
 } from "class-validator";
 
+import { roommateCodes } from "../roommates/roommate-values";
+
 const profileRoles = ["renter", "lister", "both"] as const;
-const roomTypes = ["private_room", "shared_room", "entire_place"] as const;
 const roommateStatuses = ["active", "hidden", "matched"] as const;
 
 const maxShortTextLength = 140;
@@ -28,6 +30,11 @@ const maxRoommateAge = 80;
 
 function Trim() {
   return Transform(({ value }) => (typeof value === "string" ? value.trim() : value));
+}
+
+/** Optional, but null is rejected because the column is not nullable. */
+function NotNull() {
+  return ValidateIf((_object, value) => value !== undefined);
 }
 
 function TrimStringArray() {
@@ -65,7 +72,7 @@ export class UpdateProfileDto {
   @MaxLength(maxShortTextLength)
   city?: string | null;
 
-  @ValidateIf((_object, value) => value !== undefined)
+  @NotNull()
   @IsIn(profileRoles)
   role?: string;
 
@@ -126,7 +133,7 @@ class RoommateProfileFieldsDto {
   @IsDateString()
   moveOutDate?: string;
 
-  @IsOptional()
+  @NotNull()
   @TrimStringArray()
   @IsArray()
   @ArrayMaxSize(maxArrayItems)
@@ -136,43 +143,43 @@ class RoommateProfileFieldsDto {
   preferredNeighborhoods?: string[];
 
   @IsOptional()
-  @IsIn(roomTypes)
+  @IsIn(roommateCodes("roomType"))
   roomType?: string;
 
   @IsOptional()
-  @Trim()
-  @IsString()
-  @IsNotEmpty()
-  @MaxLength(maxShortTextLength)
+  @IsIn(roommateCodes("cleanliness"))
   cleanliness?: string;
 
   @IsOptional()
-  @Trim()
-  @IsString()
-  @IsNotEmpty()
-  @MaxLength(maxShortTextLength)
+  @IsIn(roommateCodes("sleepSchedule"))
   sleepSchedule?: string;
 
   @IsOptional()
-  @Trim()
-  @IsString()
-  @IsNotEmpty()
-  @MaxLength(maxShortTextLength)
+  @IsIn(roommateCodes("smoking"))
   smoking?: string;
 
   @IsOptional()
-  @Trim()
-  @IsString()
-  @IsNotEmpty()
-  @MaxLength(maxShortTextLength)
+  @IsIn(roommateCodes("pets"))
   pets?: string;
 
   @IsOptional()
-  @Trim()
-  @IsString()
-  @IsNotEmpty()
-  @MaxLength(maxShortTextLength)
+  @IsIn(roommateCodes("guests"))
   guests?: string;
+
+  @IsOptional()
+  @IsIn(roommateCodes("gender"))
+  gender?: string;
+
+  @NotNull()
+  @IsIn(roommateCodes("genderPreference"))
+  genderPreference?: string;
+
+  @NotNull()
+  @IsArray()
+  @ArrayMaxSize(4)
+  @ArrayUnique()
+  @IsIn(roommateCodes("dealbreakers"), { each: true })
+  dealbreakers?: string[];
 
   @IsOptional()
   @Trim()

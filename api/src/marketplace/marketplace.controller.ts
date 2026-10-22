@@ -70,6 +70,12 @@ export class RoommateProfilesController {
   }
 
   @UseGuards(AuthGuard)
+  @Get("me")
+  getMine(@Req() request: AuthenticatedRequest) {
+    return this.marketplace.getMyRoommateProfile(request.user.id, request.user.email);
+  }
+
+  @UseGuards(AuthGuard)
   @Post()
   create(@Req() request: AuthenticatedRequest, @Body(createRoommateProfileBodyPipe) dto: CreateRoommateProfileDto) {
     return this.marketplace.createRoommateProfile(request.user.id, request.user.email, dto);

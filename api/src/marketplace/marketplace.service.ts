@@ -1,8 +1,10 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from "@nestjs/common";
-import { Prisma } from "@prisma/client";
+import { Prisma, Profile, RoommateMatchingProfile } from "@prisma/client";
 
 import { parseStrictDate } from "../http/strict-date";
 import { PrismaService } from "../prisma/prisma.service";
+import { dateOnly } from "../roommates/matching";
+import { roommateCode, roommateLabel } from "../roommates/roommate-values";
 import { CreateRoommateProfileDto, UpdateProfileDto, UpdateRoommateProfileDto } from "./dto";
 
 @Injectable()
@@ -45,6 +47,45 @@ export class MarketplaceService {
     });
   }
 
+  async getMyRoommateProfile(ownerId: string, email: string) {
+    const [profile, card] = await Promise.all([
+      this.prisma.profile.findUnique({ where: { email } }),
+      this.prisma.roommateProfile.findUnique({ where: { ownerId }, select: { id: true, age: true } })
+    ]);
+    const matching = profile
+      ? await this.prisma.roommateMatchingProfile.findFirst({ where: { userId: profile.id }, orderBy: { updatedAt: "desc" } })
+      : null;
+    if (!profile || !matching) return { profile: null };
+
+    return {
+      profile: {
+        id: matching.id,
+        cardId: card?.id ?? null,
+        displayName: profile.displayName,
+        age: card?.age ?? null,
+        gender: matching.gender,
+        genderPreference: matching.genderPreference,
+        school: matching.school,
+        city: matching.city,
+        budgetMin: matching.budgetMin,
+        budgetMax: matching.budgetMax,
+        moveInDate: dateOnly(matching.moveInDate),
+        moveOutDate: dateOnly(matching.moveOutDate),
+        preferredNeighborhoods: matching.preferredNeighborhoods,
+        roomType: matching.roomType,
+        sleepSchedule: roommateCode("sleepSchedule", matching.sleepSchedule),
+        cleanliness: roommateCode("cleanliness", matching.cleanliness),
+        guests: roommateCode("guests", matching.guests),
+        smoking: roommateCode("smoking", matching.smoking),
+        pets: roommateCode("pets", matching.pets),
+        dealbreakers: matching.dealbreakers,
+        intro: matching.intro,
+        lookingFor: matching.lookingFor,
+        status: matching.status
+      }
+    };
+  }
+
   findRoommateProfiles(query: { city?: string; school?: string }) {
     return this.prisma.roommateMatchingProfile.findMany({
       where: definedData({
@@ -52,6 +93,8 @@ export class MarketplaceService {
         school: query.school,
         status: "active"
       }),
+      // Public route: the owner's profile id and the private matching preferences stay out.
+      omit: { userId: true, gender: true, genderPreference: true, dealbreakers: true },
       orderBy: { updatedAt: "desc" }
     });
   }
@@ -74,7 +117,12 @@ export class MarketplaceService {
         dto.budgetMin !== undefined ? dto.budgetMin : existing.budgetMin,
         dto.budgetMax !== undefined ? dto.budgetMax : existing.budgetMax
       );
-      this.assertDateRange(dateValue(dto.moveInDate, "moveInDate") ?? existing.moveInDate, dateValue(dto.moveOutDate, "moveOutDate") ?? existing.moveOutDate);
+      const moveInDate = dateValue(dto.moveInDate, "moveInDate");
+      const moveOutDate = dateValue(dto.moveOutDate, "moveOutDate");
+      this.assertDateRange(
+        moveInDate !== undefined ? moveInDate : existing.moveInDate,
+        moveOutDate !== undefined ? moveOutDate : existing.moveOutDate
+      );
 
       const matchingProfile = await transaction.roommateMatchingProfile.update({
         where: { id },
@@ -109,18 +157,8 @@ export class MarketplaceService {
   private async projectOwnedRoommateProfile(
     transaction: Pick<Prisma.TransactionClient, "roommateProfile">,
     ownerId: string,
-    profile: { email: string; displayName: string | null; avatarUrl: string | null; role: string; city: string | null; school: string | null },
-    matchingProfile: {
-      school: string | null;
-      city: string | null;
-      budgetMin: number | null;
-      budgetMax: number | null;
-      roomType: string | null;
-      cleanliness: string | null;
-      sleepSchedule: string | null;
-      pets: string | null;
-      status: string;
-    },
+    profile: ProjectedProfile,
+    matchingProfile: RoommateMatchingProfile,
     age?: number
   ) {
     const data = ownedRoommateProfileData(profile, matchingProfile, age);
@@ -135,6 +173,8 @@ export class MarketplaceService {
     });
   }
 }
+
+type ProjectedProfile = Pick<Profile, "displayName" | "avatarUrl" | "city" | "school">;
 
 function roommateProfileData(userId: string, dto: CreateRoommateProfileDto) {
   return {
@@ -159,50 +199,42 @@ function roommateProfileUpdateData(dto: UpdateRoommateProfileDto | CreateRoommat
     smoking: dto.smoking,
     pets: dto.pets,
     guests: dto.guests,
+    gender: dto.gender,
+    genderPreference: dto.genderPreference,
+    dealbreakers: dto.dealbreakers,
     intro: dto.intro,
     lookingFor: dto.lookingFor,
     status: "status" in dto ? dto.status : undefined
   });
 }
 
-function dateValue(value: string | undefined, field: string) {
-  return value ? parseStrictDate(value, field) : undefined;
+/** null clears the date; undefined leaves it unchanged. */
+function dateValue(value: string | null | undefined, field: string) {
+  return value == null ? value : parseStrictDate(value, field);
 }
 
 function definedData<T extends Record<string, unknown>>(data: T) {
   return Object.fromEntries(Object.entries(data).filter(([, value]) => value !== undefined));
 }
 
-function ownedRoommateProfileData(
-  profile: { email: string; displayName: string | null; avatarUrl: string | null; role: string; city: string | null; school: string | null },
-  matchingProfile: {
-    school: string | null;
-    city: string | null;
-    budgetMin: number | null;
-    budgetMax: number | null;
-    roomType: string | null;
-    cleanliness: string | null;
-    sleepSchedule: string | null;
-    pets: string | null;
-    status: string;
-  },
-  age?: number
-) {
-  const atSignIndex = profile.email.indexOf("@");
-  const name = profile.displayName ?? (atSignIndex > 0 ? profile.email.slice(0, atSignIndex) : profile.email);
-  const tags = [matchingProfile.school ?? profile.school, matchingProfile.roomType, matchingProfile.cleanliness, matchingProfile.sleepSchedule, matchingProfile.pets]
-    .filter((value): value is string => Boolean(value))
-    .slice(0, 8);
+const cardTagFields = ["sleepSchedule", "cleanliness", "guests", "smoking", "pets", "roomType"] as const;
+
+function ownedRoommateProfileData(profile: ProjectedProfile, matchingProfile: RoommateMatchingProfile, age?: number) {
+  const name = profile.displayName ?? "室友";
+  const tags = cardTagFields
+    .map((field) => roommateLabel(field, matchingProfile[field]))
+    .filter((label): label is string => label !== null);
 
   return {
     name,
     ...(age !== undefined ? { age } : {}),
-    role: profile.role,
+    role: matchingProfile.school ?? profile.school ?? "",
     image: profile.avatarUrl ?? `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(name)}`,
     match: 0,
     budget: formatBudget(matchingProfile.budgetMin, matchingProfile.budgetMax),
     commute: matchingProfile.city ?? profile.city ?? "Flexible",
-    tags: tags.length > 0 ? tags : ["roommate search"],
+    tags: tags.length > 0 ? tags : ["找室友"],
+    matchingProfileId: matchingProfile.id,
     ...ownedRoommateProfileStatus(matchingProfile.status)
   };
 }
