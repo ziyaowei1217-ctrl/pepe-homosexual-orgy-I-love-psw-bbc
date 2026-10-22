@@ -1,7 +1,7 @@
-import { listingSimilarity, type ListingMatch } from "./listing-match";
-import { earliestListingDate, localDate } from "./listing-stay";
+import { interestSimilarity, listingSimilarity, type ListingMatch } from "./listing-match";
+import { isListingBookable, localDate } from "./listing-stay";
 import type { PreviewListing } from "./preview-data";
-import { defaultSearch, searchCatalog, type SearchState } from "./search-state";
+import { searchCatalog, type SearchState } from "./search-state";
 
 /**
  * Listing feeds: 为你推荐, 最近浏览 and 新上架 on the home page, 相似房源 on a listing page.
@@ -10,17 +10,11 @@ import { defaultSearch, searchCatalog, type SearchState } from "./search-state";
  */
 export type FeedItem = { listing: PreviewListing; match: ListingMatch | null };
 
-export type HomeFeeds = {
-  forYou: FeedItem[];
-  /** False until the renter has preferences, a search, saved homes or viewed homes; the row is then 精选房源. */
-  personalized: boolean;
-  recent: FeedItem[];
-  fresh: FeedItem[];
-};
-
 const dayMs = 86_400_000;
-/** A listing counts as new for two weeks after it went live, and its freshness halves over the same period. */
+/** A listing counts as new for two weeks after it was listed, and its freshness halves over the same period. */
 const freshDays = 14;
+/** Below this a same-city listing shares little more than the city (see listingSimilarity's weights). */
+const minSimilarity = 0.3;
 
 /** Homes the renter opened or saved say the most about taste; the latest ten of each are enough. */
 export function interestListings(listings: readonly PreviewListing[], savedIds: readonly string[], viewedIds: readonly string[]) {
@@ -29,64 +23,59 @@ export function interestListings(listings: readonly PreviewListing[], savedIds: 
   return [...ids].flatMap((id) => byId.get(id) ?? []);
 }
 
-export function buildHomeFeeds(listings: PreviewListing[], { matches, interest, savedIds, viewedIds, search, now }: {
-  /** Match per listing id (components/marketplace/use-listing-matches.ts, with the last search applied). */
+/**
+ * With a last search, 为你推荐 and 新上架 continue it: only its results, scored by `matches` for that search.
+ * Homes saved or opened before the page loaded (`seenIds`) are not suggested again.
+ */
+export function buildHomeFeeds(listings: readonly PreviewListing[], { matches, interest, seenIds, viewedIds, search, now }: {
+  /** Match per listing id (components/marketplace/use-listing-matches.ts, for `search`). */
   matches: ReadonlyMap<string, ListingMatch | null>;
-  /** interestListings(): viewed homes first, then saved ones. */
+  /** interestListings() as the page loaded. */
   interest: readonly PreviewListing[];
-  savedIds: readonly string[];
-  /** Newest first. */
+  seenIds: ReadonlySet<string>;
+  /** Newest first, as stored now: 最近浏览 follows 清除记录 at once. */
   viewedIds: readonly string[];
   search: SearchState | null;
   now: number;
-}): HomeFeeds {
+}) {
   const today = localDate(new Date(now));
-  const seen = new Set([...savedIds, ...viewedIds]);
   const withMatch = (listing: PreviewListing): FeedItem => ({ listing, match: matches.get(listing.id) ?? null });
-  const unseen = listings.filter((listing) => !seen.has(listing.id) && isBookable(listing, today));
+  const unseen = listings.filter((listing) => !seenIds.has(listing.id) && isListingBookable(listing, today));
+  const results = search ? new Set(searchCatalog(unseen, search, Number.MAX_SAFE_INTEGER).items) : null;
+  const pool = results ? unseen.filter((listing) => results.has(listing)) : unseen;
 
-  // A city search is a hard limit, as on the search page; the rest of the search only shapes the match score.
-  const inPlace = search?.query.trim() ? new Set(searchCatalog(unseen, { ...defaultSearch, query: search.query }, Number.MAX_SAFE_INTEGER).items) : null;
-  const pool = inPlace?.size ? unseen.filter((listing) => inPlace.has(listing)) : unseen;
   const scored = pool.map((listing) => {
     const item = withMatch(listing);
     // Without stated preferences there is no match score, but saved and viewed homes still point the way.
-    const fit = item.match ? item.match.score / 100
-      : interest.length ? Math.max(...interest.map((home) => listingSimilarity(listing, home))) : 0.5;
+    const fit = item.match ? item.match.score / 100 : interest.length ? interestSimilarity(listing, interest) : 0.5;
     return { ...item, relevance: 0.8 * fit + 0.2 * 0.5 ** (ageInDays(listing, now) / freshDays) };
   });
   const forYou = diversify(scored, 8);
   const shown = new Set(forYou.map((item) => item.listing.id));
-  const fresh = (search ? searchCatalog(unseen, search, Number.MAX_SAFE_INTEGER).items : unseen)
-    .filter((listing) => !shown.has(listing.id) && ageInDays(listing, now) <= freshDays)
-    .sort((left, right) => ageInDays(left, now) - ageInDays(right, now))
-    .slice(0, 4)
-    .map(withMatch);
-  const viewed = new Set(viewedIds);
+  const byId = new Map(listings.map((listing) => [listing.id, listing]));
 
   return {
     forYou,
-    personalized: interest.length > 0 || scored.some((item) => item.match),
-    // interestListings keeps viewed homes first, newest first.
-    recent: interest.filter((listing) => viewed.has(listing.id)).slice(0, 4).map(withMatch),
-    fresh
+    /** False until there is a search, a match, or a saved or viewed home to go on; the row is then 精选房源. */
+    personalized: Boolean(search) || interest.length > 0 || scored.some((item) => item.match),
+    recent: viewedIds.flatMap((id) => byId.get(id) ?? []).slice(0, 4).map(withMatch),
+    fresh: pool
+      .filter((listing) => !shown.has(listing.id) && ageInDays(listing, now) <= freshDays)
+      .sort((left, right) => ageInDays(left, now) - ageInDays(right, now))
+      .slice(0, 4)
+      .map(withMatch)
   };
 }
 
-/** 相似房源: bookable listings most like the open one; listingSimilarity is 0 across cities, so those drop out. */
-export function similarListings(target: PreviewListing, listings: readonly PreviewListing[], { limit = 4, today = localDate() } = {}) {
+/** 相似房源: up to four bookable listings in the same city that are close in neighborhood, rent, rooms or tags. */
+export function similarListings(target: PreviewListing, listings: readonly PreviewListing[], today = localDate()) {
   return listings
-    .filter((listing) => listing.id !== target.id && isBookable(listing, today))
+    .filter((listing) => listing.id !== target.id && isListingBookable(listing, today))
     .map((listing) => ({ listing, similarity: listingSimilarity(target, listing) }))
-    .filter(({ similarity }) => similarity > 0)
+    .filter(({ similarity }) => similarity >= minSimilarity)
     .sort((left, right) => right.similarity - left.similarity)
-    .slice(0, limit)
+    .slice(0, 4)
     .map(({ listing }) => listing);
-}
-
-/** The same rule as the listing page: some dates are still open after today. */
-function isBookable(listing: PreviewListing, today: string) {
-  return Boolean(listing.availableFrom && listing.availableTo > earliestListingDate(listing, today));
 }
 
 function ageInDays(listing: PreviewListing, now: number) {

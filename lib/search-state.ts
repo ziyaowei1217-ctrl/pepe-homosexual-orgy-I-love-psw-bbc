@@ -63,8 +63,20 @@ export function searchDateError(moveIn: string, moveOut: string) {
   return "";
 }
 
-export function safeSearchReturn(value: string | null) {
-  return value === "/search" || value?.startsWith("/search?") ? value : "/search";
+const openedSearchKey = "sublet:last-search";
+
+/** Remembers, in this tab, the search a listing was opened from: its page links back there and scores the match as the card did. */
+export function rememberOpenedSearch(state: SearchState, listingId: string) {
+  try { sessionStorage.setItem(openedSearchKey, searchHref({ ...state, selected: listingId })); } catch { /* Browsing still works when storage is unavailable. */ }
+}
+
+export function openedSearchHref() {
+  try {
+    const value = sessionStorage.getItem(openedSearchKey);
+    return value === "/search" || value?.startsWith("/search?") ? value : "/search";
+  } catch {
+    return "/search";
+  }
 }
 
 function positiveNumber(value: string | null) {

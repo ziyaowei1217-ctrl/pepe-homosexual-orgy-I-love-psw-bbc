@@ -11,14 +11,14 @@ import { MatchPreferencesDialog } from "@/components/marketplace/match-preferenc
 import { useSavedListings } from "@/components/marketplace/saved-listings-provider";
 import { SearchFiltersDialog, type SearchFilterSection } from "@/components/marketplace/search-filters";
 import { SearchResultsMap } from "@/components/marketplace/search-results-map";
-import { useFeedSignals } from "@/components/marketplace/use-feed-signals";
 import { useListingMatches } from "@/components/marketplace/use-listing-matches";
 import { formatRangeLong } from "@/lib/date-format";
+import { rememberLastSearch } from "@/lib/feed-signals";
 import type { CatalogSort } from "@/lib/listing-catalog";
 import type { PreviewListing } from "@/lib/preview-data";
 import { listingHref } from "@/lib/listing-stay";
 import { describeRenterPreferences, hasRenterPreferences } from "@/lib/renter-preferences";
-import { defaultSearch, emptyFilters, parseSearchState, searchCatalog, searchDateError, searchHref, type SearchState } from "@/lib/search-state";
+import { defaultSearch, emptyFilters, parseSearchState, rememberOpenedSearch, searchCatalog, searchDateError, searchHref, type SearchState } from "@/lib/search-state";
 import { cn } from "@/lib/utils";
 
 export function SearchExperience({ listings, initialQuery, initialMoveIn, initialMoveOut, initialState }: {
@@ -40,10 +40,16 @@ export function SearchExperience({ listings, initialQuery, initialMoveIn, initia
   const activeId = hoveredId ?? state.selected;
   const activeListing = catalog.items.find((listing) => listing.id === activeId);
   const filterCount = state.amenities.length + Number(Boolean(state.priceMin || state.priceMax)) + Number(Boolean(state.beds));
-  const { rememberLastSearch } = useFeedSignals();
 
-  // The home page's 为你推荐 and 新上架 pick up from the last search.
-  useEffect(() => { rememberLastSearch(state); }, [rememberLastSearch, state]);
+  // The home page continues from the last search (lib/feed-signals.ts). Typing settles before it is kept, and a
+  // visit with no conditions leaves the previous search alone until the renter sets one here.
+  const searched = useRef(false);
+  useEffect(() => {
+    searched.current ||= Boolean(state.query.trim() || state.moveIn || state.moveOut || filterCount);
+    if (!searched.current) return;
+    const timer = window.setTimeout(() => rememberLastSearch(state), 600);
+    return () => window.clearTimeout(timer);
+  }, [filterCount, state]);
 
   useEffect(() => {
     // Read the address bar after commit, not during render: on a client navigation the router has not
@@ -107,7 +113,8 @@ export function SearchExperience({ listings, initialQuery, initialMoveIn, initia
   }
 
   function rememberSearch(id: string) {
-    try { sessionStorage.setItem("sublet:last-search", searchHref({ ...state, selected: id })); } catch { /* Browsing still works when storage is unavailable. */ }
+    rememberOpenedSearch(state, id);
+    if (searched.current) rememberLastSearch(state);
     selectListing(id);
   }
 

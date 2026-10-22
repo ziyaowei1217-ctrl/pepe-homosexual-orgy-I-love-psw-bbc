@@ -1,10 +1,9 @@
 "use client";
 
-import { useMemo, useSyncExternalStore } from "react";
-
 import { formatDateLong, formatRangeLong } from "./date-format";
 import { destinationMarket } from "./listing-match";
 import { dateOnly, localDate } from "./listing-stay";
+import { useLocalStore, writeLocalStore } from "./local-store";
 import { searchAmenities, type SearchState } from "./search-state";
 import { formatUsd } from "./stay-price";
 
@@ -29,7 +28,6 @@ export type RenterPreferences = {
 export const emptyRenterPreferences: RenterPreferences = { destination: "", budgetMax: 0, moveIn: "", moveOut: "", beds: 0, mustHave: [] };
 
 const storageKey = "sublet_renter_preferences_v1";
-const changedEvent = "sublet:renter-preferences-changed";
 
 /** A move-in saved months ago that has passed becomes today, as listing availability does (earliestListingDate). */
 export function normalizeRenterPreferences(value: unknown, today = localDate()): RenterPreferences {
@@ -90,44 +88,11 @@ export function describeRenterPreferences(preferences: RenterPreferences) {
 }
 
 export function writeRenterPreferences(preferences: RenterPreferences) {
-  try {
-    window.localStorage.setItem(storageKey, JSON.stringify(normalizeRenterPreferences(preferences)));
-  } catch {
-    // Private sessions may deny storage; matching then uses the current search only.
-  }
-  window.dispatchEvent(new Event(changedEvent));
+  writeLocalStore(storageKey, normalizeRenterPreferences(preferences));
 }
 
 export function useRenterPreferences(): [RenterPreferences, (preferences: RenterPreferences) => void] {
-  const raw = useSyncExternalStore(subscribe, readStored, () => null);
-  const preferences = useMemo(() => normalizeRenterPreferences(safelyParse(raw)), [raw]);
-  return [preferences, writeRenterPreferences];
-}
-
-function subscribe(onChange: () => void) {
-  window.addEventListener(changedEvent, onChange);
-  window.addEventListener("storage", onChange);
-  return () => {
-    window.removeEventListener(changedEvent, onChange);
-    window.removeEventListener("storage", onChange);
-  };
-}
-
-function readStored() {
-  try {
-    return window.localStorage.getItem(storageKey);
-  } catch {
-    return null;
-  }
-}
-
-function safelyParse(raw: string | null): unknown {
-  if (!raw) return null;
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return null;
-  }
+  return [useLocalStore(storageKey, normalizeRenterPreferences), writeRenterPreferences];
 }
 
 function wholeNumber(value: unknown, max: number) {

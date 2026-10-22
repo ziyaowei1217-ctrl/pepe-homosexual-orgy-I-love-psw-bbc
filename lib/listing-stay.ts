@@ -22,6 +22,11 @@ export function earliestListingDate(listing: Pick<Availability, "availableFrom">
   return [dateOnly(listing.availableFrom.slice(0, 10)), today].sort().at(-1)!;
 }
 
+/** Some dates after today are still open. */
+export function isListingBookable(listing: Availability, today = localDate()) {
+  return Boolean(listing.availableFrom && listing.availableTo > earliestListingDate(listing, today));
+}
+
 export function initialListingStay(listing: Availability, requested?: Partial<ListingStay>, today = localDate()): ListingStay {
   if (requested?.moveIn || requested?.moveOut) return { moveIn: dateOnly(requested.moveIn), moveOut: dateOnly(requested.moveOut) };
   return { moveIn: earliestListingDate(listing, today), moveOut: dateOnly(listing.availableTo.slice(0, 10)) };

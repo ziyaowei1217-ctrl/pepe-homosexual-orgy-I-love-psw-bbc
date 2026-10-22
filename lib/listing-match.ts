@@ -92,6 +92,11 @@ export function listingSimilarity(left: MatchableListing, right: MatchableListin
   return round2(0.35 * neighborhood + 0.35 * rent + 0.1 * bedrooms + 0.2 * (union ? shared / union : 0));
 }
 
+/** How close a listing is to the closest of the homes the renter saved or opened, not counting itself. */
+export function interestSimilarity(listing: MatchableListing, interest: readonly MatchableListing[]) {
+  return Math.max(0, ...interest.filter((item) => item.id !== listing.id).map((item) => listingSimilarity(listing, item)));
+}
+
 function createMatcher(preferences: RenterPreferences, context: MatchContext) {
   const destination = resolveDestination(preferences.destination);
   const interest = context.interest ?? [];
@@ -107,8 +112,7 @@ function createMatcher(preferences: RenterPreferences, context: MatchContext) {
     if (!stated.length) return null;
     const total = stated.reduce((sum, signal) => sum + signal.weight, 0);
     const score = (100 * stated.reduce((sum, signal) => sum + signal.weight * signal.fit, 0)) / total;
-    const others = interest.filter((item) => item.id !== listing.id);
-    const similarity = others.length ? Math.max(...others.map((item) => listingSimilarity(listing, item))) : 0;
+    const similarity = interestSimilarity(listing, interest);
     return {
       score: Math.min(100, Math.round(score + interestBonus * similarity)),
       reasons: [...stated.flatMap((signal) => signal.reason ?? []), ...(similarity >= 0.6 ? ["和你看过或收藏的房源相似"] : [])],

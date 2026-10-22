@@ -26,14 +26,14 @@ import { useSavedListings } from "@/components/marketplace/saved-listings-provid
 import { ListingPhotoGallery } from "@/components/marketplace/listing-photo-gallery";
 import { ListingStayDialog, ListingStayFields } from "@/components/marketplace/listing-stay-selector";
 import { MatchPreferencesDialog } from "@/components/marketplace/match-preferences-dialog";
-import { useFeedSignals } from "@/components/marketplace/use-feed-signals";
 import { useListingMatches } from "@/components/marketplace/use-listing-matches";
 import { formatDateLong, formatRangeLong } from "@/lib/date-format";
 import { defaultMapAttribution, getListingCoordinates, getMapTiles } from "@/lib/listing-map";
-import { applicationHref, earliestListingDate, initialListingStay, listingHref, listingStayError, type ListingStay } from "@/lib/listing-stay";
+import { rememberListingView } from "@/lib/feed-signals";
+import { applicationHref, earliestListingDate, initialListingStay, isListingBookable, listingHref, listingStayError, type ListingStay } from "@/lib/listing-stay";
 import type { PreviewListing } from "@/lib/preview-data";
 import { hasRenterPreferences } from "@/lib/renter-preferences";
-import { defaultSearch, parseSearchState, safeSearchReturn } from "@/lib/search-state";
+import { defaultSearch, openedSearchHref, parseSearchState } from "@/lib/search-state";
 import { formatStayLength, formatUsd, stayPrice } from "@/lib/stay-price";
 import { cn } from "@/lib/utils";
 
@@ -63,7 +63,7 @@ export function ListingDetailExperience({ listing, listings, initialStay }: { li
   const mapTiles = getMapTiles(getListingCoordinates(listing.area), 12, { width: 900, height: 340 });
   const mapAttribution = process.env.NEXT_PUBLIC_MAP_ATTRIBUTION ?? defaultMapAttribution;
   const earliestMoveIn = earliestListingDate(listing);
-  const bookable = Boolean(listing.availableFrom && listing.availableTo > earliestMoveIn);
+  const bookable = isListingBookable(listing);
   // One availability range everywhere on the page: from today or the listing's start, whichever is later.
   const availabilityLabel = bookable ? `${formatDateLong(earliestMoveIn)}起可入住` : "租期待确认";
   const availableRange = bookable ? formatRangeLong(earliestMoveIn, listing.availableTo) : "请联系房东确认";
@@ -82,13 +82,12 @@ export function ListingDetailExperience({ listing, listings, initialStay }: { li
   const { savedPreferences, savePreferences, matches } = useListingMatches(catalog, lastSearch);
   const match = matches.get(listing.id);
   const explained = match && (match.reasons.length || match.gaps.length) ? match : null;
-  const { viewListing } = useFeedSignals();
 
-  // Feeds the home page's 最近浏览 and the interest that matches rank against.
-  useEffect(() => { viewListing(listing.id); }, [listing.id, viewListing]);
+  // Feeds the home page's 最近浏览 and the saved-and-viewed interest that matches rank against.
+  useEffect(() => { rememberListingView(listing.id); }, [listing.id]);
 
   useEffect(() => {
-    try { setReturnHref(safeSearchReturn(sessionStorage.getItem("sublet:last-search"))); } catch { /* The search route remains available without storage. */ }
+    setReturnHref(openedSearchHref());
   }, []);
 
   useEffect(() => {

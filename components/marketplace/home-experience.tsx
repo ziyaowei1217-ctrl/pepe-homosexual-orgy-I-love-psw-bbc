@@ -19,7 +19,7 @@ const needs = ["带家具", "近地铁", "独卫", "宠物"] as const;
  * It is the page's only 夜墨 block, so the booking decision block stays special elsewhere.
  * `listings` is the whole catalog; the feeds (components/marketplace/listing-feeds.tsx) pick what to show.
  */
-export function HomeExperience({ listings, totalListings = listings.length, now = Date.now() }: { listings: PreviewListing[]; totalListings?: number; totalCities?: number; now?: number }) {
+export function HomeExperience({ listings, now = Date.now() }: { listings: PreviewListing[]; now?: number }) {
   const today = localDate();
   return <main className="bg-background">
     <section aria-labelledby="home-title" className="bg-ink-block text-on-dark">
@@ -62,7 +62,7 @@ export function HomeExperience({ listings, totalListings = listings.length, now 
         </div>
       </section>
 
-      <HomeFeeds listings={listings} totalListings={totalListings} now={now} />
+      <HomeFeeds listings={listings} now={now} />
 
       <section aria-labelledby="home-post" className="flex flex-col items-start gap-6 rounded-psw-2xl bg-primary-soft p-6 sm:flex-row sm:items-center sm:gap-10 sm:px-10 sm:py-8">
         <Wowo size={88} />

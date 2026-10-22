@@ -13,13 +13,11 @@ function home(id: string, area: string, overrides: Partial<PreviewListing> = {})
   return { ...base, id, title: id, area, price: 1800, beds: 1, tags: ["Wi-Fi"], availableFrom: "2026-10-01", availableTo: "2027-03-31", ...overrides };
 }
 
-function feeds(listings: PreviewListing[], options: Partial<Parameters<typeof buildHomeFeeds>[1]> = {}) {
-  const savedIds = options.savedIds ?? [];
-  const viewedIds = options.viewedIds ?? [];
+function feeds(listings: PreviewListing[], { savedIds = [], viewedIds = [], ...options }: Partial<Parameters<typeof buildHomeFeeds>[1]> & { savedIds?: string[] } = {}) {
   return buildHomeFeeds(listings, {
     matches: new Map(),
     interest: interestListings(listings, savedIds, viewedIds),
-    savedIds,
+    seenIds: new Set([...savedIds, ...viewedIds]),
     viewedIds,
     search: null,
     now,
@@ -72,14 +70,17 @@ describe("home feeds", () => {
     expect(ids(result.recent)).toEqual(["viewed"]);
   });
 
-  it("keeps 为你推荐 to the place last searched, and falls back to everything when nothing is there", () => {
+  it("continues the last search: only its results, place, dates and budget included", () => {
     const listings = [
       home("boston", "Boston · Fenway"),
-      home("austin", "Austin · West Campus", { listedAt: daysAgo(0) }),
-      home("seattle", "Seattle · Bellevue", { listedAt: daysAgo(0) })
+      home("boston-pricey", "Boston · Fenway", { price: 3000 }),
+      home("boston-short", "Boston · Fenway", { availableTo: "2026-12-01" }),
+      home("austin", "Austin · West Campus", { listedAt: daysAgo(0) })
     ];
-    expect(ids(feeds(listings, { search: { ...defaultSearch, query: "Boston", priceMax: 2400 } }).forYou)).toEqual(["boston"]);
-    expect(ids(feeds(listings, { search: { ...defaultSearch, query: "Denver" } }).forYou)).toHaveLength(3);
+    const search = { ...defaultSearch, query: "Boston", priceMax: 2400, moveIn: "2026-11-01", moveOut: "2027-01-15" };
+    const result = feeds(listings, { search });
+    expect(result.personalized).toBe(true);
+    expect(ids(result.forYou)).toEqual(["boston"]);
   });
 
   it("shows up to four viewed homes, newest first, skipping ones no longer listed", () => {
@@ -105,16 +106,17 @@ describe("home feeds", () => {
 });
 
 describe("similar listings", () => {
-  it("keeps to the same city, drops the open and unbookable listings, and puts the closest first", () => {
+  it("keeps to close homes in the same city, drops the open and unbookable listings, and puts the closest first", () => {
     const target = home("target", "Boston · Fenway");
     const result = similarListings(target, [
       target,
       home("far-rent", "Boston · Allston", { price: 3200, beds: 3, tags: ["门卫"] }),
+      home("only-city", "Boston · Allston", { price: 4000, beds: 2, tags: ["门卫"] }),
       home("twin", "Boston · Fenway"),
       home("ended", "Boston · Fenway", { availableTo: "2026-10-01" }),
       home("other-city", "Austin · West Campus"),
       home("near", "Boston · Allston")
-    ], { today: "2026-10-22" });
+    ], "2026-10-22");
     expect(result.map((listing) => listing.id)).toEqual(["twin", "near"]);
   });
 });
