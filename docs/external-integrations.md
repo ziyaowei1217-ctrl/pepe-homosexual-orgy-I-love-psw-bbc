@@ -160,6 +160,28 @@ same access token. PostgreSQL history is authoritative; Valkey provides cross-in
 shared rate limiting. Your proxy/load balancer must preserve WebSocket upgrades and forward the
 configured trusted proxy headers.
 
+## Optional: AI assistant
+
+The web server calls the Claude API (Anthropic) for the in-app assistant (find listings, compare them,
+draft a message to a host) and for 「AI 帮我写」 in the host listing form. Without a key both are
+hidden. Set the key on the **web** service at runtime; it is never a build argument or a
+`NEXT_PUBLIC_` variable:
+
+```text
+ANTHROPIC_API_KEY=...
+```
+
+- Requests go from the web server to `api.anthropic.com`; browsers only call `/api/assistant/*` on
+  the web origin.
+- Sent to Anthropic: the user's questions and the assistant's earlier answers from the same browser
+  tab, listing facts (title, area, rent, dates, commute, transit, amenities), saved listing ids and the
+  user id. No email address, name or inbox message. Prompts are not logged.
+- Limits: the web server asks `POST /api/v1/assistant/quota/:kind` before each model call. It counts
+  requests per user (chat 20 per 10 minutes and 100 per day; listing writer 10 per 10 minutes and 30
+  per day) and across all users (1,000 and 300 per hour) in Valkey. A chat request makes at most four
+  model calls of at most 4K output tokens each and sends at most 12K characters of conversation.
+- Set a monthly spend limit on the key's workspace in the Anthropic Console as the final cap.
+
 ## Configuration gate
 
 With the production variables loaded in the shell, run:

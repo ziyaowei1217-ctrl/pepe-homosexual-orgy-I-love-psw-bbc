@@ -479,7 +479,7 @@ async function apiRequest<T>(path: string, init: RequestInit, token?: string): P
   }
 }
 
-async function readSafeErrorCode(response: Response) {
+export async function readSafeErrorCode(response: Response) {
   try {
     const payload = (await response.json()) as { code?: unknown };
     return typeof payload.code === "string" && /^[A-Z0-9_]{1,64}$/.test(payload.code)
@@ -490,7 +490,7 @@ async function readSafeErrorCode(response: Response) {
   }
 }
 
-function apiBaseUrl() {
+export function apiBaseUrl() {
   const internalUrl = typeof window === "undefined" ? process.env.API_INTERNAL_BASE_URL?.trim() : undefined;
   return internalUrl || API_BASE_URL;
 }

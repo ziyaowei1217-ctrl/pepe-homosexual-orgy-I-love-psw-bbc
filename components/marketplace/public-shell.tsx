@@ -9,6 +9,7 @@ import {
 import Link from "next/link";
 import type { ReactNode } from "react";
 
+import { AssistantLauncher } from "@/components/assistant/assistant-launcher";
 import { PswLogo } from "@/components/brand/psw-logo";
 import { cn } from "@/lib/utils";
 
@@ -73,11 +74,12 @@ export function PublicShell({ active, mobileNavigation = "bottom", wide = false,
             ))}
           </nav>
 
-          <div className="ml-auto flex items-center gap-2">
+          <div className="ml-auto flex items-center gap-1 sm:gap-2">
             {mobileNavigation === "header" ? <nav aria-label="手机快捷导航" className="flex items-center gap-1 md:hidden">
-              <Link href="/search" aria-label="找房" className="flex min-h-11 items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 text-[15px] font-semibold text-ink-secondary hover:bg-surface-subtle"><Search className="size-4" aria-hidden="true" />找房</Link>
-              <Link href="/saved" aria-label="收藏房源" className="flex min-h-11 items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 text-[15px] font-semibold text-ink-secondary hover:bg-surface-subtle"><Heart className="size-4" aria-hidden="true" />收藏</Link>
+              <Link href="/search" aria-label="找房" className="flex min-h-11 min-w-11 items-center justify-center gap-1.5 whitespace-nowrap rounded-full text-[15px] font-semibold text-ink-secondary hover:bg-surface-subtle sm:px-2.5"><Search className="size-4" aria-hidden="true" /><span className="sr-only sm:not-sr-only">找房</span></Link>
+              <Link href="/saved" aria-label="收藏房源" className="flex min-h-11 min-w-11 items-center justify-center gap-1.5 whitespace-nowrap rounded-full text-[15px] font-semibold text-ink-secondary hover:bg-surface-subtle sm:px-2.5"><Heart className="size-4" aria-hidden="true" /><span className="sr-only sm:not-sr-only">收藏</span></Link>
             </nav> : null}
+            <AssistantLauncher />
             <Link
               href="/host"
               className="hidden min-h-11 items-center rounded-full px-4 text-sm font-semibold text-ink-secondary transition-colors hover:bg-surface-subtle lg:inline-flex"
