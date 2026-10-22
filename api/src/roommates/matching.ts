@@ -94,8 +94,10 @@ const features: Feature[] = [
         0.25 * Math.max(0, 1 - Math.abs(sa[0] - sb[0]) / day / 60);
     },
     reason(v, c) {
-      if (!v.moveOut && !c.moveOut) return "入住时间相近，都没定搬走日期";
-      const days = overlapDays(stay(v)!, stay(c)!);
+      const [sv, sc] = [stay(v)!, stay(c)!];
+      // An overlap that runs to a guessed (open) end has no known length.
+      if (sv[1] <= sc[1] ? !v.moveOut : !c.moveOut) return `入住时间相近，${!v.moveOut && !c.moveOut ? "都" : v.moveOut ? "TA " : "你"}没定搬走日期`;
+      const days = overlapDays(sv, sc);
       return days < 60 ? `入住时间重合 ${days} 天` : `入住时间重合约 ${Math.round(days / 30)} 个月`;
     },
     watchout: datesWatchout,
@@ -532,12 +534,13 @@ function missingFields(v: MatchProfile | null): RoommateViewerField[] {
 function datesWatchout(v: MatchProfile, c: MatchProfile) {
   const [sv, sc] = [stay(v)!, stay(c)!];
   const startGap = Math.round((sc[0] - sv[0]) / day);
-  const endGap = v.moveOut || c.moveOut ? Math.round((sc[1] - sv[1]) / day) : 0;
+  // Against a guessed (open) end, only a fixed end that comes first is a known gap.
+  const rawEndGap = Math.round((sc[1] - sv[1]) / day);
+  const endGap = v.moveOut && c.moveOut ? rawEndGap : c.moveOut ? Math.min(0, rawEndGap) : v.moveOut ? Math.max(0, rawEndGap) : 0;
   if (startGap === 0 && endGap === 0) return `入住时间只重合 ${overlapDays(sv, sc)} 天`;
   if (Math.abs(startGap) >= Math.abs(endGap)) {
     return `TA ${monthDay(c.moveIn!)} ${startGap > 0 ? "才入住，比你晚" : "就入住，比你早"} ${Math.abs(startGap)} 天`;
   }
-  // An open end has no date to compare, so only the fixed one is named.
   if (!v.moveOut) return `TA ${monthDay(c.moveOut!)} 就搬走`;
   if (!c.moveOut) return `你 ${monthDay(v.moveOut)} 就搬走，TA 没定搬走日期`;
   return `TA ${monthDay(c.moveOut)} ${endGap < 0 ? "就搬走，比你早" : "才搬走，比你晚"} ${Math.abs(endGap)} 天`;

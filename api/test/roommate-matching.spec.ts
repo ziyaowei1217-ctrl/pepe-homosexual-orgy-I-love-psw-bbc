@@ -99,6 +99,13 @@ describe("roommate matching engine", () => {
     const leaves = card("leaves", { ...complete, moveInDate: day("2027-01-06"), moveOutDate: day("2027-02-15") });
     expect(buildRoommateCard(leaves, openViewer, flags()).watchouts).toContain("TA 2/15 就搬走");
     expect(buildRoommateCard(card("open", { ...complete, moveOutDate: null }), openViewer, flags()).reasons).toContain("入住时间相近，都没定搬走日期");
+    // A fixed end after the open side's one-year guess is not an early move-out.
+    const lateOpen = card("viewer", { ...complete, moveInDate: day("2027-03-15"), moveOutDate: null });
+    const yearLease = card("lease", { ...complete, moveInDate: day("2027-09-01"), moveOutDate: day("2028-09-01") });
+    expect(buildRoommateCard(yearLease, lateOpen, flags()).watchouts).toContain("TA 9/1 才入住，比你晚 170 天");
+    expect(buildRoommateCard(lateOpen, yearLease, flags()).watchouts).toContain("TA 3/15 就入住，比你早 170 天");
+    const longLease = card("long", { ...complete, moveInDate: day("2027-01-04"), moveOutDate: day("2028-02-15") });
+    expect(buildRoommateCard(longLease, openViewer, flags()).reasons).toContain("入住时间相近，你没定搬走日期");
 
     const smoker = card("viewer", { ...complete, smoking: "yes" });
     expect(buildRoommateCard(card("non-smoker", complete), smoker, flags()).watchouts).toContain("你抽烟，TA 不抽烟");

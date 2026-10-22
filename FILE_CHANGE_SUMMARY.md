@@ -11,6 +11,7 @@ Each entry briefly notes what the file contributes or what changed in the final 
 - `api/prisma/migrations/20260709171000_minimal_marketplace_schema/migration.sql` — Database migration used by the backend schema and launch-ready local database setup.
 - `api/prisma/migrations/20260709232000_deal_threads_messages_viewings/migration.sql` — Database migration used by the backend schema and launch-ready local database setup.
 - `api/prisma/migrations/20260718180500_roommate_profile_archive_status/migration.sql` — Database migration used by the backend schema and launch-ready local database setup.
+- `api/prisma/migrations/20261022061500_roommate_smart_matching/migration.sql` — Adds gender, gender preference and dealbreakers to roommate matching profiles, links each roommate card to its matching profile, and indexes roommate actions for the deck.
 - `api/prisma/schema.prisma` — Prisma database schema for users, listings, roommate profiles, actions, deal rooms, messages, and workflows.
 - `api/src/app.module.ts` — NestJS backend source file for API modules, services, controllers, auth, seed data, or launch workflows.
 - `api/src/auth/admin.guard.ts` — NestJS backend source file for API modules, services, controllers, auth, seed data, or launch workflows.
@@ -52,6 +53,7 @@ Each entry briefly notes what the file contributes or what changed in the final 
 - `api/src/roommates/admin-roommates.controller.ts` — NestJS backend source file for API modules, services, controllers, auth, seed data, or launch workflows.
 - `api/src/roommates/dto.ts` — API validation for the roommate deck query (limit only) and the admin roommate card payloads.
 - `api/src/roommates/matching.ts` — Roommate matching engine: two-sided hard filters, weighted feature scores, learning from swipes, ranking, diversity and the card copy.
+- `api/src/roommates/roommate-values.ts` — Stored codes and Chinese labels for the structured roommate fields.
 - `api/src/roommates/roommates.controller.ts` — NestJS backend source file for API modules, services, controllers, auth, seed data, or launch workflows.
 - `api/src/roommates/roommates.module.ts` — NestJS backend source file for API modules, services, controllers, auth, seed data, or launch workflows.
 - `api/src/roommates/roommates.service.ts` — NestJS backend source file for API modules, services, controllers, auth, seed data, or launch workflows.
@@ -83,6 +85,7 @@ Each entry briefly notes what the file contributes or what changed in the final 
 - `api/test/match-transaction-flow.spec.ts` — Backend automated test covering API, service, validation, launch-readiness, or workflow behavior.
 - `api/test/minimal-database-schema.spec.ts` — Backend automated test covering API, service, validation, launch-readiness, or workflow behavior.
 - `api/test/roommate-matching.spec.ts` — Backend tests for the matching engine: hard filters, two-sided scores, explanations, learning and deck order.
+- `api/test/roommate-smart-matching.integration.spec.ts` — Database test: two real profiles scored both ways, matched, and undo blocked after the match (runs with RUN_DB_SMOKE=1).
 - `api/test/roommates-admin.spec.ts` — Backend automated test covering API, service, validation, launch-readiness, or workflow behavior.
 - `api/test/seed-backed-read-endpoints.spec.ts` — Backend automated test covering API, service, validation, launch-readiness, or workflow behavior.
 - `api/test/support/launch-prisma-mock.ts` — Backend automated test covering API, service, validation, launch-readiness, or workflow behavior.
@@ -97,6 +100,7 @@ Each entry briefly notes what the file contributes or what changed in the final 
 - `app/messages/page.tsx` — Next.js App Router page/layout asset wiring the application routes to the shared app shell.
 - `app/page.tsx` — Next.js App Router page/layout asset wiring the application routes to the shared app shell.
 - `app/roommates/likes/page.tsx` — Next.js App Router page/layout asset wiring the application routes to the shared app shell.
+- `app/roommates/me/page.tsx` — Roommate profile editor route.
 - `app/roommates/page.tsx` — Next.js App Router page/layout asset wiring the application routes to the shared app shell.
 - `app/trips/page.tsx` — Next.js App Router page/layout asset wiring the application routes to the shared app shell.
 - `components/admin-roommates-screen.tsx` — Frontend React component for marketplace, roommate, admin, or workspace flows.
@@ -105,6 +109,9 @@ Each entry briefly notes what the file contributes or what changed in the final 
 - `components/ui/card.tsx` — Reusable UI primitive used by the frontend interface.
 - `components/ui/input.tsx` — Reusable UI primitive used by the frontend interface.
 - `components.json` — Tooling/configuration file for TypeScript, Next.js, Tailwind, ESLint, Vitest, or UI components.
+- `components/marketplace/roommate-card.tsx` — Roommate card face, photo, match details panel and mutual-like dialog.
+- `components/marketplace/roommate-profile-form.tsx` — Roommate profile editor: basics, dates, budget, habits, dealbreakers and intro.
+- `components/marketplace/roommate-swipe-deck.tsx` — Swipe deck with drag, keyboard and buttons, queued requests, undo and refill.
 - `development-doc.html` — Original/reference HTML artifact retained for project context.
 - `docker-compose.yml` — Full-stack local development orchestration for web, API, database, and admin tooling.
 - `docs/roommate-matching-admin.md` — Developer/admin guide for managing roommate profiles and understanding matching fields.
@@ -149,6 +156,7 @@ Each entry briefly notes what the file contributes or what changed in the final 
 - `lib/date-range.ts` — Frontend utility or domain logic module used by app state, routing, matching, listings, messages, or workflow behavior.
 - `lib/listing-detail.ts` — Frontend utility or domain logic module used by app state, routing, matching, listings, messages, or workflow behavior.
 - `lib/listing-map.ts` — Frontend utility or domain logic module used by app state, routing, matching, listings, messages, or workflow behavior.
+- `lib/roommate-matching.ts` — Roommate card and profile types, labels, formatters and API helpers.
 - `lib/utils.ts` — Frontend utility or domain logic module used by app state, routing, matching, listings, messages, or workflow behavior.
 - `next-env.d.ts` — Project source/configuration file included in the GitHub-ready replacement tree.
 - `next.config.mjs` — Tooling/configuration file for TypeScript, Next.js, Tailwind, ESLint, Vitest, or UI components.
@@ -163,4 +171,6 @@ Each entry briefly notes what the file contributes or what changed in the final 
 - `tests/date-range.test.ts` — Frontend/unit test validating UI helpers, domain logic, storage behavior, or workflow utilities.
 - `tests/listing-detail.test.ts` — Frontend/unit test validating UI helpers, domain logic, storage behavior, or workflow utilities.
 - `tests/listing-map.test.ts` — Frontend/unit test validating UI helpers, domain logic, storage behavior, or workflow utilities.
+- `tests/roommate-matching.test.ts` — Tests for the roommate formatters, labels and undo errors.
+- `tests/roommate-profile-form.test.tsx` — Tests for loading, saving and validating the roommate profile editor.
 - `tsconfig.json` — Tooling/configuration file for TypeScript, Next.js, Tailwind, ESLint, Vitest, or UI components.

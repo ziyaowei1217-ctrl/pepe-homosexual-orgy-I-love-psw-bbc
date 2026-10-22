@@ -85,6 +85,35 @@ describe("roommate deck", () => {
     expect(screen.queryByRole("button", { name: "跳过 Mia" })).toBeNull();
   });
 
+  it("keeps undo for a retry after a failed request and drops it once the server refuses", async () => {
+    writeStoredAuthSession("renter-token");
+    let undoStatus = 503;
+    stubApi((path) => path === "/roommates/actions/undo" ? new Response(null, { status: undoStatus }) : undefined);
+    render(<RoommatesExperience />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "跳过 Mia" }));
+    fireEvent.click(await screen.findByRole("button", { name: "撤回 Mia" }));
+    await waitFor(() => expect(screen.getByRole("status").textContent).toContain("服务暂时不可用"));
+
+    undoStatus = 409;
+    fireEvent.click(screen.getByRole("button", { name: "撤回 Mia" }));
+    await waitFor(() => expect(screen.getByRole("status").textContent).toContain("只能撤回 10 分钟内"));
+    expect((screen.getByRole("button", { name: "撤回" }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("keeps this card's undo when the server undid an action from another page", async () => {
+    writeStoredAuthSession("renter-token");
+    stubApi((path) => path === "/roommates/actions/undo" ? { roommateProfileId: "elsewhere", action: "PASS" } : undefined);
+    render(<RoommatesExperience />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "跳过 Mia" }));
+    fireEvent.click(await screen.findByRole("button", { name: "撤回 Mia" }));
+
+    await waitFor(() => expect(screen.getByRole("status").textContent).toContain("其他页面"));
+    expect(screen.getByRole("button", { name: "撤回 Mia" })).toBeDefined();
+    expect(screen.queryByRole("button", { name: "跳过 Mia" })).toBeNull();
+  });
+
   it("asks guests for enough cards to get past their local passes and stops when nothing new comes back", async () => {
     const deckPaths: string[] = [];
     stubApi((path) => {
