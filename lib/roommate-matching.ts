@@ -143,7 +143,9 @@ export async function undoRoommateAction(token: string) {
     return await apiPost<{ roommateProfileId: string; action: RoommateAction }>("/roommates/actions/undo", {}, token);
   } catch (caught) {
     // The API client keeps only error codes, so the server's 409 reasons are summed up here.
-    if (caught instanceof ProductApiError && caught.status === 409) throw new Error("只能撤回 10 分钟内、还没配对的操作。");
+    if (caught instanceof ProductApiError && caught.status === 409) {
+      throw new ProductApiError({ category: caught.category, code: caught.code, status: 409, retryable: false, message: "只能撤回 10 分钟内、还没配对的操作。" });
+    }
     throw caught;
   }
 }

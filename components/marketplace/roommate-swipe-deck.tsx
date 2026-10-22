@@ -8,6 +8,7 @@ import { EmptyState } from "@/components/marketplace/empty-state";
 import { RoommateCardFace, RoommateDetailPanel, RoommateMatchDialog } from "@/components/marketplace/roommate-card";
 import { authRoute } from "@/lib/app-routes";
 import { assertCurrentAuthSession } from "@/lib/auth-session";
+import { ProductApiError } from "@/lib/product-errors";
 import { getRoommateDeck, sendRoommateAction, undoRoommateAction, type RoommateAction, type RoommateCard, type RoommateDeckResponse } from "@/lib/roommate-matching";
 
 const commitDistance = 110; // px
@@ -46,6 +47,7 @@ export function RoommateSwipeDeck({ token, initial }: { token: string | null; in
   const swiped = useRef(new Set<string>());
   const hasMore = useRef(initial.total > initial.items.length);
   const refilling = useRef(false);
+  const undoing = useRef(false);
   const top = cards[0];
   const last = history.at(-1);
 
@@ -78,6 +80,10 @@ export function RoommateSwipeDeck({ token, initial }: { token: string | null; in
 
   function restore(card: RoommateCard) {
     swiped.current.delete(card.id);
+    // The card goes back on top, so a drag on the card below loses its pointerup; drop it.
+    drag.current = null;
+    setDragging(false);
+    setOffset(0);
     setCards((current) => [card, ...current.filter((item) => item.id !== card.id)]);
   }
 
@@ -113,30 +119,46 @@ export function RoommateSwipeDeck({ token, initial }: { token: string | null; in
     window.setTimeout(commit, flyMs);
   }
 
+  /** One undo at a time; the server always undoes the newest action. */
   function undo() {
-    if (!last || leaving) return;
-    setHistory((current) => current.slice(0, -1));
+    if (!last || leaving || undoing.current) return;
+    const older = history.slice(0, -1);
+    // Back in its place: after the older entries, before cards swiped since this press.
+    const putBack = (current: RoommateCard[]) => {
+      const at = current.findIndex((card) => !older.includes(card));
+      return at < 0 ? [...current, last] : [...current.slice(0, at), last, ...current.slice(at)];
+    };
+    setHistory((current) => current.filter((card) => card !== last));
     setToast(null);
     if (!token) return restore(last);
+    undoing.current = true;
     enqueue(async () => {
-      // A failed swipe already put the card back; asking the server would undo the action before it.
-      if (!swiped.current.has(last.id)) return;
       try {
+        // A failed swipe already put the card back; asking the server would undo the action before it.
+        if (!swiped.current.has(last.id)) return;
         assertCurrentAuthSession(token);
         const undone = await undoRoommateAction(token);
-        if (undone.roommateProfileId !== last.id) return setToast({ text: "撤回的是在其他页面做的操作，刷新后可以看到。" });
-        restore(last);
-        setToast({ text: "已撤回" });
+        if (undone.roommateProfileId === last.id) {
+          restore(last);
+          setToast({ text: "已撤回" });
+          return;
+        }
+        // A newer action from another page was undone, so this card's action is the newest again.
+        setHistory(putBack);
+        setToast({ text: "撤回的是在其他页面做的操作，刷新后可以看到。", error: true });
       } catch (caught) {
-        // The server undoes only the newest action, so once it refuses, older entries cannot be undone either.
-        setHistory([]);
+        // A refusal (matched, or over 10 minutes) holds for every older entry too; other errors can be retried.
+        const refused = caught instanceof ProductApiError && caught.status === 409;
+        setHistory(refused ? (current) => current.filter((card) => !older.includes(card)) : putBack);
         setToast({ text: caught instanceof Error ? caught.message : "撤回没有完成，请重试。", error: true });
+      } finally {
+        undoing.current = false;
       }
     });
   }
 
   function pointerDown(event: PointerEvent<HTMLDivElement>) {
-    if (drag.current || event.button !== 0 || leaving || (event.target as Element).closest("button, a")) return;
+    if (event.isPrimary === false || event.button !== 0 || leaving || (event.target as Element).closest("button, a")) return;
     drag.current = { pointerId: event.pointerId, startX: event.clientX, lastX: event.clientX, lastTime: event.timeStamp, velocity: 0 };
     event.currentTarget.setPointerCapture?.(event.pointerId);
     setDragging(true);
@@ -159,7 +181,8 @@ export function RoommateSwipeDeck({ token, initial }: { token: string | null; in
     setDragging(false);
     const dx = current.lastX - current.startX;
     const velocity = event.timeStamp - current.lastTime < 100 ? current.velocity : 0;
-    const direction = Math.abs(dx) > commitDistance ? dx : Math.abs(velocity) > commitVelocity && Math.abs(dx) > minFlick ? velocity : 0;
+    const flick = Math.abs(velocity) > commitVelocity && Math.abs(dx) > minFlick && Math.sign(velocity) === Math.sign(dx);
+    const direction = Math.abs(dx) > commitDistance ? dx : flick ? velocity : 0;
     if (event.type === "pointercancel" || !direction) setOffset(0);
     else decide(direction > 0 ? "LIKE" : "PASS");
   }
