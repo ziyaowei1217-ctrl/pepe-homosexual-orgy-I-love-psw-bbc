@@ -9,6 +9,7 @@ import { Wowo } from "@/components/brand/wowo";
 import { apiGet, apiPost, getRoommateConversations, getRoommateMessages, markRoommateConversationRead, sendRoommateMessage } from "@/lib/api";
 import type { ApiDealThread, ApiRoommateConversation, ApiRoommateMessage, ApiViewingRequest } from "@/lib/api";
 import { authRoute } from "@/lib/app-routes";
+import { useAssistantDraftHandoff } from "@/lib/assistant/client";
 import { assertCurrentAuthSession, readStoredAuthSession } from "@/lib/auth-session";
 import { sendDealMessage } from "@/lib/deal-message-commands";
 import { createRoommateRealtimeClient } from "@/lib/roommate-realtime";
@@ -115,6 +116,8 @@ function InboxSessionExperience({ initialConversationId, initialListingId, initi
   }, [initialConversationId, initialListingId, initialApplicantId, initialRoommateId, token, loadAttempt]);
 
   const selectedConversation = conversations.find((item) => item.id === selectedId) ?? null;
+  // A draft the user picked in the AI assistant lands in this composer; the user still edits and sends it.
+  useAssistantDraftHandoff(token, selectedConversation, setDraft);
   const activeId = selectedConversation?.id;
   const activeSource = selectedConversation?.source;
 

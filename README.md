@@ -158,6 +158,15 @@ stored in browser storage.
 This messaging scope intentionally does not include email or Web Push offline notifications,
 attachments, group chat, typing indicators, message editing, message recall, or presence claims.
 
+## AI Assistant
+
+Signed-in users get an 「AI 助手」 button in the header. It searches listings with the same rules as
+the search page, compares listings (including the total for the user's dates) and drafts messages to
+hosts; the user sends a draft from the inbox. Hosts get 「AI 帮我写」 in the listing form. The
+assistant runs in Next.js route handlers (`app/api/assistant/*`, `lib/assistant/*`) and is hidden
+unless the web server has `ANTHROPIC_API_KEY`. Per-user limits come from the API
+(`api/src/assistant`). Details: [`docs/external-integrations.md`](docs/external-integrations.md).
+
 ## Verify
 
 ```bash

@@ -5,6 +5,7 @@ import { JwtModule } from "@nestjs/jwt";
 
 import { AuthModule } from "./auth/auth.module";
 import { ApplicationsModule } from "./applications/applications.module";
+import { AssistantModule } from "./assistant/assistant.module";
 import { AuditModule } from "./audit/audit.module";
 import { getJwtSecret } from "./config/env";
 import { DealThreadsModule } from "./deal-threads/deal-threads.module";
@@ -37,6 +38,7 @@ import { UsersModule } from "./users/users.module";
     AuthModule,
     ...(process.env.NODE_ENV === "production" ? [] : [DemoPaymentsModule]),
     ApplicationsModule,
+    AssistantModule,
     PaymentsModule,
     HealthModule,
     DealThreadsModule,

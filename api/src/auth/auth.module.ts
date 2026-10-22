@@ -103,6 +103,7 @@ export function createAuthServiceOptions(
     AuthenticatedUserService,
     ADMIN_STEP_UP_OPTIONS,
     AUTH_OPTIONS,
+    AUTH_RATE_LIMIT_STORE,
     EMAIL_SENDER
   ]
 })

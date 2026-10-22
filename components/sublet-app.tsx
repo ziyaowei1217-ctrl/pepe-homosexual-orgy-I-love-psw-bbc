@@ -254,10 +254,12 @@ import {
   type ApiRoommateTeamInvite,
   type RoommateTeamAction
 } from "@/lib/roommate-teams";
+import { ListingCopyHelper } from "@/components/assistant/listing-copy-helper";
 import {
   executePublishSave,
   getPublishStepErrors,
   mapApiListingToPublishDraft,
+  publishAmenities,
   type PublishDraft,
   type PublishSaveResult,
   type PublishStep
@@ -6854,6 +6856,7 @@ export function PublishingFlow({
         <div ref={formRef} className="mt-4 rounded-md border bg-surface p-4">
           {step.key === "basic" ? (
             <div className="grid gap-3 md:grid-cols-2">
+              <ListingCopyHelper token={token} draft={draft} onApply={updateDraft} />
               <PublishField name="title" label="房源标题" value={draft.title} onChange={(value) => updateDraft({ title: value })} />
               <PublishField name="area" label="区域" value={draft.area} onChange={(value) => updateDraft({ area: value })} />
               <PublishField name="availableFrom" type="date" label="可入住日期" value={draft.availableFrom} onChange={(value) => updateDraft({ availableFrom: value })} />
@@ -6889,7 +6892,7 @@ export function PublishingFlow({
               <fieldset>
                 <legend className="text-sm font-semibold">设施</legend>
                 <div className="mt-2 flex flex-wrap gap-2">
-                  {["Wi-Fi", "带家具", "独卫", "近地铁", "宠物友好", "洗烘"].map((tag) => (
+                  {publishAmenities.map((tag) => (
                     <Button key={tag} name={tag === "Wi-Fi" ? "tags" : undefined} variant={draft.tags.includes(tag) ? "secondary" : "outline"} aria-pressed={draft.tags.includes(tag)} onClick={() => toggleTag(tag)}>{tag}</Button>
                   ))}
                 </div>
