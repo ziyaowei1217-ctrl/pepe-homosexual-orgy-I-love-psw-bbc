@@ -75,7 +75,7 @@ describe("host workspace experiences", () => {
 
   it("localizes application status and changes the contact action after review", () => {
     expect(getHostApplicationPresentation("SUBMITTED")).toEqual({
-      statusLabel: "等待转租人处理",
+      statusLabel: "待你处理",
       contactLabel: "要求补充"
     });
     expect(getHostApplicationPresentation("COMPLETED")).toEqual({

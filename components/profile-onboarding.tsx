@@ -91,7 +91,7 @@ export function ProfileOnboarding({
         <div className="editorial-panel mx-auto max-w-3xl p-4 md:p-6">
           <div className="mb-5">
             <div className="editorial-kicker">02 / 个人资料</div>
-            <h2 id={`${fieldId}-title`} className="text-xl font-black text-foreground">
+            <h2 id={`${fieldId}-title`} className="font-rounded text-m-title sm:text-d-title font-bold text-foreground">
               {title}
             </h2>
             <p className="mt-1 text-sm font-semibold text-muted-foreground">
@@ -103,7 +103,7 @@ export function ProfileOnboarding({
             <div className="grid gap-4 md:grid-cols-2">
               <label
                 htmlFor={`${fieldId}-display-name`}
-                className="grid gap-1 text-xs font-black uppercase text-muted-foreground"
+                className="grid gap-1 text-m-footnote font-bold uppercase text-muted-foreground"
               >
                 显示名称
                 <Input
@@ -124,13 +124,13 @@ export function ProfileOnboarding({
 
               <label
                 htmlFor={`${fieldId}-role`}
-                className="grid gap-1 text-xs font-black uppercase text-muted-foreground"
+                className="grid gap-1 text-m-footnote font-bold uppercase text-muted-foreground"
               >
                 身份
                 <select
                   id={`${fieldId}-role`}
                   name="role"
-                  className="h-11 rounded-[12px] border border-input bg-card px-3 text-sm font-medium normal-case text-foreground shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  className="h-11 rounded-psw-md border border-input bg-card px-3 text-sm font-medium normal-case text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                   value={formState.draft.role}
                   onChange={(event) =>
                     dispatch({
@@ -148,7 +148,7 @@ export function ProfileOnboarding({
 
               <label
                 htmlFor={`${fieldId}-school`}
-                className="grid gap-1 text-xs font-black uppercase text-muted-foreground"
+                className="grid gap-1 text-m-footnote font-bold uppercase text-muted-foreground"
               >
                 {organizationLabel}
                 <Input
@@ -169,7 +169,7 @@ export function ProfileOnboarding({
 
               <label
                 htmlFor={`${fieldId}-city`}
-                className="grid gap-1 text-xs font-black uppercase text-muted-foreground"
+                className="grid gap-1 text-m-footnote font-bold uppercase text-muted-foreground"
               >
                 城市
                 <Input

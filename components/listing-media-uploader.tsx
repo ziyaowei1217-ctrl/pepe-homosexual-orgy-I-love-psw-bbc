@@ -240,7 +240,7 @@ export function ListingMediaUploader({
         }}
       >
         <span>拖放图片到这里，或点击选择文件</span>
-        <span className="text-xs">JPEG、PNG、WebP · 单张不超过 10 MB · 最多 12 张</span>
+        <span className="text-m-footnote">JPEG、PNG、WebP · 单张不超过 10 MB · 最多 12 张</span>
         <input
           className="sr-only"
           type="file"
@@ -270,12 +270,12 @@ export function ListingMediaUploader({
                   />
                 </div>
               ) : (
-                <div className="grid h-24 place-items-center rounded-md bg-secondary text-xs text-muted-foreground">已保存图片</div>
+                <div className="grid h-24 place-items-center rounded-md bg-secondary text-m-footnote text-muted-foreground">已保存图片</div>
               )}
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="text-sm font-bold text-foreground">{row.media.kind} {index === 0 ? "· 封面" : ""}</p>
-                  <p className="text-xs font-semibold text-muted-foreground">{mediaStatusLabel(row)}</p>
+                  <p className="text-m-footnote font-semibold text-muted-foreground">{mediaStatusLabel(row)}</p>
                 </div>
                 <div className="flex gap-1">
                   <Button size="sm" variant="ghost" disabled={disabled || mutationPending || index === 0} onClick={() => void move(index, -1)}>前移</Button>
@@ -286,7 +286,7 @@ export function ListingMediaUploader({
                 <Button size="sm" variant="outline" disabled={disabled || mutationPending} onClick={() => void retry(row)}>重试</Button>
               ) : null}
               {row.media.storageStatus === "FAILED" && !row.file ? (
-                <p className="text-xs font-semibold text-muted-foreground">请删除后重新选择文件</p>
+                <p className="text-m-footnote font-semibold text-muted-foreground">请删除后重新选择文件</p>
               ) : null}
               <Button size="sm" variant="ghost" disabled={disabled || mutationPending} onClick={() => void remove(row)}>删除</Button>
             </li>

@@ -81,7 +81,7 @@ function PaymentSession(props: Props) {
   }
 
   if (mode === "demo") return <DemoPaymentPanel {...props} />;
-  return <section aria-label="付款状态" className="space-y-3 rounded-2xl border bg-surface p-5">
+  return <section aria-label="付款状态" className="space-y-3 rounded-psw-lg border bg-surface p-5">
     <h2 className="font-bold">付款与资金状态</h2>
     <p role="status">{status ? labels[status] : error ? "付款状态未确认" : "正在读取付款状态…"}</p>
     {status === "AWAITING_PAYMENT" && application.status === "ACCEPTED" ? currentUserId === application.submitterId

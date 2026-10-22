@@ -161,7 +161,7 @@ export function SavedMap({ listings }: { listings: PreviewListing[] }) {
       <div className="map-tint pointer-events-none absolute inset-0" aria-hidden="true" />
       {markers.map((marker) => <Link key={marker.id} href={`/listing/${encodeURIComponent(marker.id)}`} style={{ left: marker.x, top: marker.y }} className="absolute z-20 flex min-h-9 -translate-x-1/2 -translate-y-1/2 items-center rounded-full border-2 border-surface bg-surface px-3.5 font-display text-[13px] font-bold text-ink shadow-menu hover:bg-primary hover:text-on-primary">{marker.label}</Link>)}
       <p className="absolute left-4 top-4 z-30 rounded-full bg-surface px-4 py-2 text-m-footnote font-semibold shadow-menu">{listings.length} 个收藏位置</p>
-      <span className="absolute bottom-2 right-3 z-30 rounded bg-surface/90 px-1.5 py-0.5 text-[11px] font-semibold text-ink-secondary">{attribution}</span>
+      <span className="absolute bottom-2 right-3 z-30 rounded bg-surface/90 px-1.5 py-0.5 text-m-footnote font-semibold text-ink-secondary">{attribution}</span>
     </aside>
   );
 }

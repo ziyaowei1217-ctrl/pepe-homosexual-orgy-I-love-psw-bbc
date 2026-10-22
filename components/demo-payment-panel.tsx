@@ -111,11 +111,11 @@ export function DemoPaymentPanel({
               <section className="grid gap-2 rounded-md border bg-surface p-3" aria-label="不可变资金流水">
                 <div>
                   <h4 className="text-sm font-extrabold text-foreground">不可变资金流水</h4>
-                  <p className="text-xs font-semibold text-muted-foreground">每笔事件按借贷成对记录，历史记录不可修改。</p>
+                  <p className="text-m-footnote font-semibold text-muted-foreground">每笔事件按借贷成对记录，历史记录不可修改。</p>
                 </div>
                 <ul className="grid gap-2">
                   {state.ledgerEntries.map((entry) => (
-                    <li key={entry.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-secondary/50 px-3 py-2 text-xs font-semibold">
+                    <li key={entry.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-secondary/50 px-3 py-2 text-m-footnote font-semibold">
                       <span>{entry.event} · {demoLedgerAccountLabel(entry.account)} · {entry.direction === "DEBIT" ? "借记" : "贷记"}</span>
                       <span>${(entry.amountCents / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                     </li>
@@ -126,12 +126,12 @@ export function DemoPaymentPanel({
             {needsConfirmation ? (
               <div className="grid gap-2">
                 <Button variant="accept" disabled={pending || !canConfirm} onClick={() => void run("confirm")}>确认已入住</Button>
-                {!moveInEligible ? <p className="text-xs font-semibold text-muted-foreground">{application.moveIn.slice(0, 10)} 起可确认入住。</p> : null}
+                {!moveInEligible ? <p className="text-m-footnote font-semibold text-muted-foreground">{application.moveIn.slice(0, 10)} 起可确认入住。</p> : null}
               </div>
             ) : null}
           </div>
         ) : null}
-        {pending ? <p className="text-xs text-muted-foreground">正在同步服务端状态…</p> : null}
+        {pending ? <p className="text-m-footnote text-muted-foreground">正在同步服务端状态…</p> : null}
         {error ? <p role="alert" className="text-sm font-semibold text-destructive">{error}</p> : null}
       </CardContent>
     </Card>

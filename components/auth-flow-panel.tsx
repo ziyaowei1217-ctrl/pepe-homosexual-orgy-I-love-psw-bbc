@@ -259,7 +259,7 @@ export function AuthFlowPanel({
           <div className="flex items-start justify-between gap-3">
             <div>
               <div className="editorial-kicker">01 / 账户</div>
-              <h2 id={`${panelId}-title`} className="text-xl font-black text-foreground">
+              <h2 id={`${panelId}-title`} className="font-rounded text-m-title sm:text-d-title font-bold text-foreground">
                 邮箱登录
               </h2>
               {contextMessage ? (
@@ -285,7 +285,7 @@ export function AuthFlowPanel({
             <form className="mt-5 grid gap-3" onSubmit={handleEmailSubmit} noValidate>
               <label
                 htmlFor={`${panelId}-email`}
-                className="grid gap-1 text-xs font-black uppercase text-muted-foreground"
+                className="grid gap-1 text-m-footnote font-bold uppercase text-muted-foreground"
               >
                 邮箱地址
                 <Input
@@ -314,7 +314,7 @@ export function AuthFlowPanel({
               </p>
               <label
                 htmlFor={`${panelId}-code`}
-                className="grid gap-1 text-xs font-black uppercase text-muted-foreground"
+                className="grid gap-1 text-m-footnote font-bold uppercase text-muted-foreground"
               >
                 六位验证码
                 <Input
@@ -331,7 +331,7 @@ export function AuthFlowPanel({
                 />
               </label>
               {expiresAt && !verificationStatus.expired ? (
-                <p className="text-xs font-semibold text-muted-foreground">
+                <p className="text-m-footnote font-semibold text-muted-foreground">
                   请在验证码过期前完成验证。
                 </p>
               ) : null}
@@ -429,7 +429,7 @@ function AuthenticatedProfilePanel({
           <div className="flex items-start justify-between gap-3">
             <div>
               <div className="editorial-kicker">01 / 账户</div>
-              <h2 id={`${panelId}-title`} className="text-xl font-black text-foreground">
+              <h2 id={`${panelId}-title`} className="font-rounded text-m-title sm:text-d-title font-bold text-foreground">
                 账户与资料
               </h2>
               <p className="mt-1 text-sm font-semibold text-muted-foreground">{user.email}</p>
@@ -489,13 +489,13 @@ function AuthenticatedProfilePanel({
               />
               <label
                 htmlFor={`${panelId}-role`}
-                className="grid gap-1 text-xs font-black uppercase text-muted-foreground"
+                className="grid gap-1 text-m-footnote font-bold uppercase text-muted-foreground"
               >
                 身份
                 <select
                   id={`${panelId}-role`}
                   name="role"
-                  className="h-11 rounded-[12px] border border-input bg-card px-3 text-sm font-medium normal-case text-foreground shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  className="h-11 rounded-psw-md border border-input bg-card px-3 text-sm font-medium normal-case text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                   value={draft.role ?? "renter"}
                   onChange={(event) =>
                     onDraftChange({
@@ -525,13 +525,13 @@ function AuthenticatedProfilePanel({
               />
               <label
                 htmlFor={`${panelId}-bio`}
-                className="grid gap-1 text-xs font-black uppercase text-muted-foreground md:col-span-2"
+                className="grid gap-1 text-m-footnote font-bold uppercase text-muted-foreground md:col-span-2"
               >
                 个人简介
                 <textarea
                   id={`${panelId}-bio`}
                   name="bio"
-                  className="min-h-24 rounded-[12px] border border-input bg-card px-3 py-2 text-sm font-medium normal-case text-foreground shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  className="min-h-24 rounded-psw-md border border-input bg-card px-3 py-2 text-sm font-medium normal-case text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                   value={draft.bio ?? ""}
                   onChange={(event) => updateDraft("bio", event.target.value)}
                 />
@@ -577,7 +577,7 @@ function ProfileField({
   return (
     <label
       htmlFor={id}
-      className="grid gap-1 text-xs font-black uppercase text-muted-foreground"
+      className="grid gap-1 text-m-footnote font-bold uppercase text-muted-foreground"
     >
       {label}
       <Input

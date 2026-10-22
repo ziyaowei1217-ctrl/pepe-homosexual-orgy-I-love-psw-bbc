@@ -195,7 +195,7 @@ export function ListingDetailExperience({ listing, initialStay }: { listing: Pre
                 <div className="map-tint pointer-events-none absolute inset-0" aria-hidden="true" />
                 <div className="absolute left-1/2 top-1/2 grid size-14 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border-4 border-surface bg-primary text-white shadow-menu"><Building2 className="size-6" aria-hidden="true" /></div>
                 <div className="absolute bottom-4 left-4 rounded-psw-lg bg-surface p-4 shadow-menu"><p className="text-d-label text-ink">{listing.area}</p><p className="mt-1 text-m-footnote text-ink-secondary">准确地址将在申请流程中按规则展示</p></div>
-                <span className="absolute bottom-2 right-3 rounded bg-surface/90 px-1.5 py-0.5 text-[11px] font-semibold text-ink-secondary">{mapAttribution}</span>
+                <span className="absolute bottom-2 right-3 rounded bg-surface/90 px-1.5 py-0.5 text-m-footnote font-semibold text-ink-secondary">{mapAttribution}</span>
               </div>
             </section>
           </div>

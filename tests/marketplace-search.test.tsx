@@ -27,7 +27,8 @@ describe("marketplace search", () => {
 
     expect(html).toContain("Westwood的可租房源");
     expect(html).not.toContain("Westwood 的可租房源");
-    expect(html).toContain("房源列表");
+    // No breadcrumb: the header navigation already says where you are.
+    expect(html).not.toContain("房源列表");
     expect(html).toContain('aria-label="房源地图"');
     expect(html).toContain("tile.openstreetmap.de");
     expect(html).toContain("© OpenStreetMap contributors");

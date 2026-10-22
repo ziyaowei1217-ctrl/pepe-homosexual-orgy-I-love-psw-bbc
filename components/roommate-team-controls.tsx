@@ -25,7 +25,7 @@ export function RoommateTeamControls({
   onLeave
 }: RoommateTeamControlsProps) {
   return (
-    <section aria-label="室友组队" className="space-y-3 rounded-[14px] border border-border bg-card p-4">
+    <section aria-label="室友组队" className="space-y-3 rounded-psw-md border border-border bg-card p-4">
       <div className="space-y-1">
         <h3 className="text-sm font-semibold text-foreground">两人小组</h3>
         <TeamStateCopy action={action} />
@@ -60,9 +60,9 @@ export function RoommateTeamControls({
         </Button>
       ) : null}
 
-      {pending ? <p className="text-xs text-muted-foreground">处理中…</p> : null}
+      {pending ? <p className="text-m-footnote text-muted-foreground">处理中…</p> : null}
       {error ? (
-        <p className="text-xs text-destructive" role="alert">
+        <p className="text-m-footnote text-destructive" role="alert">
           {error}
         </p>
       ) : null}
@@ -72,16 +72,16 @@ export function RoommateTeamControls({
 
 function TeamStateCopy({ action }: { action: RoommateTeamAction }) {
   if (action.kind === "unavailable") {
-    return <p className="text-xs text-muted-foreground">{action.reason}</p>;
+    return <p className="text-m-footnote text-muted-foreground">{action.reason}</p>;
   }
   if (action.kind === "outgoing") {
-    return <p className="text-xs text-muted-foreground">等待对方确认</p>;
+    return <p className="text-m-footnote text-muted-foreground">等待对方确认</p>;
   }
   if (action.kind === "incoming") {
-    return <p className="text-xs text-muted-foreground">对方邀请你组成两人小组</p>;
+    return <p className="text-m-footnote text-muted-foreground">对方邀请你组成两人小组</p>;
   }
   if (action.kind === "active") {
-    return <p className="text-xs text-trust-verified">已组成两人小组</p>;
+    return <p className="text-m-footnote text-trust-verified">已组成两人小组</p>;
   }
-  return <p className="text-xs text-muted-foreground">确认后可共同申请房源</p>;
+  return <p className="text-m-footnote text-muted-foreground">确认后可共同申请房源</p>;
 }

@@ -110,7 +110,7 @@ function RentalApplicationSession({
         <CardContent className="space-y-5">
           {step === 0 ? (
             <section className="space-y-3" aria-label="申请方式">
-              <h2 className="text-lg font-extrabold">申请方式</h2>
+              <h2 className="text-m-headline sm:text-d-headline font-extrabold">申请方式</h2>
               {scopes.map((option) => (
                 <button
                   key={option.value}
@@ -149,7 +149,7 @@ function RentalApplicationSession({
 
           {step === 2 ? (
             <section className="space-y-4" aria-label="确认提交">
-              <h2 className="text-lg font-extrabold">确认提交</h2>
+              <h2 className="text-m-headline sm:text-d-headline font-extrabold">确认提交</h2>
               <div className="grid gap-2 rounded-md bg-secondary p-4 text-sm font-semibold">
                 <span>{draft.scope === "TEAM" ? "两人小组申请" : "个人申请"}</span>
                 <span>{draft.moveIn} 至 {draft.moveOut}</span>

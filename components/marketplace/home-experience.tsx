@@ -25,12 +25,12 @@ export function HomeExperience({ listings, totalListings = listings.length }: { 
       <div className="page-container flex items-center gap-12 pb-10 pt-8 sm:pb-14 sm:pt-12 lg:py-[72px]">
         <div className="min-w-0 flex-1">
           <div className="flex items-end justify-between gap-4">
-            <h1 id="home-title" className="font-slogan text-[44px] font-black leading-[1.18] tracking-[-0.01em] sm:text-[64px] lg:text-[76px] lg:leading-[1.16]">
+            <h1 id="home-title" className="font-slogan text-[44px] font-bold leading-[1.18] sm:text-[64px] lg:text-[76px] lg:leading-[1.16]">
               <span className="block">下一站，</span><span className="block text-accent">住得自在。</span>
             </h1>
             <span aria-hidden="true" className="mb-1 grid size-24 shrink-0 place-items-center rounded-full bg-peach-100 lg:hidden"><Wowo size={72} /></span>
           </div>
-          <p className="mt-4 text-m-subhead text-on-dark-secondary sm:mt-6 sm:text-lg sm:leading-7">留学生之间的转租。选好日期，总价一次算清。</p>
+          <p className="mt-4 text-m-subhead text-on-dark-secondary sm:mt-6 sm:leading-7">留学生之间的转租。选好日期，总价一次算清。</p>
           <form action="/search" method="get" aria-label="搜索房源" className="relative z-10 mt-6 flex flex-col gap-1 rounded-psw-xl bg-surface p-2 text-ink shadow-search sm:mt-8 lg:max-w-[720px] lg:flex-row lg:items-center lg:rounded-full lg:p-2 lg:pl-3">
             <label className="flex min-w-0 flex-1 items-center gap-3 rounded-full px-3 py-2 focus-within:bg-surface-subtle lg:flex-[1.3]">
               <MapPin className="size-5 shrink-0 text-primary-text" aria-hidden="true" />
@@ -49,7 +49,8 @@ export function HomeExperience({ listings, totalListings = listings.length }: { 
     </section>
 
     <div className="page-container flex flex-col gap-12 pb-16 pt-10 sm:pt-12">
-      <section aria-labelledby="home-start" className="flex flex-col gap-5">
+      {/* Cities and conditions sit side by side on wide screens instead of two half-empty rows. */}
+      <section aria-labelledby="home-start" className="flex flex-col gap-5 lg:flex-row lg:items-start lg:gap-12">
         <h2 id="home-start" className="sr-only">从这里开始</h2>
         <div className="flex flex-col gap-3">
           <h3 className="text-m-headline text-ink sm:text-d-headline">热门城市</h3>

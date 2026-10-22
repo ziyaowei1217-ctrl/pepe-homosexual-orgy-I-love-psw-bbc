@@ -6785,11 +6785,11 @@ export function PublishingFlow({
             <CheckCircle2 className="size-7" aria-hidden="true" />
           </div>
           <div>
-            <h2 className="text-xl font-black text-foreground">房源已提交审核</h2>
+            <h2 className="font-rounded text-m-title sm:text-d-title font-bold text-foreground">房源已提交审核</h2>
             <p className="mt-2 max-w-md text-sm font-semibold text-muted-foreground">
               当前房源及图片已锁定，审核完成前不能继续编辑。你可以在“我的房源”查看审核状态。
             </p>
-            <p className="mt-2 text-xs font-semibold text-muted-foreground">
+            <p className="mt-2 text-m-footnote font-semibold text-muted-foreground">
               房源编号：{submittedResult.remoteListingId}
             </p>
           </div>
@@ -6821,7 +6821,7 @@ export function PublishingFlow({
       <CardHeader>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <CardTitle>房源资料</CardTitle>
+            <h2 className="text-m-headline text-ink sm:text-d-headline">房源资料</h2>
             <CardDescription>
               填写房源信息并添加照片。提交审核后，照片将暂时锁定。
             </CardDescription>
@@ -6833,35 +6833,35 @@ export function PublishingFlow({
         </div>
       </CardHeader>
       <CardContent>
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+        <div className="grid grid-cols-4 gap-2 md:gap-3">
           {steps.map((item, index) => (
             <button
               key={item.key}
               className={cn(
-                "rounded-md border bg-surface p-4 text-left transition-colors",
-                index === stepIndex && "border-trust-sky bg-trust-sky/5"
+                "min-h-11 min-w-0 rounded-psw-md border bg-surface px-1.5 py-2 text-left transition-colors md:p-4",
+                index === stepIndex && "border-primary bg-primary-soft"
               )}
               type="button"
               aria-current={index === stepIndex ? "step" : undefined}
               onClick={() => void goToStep(index)}
             >
-              <div className="text-xs font-extrabold text-trust-sky">{item.code}</div>
-              <div className="mt-2 text-sm font-bold text-foreground">{item.title}</div>
-              <div className="mt-1 text-sm font-medium text-muted-foreground">{item.detail}</div>
+              <div className="text-m-footnote font-bold text-primary-text">{item.code}</div>
+              <div className="mt-1 whitespace-nowrap text-m-footnote font-bold text-foreground md:mt-2 md:text-sm">{item.title}</div>
+              <div className="mt-1 hidden text-m-footnote text-muted-foreground md:block">{item.detail}</div>
             </button>
           ))}
         </div>
         <div ref={formRef} className="mt-4 rounded-md border bg-surface p-4">
           {step.key === "basic" ? (
             <div className="grid gap-3 md:grid-cols-2">
-              <PublishField name="title" label="房源标题" value={draft.title} onChange={(value) => updateDraft({ title: value })} />
-              <PublishField name="area" label="区域" value={draft.area} onChange={(value) => updateDraft({ area: value })} />
+              <PublishField name="title" label="房源标题" placeholder="例如：Westwood 两室中的主卧，步行到 UCLA" value={draft.title} onChange={(value) => updateDraft({ title: value })} />
+              <PublishField name="area" label="区域" placeholder="例如：Los Angeles · Westwood" value={draft.area} onChange={(value) => updateDraft({ area: value })} />
               <PublishField name="availableFrom" type="date" label="可入住日期" value={draft.availableFrom} onChange={(value) => updateDraft({ availableFrom: value })} />
               <PublishField name="availableTo" type="date" label="最晚退租日期" value={draft.availableTo} onChange={(value) => updateDraft({ availableTo: value })} />
               <PublishNumberField name="beds" label="卧室" value={draft.beds} min={0} onChange={(value) => updateDraft({ beds: value })} />
               <PublishNumberField name="baths" label="卫浴" value={draft.baths} min={0} onChange={(value) => updateDraft({ baths: value })} />
-              <PublishField name="commute" label="通勤说明" value={draft.commute} onChange={(value) => updateDraft({ commute: value })} />
-              <PublishField name="transit" label="交通说明" value={draft.transit} onChange={(value) => updateDraft({ transit: value })} />
+              <PublishField name="commute" label="通勤说明" placeholder="例如：步行 8 分钟到 UCLA" value={draft.commute} onChange={(value) => updateDraft({ commute: value })} />
+              <PublishField name="transit" label="交通说明" placeholder="例如：楼下有 Metro 公交站" value={draft.transit} onChange={(value) => updateDraft({ transit: value })} />
             </div>
           ) : null}
 
@@ -6933,7 +6933,7 @@ export function PublishingFlow({
             </div>
           ) : null}
           <div className="mt-4 flex items-center justify-between">
-            <Button variant="ghost" disabled={stepIndex === 0 || isPublishing} onClick={() => void goToStep(stepIndex - 1)}>上一步</Button>
+            <Button variant="ghost" className={stepIndex === 0 ? "invisible" : undefined} disabled={stepIndex === 0 || isPublishing} onClick={() => void goToStep(stepIndex - 1)}>上一步</Button>
             {stepIndex < steps.length - 1 ? (
               <Button variant="trust" disabled={isPublishing || mediaSummary.mutationPending} onClick={() => void goToStep(stepIndex + 1)}>下一步</Button>
             ) : null}
@@ -6950,6 +6950,7 @@ function PublishField({
   value,
   type = "text",
   disabled = false,
+  placeholder,
   onChange
 }: {
   name: string;
@@ -6957,12 +6958,14 @@ function PublishField({
   value: string;
   type?: "text" | "date";
   disabled?: boolean;
+  /** An example of a good answer, so a first-time 转租人 knows what to write. */
+  placeholder?: string;
   onChange: (value: string) => void;
 }) {
   return (
-    <label className="grid gap-2 text-sm font-semibold">
+    <label className="grid gap-2 text-d-label text-ink-secondary">
       {label}
-      <Input name={name} type={type} value={value} disabled={disabled} onChange={(event) => onChange(event.target.value)} />
+      <Input name={name} type={type} value={value} disabled={disabled} placeholder={placeholder} onChange={(event) => onChange(event.target.value)} />
     </label>
   );
 }
@@ -7009,7 +7012,7 @@ function getPublishErrorFieldName(error?: string) {
 function PublishReviewItem({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-md border bg-secondary p-3">
-      <div className="text-xs font-bold text-muted-foreground">{label}</div>
+      <div className="text-m-footnote font-bold text-muted-foreground">{label}</div>
       <div className="mt-1 break-words text-sm font-extrabold text-foreground">{value}</div>
     </div>
   );

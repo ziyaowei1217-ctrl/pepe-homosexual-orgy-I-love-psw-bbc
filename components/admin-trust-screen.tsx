@@ -218,7 +218,7 @@ export function AdminTrustScreen({
       <div className="editorial-toolbar">
         <div>
           <span className="editorial-kicker">01 / 信任</span>
-          <h1 id="admin-trust-title" className="mt-2 text-3xl font-black tracking-[-0.01em] md:text-4xl">
+          <h1 id="admin-trust-title" className="mt-2 font-rounded text-m-title sm:text-d-title font-bold">
             房源审核队列
           </h1>
           <p className="mt-1 text-sm font-semibold text-muted-foreground">逐项核验待发布房源，决定会立即同步到公开目录。</p>
@@ -233,8 +233,8 @@ export function AdminTrustScreen({
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {trustMetrics.map((metric) => (
               <div key={metric.id ?? metric.label} className="rounded-md border bg-secondary/40 p-3">
-                <div className="text-xs font-bold text-muted-foreground">{metric.label}</div>
-                <div className="mt-1 text-2xl font-black text-foreground">{metric.value}</div>
+                <div className="text-m-footnote font-bold text-muted-foreground">{metric.label}</div>
+                <div className="mt-1 font-rounded text-m-title sm:text-d-title font-bold text-foreground">{metric.value}</div>
               </div>
             ))}
           </div>
@@ -259,13 +259,13 @@ export function AdminTrustScreen({
               <CardContent className="grid gap-4">
                 <dl className="grid gap-3 rounded-md border bg-secondary/30 p-3 sm:grid-cols-2">
                   <div>
-                    <dt className="text-xs font-bold text-muted-foreground">发布者编号</dt>
+                    <dt className="text-m-footnote font-bold text-muted-foreground">发布者编号</dt>
                     <dd className="mt-1 break-all text-sm font-semibold text-foreground">
                       {displayText(listing.ownerId, "未提供")}
                     </dd>
                   </div>
                   <div>
-                    <dt className="text-xs font-bold text-muted-foreground">信任声明</dt>
+                    <dt className="text-m-footnote font-bold text-muted-foreground">信任声明</dt>
                     <dd className="mt-1 text-sm font-semibold text-foreground">
                       {displayText(listing.trust, "未提供信任声明")}
                     </dd>
@@ -286,7 +286,7 @@ export function AdminTrustScreen({
                           className="aspect-[4/3] bg-cover bg-center"
                           style={{ backgroundImage: `url("${media.url}")` }}
                         />
-                        <figcaption className="px-3 py-2 text-xs font-bold text-muted-foreground">
+                        <figcaption className="px-3 py-2 text-m-footnote font-bold text-muted-foreground">
                           {media.kind}
                         </figcaption>
                       </figure>
@@ -372,7 +372,7 @@ function AdminTrustGate({ title, detail }: { title: string; detail: string }) {
     <section className="app-shell py-10">
       <Card className="mx-auto max-w-3xl shadow-panel">
         <CardContent className="p-8">
-          <h1 className="text-3xl font-black text-foreground">{title}</h1>
+          <h1 className="font-rounded text-m-title sm:text-d-title font-bold text-foreground">{title}</h1>
           <p className="mt-2 text-sm font-semibold text-muted-foreground">{detail}</p>
         </CardContent>
       </Card>

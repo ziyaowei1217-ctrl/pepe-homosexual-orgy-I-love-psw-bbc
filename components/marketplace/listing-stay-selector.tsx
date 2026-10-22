@@ -21,8 +21,8 @@ export function ListingStayDialog({ listing, stay, onApply, onClose }: { listing
   useModalFocus(dialog, onClose);
   const error = listingStayError(draft, listing);
   return <div className="marketplace-modal-backdrop fixed inset-0 z-[85] flex items-end justify-center bg-ink-block/40 backdrop-blur-sm sm:items-center sm:p-6" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-    <section ref={dialog} role="dialog" aria-modal="true" aria-labelledby="stay-dialog-title" className="marketplace-modal-panel max-h-[90dvh] w-full max-w-lg overflow-y-auto rounded-t-3xl bg-surface p-6 pb-[max(24px,env(safe-area-inset-bottom))] shadow-2xl sm:rounded-3xl">
-      <header className="flex items-center justify-between gap-4"><h2 id="stay-dialog-title" className="text-xl font-bold">选择租期</h2><button type="button" onClick={onClose} aria-label="关闭租期选择" className="grid size-10 place-items-center rounded-full bg-tag-neutral hover:bg-line-strong"><X className="size-5" /></button></header>
+    <section ref={dialog} role="dialog" aria-modal="true" aria-labelledby="stay-dialog-title" className="marketplace-modal-panel max-h-[90dvh] w-full max-w-lg overflow-y-auto rounded-t-psw-2xl bg-surface p-6 pb-[max(24px,env(safe-area-inset-bottom))] shadow-dialog sm:rounded-psw-xl">
+      <header className="flex items-center justify-between gap-4"><h2 id="stay-dialog-title" className="font-rounded text-m-title sm:text-d-title font-bold">选择租期</h2><button type="button" onClick={onClose} aria-label="关闭租期选择" className="grid size-10 place-items-center rounded-full bg-tag-neutral hover:bg-line-strong"><X className="size-5" /></button></header>
       <p className="mb-6 mt-2 text-m-subhead text-ink-secondary">{listing.title}</p>
       <ListingStayFields listing={listing} stay={draft} onChange={setDraft} />
       <p className="mt-4 flex gap-2 text-m-footnote text-ink-secondary"><CalendarDays className="mt-0.5 size-4 shrink-0" aria-hidden="true" />可租日期：{listing.availableTo ? formatRangeLong(earliestListingDate(listing), listing.availableTo) : "待确认"}</p>

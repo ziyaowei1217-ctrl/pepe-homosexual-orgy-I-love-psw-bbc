@@ -29,6 +29,7 @@ import {
 } from "@/lib/rental-applications";
 import type { ApiRentalApplication, RentalApplicationStatus } from "@/lib/rental-applications";
 import { useMarketplaceSession } from "@/lib/use-marketplace-session";
+import { formatRangeLong, formatRangeShort } from "@/lib/date-format";
 import { cn } from "@/lib/utils";
 
 export function HostDashboardExperience() {
@@ -65,8 +66,11 @@ function HostDashboardExperienceSession() {
     return () => { cancelled = true; };
   }, [session.token, loadAttempt]);
 
-  const pendingApplications = applications.filter((item) => item.status === "SUBMITTED").length;
-  const pendingTours = threads.filter((thread) => thread.viewerRole === "host").flatMap((thread) => thread.viewingRequests).filter((item) => item.status === "REQUESTED").length;
+  const waitingApplications = applications.filter((item) => item.status === "SUBMITTED");
+  const waitingTours = threads.filter((thread) => thread.viewerRole === "host").flatMap((thread) => (thread.viewingRequests ?? []).filter((item) => item.status === "REQUESTED").map((request) => ({ request, thread })));
+  const inReview = listings.filter((item) => item.status === "SUBMITTED");
+  const pendingApplications = waitingApplications.length;
+  const pendingTours = waitingTours.length;
   const publishedListings = listings.filter((item) => item.status === "APPROVED").length;
   const totalsReady = Boolean(session.user && !session.loading && !session.error && !loading && !error);
 
@@ -75,12 +79,20 @@ function HostDashboardExperienceSession() {
     {error || session.error ? <ErrorNotice text={error ?? session.error!} /> : null}
     {error || session.error ? <button type="button" onClick={() => { if (session.error) session.reload(); setLoadAttempt((attempt) => attempt + 1); }} className="secondary-action mt-4">重新加载工作台</button> : null}
     {session.token && (session.loading || loading) ? <p role="status" className="mt-6 text-sm font-bold text-ink-secondary">正在加载工作台…</p> : null}
-    {session.token ? <><section className="mt-7 grid gap-4 sm:grid-cols-3" aria-label="关键指标">
+    {session.token ? <><section className="mt-7 grid grid-cols-3 gap-3 sm:gap-4" aria-label="关键指标">
       <Metric icon={ClipboardCheck} label="待处理申请" value={totalsReady ? String(pendingApplications) : "—"} href="/host/applications" />
       <Metric icon={CalendarDays} label="待确认预约" value={totalsReady ? String(pendingTours) : "—"} href="/inbox" />
       <Metric icon={Building2} label="在线房源" value={totalsReady ? String(publishedListings) : "—"} href="/host/listings" />
     </section>
-    <section className="mt-6 rounded-[26px] border border-line-strong bg-surface p-6 shadow-sm"><h2 className="text-lg font-black">优先待办</h2><p className="mt-2 text-sm text-ink-secondary">先查看申请人的资料，再到消息中确认看房安排。</p><div className="mt-5 flex flex-wrap gap-3"><Link href="/host/applications" className="secondary-action">查看申请</Link><Link href="/inbox" className="secondary-action">打开消息</Link><Link href="/host/listings" className="secondary-action">管理房源</Link></div></section></> : null}
+    {/* The actual things waiting for the 转租人, each one tap from where it is handled. */}
+    {totalsReady ? <section className="mt-6 rounded-psw-xl bg-surface p-5 sm:p-6" aria-labelledby="host-todo">
+      <h2 id="host-todo" className="text-m-headline sm:text-d-headline">要你处理的事</h2>
+      {waitingApplications.length || waitingTours.length || inReview.length ? <ul className="mt-3 divide-y divide-line-strong">
+        {waitingApplications.slice(0, 5).map((item) => <TodoRow key={item.id} href="/host/applications" icon={ClipboardCheck} title={`${item.contactName ?? item.memberSnapshots?.[0]?.displayName ?? "有人"}申请了「${item.listingTitle ?? "你的房间"}」`} detail={[item.moveIn && item.moveOut ? formatRangeLong(item.moveIn.slice(0, 10), item.moveOut.slice(0, 10)) : "", "看资料后接受或不通过"].filter(Boolean).join(" · ")} action="看申请" />)}
+        {waitingTours.slice(0, 5).map(({ request, thread }) => <TodoRow key={request.id} href={`/inbox/${encodeURIComponent(thread.id)}`} icon={CalendarDays} title={`${thread.contactName ?? "有人"}想${request.mode === "video" ? "视频" : "线下"}看房`} detail={[request.timeLabel, thread.listingTitle].filter(Boolean).join(" · ")} action="确认时间" />)}
+        {inReview.slice(0, 5).map((item) => <TodoRow key={item.id} href="/host/listings" icon={Building2} title={`「${item.title}」在等平台审核`} detail="审核通过后会出现在搜索里，不用做什么。" />)}
+      </ul> : <p className="mt-2 text-d-subhead text-ink-secondary">现在没有要处理的事。新的申请和看房请求会出现在这里。</p>}
+    </section> : null}</> : null}
   </HostPage>;
 }
 
@@ -117,7 +129,7 @@ function HostListingsExperienceSession() {
     {error || session.error ? <button type="button" onClick={() => { if (session.error) session.reload(); setLoadAttempt((attempt) => attempt + 1); }} className="secondary-action mt-4">重新加载房源</button> : null}
     {session.token && (session.loading || loading) ? <p role="status" className="mt-6 text-sm font-bold text-ink-secondary">正在加载房源…</p> : null}
     {session.user && !loading && visible.length === 0 && !error && !session.error ? <EmptyState text="这个状态下还没有房源。" /> : null}
-    <div className="mt-6 grid gap-5 lg:grid-cols-2">{visible.map((listing, index) => <article key={listing.id} className="grid overflow-hidden rounded-[26px] border border-line-strong bg-surface shadow-sm sm:grid-cols-[190px_minmax(0,1fr)]"><div className="relative min-h-48 bg-tag-neutral"><SmartImage src={getListingCoverUrl(listing)} alt={listing.title} fill priority={index < 4} fetchPriority={index < 4 ? "high" : "auto"} sizes="190px" className="object-cover" /></div><div className="flex flex-col p-5"><span className="w-fit rounded-full bg-surface-subtle px-2.5 py-1 text-[11px] font-black text-primary-text">{statusLabel(listing.status)}</span><h2 className="mt-3 text-base font-black">{listing.title}</h2><p className="mt-2 flex items-center gap-1 text-xs text-ink-secondary"><MapPin className="size-3.5" />{listing.area}</p><p className="mt-4 text-lg font-black">${listing.price.toLocaleString("en-US")} <span className="text-xs text-ink-placeholder">/ 月</span></p><div className="mt-auto flex gap-2 pt-5"><Link href={`/host/listings/${listing.id}`} className="secondary-action"><Pencil className="size-3.5" />管理</Link>{listing.status === "APPROVED" ? <Link href={`/listing/${listing.id}`} className="secondary-action" aria-label="查看公开房源"><Eye className="size-3.5" /></Link> : null}</div></div></article>)}</div>
+    <div className="mt-6 grid gap-5 lg:grid-cols-2">{visible.map((listing, index) => <article key={listing.id} className="grid overflow-hidden rounded-psw-xl bg-surface sm:grid-cols-[190px_minmax(0,1fr)]"><div className="relative min-h-48 bg-tag-neutral"><SmartImage src={getListingCoverUrl(listing)} alt={listing.title} fill priority={index < 4} fetchPriority={index < 4 ? "high" : "auto"} sizes="190px" className="object-cover" /></div><div className="flex flex-col p-5"><span className={cn("w-fit rounded-psw-sm px-2.5 py-1 text-m-footnote font-bold", listing.status === "APPROVED" ? "bg-success-soft text-success-text" : listing.status === "SUBMITTED" ? "bg-warning-soft text-warning-text" : "bg-tag-neutral text-ink-secondary")}>{statusLabel(listing.status)}</span><h2 className="mt-3 text-d-card-title text-ink">{listing.title}</h2><p className="mt-1 flex items-center gap-1 text-m-footnote text-ink-secondary"><MapPin className="size-3.5" aria-hidden="true" />{listing.area}</p>{listing.availableFrom && listing.availableTo ? <p className="mt-1 flex items-center gap-1 text-m-footnote font-semibold text-ink"><CalendarDays className="size-3.5" aria-hidden="true" />{formatRangeShort(listing.availableFrom.slice(0, 10), listing.availableTo.slice(0, 10))} 可住</p> : null}{listing.status === "SUBMITTED" ? <p className="mt-1 text-m-footnote text-ink-secondary">平台审核通过后出现在搜索里。</p> : null}<p className="mt-3"><span className="font-display text-[22px] font-extrabold leading-7 text-primary-text">${listing.price.toLocaleString("en-US")}</span><span className="ml-1 text-m-footnote text-ink-secondary">/ 月</span></p><div className="mt-auto flex gap-2 pt-5"><Link href={`/host/listings/${listing.id}`} className="secondary-action"><Pencil className="size-3.5" />管理</Link>{listing.status === "APPROVED" ? <Link href={`/listing/${listing.id}`} className="secondary-action"><Eye className="size-3.5" aria-hidden="true" />看租客看到的样子</Link> : null}</div></div></article>)}</div>
   </HostPage>;
 }
 
@@ -217,7 +229,7 @@ function HostApplicationsExperienceSession() {
     {session.user && !loading && applications.length === 0 && !loadError && !session.error ? <EmptyState text="暂时没有租房申请。" /> : null}
     <fieldset disabled={loading || session.loading || Boolean(pendingId)} className="mt-6 grid min-w-0 gap-4" aria-label="申请列表">{applications.map((application) => {
       const presentation = getHostApplicationPresentation(application.status);
-      return <article key={application.id} className="min-w-0 [overflow-wrap:anywhere] rounded-[24px] border border-line-strong bg-surface p-5 shadow-sm"><div className="flex flex-col justify-between gap-4 sm:flex-row"><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><h2 className="text-lg font-black">{application.listingTitle ?? "房源申请"}</h2><span className="rounded-full bg-tag-neutral px-2.5 py-1 text-[11px] font-black">{presentation.statusLabel}</span></div><p className="mt-2 text-sm text-ink-secondary">{application.memberSnapshots.map((item) => item.displayName).join("、") || "个人申请"} · {application.moveIn.slice(0,10)} 至 {application.moveOut.slice(0,10)}</p><p className="mt-3 text-sm font-bold">{application.schoolOrOccupation}</p>{application.contactName || application.contactEmail ? <p className="mt-2 text-sm text-ink-secondary">联系人：{[application.contactName, application.contactEmail].filter(Boolean).join(" · ")}</p> : null}<HostApplicationFacts application={application} />{application.note ? <p className="mt-3 whitespace-pre-wrap rounded-[16px] bg-surface-muted p-4 text-sm leading-6 text-ink-secondary">{application.note}</p> : null}</div><div className="flex shrink-0 flex-wrap gap-2 sm:flex-col">{application.status === "SUBMITTED" ? <><button disabled={Boolean(pendingId) || loading || session.loading || Boolean(session.error)} onClick={() => void decide(application, "accept")} className="primary-action">{pendingId === application.id ? "正在处理…" : "接受申请"}</button><button disabled={Boolean(pendingId) || loading || session.loading || Boolean(session.error)} onClick={() => void decide(application, "reject")} className="secondary-action text-danger-text">不通过</button></> : null}<Link href={`/inbox?${new URLSearchParams({ listingId: application.listingId, applicantId: application.submitterId }).toString()}`} className="secondary-action"><MessageCircle className="size-4" />{presentation.contactLabel}</Link></div></div>{decisionError?.id === application.id ? <p role="alert" className="mt-4 rounded-2xl bg-danger-soft p-4 text-sm font-bold text-danger-text">{decisionError.message}</p> : null}{notice?.id === application.id ? <p role="status" className="mt-4 rounded-2xl bg-surface-subtle p-4 text-sm font-bold text-ink">{notice.message}</p> : null}{session.token && session.user ? <ApplicationCancellation application={application} token={session.token} currentUserId={session.user.id} onApplicationChange={applyApplication} /> : null}{session.token && session.user && (application.status === "ACCEPTED" || application.status === "COMPLETED" || application.status === "CANCELLATION_PENDING" || application.status === "CANCELLED") ? <div className="mt-5"><PaymentPanel application={application} token={session.token} currentUserId={session.user.id} onApplicationChange={applyApplication} /></div> : null}</article>;
+      return <article key={application.id} className="min-w-0 [overflow-wrap:anywhere] rounded-psw-xl border border-line-strong bg-surface p-5"><div className="flex flex-col justify-between gap-4 sm:flex-row"><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><h2 className="text-m-headline sm:text-d-headline font-bold">{application.listingTitle ?? "房源申请"}</h2><span className={cn("rounded-psw-sm px-2.5 py-1 text-m-footnote font-bold", application.status === "SUBMITTED" ? "bg-warning-soft text-warning-text" : "bg-tag-neutral text-ink-secondary")}>{presentation.statusLabel}</span></div><p className="mt-2 text-d-subhead text-ink-secondary">{application.memberSnapshots.map((item) => item.displayName).join("、") || "个人申请"} · {formatRangeLong(application.moveIn.slice(0, 10), application.moveOut.slice(0, 10))}</p><p className="mt-3 text-sm font-bold">{application.schoolOrOccupation}</p>{application.contactName || application.contactEmail ? <p className="mt-2 text-sm text-ink-secondary">联系人：{[application.contactName, application.contactEmail].filter(Boolean).join(" · ")}</p> : null}<HostApplicationFacts application={application} />{application.note ? <p className="mt-3 whitespace-pre-wrap rounded-psw-lg bg-surface-muted p-4 text-sm leading-6 text-ink-secondary">{application.note}</p> : null}</div><div className="flex shrink-0 flex-wrap gap-2 sm:flex-col">{application.status === "SUBMITTED" ? <><button disabled={Boolean(pendingId) || loading || session.loading || Boolean(session.error)} onClick={() => void decide(application, "accept")} className="primary-action">{pendingId === application.id ? "正在处理…" : "接受申请"}</button><button disabled={Boolean(pendingId) || loading || session.loading || Boolean(session.error)} onClick={() => void decide(application, "reject")} className="secondary-action text-danger-text">不通过</button></> : null}<Link href={`/inbox?${new URLSearchParams({ listingId: application.listingId, applicantId: application.submitterId }).toString()}`} className="secondary-action"><MessageCircle className="size-4" />{presentation.contactLabel}</Link></div></div>{decisionError?.id === application.id ? <p role="alert" className="mt-4 rounded-psw-lg bg-danger-soft p-4 text-sm font-bold text-danger-text">{decisionError.message}</p> : null}{notice?.id === application.id ? <p role="status" className="mt-4 rounded-psw-lg bg-surface-subtle p-4 text-sm font-bold text-ink">{notice.message}</p> : null}{session.token && session.user ? <ApplicationCancellation application={application} token={session.token} currentUserId={session.user.id} onApplicationChange={applyApplication} /> : null}{session.token && session.user && (application.status === "ACCEPTED" || application.status === "COMPLETED" || application.status === "CANCELLATION_PENDING" || application.status === "CANCELLED") ? <div className="mt-5"><PaymentPanel application={application} token={session.token} currentUserId={session.user.id} onApplicationChange={applyApplication} /></div> : null}</article>;
     })}</fieldset>
   </HostPage>;
 }
@@ -225,9 +237,9 @@ function HostApplicationsExperienceSession() {
 function HostApplicationFacts({ application }: { application: ApiRentalApplication }) {
   const income = { BELOW_2X: "低于月租 2 倍", TWO_TO_THREE_X: "月租 2–3 倍", THREE_TO_FOUR_X: "月租 3–4 倍", ABOVE_FOUR_X: "高于月租 4 倍", PREFER_NOT_TO_SAY: "不愿透露" }[application.incomeBand];
   const guarantor = { AVAILABLE: "可提供", NOT_AVAILABLE: "无法提供", NOT_NEEDED: "不需要" }[application.guarantorStatus];
-  return <dl className="mt-4 grid grid-cols-2 gap-3 rounded-2xl border border-line-strong p-4 text-sm">
-    <div><dt className="text-xs text-ink-secondary">收入区间</dt><dd className="mt-1 font-bold">{income}</dd></div>
-    <div><dt className="text-xs text-ink-secondary">担保人</dt><dd className="mt-1 font-bold">{guarantor}</dd></div>
+  return <dl className="mt-4 grid grid-cols-2 gap-3 rounded-psw-lg border border-line-strong p-4 text-sm">
+    <div><dt className="text-m-footnote text-ink-secondary">收入区间</dt><dd className="mt-1 font-bold">{income}</dd></div>
+    <div><dt className="text-m-footnote text-ink-secondary">担保人</dt><dd className="mt-1 font-bold">{guarantor}</dd></div>
   </dl>;
 }
 
@@ -283,8 +295,8 @@ function HostListingEditorSession({ listingId }: { listingId?: string }) {
     {session.error ? <><ErrorNotice text={session.error} /><button type="button" onClick={session.reload} className="secondary-action mt-4">重新加载账户</button></> : null}
     {session.token && (session.loading || (canEdit && loadingListing)) ? <p role="status" className="mt-6 text-sm font-bold text-ink-secondary">正在加载房源…</p> : null}
     {canEdit && loadError ? <><ErrorNotice text={loadError} /><button type="button" onClick={() => setLoadAttempt((attempt) => attempt + 1)} className="secondary-action mt-4">重新加载房源</button></> : null}
-    {canEdit && listingId && !loadingListing && !loadError && !listing ? <section className="mt-6 rounded-[24px] border border-line-strong bg-surface p-6"><p className="text-sm font-bold text-ink-secondary">未找到这套房源，或你没有管理权限。</p><Link href="/host/listings" className="primary-action mt-5">返回我的房源</Link></section> : null}
-    {message ? <p className="mt-5 rounded-[16px] bg-surface-subtle p-4 text-sm font-bold text-ink">{message}</p> : null}
+    {canEdit && listingId && !loadingListing && !loadError && !listing ? <section className="mt-6 rounded-psw-xl border border-line-strong bg-surface p-6"><p className="text-sm font-bold text-ink-secondary">未找到这套房源，或你没有管理权限。</p><Link href="/host/listings" className="primary-action mt-5">返回我的房源</Link></section> : null}
+    {message ? <p className="mt-5 rounded-psw-lg bg-surface-subtle p-4 text-sm font-bold text-ink">{message}</p> : null}
     {session.token && canEdit && !loadingListing && !loadError && (!listingId || listing) ? <div className="mt-6"><PublishingFlow initialDraft={listing ? mapApiListingToPublishDraft(listing) : null} isPublishing={publishing} token={session.token} onSave={save} /></div> : null}
   </HostPage>;
 }
@@ -293,14 +305,19 @@ function HostPage({ title, description, action, children }: { title: string; des
 function LoginGate({ text, returnTo }: { text: string; returnTo: string }) { return <SharedEmptyState className="mt-6" mood="default" title={text} body="用邮箱验证码登录后，就能看到你发布的房源和收到的申请。" action={<Link href={authRoute({ returnTo })} className="primary-action">登录</Link>} />; }
 function ErrorNotice({ text }: { text: string }) { return <p role="alert" className="mt-6 rounded-psw-md bg-danger-soft p-4 text-d-subhead font-semibold text-danger-text">{text}</p>; }
 function EmptyState({ text }: { text: string }) { return <SharedEmptyState className="mt-6" mood="sleepy" title={text} />; }
-function RoleGate() { return <section className="mt-6 rounded-[20px] border border-dashed border-outline bg-surface p-8 text-center"><p className="text-sm font-bold text-ink-secondary">请先在账户资料中将身份设置为转租人或租客兼转租人。</p><Link href="/account/profile" className="primary-action mt-5">前往账户资料</Link></section>; }
-function Metric({ icon: Icon, label, value, href }: { icon: typeof Building2; label: string; value: string; href: string }) { return <Link href={href} className="rounded-[24px] border border-line-strong bg-surface p-5 shadow-sm"><span className="grid size-10 place-items-center rounded-[14px] bg-surface-subtle text-primary-text"><Icon className="size-5" /></span><p className="mt-5 text-xs font-black text-ink-secondary">{label}</p><p className="mt-2 text-3xl font-black">{value}</p></Link>; }
+function RoleGate() { return <section className="mt-6 rounded-psw-xl border border-dashed border-outline bg-surface p-8 text-center"><p className="text-sm font-bold text-ink-secondary">请先在账户资料中将身份设置为转租人或租客兼转租人。</p><Link href="/account/profile" className="primary-action mt-5">前往账户资料</Link></section>; }
+function TodoRow({ href, icon: Icon, title, detail, action }: { href: string; icon: typeof Building2; title: string; detail: string; action?: string }) {
+  return <li><Link href={href} className="flex min-h-14 items-center gap-3 py-3 hover:text-primary-text"><span className="grid size-10 shrink-0 place-items-center rounded-full bg-primary-soft text-primary-text"><Icon className="size-5" aria-hidden="true" /></span><span className="min-w-0 flex-1"><span className="block text-d-label text-ink">{title}</span><span className="mt-0.5 block text-m-footnote text-ink-secondary">{detail}</span></span>{action ? <span className="shrink-0 font-rounded text-d-label text-primary-text">{action}</span> : null}</Link></li>;
+}
+
+function Metric({ icon: Icon, label, value, href }: { icon: typeof Building2; label: string; value: string; href: string }) { return <Link href={href} className="flex flex-col rounded-psw-xl bg-surface p-4 transition-shadow hover:shadow-card-hover sm:p-5"><span className="hidden size-10 place-items-center rounded-full bg-primary-soft text-primary-text sm:grid"><Icon className="size-5" aria-hidden="true" /></span><span className="text-m-footnote font-semibold text-ink-secondary sm:mt-4">{label}</span><span className="mt-1 font-display text-[28px] font-extrabold leading-9 text-ink sm:text-d-price-large">{value}</span></Link>; }
 function statusKey(status?: ApiListing["status"]) { return status === "DRAFT" || status === "REJECTED" ? "draft" : status === "SUBMITTED" ? "review" : status === "APPROVED" ? "published" : status === "SUSPENDED" ? "suspended" : "rented"; }
 function statusLabel(status?: ApiListing["status"]) { return status === "DRAFT" ? "草稿" : status === "SUBMITTED" ? "审核中" : status === "APPROVED" ? "已发布" : status === "REJECTED" ? "已退回" : status === "SUSPENDED" ? "已下架" : "已出租"; }
 
 export function getHostApplicationPresentation(status: RentalApplicationStatus) {
   return {
-    statusLabel: getRentalApplicationStatusCopy(status).label,
+    // This page is the 转租人's own view, so a waiting application is waiting for "you".
+    statusLabel: status === "SUBMITTED" ? "待你处理" : getRentalApplicationStatusCopy(status).label,
     contactLabel: status === "SUBMITTED" ? "要求补充" : "联系申请人"
   };
 }

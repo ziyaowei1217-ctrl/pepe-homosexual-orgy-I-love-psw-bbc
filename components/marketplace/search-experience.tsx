@@ -145,7 +145,7 @@ export function SearchExperience({ listings, initialQuery, initialMoveIn, initia
           <button type="button" onClick={() => setFilterOpen("dates")} className={cn("search-pill", (state.moveIn || state.moveOut) && "search-pill-active")}><CalendarDays className="size-4" aria-hidden="true" />{dateLabel}<ChevronDown className="size-3.5" aria-hidden="true" /></button>
           <button type="button" onClick={() => setFilterOpen("budget")} className={cn("search-pill", (state.priceMin || state.priceMax) && "search-pill-active")}>{budgetLabel}<ChevronDown className="size-3.5" aria-hidden="true" /></button>
           <button type="button" onClick={() => setFilterOpen("beds")} className={cn("search-pill", state.beds && "search-pill-active")}><BedDouble className="size-4" aria-hidden="true" />{state.beds ? `${state.beds}+ 卧室` : "卧室"}<ChevronDown className="size-3.5" aria-hidden="true" /></button>
-          <button type="button" onClick={() => setFilterOpen("budget")} aria-label="筛选" className={cn("search-pill", filterCount && "search-pill-active")}><SlidersHorizontal className="size-4" aria-hidden="true" /><span>筛选</span>{filterCount ? <span className="grid size-5 place-items-center rounded-full bg-surface text-[11px] text-primary-text">{filterCount}</span> : null}</button>
+          <button type="button" onClick={() => setFilterOpen("budget")} aria-label="筛选" className={cn("search-pill", filterCount && "search-pill-active")}><SlidersHorizontal className="size-4" aria-hidden="true" /><span>筛选</span>{filterCount ? <span className="grid size-5 place-items-center rounded-full bg-surface text-m-footnote text-primary-text">{filterCount}</span> : null}</button>
         </div>
         <Link href="/saved" className="ml-auto hidden min-h-11 shrink-0 items-center gap-2 text-d-subhead font-semibold text-ink-secondary hover:text-ink xl:flex"><Heart className="size-4" aria-hidden="true" />我的收藏{savedIds.size ? ` (${savedIds.size})` : ""}</Link>
       </div>
@@ -153,9 +153,9 @@ export function SearchExperience({ listings, initialQuery, initialMoveIn, initia
 
     <div className={cn("mx-auto grid max-w-[1920px]", state.view === "split" && "lg:grid-cols-[minmax(480px,0.95fr)_minmax(0,1.05fr)]")}>
       <section className={cn("min-w-0 px-4 pb-28 pt-1 sm:px-6 sm:pt-6 lg:px-8", state.view === "map" && "hidden")} aria-labelledby="result-heading">
-        <div className="hidden items-center gap-2 text-m-footnote text-ink-secondary sm:flex"><Link href="/" className="flex min-h-6 items-center hover:text-ink">首页</Link><span aria-hidden="true">/</span><span>房源列表</span>{state.query ? <><span aria-hidden="true">/</span><span className="truncate">{state.query}</span></> : null}</div>
         {/* Phones get a title-size heading so the first price is on the first screen. */}
-        <h1 id="result-heading" className="font-rounded text-m-title text-ink sm:mt-3 sm:text-d-large-title">{catalog.heading}</h1>
+        {/* The results are the page; the heading names them without out-shouting the prices. */}
+        <h1 id="result-heading" className="font-rounded text-m-title text-ink sm:mt-2 sm:text-d-title">{catalog.heading}</h1>
         {dateError ? <p role="alert" className="mt-3 rounded-psw-md bg-warning-soft px-3 py-2 text-d-subhead text-warning-text">{dateError}</p> : null}
         {chips.length ? <div className="mt-4 flex flex-wrap items-center gap-2" aria-label="已选条件">{chips.map((chip) => <button key={chip.label} type="button" aria-label={`移除 ${chip.label}`} onClick={chip.clear} className="tap-target flex h-9 items-center gap-1.5 rounded-full bg-primary px-3.5 text-m-footnote font-semibold text-on-primary hover:bg-primary-hover">{chip.label}<X className="size-3.5" aria-hidden="true" /></button>)}<button type="button" onClick={() => update({ ...emptyFilters, moveIn: "", moveOut: "" })} className="min-h-11 px-2 text-m-footnote font-semibold text-ink-secondary underline underline-offset-4">重置条件</button></div> : null}
         <div className="mt-2 flex items-center justify-between gap-3 border-b border-line-strong pb-2 sm:mt-4 sm:pb-4">

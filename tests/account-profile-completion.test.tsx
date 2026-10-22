@@ -23,9 +23,11 @@ it.each([
 ])("reflects the saved profile's completeness: %j", async (profile, percent) => {
   setup(profile);
   render(<AccountExperience mode="overview" />);
-  const progress = await screen.findByRole("progressbar", { name: "资料完成度" });
-  expect(progress.getAttribute("aria-valuenow")).toBe(String(percent));
-  expect(screen.getByRole("link", { name: percent === 100 ? "编辑资料" : "完善资料" }).getAttribute("href")).toBe("/account/profile");
+  expect((await screen.findByRole("link", { name: percent === 100 ? "编辑资料" : "完善资料" })).getAttribute("href")).toBe("/account/profile");
+  // A full bar says nothing, so the bar only shows while something is missing.
+  const progress = screen.queryByRole("progressbar", { name: "资料完成度" });
+  if (percent === 100) expect(progress).toBeNull();
+  else expect(progress?.getAttribute("aria-valuenow")).toBe(String(percent));
 });
 
 it("offers working notification destinations without switches that cannot save or control delivery", async () => {
