@@ -5,12 +5,6 @@ import { RoommatesExperience } from "@/components/marketplace/roommate-experienc
 
 export const metadata: Metadata = { title: "室友匹配" };
 
-export default async function RoommatesPage({
-  searchParams
-}: {
-  searchParams?: Promise<{ roommateId?: string }>;
-}) {
-  await searchParams;
-
+export default function RoommatesPage() {
   return <PublicShell active="roommates"><RoommatesExperience /></PublicShell>;
 }

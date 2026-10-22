@@ -53,43 +53,8 @@ export function buildPublicListingsPath(range: {
   return `/listings?${params.toString()}`;
 }
 
-export type ApiRoommateCompatibilityDimensions = {
-  budget: number;
-  lifestyle: number;
-  school: number;
-  area: number;
-  reliability: number;
-  profile: number;
-};
-
-export type ApiRoommateMatchType = "top-pick" | "strong-fit" | "explore" | "wildcard";
-
-export type ApiRoommateDeckStrategy = "precision" | "balanced" | "discovery";
-
-export type ApiRoommateRecommendation = {
-  action: "like" | "later" | "pass";
-  confidence: "high" | "medium" | "low";
-  headline: string;
-  primarySignals: string[];
-  watchouts: string[];
-  nextQuestions: string[];
-};
-
-export type ApiRoommateRankingSignals = {
-  finalScore: number;
-  compatibilityScore: number;
-  confidenceScore: number;
-  profileQualityScore: number;
-  diversityBoost: number;
-  explorationBoost: number;
-  recommendationPriority: number;
-  percentile: number;
-  strategy: ApiRoommateDeckStrategy;
-};
-
 export type ApiRoommate = {
   id?: string;
-  actionTargetId?: string;
   name: string;
   age: number;
   role: string;
@@ -100,55 +65,6 @@ export type ApiRoommate = {
   tags: string[];
   status?: "active" | "hidden";
   archivedAt?: string | null;
-  compatibilityScore?: number;
-  ranking?: ApiRoommateRankingSignals;
-  dimensions?: ApiRoommateCompatibilityDimensions;
-  matchType?: ApiRoommateMatchType;
-  recommendation?: ApiRoommateRecommendation;
-  decisionHint?: string;
-  rank?: number;
-  deckBatch?: string;
-  spark?: string;
-  reasons?: string[];
-  tradeoffs?: string[];
-  icebreaker?: string;
-  badges?: string[];
-};
-
-export type ApiRoommateDeckResponse = {
-  items: ApiRoommate[];
-  pageInfo: {
-    cursor: number;
-    nextCursor: number | null;
-    limit: number;
-    returned: number;
-    totalCandidates: number;
-  };
-  discovery: {
-    headline: string;
-    sampleSize: number;
-    topScore: number;
-    filters: {
-      budgetMin: number;
-      budgetMax: number;
-      school: string;
-      schools?: string[];
-      hobby: string;
-      hobbies?: string[];
-      city: string;
-      gender?: string;
-      strategy?: ApiRoommateDeckStrategy;
-    };
-    weights?: Partial<Record<keyof ApiRoommateCompatibilityDimensions, number>>;
-    rankingWeights?: {
-      compatibility: number;
-      confidence: number;
-      profileQuality: number;
-      diversity: number;
-      exploration: number;
-    };
-    tips: string[];
-  };
 };
 
 export type ApiGroup = {

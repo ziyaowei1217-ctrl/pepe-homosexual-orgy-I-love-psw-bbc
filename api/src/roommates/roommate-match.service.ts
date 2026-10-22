@@ -1,8 +1,10 @@
-import { BadRequestException, Inject, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 
 import { PrismaService } from "../prisma/prisma.service";
 import { RoommateActionDtoValue } from "./dto";
+
+const undoWindowMs = 10 * 60_000;
 
 export function normalizeUserPair(leftId: string, rightId: string) {
   if (leftId === rightId) throw new BadRequestException("Cannot match with yourself");
@@ -17,6 +19,29 @@ export class RoommateMatchService {
 
   async recordAction(actorUserId: string, targetProfileId: string, action: RoommateActionDtoValue) {
     return this.runTransaction((transaction) => this.recordActionInTransaction(transaction, actorUserId, targetProfileId, action));
+  }
+
+  /** Deletes the user's latest action; a LIKE that already formed an active match stays. */
+  async undoLastAction(userId: string, now = new Date()) {
+    return this.runTransaction(async (transaction) => {
+      const last = await transaction.roommateAction.findFirst({
+        where: { userId },
+        orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
+        include: { roommateProfile: { select: { ownerId: true } } }
+      });
+      if (!last) throw new ConflictException("没有可以撤回的操作");
+      if (now.getTime() - last.updatedAt.getTime() > undoWindowMs) throw new ConflictException("只能撤回 10 分钟内的操作");
+      const peerId = last.roommateProfile.ownerId;
+      if (last.action === "LIKE" && peerId && peerId !== userId) {
+        const match = await transaction.roommateMatch.findUnique({
+          where: { firstUserId_secondUserId: normalizeUserPair(userId, peerId) },
+          select: { status: true }
+        });
+        if (match?.status === "ACTIVE") throw new ConflictException("已经配对，不能撤回");
+      }
+      await transaction.roommateAction.delete({ where: { id: last.id } });
+      return { roommateProfileId: last.roommateProfileId, action: last.action };
+    });
   }
 
   private async recordActionInTransaction(

@@ -328,11 +328,14 @@ model RoommateProfile {
   archivedAt          DateTime?
   localReciprocalLike Boolean          @default(false)
   createdAt           DateTime         @default(now())
+  matchingProfileId   String?          @db.Uuid
+  matchingProfile     RoommateMatchingProfile? @relation(fields: [matchingProfileId], references: [id], onDelete: SetNull)
   actions             RoommateAction[]
   dealRooms           DealRoom[]
   dealRoomMembers     DealRoomMember[]
 
   @@index([status, match])
+  @@index([matchingProfileId])
 }
 
 enum RoommateMatchStatus {
@@ -750,9 +753,13 @@ model RoommateMatchingProfile {
   guests                 String?
   intro                  String?
   lookingFor             String?   @map("looking_for")
+  gender                 String?
+  genderPreference       String    @default("any") @map("gender_preference")
+  dealbreakers           String[]  @default([])
   status                 String    @default("active")
   createdAt              DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt              DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  cards                  RoommateProfile[]
 
   @@index([userId, status])
   @@index([city, school, status])
@@ -800,6 +807,8 @@ model RoommateAction {
   @@unique([userId, roommateProfileId])
   @@index([userId])
   @@index([roommateProfileId])
+  @@index([action, updatedAt, roommateProfileId])
+  @@index([updatedAt, userId])
 }
 
 model DealRoom {

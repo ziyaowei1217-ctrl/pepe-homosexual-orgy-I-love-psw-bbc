@@ -1,6 +1,6 @@
 import { Prisma, PrismaClient } from "@prisma/client";
 
-import { seedGroups, seedListings, seedRoommates, seedTrips, seedTrustQueues } from "./seed-data";
+import { seedGroups, seedListings, seedRoommateMatching, seedRoommates, seedTrips, seedTrustQueues } from "./seed-data";
 
 const prisma = new PrismaClient();
 
@@ -54,17 +54,38 @@ async function main() {
   }
 
   for (const [index, roommate] of seedRoommates.entries()) {
-    const localReciprocalLike = index < 3;
+    const number = index + 1;
+    const email = `seed-roommate-${number}@example.com`;
+    const { moveInDate, moveOutDate, ...matching } = seedRoommateMatching[roommate.id];
+    const owner = await prisma.user.upsert({
+      where: { id: `seed-roommate-user-${number}` },
+      update: { email },
+      create: { id: `seed-roommate-user-${number}`, email, role: "USER" }
+    });
+    const profile = await prisma.profile.upsert({
+      where: { email },
+      update: { displayName: roommate.name, school: matching.school },
+      create: { email, displayName: roommate.name, school: matching.school }
+    });
+    // Fixed ids keep re-runs idempotent; matching rows have no natural key.
+    const matchingProfileId = `5eed0000-0000-4000-8000-${String(number).padStart(12, "0")}`;
+    const matchingData = {
+      ...matching,
+      userId: profile.id,
+      city: "Los Angeles",
+      moveInDate: new Date(moveInDate),
+      moveOutDate: moveOutDate ? new Date(moveOutDate) : null
+    };
+    await prisma.roommateMatchingProfile.upsert({
+      where: { id: matchingProfileId },
+      update: matchingData,
+      create: { id: matchingProfileId, ...matchingData }
+    });
+    const card = { ...roommate, ownerId: owner.id, matchingProfileId, localReciprocalLike: index < 3 };
     await prisma.roommateProfile.upsert({
       where: { id: roommate.id },
-      update: {
-        ...roommate,
-        localReciprocalLike
-      },
-      create: {
-        ...roommate,
-        localReciprocalLike
-      }
+      update: card,
+      create: card
     });
   }
 

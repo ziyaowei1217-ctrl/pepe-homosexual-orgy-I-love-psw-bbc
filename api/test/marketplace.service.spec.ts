@@ -26,6 +26,42 @@ describe("MarketplaceService", () => {
     expect(database.matchingProfiles).toEqual([expect.objectContaining({ id: "matching-1", city: "LA", status: "active" })]);
     expect(database.transactions).toBe(1);
   });
+
+  it("projects the public card from the matching row it just wrote, without the email prefix", async () => {
+    const upserts: Array<{ create: Record<string, unknown>; update: Record<string, unknown> }> = [];
+    const transaction = {
+      roommateMatchingProfile: {
+        create: async ({ data }: { data: Record<string, unknown> }) => ({ id: "matching-9", ...data, status: "active" })
+      },
+      roommateProfile: {
+        findUnique: async () => null,
+        upsert: async (args: { create: Record<string, unknown>; update: Record<string, unknown> }) => upserts.push(args)
+      }
+    };
+    const prisma = {
+      profile: { upsert: async () => ({ id: "profile-1", email: "maya.private@example.com", displayName: null, avatarUrl: null, city: null, school: null }) },
+      $transaction: async <T>(operation: (client: typeof transaction) => Promise<T>) => operation(transaction)
+    };
+    const service = new MarketplaceService(prisma as never);
+
+    await service.createRoommateProfile("user-1", "maya.private@example.com", {
+      ...roommateProfileInput(),
+      pets: "none",
+      guests: "often",
+      smoking: "free text"
+    });
+
+    expect(upserts[0]!.create).toMatchObject({
+      ownerId: "user-1",
+      name: "室友",
+      role: "USC",
+      age: 26,
+      budget: "$1,200–$1,800/month",
+      matchingProfileId: "matching-9",
+      tags: ["夜猫子", "整洁", "经常带朋友", "没有宠物", "独立卧室"]
+    });
+    expect(JSON.stringify(upserts)).not.toContain("maya.private");
+  });
 });
 
 function roommateProfileInput() {

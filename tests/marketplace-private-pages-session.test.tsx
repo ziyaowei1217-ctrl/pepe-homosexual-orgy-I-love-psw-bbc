@@ -13,7 +13,8 @@ import { assertCurrentAuthSession, clearStoredAuthSession, readStoredAuthSession
 
 const privateName = "Only account A";
 const profile = { id: "profile-a", email: "a@example.com", displayName: privateName, avatarUrl: null, school: null, city: null, role: "renter", eduEmailVerified: false, phoneVerified: false, wechat: null, instagram: null, bio: null };
-const candidate = { id: "roommate-a", name: privateName, age: 22, role: "UCLA", image: "https://example.com/ivy.jpg", match: 92, budget: "$1,560/月", commute: "Westwood", tags: ["早睡"], reasons: ["预算匹配"] };
+const candidate = { id: "roommate-a", name: privateName, age: 22, role: "UCLA", image: "https://example.com/ivy.jpg", match: 92, budget: "$1,560/月", commute: "Westwood", tags: ["早睡"] };
+const deckCard = { id: "roommate-a", name: privateName, age: 22, image: "https://example.com/ivy.jpg", school: "UCLA", city: "Los Angeles", neighborhoods: ["Westwood"], budgetMin: 1200, budgetMax: 1600, moveInDate: "2027-01-04", moveOutDate: "2027-06-12", roomType: null, gender: null, sleepSchedule: null, cleanliness: null, guests: null, smoking: null, pets: null, intro: null, lookingFor: null, score: 86, tier: "great", reasons: ["都在 UCLA"], watchouts: [], icebreaker: null, breakdown: [], likedYou: false, youLiked: false, later: false, conversationId: null };
 const thread = { id: "thread-a", ownerId: "a", listingOwnerId: "host-a", viewerRole: "renter", dealRoomId: null, listingId: "listing-a", listingTitle: privateName, area: "Westwood", contactName: "Host", participantNames: ["A"], messages: [], viewingRequests: [], createdAt: "2026-09-03T10:00:00.000Z", updatedAt: "2026-09-03T10:00:00.000Z" };
 
 function json(value: unknown) {
@@ -29,7 +30,7 @@ function fixture(input: RequestInfo | URL, init?: RequestInit): Response {
   if (url.endsWith("/applications/mine")) return json(old ? [{ id: "stay-a", listingId: "listing-a", listingTitle: privateName, status: "ACCEPTED", moveIn: "2026-10-01", moveOut: "2027-01-01" }] : []);
   if (url.endsWith("/deal-threads")) return json(old ? [thread] : []);
   if (url.endsWith("/roommate-conversations")) return json([]);
-  if (url.includes("/roommates/deck")) return json({ items: old ? [candidate] : [], pageInfo: {}, discovery: {} });
+  if (url.includes("/roommates/deck")) return json({ items: old ? [deckCard] : [], total: old ? 1 : 0, filteredOut: 0, viewer: { signedIn: true, hasProfile: true, missing: [] } });
   if (url.endsWith("/roommates/activity")) return json({ inbound: old ? [{ profile: candidate }] : [], outbound: [], matchedProfileIds: [] });
   if (url.endsWith("/roommate-teams/current")) return json(old ? { id: "team-a", status: "ACTIVE", dealRoomId: null, confirmedAt: "2026-09-01", dissolvedAt: null, dissolvedById: null, dissolveReason: null, members: [{ id: "member-a", userId: "a", active: true, snapshot: {} }] } : null);
   if (url.endsWith("/roommate-teams/invites")) return json([]);

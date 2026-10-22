@@ -37,11 +37,80 @@ describe("RoommatesService", () => {
     const prisma = createPrismaMock([candidate({ ownerId: "user-2", localReciprocalLike: true })]);
     const service = new RoommatesService(prisma as never, createDealRoomsMock() as never, createRoommateMatchesMock() as never);
 
-    const deck = await service.findDeck({ limit: 1 });
+    const deck = await service.findDeck(1);
 
     expect(deck.items).toHaveLength(1);
     expect(deck.items[0]).not.toHaveProperty("ownerId");
     expect(deck.items[0]).not.toHaveProperty("localReciprocalLike");
+  });
+
+  it("excludes liked and recently passed cards, resurfaces older passes and puts LATER last", async () => {
+    const now = new Date("2026-12-01T00:00:00.000Z");
+    const daysAgo = (days: number) => new Date(now.getTime() - days * 86_400_000);
+    const cards = ["liked", "passed-recently", "passed-long-ago", "later", "fresh"].map((id) => candidate({ id, ownerId: `owner-${id}`, createdAt: now }));
+    const actions = [
+      { roommateProfileId: "liked", action: "LIKE", updatedAt: daysAgo(40) },
+      { roommateProfileId: "passed-recently", action: "PASS", updatedAt: daysAgo(20) },
+      { roommateProfileId: "passed-long-ago", action: "PASS", updatedAt: daysAgo(21) },
+      { roommateProfileId: "later", action: "LATER", updatedAt: now }
+    ];
+    const prisma = {
+      roommateProfile: { findMany: async () => cards, findUnique: async () => null },
+      roommateAction: {
+        findMany: async ({ where }: { where: { userId?: string; action?: unknown } }) => (where.userId && !where.action ? actions : []),
+        groupBy: async () => []
+      }
+    };
+    const service = new RoommatesService(prisma as never, createDealRoomsMock() as never, createRoommateMatchesMock() as never);
+
+    const deck = await service.findDeck(20, "user-1", now);
+
+    expect(deck.items.map((item) => [item.id, item.later])).toEqual([["fresh", false], ["passed-long-ago", false], ["later", true]]);
+    expect(deck.total).toBe(3);
+  });
+
+  it("likes the actor back from a development demo card so the real match path runs", async () => {
+    const demo = candidate({ id: "demo", ownerId: "demo-owner", localReciprocalLike: true });
+    const upserts: unknown[] = [];
+    const prisma = {
+      roommateProfile: {
+        findUnique: async ({ where }: { where: { id?: string; ownerId?: string } }) =>
+          where.id === "demo" ? demo : where.ownerId === "user-1" ? { id: "card-1" } : null
+      },
+      roommateAction: { upsert: async (args: unknown) => upserts.push(args) }
+    };
+    const matches = {
+      recordAction: async () => ({
+        action: { action: "LIKE" },
+        match: { id: "match-1", status: "ACTIVE", firstUserId: "demo-owner", secondUserId: "user-1" },
+        conversation: { id: "conversation-1", matchId: "match-1", lastMessageAt: null }
+      })
+    };
+    const service = new RoommatesService(prisma as never, createDealRoomsMock() as never, matches as never);
+
+    await expect(service.recordAction("user-1", "demo", "LIKE")).resolves.toEqual({
+      action: { action: "LIKE" },
+      match: { id: "match-1", status: "ACTIVE" },
+      conversation: { id: "conversation-1", matchId: "match-1" },
+      dealRoom: null
+    });
+    expect(upserts).toEqual([
+      {
+        where: { userId_roommateProfileId: { userId: "demo-owner", roommateProfileId: "card-1" } },
+        create: { userId: "demo-owner", roommateProfileId: "card-1", action: "LIKE" },
+        update: { action: "LIKE" }
+      }
+    ]);
+
+    await service.recordAction("user-1", "demo", "PASS");
+    const previousNodeEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = "production";
+    try {
+      await service.recordAction("user-1", "demo", "LIKE");
+    } finally {
+      process.env.NODE_ENV = previousNodeEnv;
+    }
+    expect(upserts).toHaveLength(1);
   });
 
   it("records a pending like without creating a deal room", async () => {
@@ -120,7 +189,8 @@ function createPrismaMock(candidates: ReturnType<typeof candidate>[]) {
         where?.ownerId ? candidates.filter((item) => item.ownerId) : candidates,
       findUnique: async ({ where }: { where: { id: string } }) =>
         candidates.find((item) => item.id === where.id) ?? null
-    }
+    },
+    roommateAction: { groupBy: async () => [] }
   };
 }
 

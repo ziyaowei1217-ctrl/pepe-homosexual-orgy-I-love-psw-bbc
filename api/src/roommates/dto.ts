@@ -72,57 +72,8 @@ export class RoommateDeckQueryDto {
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  @Max(80)
+  @Max(50)
   limit?: number;
-
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(0)
-  cursor?: number;
-
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(0)
-  budgetMin?: number;
-
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(0)
-  budgetMax?: number;
-
-  @IsOptional()
-  @IsString()
-  school?: string;
-
-  @IsOptional()
-  @IsString()
-  @MaxLength(220)
-  schools?: string;
-
-  @IsOptional()
-  @IsString()
-  hobby?: string;
-
-  @IsOptional()
-  @IsString()
-  @MaxLength(220)
-  hobbies?: string;
-
-  @IsOptional()
-  @IsString()
-  city?: string;
-
-  @IsOptional()
-  @IsString()
-  @MaxLength(40)
-  gender?: string;
-
-  @IsOptional()
-  @IsIn(["precision", "balanced", "discovery"])
-  strategy?: string;
 }
 
 export class CreateRoommateProfileDto {
