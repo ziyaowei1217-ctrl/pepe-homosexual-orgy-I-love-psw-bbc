@@ -11,7 +11,7 @@ import { areaNeighborhood, findUSMarketByArea, normalize, usMarkets, type USMark
  * Pure and synchronous, so search, the home feed and the listing page all rank with the same numbers.
  *
  * Each signal the renter has given is scored 0–1 and weighted; signals they have not given, or that cannot
- * be judged for a listing, are left out rather than guessed. Similarity to saved homes only adds a bonus.
+ * be judged for a listing, are left out rather than guessed. Similarity to homes the renter saved or viewed only adds a bonus.
  * The host's self-set rating is not used.
  */
 export type MatchableListing = Pick<
@@ -29,7 +29,7 @@ export type ListingMatch = {
 };
 
 export type MatchContext = {
-  /** Listings the renter saved; listings like them get a bonus of up to 10 points. */
+  /** Listings the renter saved or viewed; listings like them get a bonus of up to 10 points. */
   interest?: readonly MatchableListing[];
 };
 
@@ -108,7 +108,7 @@ function createMatcher(preferences: RenterPreferences, context: MatchContext) {
       preferences.mustHave.length ? mustHaveSignal(listing, preferences.mustHave) : null,
       preferences.beds ? bedsSignal(listing.beds, preferences.beds) : null
     ].filter((signal): signal is Signal => signal !== null);
-    // Saved homes refine a match; on their own they are not a preference to score against.
+    // Saved and viewed homes refine a match; on their own they are not a preference to score against.
     if (!stated.length) return null;
     const total = stated.reduce((sum, signal) => sum + signal.weight, 0);
     const score = (100 * stated.reduce((sum, signal) => sum + signal.weight * signal.fit, 0)) / total;

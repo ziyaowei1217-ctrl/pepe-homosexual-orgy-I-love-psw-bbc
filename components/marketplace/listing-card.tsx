@@ -7,7 +7,7 @@ import type { HTMLAttributes, Ref } from "react";
 import { SmartImage } from "@/components/ui/smart-image";
 import { formatRangeShort } from "@/lib/date-format";
 import type { ListingMatch } from "@/lib/listing-match";
-import { earliestListingDate } from "@/lib/listing-stay";
+import { earliestListingDate, isListingBookable } from "@/lib/listing-stay";
 import type { PreviewListing } from "@/lib/preview-data";
 import { formatStayLength, formatUsd, stayPrice } from "@/lib/stay-price";
 import { cn } from "@/lib/utils";
@@ -29,7 +29,7 @@ export function ListingCard({
 } & Omit<HTMLAttributes<HTMLElement>, "children">) {
   const Heading = headingLevel === 2 ? "h2" : "h3";
   // The same availability the detail page shows: from today or the listing's start, whichever is later.
-  const availableFrom = listing.availableFrom ? earliestListingDate(listing) : "";
+  const availableFrom = earliestListingDate(listing);
   const facts = [`${listing.beds} 卧`, `${listing.baths} 卫`, ...listing.tags.filter((tag) => !tag.includes("入住") && tag !== "房东知情").slice(0, 2)];
   // The commute line below already shows the listing's commute, so the match line skips it.
   const matchNote = match ? [...match.gaps, ...match.reasons].find((note) => note !== listing.commute) : undefined;
@@ -66,7 +66,7 @@ export function ListingCard({
         {match && (match.reasons.length || match.gaps.length) ? <p className="flex min-w-0 items-center gap-2"><span className="shrink-0 rounded-psw-sm bg-primary-soft px-2 py-0.5 text-m-footnote font-bold text-primary-text">匹配 <span className="font-display">{match.score}</span>%</span>{matchNote ? <span className="truncate text-m-footnote text-ink-secondary">{matchNote}</span> : null}</p> : null}
         {listing.commute ? <p className="flex items-center gap-1.5 text-m-subhead text-ink-secondary sm:text-d-subhead"><TrainFront className="size-4 shrink-0" aria-hidden="true" /><span className="truncate">{listing.commute}</span></p> : null}
         <p className="truncate text-m-footnote text-ink-secondary">{facts.join(" · ")}</p>
-        {availableFrom && listing.availableTo > availableFrom ? <p className="flex items-center gap-1.5 text-m-footnote font-semibold text-ink"><CalendarDays className="size-4 shrink-0" aria-hidden="true" />{formatRangeShort(availableFrom, listing.availableTo)} 可住</p> : null}
+        {isListingBookable(listing) ? <p className="flex items-center gap-1.5 text-m-footnote font-semibold text-ink"><CalendarDays className="size-4 shrink-0" aria-hidden="true" />{formatRangeShort(availableFrom, listing.availableTo)} 可住</p> : null}
         <CardPrice monthly={listing.price} moveIn={moveIn} moveOut={moveOut} />
       </div>
     </article>

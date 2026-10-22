@@ -83,6 +83,18 @@ describe("home feeds", () => {
     expect(ids(result.forYou)).toEqual(["boston"]);
   });
 
+  it("lets saved and viewed homes rank a city search whose matches are all 100", () => {
+    const listings = [home("allston", "Boston · Allston", { price: 3000, beds: 3, tags: ["门卫"] }), home("fenway", "Boston · Fenway"), home("saved", "Boston · Fenway")];
+    const matches = new Map(listings.map((listing) => [listing.id, match(100)]));
+    expect(ids(feeds(listings, { matches, savedIds: ["saved"] }).forYou)).toEqual(["fenway", "allston"]);
+  });
+
+  it("shows the search's homes again rather than nothing once all of them have been seen", () => {
+    const listings = [home("boston", "Boston · Fenway"), home("austin", "Austin · West Campus")];
+    const result = feeds(listings, { viewedIds: ["boston"], search: { ...defaultSearch, query: "Boston" } });
+    expect(ids(result.forYou)).toEqual(["boston"]);
+  });
+
   it("shows up to four viewed homes, newest first, skipping ones no longer listed", () => {
     const listings = ["a", "b", "c", "d", "e"].map((id) => home(id, "Boston · Fenway"));
     expect(ids(feeds(listings, { viewedIds: ["e", "gone", "c", "a", "b", "d"] }).recent)).toEqual(["e", "c", "a", "b"]);

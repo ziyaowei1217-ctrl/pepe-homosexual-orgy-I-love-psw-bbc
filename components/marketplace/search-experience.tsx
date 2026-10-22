@@ -41,15 +41,18 @@ export function SearchExperience({ listings, initialQuery, initialMoveIn, initia
   const activeListing = catalog.items.find((listing) => listing.id === activeId);
   const filterCount = state.amenities.length + Number(Boolean(state.priceMin || state.priceMax)) + Number(Boolean(state.beds));
 
-  // The home page continues from the last search (lib/feed-signals.ts). Typing settles before it is kept, and a
-  // visit with no conditions leaves the previous search alone until the renter sets one here.
-  const searched = useRef(false);
+  const hasConditions = Boolean(state.query.trim() || state.moveIn || state.moveOut || filterCount);
+
+  // The home page continues from the last search (lib/feed-signals.ts), kept once typing settles. Changes made
+  // here count, clearing included; arriving with no conditions (a link, 找房, going back) keeps the previous one.
+  const changedHere = useRef(false);
   useEffect(() => {
-    searched.current ||= Boolean(state.query.trim() || state.moveIn || state.moveOut || filterCount);
-    if (!searched.current) return;
+    const keep = changedHere.current || hasConditions;
+    changedHere.current = false;
+    if (!keep) return;
     const timer = window.setTimeout(() => rememberLastSearch(state), 600);
     return () => window.clearTimeout(timer);
-  }, [filterCount, state]);
+  }, [hasConditions, state]);
 
   useEffect(() => {
     // Read the address bar after commit, not during render: on a client navigation the router has not
@@ -93,6 +96,7 @@ export function SearchExperience({ listings, initialQuery, initialMoveIn, initia
 
   function update(patch: Partial<SearchState>, history: "push" | "replace" = "push") {
     const next = { ...state, page: 1, selected: "", ...patch };
+    changedHere.current = true;
     setState(next);
     setHoveredId(null);
     const href = searchHref(next);
@@ -114,7 +118,7 @@ export function SearchExperience({ listings, initialQuery, initialMoveIn, initia
 
   function rememberSearch(id: string) {
     rememberOpenedSearch(state, id);
-    if (searched.current) rememberLastSearch(state);
+    if (hasConditions) rememberLastSearch(state);
     selectListing(id);
   }
 

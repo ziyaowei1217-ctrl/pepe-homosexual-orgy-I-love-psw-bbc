@@ -25,7 +25,7 @@ export function interestListings(listings: readonly PreviewListing[], savedIds: 
 
 /**
  * With a last search, 为你推荐 and 新上架 continue it: only its results, scored by `matches` for that search.
- * Homes saved or opened before the page loaded (`seenIds`) are not suggested again.
+ * Homes saved or opened before the page loaded (`seenIds`) come back only when nothing else is left.
  */
 export function buildHomeFeeds(listings: readonly PreviewListing[], { matches, interest, seenIds, viewedIds, search, now }: {
   /** Match per listing id (components/marketplace/use-listing-matches.ts, for `search`). */
@@ -38,17 +38,17 @@ export function buildHomeFeeds(listings: readonly PreviewListing[], { matches, i
   search: SearchState | null;
   now: number;
 }) {
-  const today = localDate(new Date(now));
   const withMatch = (listing: PreviewListing): FeedItem => ({ listing, match: matches.get(listing.id) ?? null });
-  const unseen = listings.filter((listing) => !seenIds.has(listing.id) && isListingBookable(listing, today));
-  const results = search ? new Set(searchCatalog(unseen, search, Number.MAX_SAFE_INTEGER).items) : null;
-  const pool = results ? unseen.filter((listing) => results.has(listing)) : unseen;
+  const results = feedCandidates(listings, search, now);
+  const unseen = results.filter((listing) => !seenIds.has(listing.id));
+  const pool = unseen.length ? unseen : results;
 
   const scored = pool.map((listing) => {
     const item = withMatch(listing);
-    // Without stated preferences there is no match score, but saved and viewed homes still point the way.
-    const fit = item.match ? item.match.score / 100 : interest.length ? interestSimilarity(listing, interest) : 0.5;
-    return { ...item, relevance: 0.8 * fit + 0.2 * 0.5 ** (ageInDays(listing, now) / freshDays) };
+    // Saved and viewed homes always count, even when every match is 100 (as after a city-only search).
+    const taste = interest.length ? interestSimilarity(listing, interest) : 0;
+    const fit = item.match ? item.match.score / 100 : 0.5;
+    return { ...item, relevance: 0.6 * fit + 0.25 * taste + 0.15 * 0.5 ** (ageInDays(listing, now) / freshDays) };
   });
   const forYou = diversify(scored, 8);
   const shown = new Set(forYou.map((item) => item.listing.id));
@@ -65,6 +65,13 @@ export function buildHomeFeeds(listings: readonly PreviewListing[], { matches, i
       .slice(0, 4)
       .map(withMatch)
   };
+}
+
+/** Bookable homes, narrowed to the search's results when there is one. */
+export function feedCandidates(listings: readonly PreviewListing[], search: SearchState | null, now: number) {
+  const today = localDate(new Date(now));
+  const bookable = listings.filter((listing) => isListingBookable(listing, today));
+  return search ? searchCatalog(bookable, search, Number.MAX_SAFE_INTEGER).items : bookable;
 }
 
 /** 相似房源: up to four bookable listings in the same city that are close in neighborhood, rent, rooms or tags. */

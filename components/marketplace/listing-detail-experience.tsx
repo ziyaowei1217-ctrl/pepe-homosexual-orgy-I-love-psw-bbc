@@ -41,7 +41,7 @@ const sections = [["listing-overview", "房源概况"], ["listing-highlights", "
 
 /** listings is the whole catalog: the match is scored against the same saved homes as on the search page. */
 export function ListingDetailExperience({ listing, listings, initialStay }: { listing: PreviewListing; listings?: PreviewListing[]; initialStay?: Partial<ListingStay> }) {
-  const { savedIds, toggleSaved } = useSavedListings();
+  const { savedIds, toggleSaved, hydrated } = useSavedListings();
   const saved = savedIds.has(listing.id);
   const [stay, setStay] = useState(() => {
     if (typeof window !== "undefined" && window.location.pathname === `/listing/${encodeURIComponent(listing.id)}`) {
@@ -83,8 +83,9 @@ export function ListingDetailExperience({ listing, listings, initialStay }: { li
   const match = matches.get(listing.id);
   const explained = match && (match.reasons.length || match.gaps.length) ? match : null;
 
-  // Feeds the home page's 最近浏览 and the saved-and-viewed interest that matches rank against.
-  useEffect(() => { rememberListingView(listing.id); }, [listing.id]);
+  // Feeds the home page's 最近浏览 and the saved-and-viewed interest. Recorded after the match snapshot (taken when
+  // saved homes load), so this page never counts the open listing as interest, however it was reached.
+  useEffect(() => { if (hydrated) rememberListingView(listing.id); }, [hydrated, listing.id]);
 
   useEffect(() => {
     setReturnHref(openedSearchHref());
@@ -257,7 +258,7 @@ export function ListingDetailExperience({ listing, listings, initialStay }: { li
             </div>
           </aside>
 
-          <SimilarListings listing={listing} listings={catalog} matches={matches} className="border-t border-line-strong pt-10 lg:col-span-2" />
+          <SimilarListings listing={listing} listings={catalog} matches={matches} search={lastSearch} className="border-t border-line-strong pt-10 lg:col-span-2" />
         </div>
       </div>
 
