@@ -1,0 +1,18 @@
+{
+  "checkedAt": "2026-10-23T04:46:24.313Z",
+  "provider": "Neon Free PostgreSQL",
+  "verifiedTls": true,
+  "serverVersionNumber": 180006,
+  "testsPassed": 7,
+  "commandScope": "One viewing/team revision integration suite in an ownership-marked disposable database",
+  "mainApplicationUserCount": 0,
+  "remainingDisposableDatabases": 0,
+  "sourceHashes": {
+    "api/test/viewing-team-revisions.integration.spec.ts": "69d4635698c32a72254bd0a34a0c4d2d4f0949556c768dd781750e1a33ac7d69",
+    "api/src/deal-threads/deal-threads.service.ts": "f1dc06a1cf42595dc1dc7e86483ad18300d8711c9e3999ee5c147a6944b930d5",
+    "api/test/support/disposable-postgres.ts": "d5db45b232cdcdb9fc25c7b9c08f011e706293e3911e1554e0aef31be53dbd59"
+  },
+  "limitations": [
+    "This is actual database integration verification, not Google OAuth, browser or hosted customer-journey acceptance."
+  ]
+}

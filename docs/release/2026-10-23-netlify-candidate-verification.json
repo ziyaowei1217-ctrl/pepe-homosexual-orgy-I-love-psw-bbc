@@ -1,0 +1,47 @@
+{
+  "checkedAt": "2026-10-23T04:46:35.028201+00:00",
+  "status": "pending hosted authentication and browser acceptance",
+  "candidateId": "6adae4c71b58c2959a619581",
+  "candidateUrl": "https://6adae4c71b58c2959a619581--sublet-pipeline-demo-zihao.netlify.app",
+  "sourceArtifactCommit": "3d4f4924d42dc3591bedb35d3cfb14540cf6901d",
+  "nextRuntimeVersion": "5.16.3",
+  "buildMethod": "One offline production-context build with private operator environment; prepared .netlify/static uploaded without a rebuild. Six function settings supplied as structured deploy variables; cookie secret marked secret.",
+  "artifact": {
+    "valid": true,
+    "buildId": "998gkk4wVbobvYX9hDFGM",
+    "publishDirectory": ".netlify/static",
+    "staticAssetCount": 73,
+    "publicFontCount": 18,
+    "bundledFontCount": 1,
+    "functionArchiveCount": 1,
+    "edgeFunctionCount": 1,
+    "edgeBundleCount": 1,
+    "errors": []
+  },
+  "http": {
+    "ssrRoutesPassed": 5,
+    "referencedAssetsPassed": 33,
+    "referencedAssetsChecked": 33,
+    "uniqueNoncePerResponse": true,
+    "scriptsMatchResponseNonce": true,
+    "privateNoStoreHtml": true,
+    "authStatus": 403,
+    "authCode": "AUTH_ORIGIN_REJECTED",
+    "apiCors": "Stable origin accepted; candidate and unrelated origins excluded."
+  },
+  "credentialScan": {
+    "artifactFilesChecked": 6902,
+    "credentialMatches": 0
+  },
+  "discardedCandidates": [
+    "6adae35e7a092d96d6326369",
+    "6adae28a654086234a86f4a8"
+  ],
+  "rollbackDeployId": "6ac5e7265c754b7319abd326",
+  "publicDeploymentChanged": false,
+  "limitations": [
+    "Runtime authentication is configured for the exact stable origin. This draft correctly rejects authentication until a deliberate origin configuration is made; no OAuth/cookie acceptance is claimed.",
+    "No actual account or shared-customer journey is established by anonymous HTTP checks.",
+    "The artifact remains unpublished and unaccepted until the release owner performs the documented controlled acceptance."
+  ]
+}

@@ -1,0 +1,222 @@
+{
+  "scope": "Hosted API read-only and four invalid-token negative requests; no users, application records, OAuth login, or staff bypass",
+  "startedAt": "2026-10-23T04:38:14.487Z",
+  "apiBase": "https://psw-connected-api.onrender.com/api/v1",
+  "allowedWebsiteOrigin": "https://sublet-pipeline-demo-zihao.netlify.app",
+  "runtime": {
+    "node": "v22.23.3"
+  },
+  "checks": [
+    {
+      "name": "hosted-readiness-database-and-all-distributed-components",
+      "passed": true,
+      "status": 200,
+      "checks": {
+        "database": "ok",
+        "realtime": {
+          "status": "ok",
+          "mode": "distributed"
+        },
+        "messageRateLimit": {
+          "status": "ok",
+          "mode": "distributed"
+        },
+        "authRateLimit": {
+          "status": "ok",
+          "mode": "distributed"
+        }
+      }
+    },
+    {
+      "name": "http-cors-exact-stable-and-lookalike-evil-origin-boundary",
+      "passed": true,
+      "stableRead": {
+        "status": 200,
+        "allowedOriginIsExactStable": true,
+        "allowOriginAbsent": false,
+        "credentialsAllowed": true
+      },
+      "evilRead": {
+        "status": 200,
+        "allowedOriginIsExactStable": false,
+        "allowOriginAbsent": true,
+        "credentialsAllowed": true
+      },
+      "stablePreflight": {
+        "status": 204,
+        "allowedOriginIsExactStable": true,
+        "allowOriginAbsent": false,
+        "credentialsAllowed": true
+      },
+      "evilPreflight": {
+        "status": 204,
+        "allowedOriginIsExactStable": false,
+        "allowOriginAbsent": true,
+        "credentialsAllowed": true
+      }
+    },
+    {
+      "name": "engine-io-explicit-application-origin-gate",
+      "passed": true,
+      "stableStatus": 200,
+      "evilStatus": 403,
+      "evilCode": 4,
+      "transport": "polling"
+    },
+    {
+      "name": "websocket-lookalike-evil-origin-rejected-before-connection",
+      "passed": true,
+      "status": 400
+    },
+    {
+      "name": "websocket-exact-stable-origin-transport-accepted-unauthenticated-namespace-disconnected",
+      "passed": true,
+      "transportAccepted": true,
+      "namespaceConnected": true,
+      "serverDisconnected": true
+    },
+    {
+      "name": "unauthenticated-hypothetical-history-and-media-denied",
+      "passed": true,
+      "cases": [
+        {
+          "name": "deal-history",
+          "status": 401
+        },
+        {
+          "name": "roommate-history",
+          "status": 401
+        },
+        {
+          "name": "private-admin-media",
+          "status": 401
+        },
+        {
+          "name": "hypothetical-public-media",
+          "status": 404
+        }
+      ]
+    },
+    {
+      "name": "single-forged-forwarded-hop-retains-baseline-ip-quota-bucket",
+      "passed": true,
+      "requestsReachingExpectedExchangeRejection": 2,
+      "statuses": [
+        401,
+        401
+      ],
+      "sameBucketIncrementedOncePerRequest": true
+    },
+    {
+      "name": "combined-multi-hop-and-alternative-forwarding-headers-rejected",
+      "passed": true,
+      "requests": 2,
+      "statuses": [
+        403,
+        403
+      ],
+      "exactRejectingLayerIdentified": false
+    }
+  ],
+  "privacy": {
+    "credentialsOrPrivateEndpointsRecorded": false,
+    "rawIpAddressesRecorded": false,
+    "quotaBucketHashesRecorded": false
+  },
+  "isolation": {
+    "invalidTokenExchangeRequestLimit": 4,
+    "uniqueValidDeviceIdPerExchange": true,
+    "hypotheticalUuidResourceIdsOnly": true,
+    "bruteForceOrResourceEnumeration": false
+  },
+  "sourceCommit": "3d4f4924d42dc3591bedb35d3cfb14540cf6901d",
+  "sourceSha256": {
+    "api/src/main.ts": "398bc79f776f52d80f9f44b561dbb82dee32ff9fbdb475accb1bd3bcea50c9d0",
+    "api/src/config/cors.ts": "f41acc719fdd953c860db2513123d1bcd2c2d1ee5b2e0371e70cd0acf2288c08",
+    "api/src/config/env.ts": "0b48bf309368ffb7e1b58035575caa4a5520149b9d0d19dfb5da7fe2ef986273",
+    "api/src/auth/auth-rate-limit.ts": "1a895be68b987fc701f42321e76739074736d5efd2d93d66bf9f3a5807e3d84f",
+    "api/src/auth/auth.controller.ts": "eff474798d93294ccd8a3c18fdce5a4c6fd4efc99ecc3c03898048bc1924b22c",
+    "api/src/auth/valkey-rate-limit-store.ts": "41f8256ba911bcda4b91bed7ecf65029492cea9bd1ffb7cfbe191d64592a05a3",
+    "api/src/roommate-conversations/socket-origin.ts": "fd701a99b487307661d586968edfd6443ab7591272e0c233f2a92e07835a1492",
+    "api/src/roommate-conversations/socket-adapter.ts": "8822daad9aa647ba0d0702746c0ab6246153e4ff99258c5278ec3e225c6ff64a",
+    "api/src/roommate-conversations/roommate-conversations.gateway.ts": "2df6949e908672517cc162b874b237ccf6fc5c3dcd6e604900052bcae9e422f1"
+  },
+  "sourceSnapshot": "Hashes identify the local reviewed source; matching the deployed image to this checkout still requires the deployment receipt.",
+  "probeSourceSha256": "b7abc5d8744541c99ce65267efb236c5dbe398764b2504886ca994b5794d5685",
+  "readOnlyChecksReusedFrom": {
+    "completedAt": "2026-10-23T04:37:16.586Z",
+    "earlierProbeSourceSha256": "9e4aaa73fb2bc5c7c79629bcbbd1ca5af62fe35fe7d01f45cc57b2e5939d0ce6",
+    "reason": "Earlier checks passed before a temporary-harness cleanup-method typo stopped the run; they were reused to avoid repeating hosted requests."
+  },
+  "forwardedHeaderObservations": [
+    {
+      "variant": "baseline",
+      "status": 401,
+      "exactlyOneIpBucketIncrementedOnce": true,
+      "sameBucketAsBaseline": true
+    },
+    {
+      "variant": "forged-single-forwarded-hop",
+      "status": 401,
+      "exactlyOneIpBucketIncrementedOnce": true,
+      "sameBucketAsBaseline": true
+    },
+    {
+      "variant": "forged-two-hop-chain-and-alternative-ip-headers",
+      "status": 403,
+      "exactlyOneIpBucketIncrementedOnce": false,
+      "sameBucketAsBaseline": false
+    },
+    {
+      "variant": "forged-three-hop-chain-and-alternative-ip-headers",
+      "status": 403,
+      "exactlyOneIpBucketIncrementedOnce": false,
+      "sameBucketAsBaseline": false
+    }
+  ],
+  "cleanup": {
+    "redisClientDisposed": true,
+    "productionQuotaEntriesDeleted": false,
+    "quotaEntriesExpireNormally": true,
+    "socketsClosedAfterChecks": true
+  },
+  "invalidTokenExchangeRequestsMade": 4,
+  "finishedAt": "2026-10-23T04:38:15.951Z",
+  "durationMs": 1464,
+  "result": "partial",
+  "limitations": [
+    "This does not complete Google OAuth or verify signed-in account authorization, real media visibility, message persistence, or two-device user journeys.",
+    "HTTP CORS omits an allowed-origin response for untrusted origins; it is a browser response-access boundary, not a replacement for bearer authentication.",
+    "The four controlled-source requests test resistance to the supplied forged headers only. They do not independently establish the real end-user IP, exact proxy-hop count, every ingress path, or all spoofing variations.",
+    "Quota attribution requires no concurrent exchange from another source during the short observation window; counts and bucket comparisons are recorded without raw IP addresses or bucket hashes.",
+    "Readiness is one healthy snapshot, not outage/recovery or sustained availability testing.",
+    "The evil-origin raw WebSocket upgrade returned HTTP 400 while the polling origin gate returned the application's explicit HTTP 403 denial. The HTTP 400 response alone does not identify which proxy/application layer rejected the upgrade.",
+    "The local source hashes require a matching deployment receipt to establish the exact running source commit.",
+    "The two combined forwarding-header variants returned 403 rather than the expected exchange 401. Their exact rejection layer and per-request quota deltas are not established by this record. No extra token exchanges were sent after reaching the four-request limit."
+  ],
+  "priorAttempt": {
+    "result": "failed-test-expectation",
+    "invalidTokenExchanges": 0,
+    "reason": "The initial probe required an evil-origin WebSocket response of exactly 403; the actual response was 400. The rejected connection was subsequently distinguished from the explicit application polling-origin 403 and the accepted stable-origin WebSocket."
+  },
+  "priorHarnessCleanupCorrection": {
+    "result": "failed-probe-harness",
+    "invalidTokenExchanges": 0,
+    "reason": "Five checks passed before calling a nonexistent Socket.IO manager close method. The socket was already disconnected; the harness now uses the supported disconnect method. No application source changed."
+  },
+  "finalIpQuotaSnapshot": {
+    "observedAt": "2026-10-23T04:40:09.498Z",
+    "bucketCount": 1,
+    "retainedEvents": 2,
+    "inspectedOnlyExchangeIpQuotaZCard": true,
+    "rawIpsAndBucketHashesRecorded": false
+  },
+  "testExpectationFailure": {
+    "stage": "forwarded-header-ip-quota",
+    "code": "FORWARDED_HEADER_BUCKET_BOUNDARY_FAILED"
+  },
+  "interpretation": "All attempted unauthorized requests were denied. Baseline and a single forged X-Forwarded-For reached the exchange limiter and incremented the same bucket. Combined spoofed-header variants returned 403; the original expectation of four 401 responses and four limiter increments was not met. This is limited acceptance evidence, not a demonstrated quota bypass or complete proxy-chain verification.",
+  "evidenceFinalizedAt": "2026-10-23T04:40:09.498Z",
+  "sourceHashesMatchAtFinalization": true,
+  "finalObservationProbeSha256": "c466cfbd80daafedc132fa1ff8797c1b4aeaaa6983af988dc845ec5a6d661e9f"
+}
