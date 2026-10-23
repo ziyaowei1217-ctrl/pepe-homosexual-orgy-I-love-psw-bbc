@@ -52,7 +52,14 @@ const nextConfig = {
     if (production) {
       headers.push({ key: "Strict-Transport-Security", value: "max-age=31536000; includeSubDomains" });
     }
-    return [{ source: "/(.*)", headers }];
+    const authHeaders = [{ key: "Referrer-Policy", value: "no-referrer" }];
+    return [
+      { source: "/(.*)", headers },
+      // Next applies the last matching value. Keep OAuth redirects and their
+      // completion page from inheriting the broader site's referrer policy.
+      { source: "/api/auth/:path*", headers: authHeaders },
+      { source: "/auth/complete", headers: authHeaders }
+    ];
   }
 };
 
