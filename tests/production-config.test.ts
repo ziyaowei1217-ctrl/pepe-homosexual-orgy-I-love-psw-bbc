@@ -1,8 +1,8 @@
 import { spawnSync } from "node:child_process";
-import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -46,7 +46,8 @@ function writeEnvironmentFile(directory: string, name: string, environment: Reco
 }
 
 function runCli(arguments_: string[], environment: Record<string, string> = {}) {
-  return spawnSync(process.execPath, ["--", scriptPath, ...arguments_], {
+  const preload = environment.FAKE_DOCKER_PRELOAD;
+  return spawnSync(process.execPath, [...(preload ? ["--import", pathToFileURL(preload).href] : []), "--", scriptPath, ...arguments_], {
     cwd: process.cwd(),
     encoding: "utf8",
     env: environment as NodeJS.ProcessEnv
@@ -79,14 +80,19 @@ function effectiveComposeConfig(apiOverrides: Record<string, string> = {}) {
 function installFakeDocker(directory: string, output: string, exitCode = 0) {
   const outputPath = join(directory, "docker-output.txt");
   const argumentsPath = join(directory, "docker-arguments.json");
-  const dockerPath = join(directory, "docker");
+  const dockerPath = join(directory, "docker.cjs");
+  const preloadPath = join(directory, "fake-docker.mjs");
   writeFileSync(outputPath, output);
-  writeFileSync(dockerPath, `#!${process.execPath}\nconst fs = require("node:fs");\nfs.writeFileSync(process.env.FAKE_DOCKER_ARGUMENTS_PATH, JSON.stringify(process.argv.slice(2)));\nprocess.stdout.write(fs.readFileSync(process.env.FAKE_DOCKER_OUTPUT_PATH, "utf8"));\nprocess.stderr.write(process.env.FAKE_DOCKER_STDERR || "");\nprocess.exit(Number(process.env.FAKE_DOCKER_EXIT_CODE || 0));\n`);
-  chmodSync(dockerPath, 0o755);
+  writeFileSync(dockerPath, `const fs = require("node:fs");\nfs.writeFileSync(process.env.FAKE_DOCKER_ARGUMENTS_PATH, JSON.stringify(process.argv.slice(2)));\nprocess.stdout.write(fs.readFileSync(process.env.FAKE_DOCKER_OUTPUT_PATH, "utf8"));\nprocess.stderr.write(process.env.FAKE_DOCKER_STDERR || "");\nprocess.exit(Number(process.env.FAKE_DOCKER_EXIT_CODE || 0));\n`);
+  // Intercept only this child process's Docker dependency. Node executes the
+  // fixture directly, so no POSIX shebang or platform-specific executable shim
+  // changes the CLI's argument, parsing, failure or redaction behavior.
+  writeFileSync(preloadPath, `import childProcess from "node:child_process";\nimport { syncBuiltinESMExports } from "node:module";\nconst spawnSync = childProcess.spawnSync;\nchildProcess.spawnSync = (command, args, options) => {\n  if (command !== "docker") throw new Error("Unexpected fixture command");\n  return spawnSync(process.execPath, [process.env.FAKE_DOCKER_SCRIPT, ...args], options);\n};\nsyncBuiltinESMExports();\n`);
   return {
     argumentsPath,
     environment: {
-      PATH: directory,
+      FAKE_DOCKER_PRELOAD: preloadPath,
+      FAKE_DOCKER_SCRIPT: dockerPath,
       FAKE_DOCKER_ARGUMENTS_PATH: argumentsPath,
       FAKE_DOCKER_OUTPUT_PATH: outputPath,
       FAKE_DOCKER_EXIT_CODE: String(exitCode)

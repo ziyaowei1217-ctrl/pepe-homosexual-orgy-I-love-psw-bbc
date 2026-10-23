@@ -21,7 +21,14 @@ describe("local backend scripts", () => {
         private: true,
         scripts: { dev: "node -e \"console.log('API_STARTED')\"" }
       }));
-      const result = spawnSync("pnpm", ["dev:local"], { cwd: directory, encoding: "utf8", timeout: 20_000 });
+      const pnpmCli = process.env.npm_execpath;
+      const useNode = Boolean(pnpmCli && /(?:^|[\\/])pnpm\.(?:c?js)$/i.test(pnpmCli));
+      const result = spawnSync(useNode ? process.execPath : "pnpm", useNode ? [pnpmCli!, "dev:local"] : ["dev:local"], {
+        cwd: directory,
+        encoding: "utf8",
+        timeout: 20_000,
+        shell: !useNode && process.platform === "win32"
+      });
       expect(result.status, result.stderr).toBe(0);
       expect(result.stdout).toMatch(/^\. dev: WEB_STARTED$/m);
       expect(result.stdout).toMatch(/^api dev: API_STARTED$/m);

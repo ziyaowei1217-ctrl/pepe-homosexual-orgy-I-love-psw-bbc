@@ -1,0 +1,103 @@
+{
+  "scope": "Real Upstash native TLS, exact application Lua scripts, and two local Socket.IO servers communicating through the real Redis adapter; not hosted application acceptance",
+  "provider": "Upstash Redis",
+  "startedAt": "2026-10-23T04:26:09.018Z",
+  "runtime": {
+    "node": "v22.23.3"
+  },
+  "credentialExposure": {
+    "credentialsInArguments": false,
+    "credentialsOrEndpointsInEvidence": false
+  },
+  "isolation": {
+    "uniqueVerificationNamespace": true,
+    "keysAndChannelsStartWith": "psw:verification:",
+    "realUsersCreated": false,
+    "applicationRecordsWritten": false
+  },
+  "checks": [
+    {
+      "name": "verified-tls-certificate-and-hostname",
+      "passed": true
+    },
+    {
+      "name": "native-tls-authenticated-ping",
+      "passed": true
+    },
+    {
+      "name": "exact-authentication-lua-multi-scope-allow-deny-atomicity-and-ttl",
+      "passed": true,
+      "accepted": 2,
+      "denied": 1,
+      "testLimits": [
+        2,
+        3
+      ],
+      "testWindowMs": 30000
+    },
+    {
+      "name": "exact-authentication-lua-expired-window-recovers",
+      "passed": true
+    },
+    {
+      "name": "exact-messaging-lua-conversation-and-actor-quotas-atomicity-and-ttl",
+      "passed": true,
+      "conversationLimit": 20,
+      "actorLimit": 100,
+      "windowMs": 60000,
+      "accepted": 100,
+      "denied": 2
+    },
+    {
+      "name": "socket-io-two-server-room-delivery-through-native-tls-redis",
+      "passed": true,
+      "servers": 2,
+      "localDeliveries": 1,
+      "remoteDeliveries": 1,
+      "isolatedAdapterChannelPrefix": true
+    },
+    {
+      "name": "socket-io-redis-reverse-roundtrip",
+      "passed": true
+    }
+  ],
+  "sourceCommit": "fee5a6abe7aaed16a5f85b326083c0e1ce03c3e2",
+  "sourceSha256": {
+    "api/src/auth/valkey-rate-limit-store.ts": "41f8256ba911bcda4b91bed7ecf65029492cea9bd1ffb7cfbe191d64592a05a3",
+    "api/src/roommate-conversations/roommate-message-rate-limit.ts": "98ad175e865ee4df7eb40903f2ebe03441c60965931bca0f47242625bb6aa658",
+    "api/src/roommate-conversations/socket-adapter.ts": "8822daad9aa647ba0d0702746c0ab6246153e4ff99258c5278ec3e225c6ff64a",
+    "api/src/valkey/valkey-client-construction.ts": "c17e4144aa379466a56a859ff65fd5057d5550e0787c3d5acf73bab3a4923b0e",
+    "api/package.json": "16d011b2c5e5a4a7c6076beea92cf32c19d6e0897139186becada4cfa32c2c02",
+    "pnpm-lock.yaml": "fa480a04e1b841a7d6a9bb66e24db573ac6e12b90ea00cf59bec9d707e9e865a"
+  },
+  "sdkVersions": {
+    "redis": "5.12.1",
+    "@socket.io/redis-adapter": "8.3.0",
+    "socket.io": "4.8.3",
+    "socket.io-client": "4.8.3"
+  },
+  "luaSha256": {
+    "authentication": "527340a4aef307faa9a1a045a11407acade85f22d1149d75c947d0a4cac854ff",
+    "messaging": "dd81aedf2577e019561bcfcff6c58a90a739f7ea086c46c4bf827b993e8e0f15"
+  },
+  "sourceUnchangedDuringRun": true,
+  "cleanup": {
+    "socketServersClosed": true,
+    "verificationKeysTargeted": 10,
+    "verificationKeysDeleted": 9,
+    "remainingVerificationKeys": 0,
+    "clientsDisposed": true
+  },
+  "finishedAt": "2026-10-23T04:26:11.516Z",
+  "durationMs": 2498,
+  "driverErrorEvents": 0,
+  "result": "passed",
+  "limitations": [
+    "No hosted Render or Netlify deployment was exercised.",
+    "No Google OAuth, application users, application records, or cross-device user journeys were created or verified.",
+    "The exact Lua scripts were evaluated using isolated verification keys; authentication used small explicit test limits, and messaging used the application limits of 20 per conversation and 100 per actor per minute.",
+    "Two loopback Socket.IO servers used the pinned Redis adapter with an isolated channel prefix; this verifies real provider Pub/Sub compatibility, not hosted gateway authorization or proxy/CORS settings."
+  ],
+  "sourceSnapshot": "sourceCommit identifies checkout HEAD; sourceSha256 records actual working-tree files, confirmed unchanged during the probe.",
+  "probeSourceSha256": "3be8894454351408f444ab15054bdf96dcea49016eff8c05cbdc09f314ae1648"
+}

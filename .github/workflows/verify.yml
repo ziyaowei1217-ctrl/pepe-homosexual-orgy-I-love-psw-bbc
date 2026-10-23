@@ -46,7 +46,8 @@ jobs:
   integration-and-containers:
     name: Disposable PostgreSQL, storage, messaging and containers
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # A cold runner compiles the checksum-pinned official storage fixtures.
+    timeout-minutes: 40
     env:
       NEXT_TELEMETRY_DISABLED: "1"
       DATABASE_URL: postgresql://sublet:sublet@localhost:5432/sublet_pipeline?schema=public
@@ -60,10 +61,15 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Generate the API database client
+        run: pnpm -C api exec prisma generate
+      - name: Build pinned disposable storage fixtures
+        timeout-minutes: 15
+        run: docker compose build minio minio-init
       - name: Start disposable services
         run: |
           docker compose --profile realtime up -d --wait --wait-timeout 120 db minio valkey
-          docker compose run --rm minio-init
+          docker compose run --rm --no-deps minio-init
       - name: Apply migrations to the disposable database
         run: pnpm -C api exec prisma migrate deploy
       - name: Check real database, image immutability and distributed quotas
@@ -73,7 +79,7 @@ jobs:
           RUN_MEDIA_SMOKE: "1"
           RUN_VALKEY_SMOKE: "1"
           VALKEY_URL: redis://127.0.0.1:6379
-        run: pnpm exec vitest run --no-file-parallelism --maxWorkers=1 test/*.integration.spec.ts
+        run: pnpm exec vitest run --no-file-parallelism --maxWorkers=1 test/*.integration.spec.ts test/*schema.spec.ts test/*.migration.spec.ts
       - name: Check marketplace journey with real persistence
         run: pnpm -C api launch:smoke:marketplace
       - name: Check authorized realtime messaging
