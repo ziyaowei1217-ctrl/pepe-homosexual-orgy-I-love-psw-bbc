@@ -132,7 +132,8 @@ describe.each(["deal", "roommate"] as const)("%s bounded Inbox history", source 
     await content().findByText(body(id, 1));
     expectMessages(id, 1, 60);
     expect(requests.at(-1)).toEqual({ source, id, cursor: olderCursor });
-    expect(view.scrollTop).toBe(80 + view.scrollHeight - oldHeight);
+    // Prepending renders before the effect restores the viewport anchor.
+    await waitFor(() => expect(view.scrollTop).toBe(80 + view.scrollHeight - oldHeight));
     expect(content().queryByRole("button", { name: "加载较早消息" })).toBeNull();
   });
 
@@ -219,10 +220,10 @@ it("keeps older requests independent across navigation and never applies another
   expect(view.scrollTop).toBe(140);
   expect((content().getByRole("button", { name: "正在加载…" }) as HTMLButtonElement).disabled).toBe(true);
   await act(async () => earlierB.resolve(page("deal", "deal-B", 1, 10)));
-  expect(view.scrollTop).toBe(140 + view.scrollHeight - bHeight);
+  await waitFor(() => expect(view.scrollTop).toBe(140 + view.scrollHeight - bHeight));
   select("deal-A");
   await content().findByText(body("deal-A", 1));
-  expect(view.scrollTop).toBe(view.scrollHeight);
+  await waitFor(() => expect(view.scrollTop).toBe(view.scrollHeight));
   expect(content().queryByText(body("deal-B", 1))).toBeNull();
 });
 
@@ -240,7 +241,7 @@ it("keeps the reading position when a live message arrives, and follows messages
   fireEvent.scroll(view);
   act(() => realtime.options!.onEvent({ name: "roommate.message.created", payload: { conversationId: "roommate-A", message: roommateMessage(62) } }));
   await content().findByText(body("roommate-A", 62));
-  expect(view.scrollTop).toBe(view.scrollHeight);
+  await waitFor(() => expect(view.scrollTop).toBe(view.scrollHeight));
 });
 
 it("does not clear an identical new draft in a different conversation when a pending send completes", async () => {

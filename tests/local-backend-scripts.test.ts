@@ -32,8 +32,10 @@ describe("local backend scripts", () => {
       });
       expect(result.status, result.stderr).toBe(0);
       const output = stripVTControlCharacters(result.stdout);
-      expect(output).toMatch(/^\. dev: WEB_STARTED$/m);
-      expect(output).toMatch(/^api dev: API_STARTED$/m);
+      // pnpm uses relative workspace labels on Unix and abbreviated absolute
+      // paths on Windows. Both unique startup lines must still be present.
+      expect(output).toMatch(/^.+ dev: WEB_STARTED$/m);
+      expect(output).toMatch(/^.+ dev: API_STARTED$/m);
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }

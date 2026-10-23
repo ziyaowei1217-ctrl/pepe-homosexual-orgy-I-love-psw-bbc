@@ -218,5 +218,57 @@
   "interpretation": "All attempted unauthorized requests were denied. Baseline and a single forged X-Forwarded-For reached the exchange limiter and incremented the same bucket. Combined spoofed-header variants returned 403; the original expectation of four 401 responses and four limiter increments was not met. This is limited acceptance evidence, not a demonstrated quota bypass or complete proxy-chain verification.",
   "evidenceFinalizedAt": "2026-10-23T04:40:09.498Z",
   "sourceHashesMatchAtFinalization": true,
-  "finalObservationProbeSha256": "c466cfbd80daafedc132fa1ff8797c1b4aeaaa6983af988dc845ec5a6d661e9f"
+  "finalObservationProbeSha256": "c466cfbd80daafedc132fa1ff8797c1b4aeaaa6983af988dc845ec5a6d661e9f",
+  "latestDeployment": {
+    "checkedAt": "2026-10-23T05:21:15.538898+00:00",
+    "sourceHead": "cfcdba50643071ada000de7129cc2829f5d175f7",
+    "deploymentId": "dep-dbdes9dg1s2s73b8tglg",
+    "checks": [
+      {
+        "httpStatus": 200,
+        "durationMs": 241,
+        "body": {
+          "status": "ok",
+          "checks": {
+            "database": "ok",
+            "realtime": {
+              "status": "ok",
+              "mode": "distributed"
+            },
+            "messageRateLimit": {
+              "status": "ok",
+              "mode": "distributed"
+            },
+            "authRateLimit": {
+              "status": "ok",
+              "mode": "distributed"
+            }
+          }
+        }
+      },
+      {
+        "httpStatus": 200,
+        "durationMs": 139,
+        "body": {
+          "status": "ok",
+          "checks": {
+            "database": "ok",
+            "realtime": {
+              "status": "ok",
+              "mode": "distributed"
+            },
+            "messageRateLimit": {
+              "status": "ok",
+              "mode": "distributed"
+            },
+            "authRateLimit": {
+              "status": "ok",
+              "mode": "distributed"
+            }
+          }
+        }
+      }
+    ],
+    "limitation": "Two healthy responses verify hosted dependencies; actual cache coalescing and expiry are established by the focused production-cache tests, not by response latency alone."
+  }
 }
