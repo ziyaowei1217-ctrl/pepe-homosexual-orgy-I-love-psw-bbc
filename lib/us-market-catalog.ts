@@ -71,6 +71,11 @@ export function findUSMarketByArea(area: string) {
   );
 }
 
+/** "Los Angeles · Westwood" → "Westwood"; an area without "·" is its own neighborhood. */
+export function areaNeighborhood(area: string) {
+  return (area.split("·")[1] ?? area).trim();
+}
+
 export function getMarketNeighborhoodCoordinates(entry: USMarket, neighborhood: string) {
   const hash = stableHash(`${entry.id}:${neighborhood}`);
   const latOffset = ((hash % 997) - 498) * 0.000055;
@@ -104,11 +109,11 @@ function matchRank(entry: USMarket, query: string) {
   return Number.POSITIVE_INFINITY;
 }
 
-function normalize(value: string) {
+export function normalize(value: string) {
   return value.trim().toLowerCase();
 }
 
-function stableHash(value: string) {
+export function stableHash(value: string) {
   let hash = 0;
   for (const character of value) hash = (hash * 31 + character.charCodeAt(0)) >>> 0;
   return hash;

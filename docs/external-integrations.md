@@ -123,8 +123,14 @@ tests use a controlled adapter boundary and cannot certify an external provider'
 
 ## 3. Map
 
-The web app uses raster XYZ tiles in search, listing detail, and saved-list maps. Set these values
-before building the web image:
+Search, saved-list and listing maps run on MapLibre GL (`components/marketplace/listing-map.tsx`). The
+basemap is chosen in `getMapStyle` (`lib/listing-map.ts`):
+
+1. `NEXT_PUBLIC_MAP_STYLE_URL`: a MapLibre vector style URL (for example a MapTiler or Stadia style).
+2. `NEXT_PUBLIC_MAP_TILE_URL_TEMPLATE`: raster XYZ tiles, shown with `NEXT_PUBLIC_MAP_ATTRIBUTION`.
+3. Neither set: OpenFreeMap's free vector style (`https://tiles.openfreemap.org/styles/liberty`).
+
+Production builds require the raster values, set before building the web image:
 
 ```text
 NEXT_PUBLIC_MAP_TILE_URL_TEMPLATE=https://maps.example.com/tiles/{z}/{x}/{y}.png?key=...
@@ -132,8 +138,8 @@ NEXT_PUBLIC_MAP_ATTRIBUTION=© Your map provider
 ```
 
 The URL must be HTTPS and contain `{z}`, `{x}`, and `{y}`. These are public build-time values, so use
-a browser-restricted map key. The local fallback is OpenStreetMap and is not intended to replace a
-production tile plan.
+a browser-restricted map key. `next.config.mjs` adds the style or tile origin to the CSP `connect-src`;
+a vector style must serve its tiles, glyphs and sprites from that same origin.
 
 ## 4. Messages
 
@@ -159,6 +165,28 @@ Realtime clients connect to the public API origin at `/roommate-messaging` and a
 same access token. PostgreSQL history is authoritative; Valkey provides cross-instance fan-out and
 shared rate limiting. Your proxy/load balancer must preserve WebSocket upgrades and forward the
 configured trusted proxy headers.
+
+## Optional: AI assistant
+
+The web server calls the Claude API (Anthropic) for the in-app assistant (find listings, compare them,
+draft a message to a host) and for 「AI 帮我写」 in the host listing form. Without a key both are
+hidden. Set the key on the **web** service at runtime; it is never a build argument or a
+`NEXT_PUBLIC_` variable:
+
+```text
+ANTHROPIC_API_KEY=...
+```
+
+- Requests go from the web server to `api.anthropic.com`; browsers only call `/api/assistant/*` on
+  the web origin.
+- Sent to Anthropic: the user's questions and the assistant's earlier answers from the same browser
+  tab, listing facts (title, area, rent, dates, commute, transit, amenities), saved listing ids and the
+  user id. No email address, name or inbox message. Prompts are not logged.
+- Limits: the web server asks `POST /api/v1/assistant/quota/:kind` before each model call. It counts
+  requests per user (chat 20 per 10 minutes and 100 per day; listing writer 10 per 10 minutes and 30
+  per day) and across all users (1,000 and 300 per hour) in Valkey. A chat request makes at most four
+  model calls of at most 4K output tokens each and sends at most 12K characters of conversation.
+- Set a monthly spend limit on the key's workspace in the Anthropic Console as the final cap.
 
 ## Configuration gate
 

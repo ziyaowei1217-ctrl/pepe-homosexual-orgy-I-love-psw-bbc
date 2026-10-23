@@ -8,7 +8,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { ApplicationDetailExperience, ApplicationsExperience } from "../components/marketplace/application-experiences";
 import { HostApplicationsExperience, HostDashboardExperience } from "../components/marketplace/host-experiences";
 import { InboxExperience } from "../components/marketplace/inbox-experience";
-import { PublishingFlow } from "../components/sublet-app";
+import { PublishingFlow } from "../components/publishing-flow";
 import { writeStoredAuthSession } from "../lib/auth-session";
 
 vi.mock("../lib/roommate-realtime", () => ({ createRoommateRealtimeClient: () => ({ connect() {}, disconnect() {} }) }));

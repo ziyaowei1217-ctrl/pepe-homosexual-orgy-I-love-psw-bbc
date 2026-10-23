@@ -1,8 +1,8 @@
-import { ArrowRight, CalendarDays, MapPin, Search } from "lucide-react";
+import { CalendarDays, MapPin, Search } from "lucide-react";
 import Link from "next/link";
 
 import { Wowo } from "@/components/brand/wowo";
-import { ListingCard } from "@/components/marketplace/listing-card";
+import { HomeFeeds } from "@/components/marketplace/listing-feeds";
 import { LocationAutocomplete } from "@/components/marketplace/location-autocomplete";
 import { localDate } from "@/lib/listing-stay";
 import type { PreviewListing } from "@/lib/preview-data";
@@ -18,8 +18,9 @@ const needs = ["带家具", "近地铁", "独卫", "宠物"] as const;
 /**
  * psw home, direction A (夜色): one short 夜墨 hero with the slogan and the search, then light content.
  * It is the page's only 夜墨 block, so the booking decision block stays special elsewhere.
+ * `listings` is the whole catalog; the feeds (components/marketplace/listing-feeds.tsx) pick what to show.
  */
-export function HomeExperience({ listings, totalListings = listings.length }: { listings: PreviewListing[]; totalListings?: number; totalCities?: number }) {
+export function HomeExperience({ listings }: { listings: PreviewListing[] }) {
   const today = localDate();
   return <main className="bg-background">
     <section aria-labelledby="home-title" className="bg-ink-block text-on-dark">
@@ -63,18 +64,7 @@ export function HomeExperience({ listings, totalListings = listings.length }: { 
         </div>
       </section>
 
-      <section aria-labelledby="home-picks" className="flex flex-col gap-6">
-        <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-2">
-          <div className="min-w-0">
-            <h2 id="home-picks" className="text-[22px] font-bold leading-[30px] text-ink sm:text-d-title">精选房源</h2>
-            <p className="mt-1 text-m-subhead text-ink-secondary sm:text-d-subhead">按月租显示。选好日期后，卡片上会换成你那段日期的总价。</p>
-          </div>
-          <Link href="/search" className="flex min-h-11 items-center gap-1 rounded-full px-1 font-rounded text-d-label text-primary-text hover:text-ink">查看全部{totalListings ? ` ${totalListings.toLocaleString("en-US")} 套` : ""}<ArrowRight className="size-4" aria-hidden="true" /></Link>
-        </div>
-        {listings.length ? <div className="grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-6">
-          {listings.map((listing, index) => <ListingCard key={listing.id} listing={listing} href={`/listing/${encodeURIComponent(listing.id)}`} priority={index === 0} />)}
-        </div> : <p className="rounded-psw-xl bg-surface p-8 text-center text-d-subhead text-ink-secondary">新房源正在准备中，可以先选择感兴趣的城市。</p>}
-      </section>
+      <HomeFeeds listings={listings} now={Date.now()} />
 
       <section aria-labelledby="home-post" className="flex flex-col items-start gap-6 rounded-psw-2xl bg-primary-soft p-6 sm:flex-row sm:items-center sm:gap-10 sm:px-10 sm:py-8">
         <Wowo size={88} />

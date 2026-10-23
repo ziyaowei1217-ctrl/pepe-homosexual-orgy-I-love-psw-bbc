@@ -2,14 +2,14 @@
 
 import { Info, List, Map, Plus, Search, X } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useMemo, useRef, useState, type FormEvent } from "react";
 
 import { EmptyState } from "@/components/marketplace/empty-state";
 import { ListingCard } from "@/components/marketplace/listing-card";
+import { ListingMap } from "@/components/marketplace/listing-map";
 import { PageHeader } from "@/components/marketplace/page-header";
 import { useSavedListings } from "@/components/marketplace/saved-listings-provider";
 import { useModalFocus } from "@/components/marketplace/use-modal-focus";
-import { defaultMapAttribution, getMapCenterForListings, getMapMarkers, getMapTiles } from "@/lib/listing-map";
 import { DEFAULT_SAVED_COLLECTION_ID } from "@/lib/saved-collections";
 import type { PreviewListing } from "@/lib/preview-data";
 import { cn } from "@/lib/utils";
@@ -126,42 +126,7 @@ function NewCollectionDialog({ name, onNameChange, onSubmit, onClose }: {
   );
 }
 
-export function SavedMap({ listings }: { listings: PreviewListing[] }) {
-  const canvas = useRef<HTMLElement>(null);
-  const [mapSize, setMapSize] = useState({ width: 720, height: 620 });
-  const center = useMemo(() => getMapCenterForListings(listings), [listings]);
-  // Zoom out until every saved listing fits, so listings in different cities are not pinned to the edges.
-  const zoom = useMemo(() => {
-    for (let candidate = 11; candidate >= 2; candidate--) {
-      const points = getMapMarkers(listings, center, candidate, mapSize, false);
-      if (points.every((point) => point.x > 50 && point.x < mapSize.width - 50 && point.y > 60 && point.y < mapSize.height - 40)) return candidate;
-    }
-    return 2;
-  }, [center, listings, mapSize]);
-  const tiles = getMapTiles(center, zoom, mapSize);
-  const markers = getMapMarkers(listings, center, zoom, mapSize, false);
-  const attribution = process.env.NEXT_PUBLIC_MAP_ATTRIBUTION ?? defaultMapAttribution;
-
-  useEffect(() => {
-    if (!canvas.current || typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver(([entry]) => {
-      if (entry.contentRect.width && entry.contentRect.height) {
-        setMapSize({ width: entry.contentRect.width, height: entry.contentRect.height });
-      }
-    });
-    observer.observe(canvas.current);
-    return () => observer.disconnect();
-  }, []);
-
-  return (
-    <aside ref={canvas} className="relative h-[60dvh] min-h-[360px] overflow-hidden rounded-psw-xl bg-line-strong lg:sticky lg:top-[96px] lg:h-[calc(100dvh-120px)] lg:min-h-[620px]" aria-label="收藏房源地图">
-      <div className="map-tiles absolute inset-0" aria-hidden="true">
-        {tiles.map((tile) => <div key={tile.id} className="absolute size-64 select-none bg-cover bg-center" style={{ backgroundImage: `url(${tile.url})`, left: tile.x, top: tile.y }} />)}
-      </div>
-      <div className="map-tint pointer-events-none absolute inset-0" aria-hidden="true" />
-      {markers.map((marker) => <Link key={marker.id} href={`/listing/${encodeURIComponent(marker.id)}`} style={{ left: marker.x, top: marker.y }} className="absolute z-20 flex min-h-9 -translate-x-1/2 -translate-y-1/2 items-center rounded-full border-2 border-surface bg-surface px-3.5 font-display text-[13px] font-bold text-ink shadow-menu hover:bg-primary hover:text-on-primary">{marker.label}</Link>)}
-      <p className="absolute left-4 top-4 z-30 rounded-full bg-surface px-4 py-2 text-m-footnote font-semibold shadow-menu">{listings.length} 个收藏位置</p>
-      <span className="absolute bottom-2 right-3 z-30 rounded bg-surface/90 px-1.5 py-0.5 text-m-footnote font-semibold text-ink-secondary">{attribution}</span>
-    </aside>
-  );
+function SavedMap({ listings }: { listings: PreviewListing[] }) {
+  const [selectedId, setSelectedId] = useState("");
+  return <ListingMap label="收藏房源地图" listings={listings} fitKey={listings.map((listing) => listing.id).join(",")} selectedId={selectedId} onSelect={setSelectedId} className="h-[60dvh] min-h-[360px] rounded-psw-xl lg:sticky lg:top-[96px] lg:h-[calc(100dvh-120px)] lg:min-h-[620px]" />;
 }

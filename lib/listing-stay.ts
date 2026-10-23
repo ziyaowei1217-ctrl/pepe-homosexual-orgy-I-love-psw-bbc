@@ -16,14 +16,20 @@ export function localDate(now = new Date()) {
   return cachedDay.day;
 }
 
-function dateOnly(value: string | undefined) {
-  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return "";
+/** The value if it is a real YYYY-MM-DD date, else "". */
+export function dateOnly(value: unknown) {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return "";
   const date = new Date(`${value}T00:00:00Z`);
   return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value ? value : "";
 }
 
 export function earliestListingDate(listing: Pick<Availability, "availableFrom">, today = localDate()) {
   return [dateOnly(listing.availableFrom.slice(0, 10)), today].sort().at(-1)!;
+}
+
+/** Some dates after today are still open. */
+export function isListingBookable(listing: Availability, today = localDate()) {
+  return Boolean(listing.availableFrom && listing.availableTo > earliestListingDate(listing, today));
 }
 
 /** The dates the renter asked for, or none. The listing page starts here and never picks dates on the renter's behalf. */

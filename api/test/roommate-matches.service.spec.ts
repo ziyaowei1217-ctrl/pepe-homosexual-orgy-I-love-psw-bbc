@@ -1,4 +1,4 @@
-import { BadRequestException } from "@nestjs/common";
+import { BadRequestException, ConflictException } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { describe, expect, it } from "vitest";
 
@@ -61,6 +61,40 @@ describe("RoommateMatchService", () => {
     expect(database.actions).toHaveLength(0);
   });
 
+  it("undoes only the latest action", async () => {
+    const database = createDatabase();
+    const service = new RoommateMatchService(database.prisma as never);
+
+    await service.recordAction("user-a", "demo-profile", "PASS");
+    await service.recordAction("user-a", "profile-b", "LIKE");
+
+    await expect(service.undoLastAction("user-a")).resolves.toEqual({ roommateProfileId: "profile-b", action: "LIKE" });
+    expect(database.actions).toEqual([expect.objectContaining({ roommateProfileId: "demo-profile", action: "PASS" })]);
+  });
+
+  it("refuses to undo when there is no action or the latest one is older than 10 minutes", async () => {
+    const database = createDatabase();
+    const service = new RoommateMatchService(database.prisma as never);
+
+    await expect(service.undoLastAction("user-a")).rejects.toThrow(new ConflictException("没有可以撤回的操作"));
+    await service.recordAction("user-a", "profile-b", "PASS");
+    await expect(service.undoLastAction("user-a", new Date(Date.now() + 11 * 60_000))).rejects.toThrow(
+      new ConflictException("只能撤回 10 分钟内的操作")
+    );
+    expect(database.actions).toHaveLength(1);
+  });
+
+  it("refuses to undo a LIKE that formed an active match", async () => {
+    const database = createDatabase();
+    const service = new RoommateMatchService(database.prisma as never);
+
+    await service.recordAction("user-a", "profile-b", "LIKE");
+    await service.recordAction("user-b", "profile-a", "LIKE");
+
+    await expect(service.undoLastAction("user-b")).rejects.toThrow(new ConflictException("已经配对，不能撤回"));
+    expect(database.actions).toHaveLength(2);
+  });
+
   it("never creates real chat for an ownerless development candidate", async () => {
     const database = createDatabase();
     const service = new RoommateMatchService(database.prisma as never);
@@ -106,7 +140,7 @@ describe("RoommateMatchService", () => {
   });
 });
 
-type Action = { id: string; userId: string; roommateProfileId: string; action: "LIKE" | "PASS" | "LATER" };
+type Action = { id: string; userId: string; roommateProfileId: string; action: "LIKE" | "PASS" | "LATER"; updatedAt: Date };
 type Match = { id: string; firstUserId: string; secondUserId: string; status: "ACTIVE" };
 type Conversation = { id: string; matchId: string };
 type ConversationMember = { conversationId: string; userId: string };
@@ -143,7 +177,7 @@ function createDatabase(options: { transactionFailures?: Error[] } = {}) {
         update
       }: {
         where: { userId_roommateProfileId: { userId: string; roommateProfileId: string } };
-        create: Omit<Action, "id">;
+        create: Omit<Action, "id" | "updatedAt">;
         update: Pick<Action, "action">;
       }) => {
         const existing = actions.find(
@@ -151,27 +185,34 @@ function createDatabase(options: { transactionFailures?: Error[] } = {}) {
             item.userId === where.userId_roommateProfileId.userId &&
             item.roommateProfileId === where.userId_roommateProfileId.roommateProfileId
         );
-        if (existing) return Object.assign(existing, update);
-        const action = { id: `action-${actions.length + 1}`, ...create };
+        if (existing) return Object.assign(existing, update, { updatedAt: new Date() });
+        const action = { id: `action-${actions.length + 1}`, ...create, updatedAt: new Date() };
         actions.push(action);
         return action;
       },
-      findFirst: async ({ where }: { where: Partial<Pick<Action, "userId" | "roommateProfileId" | "action">> }) =>
-        actions.find(
-          (item) =>
-            item.userId === where.userId &&
-            item.roommateProfileId === where.roommateProfileId &&
-            item.action === where.action
-        ) ?? null
+      findFirst: async ({ where, include }: { where: Partial<Pick<Action, "userId" | "roommateProfileId" | "action">>; include?: object }) => {
+        const [action] = actions
+          .filter((item) => Object.entries(where).every(([key, value]) => item[key as keyof Action] === value))
+          .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime() || b.id.localeCompare(a.id));
+        if (!action) return null;
+        return include ? { ...action, roommateProfile: profiles.find((item) => item.id === action.roommateProfileId) } : action;
+      },
+      delete: async ({ where }: { where: { id: string } }) => actions.splice(actions.findIndex((item) => item.id === where.id), 1)[0]
     },
     roommateMatch: {
+      findUnique: async ({ where }: { where: { firstUserId_secondUserId: { firstUserId: string; secondUserId: string } } }) =>
+        matches.find(
+          (item) =>
+            item.firstUserId === where.firstUserId_secondUserId.firstUserId &&
+            item.secondUserId === where.firstUserId_secondUserId.secondUserId
+        ) ?? null,
       upsert: async ({
         where,
         create,
         update
       }: {
         where: { firstUserId_secondUserId: { firstUserId: string; secondUserId: string } };
-        create: Omit<Match, "id">;
+        create: Omit<Match, "id" | "status">;
         update: Partial<Match>;
       }) => {
         const existing = matches.find(
@@ -180,7 +221,7 @@ function createDatabase(options: { transactionFailures?: Error[] } = {}) {
             item.secondUserId === where.firstUserId_secondUserId.secondUserId
         );
         if (existing) return Object.assign(existing, update);
-        const match = { id: `match-${matches.length + 1}`, ...create };
+        const match = { id: `match-${matches.length + 1}`, status: "ACTIVE" as const, ...create };
         matches.push(match);
         return match;
       }

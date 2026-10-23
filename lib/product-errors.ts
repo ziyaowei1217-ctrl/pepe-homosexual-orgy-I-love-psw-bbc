@@ -131,7 +131,10 @@ const productCodeMessages: Record<string, string> = {
   IMAGE_DIMENSIONS_UNSAFE: "图片尺寸无法安全读取，请更换图片。",
   IMAGE_VALIDATION_FAILED: "图片安全校验失败，请更换图片。",
   IMAGE_STORAGE_UNAVAILABLE: "图片服务暂时不可用，请稍后重试。",
-  DEMO_MOVE_IN_NOT_STARTED: "约定入住日期前不能确认入住。"
+  DEMO_MOVE_IN_NOT_STARTED: "约定入住日期前不能确认入住。",
+  ASSISTANT_UNAVAILABLE: "AI 助手暂时不可用，请稍后再试。",
+  ASSISTANT_RATE_LIMITED: "提问太频繁，请过几分钟再试。",
+  ASSISTANT_DECLINED: "这个问题 AI 助手无法回答，请换个问法。"
 };
 
 function safeErrorCode(code: unknown) {

@@ -30,8 +30,8 @@ describe("marketplace listing detail", () => {
     expect(html).toContain("预约看房");
     expect(html).toContain("联系转租人");
     expect(html).toContain("费用明细");
-    expect(html).toContain("tile.openstreetmap.de");
-    expect(html).toContain("© OpenStreetMap contributors");
+    expect(html).toContain('aria-label="房源位置地图"');
+    expect(html).toContain("地图显示大致位置");
     expect(html).not.toContain("房源位置示意地图");
     expect(html).not.toContain("立即付款");
     expect(html).not.toContain("阅读完整介绍");

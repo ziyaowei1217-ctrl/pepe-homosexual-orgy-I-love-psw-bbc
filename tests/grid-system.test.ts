@@ -15,33 +15,8 @@ describe("responsive grid system", () => {
     expect(css).toContain("xl:grid-cols-12");
   });
 
-  it("uses the shared shell throughout the application", () => {
-    const source = readFileSync("components/sublet-app.tsx", "utf8");
-    expect((source.match(/app-shell/g) ?? []).length).toBeGreaterThanOrEqual(8);
-    expect(source).toContain("xl:col-span-7");
-    expect(source).toContain("xl:col-span-5");
-    expect(source).toContain("xl:col-span-8");
-    expect(source).toContain("xl:col-span-4");
-  });
 
-  it("keeps listing cards on the shared card grid", () => {
-    const source = readFileSync("components/sublet-app.tsx", "utf8");
-    expect(source).toContain("app-card-grid");
-    expect(source).toContain("aspect-[16/11]");
-  });
 
-  it("defines the agreed workspace column templates", () => {
-    const source = readFileSync("components/sublet-app.tsx", "utf8");
-    for (const contract of [
-      "xl:col-span-3",
-      "xl:col-span-9",
-      "lg:col-span-4",
-      "xl:col-span-8",
-      "xl:col-span-4"
-    ]) {
-      expect(source).toContain(contract);
-    }
-  });
 
   it("uses the approved shared card and control radii", () => {
     const card = readFileSync("components/ui/card.tsx", "utf8");

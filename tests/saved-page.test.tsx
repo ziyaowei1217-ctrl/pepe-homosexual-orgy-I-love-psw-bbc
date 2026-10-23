@@ -5,9 +5,13 @@ import { act, cleanup, fireEvent, render, screen, within } from "@testing-librar
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { SavedListingsProvider } from "../components/marketplace/saved-listings-provider";
-import { SavedMap, SavedPageExperience } from "../components/marketplace/saved-page-experience";
+import { SavedPageExperience } from "../components/marketplace/saved-page-experience";
 import { createPreviewListings } from "../lib/preview-data";
 import { getSavedCollectionsStorageKey } from "../lib/saved-collections";
+
+vi.mock("maplibre-gl", () => import("./support/fake-maplibre"));
+// MapLibre is imported after render; let that import settle.
+const loadMap = () => act(async () => { await new Promise((resolve) => setTimeout(resolve, 50)); });
 
 afterEach(() => {
   cleanup();
@@ -51,62 +55,23 @@ describe("saved page", () => {
     expect(html).not.toContain("完整筛选");
   });
 
-  it("renders saved homes on the configured map instead of an illustration", () => {
-    const html = renderToStaticMarkup(<SavedMap listings={createPreviewListings().slice(0, 2)} />);
-
-    expect(html).toContain("tile.openstreetmap.de");
-    expect(html).toContain("© OpenStreetMap contributors");
-    expect(html).toContain("$995");
-  });
-
-  it("offers a list return action after opening the saved map and keeps listing navigation available", () => {
+  it("prices saved homes on the map and opens a card linking to the listing", async () => {
     const listing = renderSavedPage();
     fireEvent.click(screen.getByRole("button", { name: "地图" }));
+    await loadMap();
 
     const returnToList = screen.getByRole("button", { name: "列表" });
     expect(returnToList.getAttribute("aria-pressed")).toBe("true");
-    const map = screen.getByRole("complementary", { name: "收藏房源地图" });
-    expect(within(map).getByRole("link", { name: `$${listing.price.toLocaleString()}` }).getAttribute("href"))
-      .toBe(`/listing/${encodeURIComponent(listing.id)}`);
+    const map = screen.getByRole("region", { name: "收藏房源地图" });
+    const pin = within(map).getByRole("button", { name: `${listing.title} $${listing.price.toLocaleString("en-US")}` });
+    expect(pin.classList.contains("is-saved")).toBe(true);
+    fireEvent.click(pin);
+    expect(within(map).getByRole("link", { name: listing.title }).getAttribute("href")).toBe(`/listing/${encodeURIComponent(listing.id)}`);
 
     fireEvent.click(returnToList);
-    expect(screen.queryByRole("complementary", { name: "收藏房源地图" })).toBeNull();
+    expect(screen.queryByRole("region", { name: "收藏房源地图" })).toBeNull();
     expect(screen.getByRole("button", { name: "地图" }).getAttribute("aria-pressed")).toBe("false");
     expect(screen.getByRole("heading", { name: listing.title })).toBeTruthy();
-  });
-
-  it("keeps saved markers aligned with tile coordinates when the map resizes", () => {
-    let resize: (entries: ResizeObserverEntry[]) => void = () => {};
-    vi.stubGlobal("ResizeObserver", class implements ResizeObserver {
-      constructor(callback: ResizeObserverCallback) {
-        resize = (entries) => callback(entries, this);
-      }
-      observe() {}
-      unobserve() {}
-      disconnect() {}
-    });
-    const listings = createPreviewListings().slice(0, 2).map((listing, index) => ({
-      ...listing, latitude: 0, longitude: index === 0 ? -0.01 : 0.01
-    }));
-    render(<SavedMap listings={listings} />);
-    const map = screen.getByRole("complementary", { name: "收藏房源地图" });
-    const westernMarker = within(map).getByRole("link", { name: "$995" });
-    function setMapSize(width: number, height: number) {
-      act(() => resize([{
-        target: map,
-        contentRect: new DOMRect(0, 0, width, height),
-        borderBoxSize: [], contentBoxSize: [], devicePixelContentBoxSize: []
-      }]));
-    }
-
-    // At zoom 11, 0.01° longitude spans approximately 14.56 pixels.
-    setMapSize(358, 480);
-    expect(westernMarker.style.left).toBe("164px");
-    expect(westernMarker.style.top).toBe("240px");
-
-    setMapSize(720, 620);
-    expect(westernMarker.style.left).toBe("345px");
-    expect(westernMarker.style.top).toBe("310px");
   });
 
   it("closes the collection dialog with Escape and restores the opener focus", () => {

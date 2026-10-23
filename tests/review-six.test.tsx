@@ -6,9 +6,8 @@ import { act, cleanup, fireEvent, render, screen, within } from "@testing-librar
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import { DemoPaymentPanel } from "../components/demo-payment-panel";
-import { HostApplicationInbox } from "../components/host-application-inbox";
 import { PaymentPanel } from "../components/payment-panel";
-import { PublishingFlow } from "../components/sublet-app";
+import { PublishingFlow } from "../components/publishing-flow";
 import { DateInput } from "../components/ui/date-input";
 import { writeStoredAuthSession } from "../lib/auth-session";
 
@@ -77,17 +76,6 @@ it("does not invent an amount for a real payment, which only the payment page kn
   expect(screen.getByRole("button", { name: "继续付款" })).toBeTruthy();
 });
 
-it("asks in the site's dialog in the older host inbox too, with the reason in the same dialog", async () => {
-  const native = vi.spyOn(window, "confirm"); const prompt = vi.spyOn(window, "prompt");
-  vi.stubGlobal("fetch", vi.fn(async () => Response.json([{ ...accepted, status: "SUBMITTED" }])));
-  await act(async () => { render(<HostApplicationInbox token="token-1" currentUserId="owner-1" />); });
-  fireEvent.click(await screen.findByRole("button", { name: "不通过" }));
-  const dialog = await screen.findByRole("alertdialog", { name: "不通过Lin的申请？" });
-  expect((within(dialog).getByRole("button", { name: "不通过" }) as HTMLButtonElement).disabled).toBe(true);
-  fireEvent.click(within(dialog).getByRole("button", { name: "先不" }));
-  expect(screen.queryByRole("alertdialog")).toBeNull();
-  expect(native).not.toHaveBeenCalled(); expect(prompt).not.toHaveBeenCalled();
-});
 
 it("marks nearby transit optional and uses the site date fields when publishing", async () => {
   await act(async () => { render(<PublishingFlow initialDraft={null} isPublishing={false} token="owner-token" onSave={vi.fn()} />); });

@@ -1,5 +1,8 @@
 export type PublishStep = "basic" | "media" | "pricing" | "review";
 
+/** The amenity toggles of the host form; listing tags must match these strings exactly. */
+export const publishAmenities = ["Wi-Fi", "带家具", "独卫", "近地铁", "宠物友好", "洗烘"];
+
 export type PublishDraft = {
   title: string;
   area: string;

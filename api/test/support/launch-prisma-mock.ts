@@ -88,6 +88,7 @@ type RoommateRecord = {
   status?: string;
   archivedAt?: Date | null;
   localReciprocalLike: boolean;
+  matchingProfileId?: string | null;
   createdAt: Date;
 };
 
@@ -234,10 +235,27 @@ type RoommateMatchingProfileRecord = {
   guests: string | null;
   intro: string | null;
   lookingFor: string | null;
+  gender: string | null;
+  genderPreference: string;
+  dealbreakers: string[];
   status: string;
   createdAt: Date;
   updatedAt: Date;
 };
+
+type RoommateActionWhere = {
+  id?: string;
+  userId?: string;
+  roommateProfileId?: string;
+  action?: RoommateActionType | { in: RoommateActionType[] };
+  updatedAt?: { gte: Date };
+  roommateProfile?: { ownerId: string };
+};
+
+type RoommateCardInclude = { matchingProfile?: boolean };
+
+type RoommateMatchRecord = { id: string; firstUserId: string; secondUserId: string; status: "ACTIVE" | "CLOSED"; matchedAt: Date };
+type RoommateConversationRecord = { id: string; matchId: string; members: string[] };
 
 type HousingListingRecord = {
   id: string;
@@ -337,8 +355,32 @@ export function createLaunchPrismaMock() {
     trustQueueItems: [] as TrustQueueItemRecord[],
     profiles: [] as ProfileRecord[],
     roommateMatchingProfiles: [] as RoommateMatchingProfileRecord[],
+    roommateMatches: [] as RoommateMatchRecord[],
+    roommateConversations: [] as RoommateConversationRecord[],
     housingListings: [] as HousingListingRecord[],
     auditEvents: [] as Array<Record<string, unknown>>
+  };
+
+  const withCardIncludes = (roommate: RoommateRecord, include?: RoommateCardInclude) =>
+    include?.matchingProfile
+      ? { ...roommate, matchingProfile: state.roommateMatchingProfiles.find((profile) => profile.id === roommate.matchingProfileId) ?? null }
+      : roommate;
+  const matchesAction = (action: RoommateActionRecord, where: RoommateActionWhere = {}) =>
+    (!where.id || action.id === where.id) &&
+    (!where.userId || action.userId === where.userId) &&
+    (!where.roommateProfileId || action.roommateProfileId === where.roommateProfileId) &&
+    (!where.action || (typeof where.action === "string" ? action.action === where.action : where.action.in.includes(action.action))) &&
+    (!where.updatedAt || action.updatedAt >= where.updatedAt.gte) &&
+    (!where.roommateProfile ||
+      state.roommates.some((roommate) => roommate.id === action.roommateProfileId && roommate.ownerId === where.roommateProfile!.ownerId));
+  const withActionIncludes = (action: RoommateActionRecord, include?: { roommateProfile?: boolean | { include?: RoommateCardInclude } }) => {
+    if (!include?.roommateProfile) return action;
+    const roommate = state.roommates.find((record) => record.id === action.roommateProfileId)!;
+    return { ...action, roommateProfile: withCardIncludes(roommate, include.roommateProfile === true ? undefined : include.roommateProfile.include) };
+  };
+  const findActions = (where?: RoommateActionWhere, orderBy?: unknown) => {
+    const actions = state.actions.filter((action) => matchesAction(action, where));
+    return orderBy ? sortByDate(actions, "updatedAt") : actions;
   };
 
   const mock = {
@@ -553,6 +595,9 @@ export function createLaunchPrismaMock() {
           guests: data.guests ?? null,
           intro: data.intro ?? null,
           lookingFor: data.lookingFor ?? null,
+          gender: data.gender ?? null,
+          genderPreference: data.genderPreference ?? "any",
+          dealbreakers: data.dealbreakers ?? [],
           status: data.status ?? "active",
           createdAt: new Date(),
           updatedAt: new Date()
@@ -560,8 +605,10 @@ export function createLaunchPrismaMock() {
         state.roommateMatchingProfiles.push(created);
         return created;
       },
-      findMany: async ({ where }: { where?: Partial<RoommateMatchingProfileRecord> } = {}) =>
-        state.roommateMatchingProfiles.filter((profile) => matchesPartial(profile, where)),
+      findMany: async ({ where, omit = {} }: { where?: Partial<RoommateMatchingProfileRecord>; omit?: Record<string, boolean> } = {}) =>
+        state.roommateMatchingProfiles
+          .filter((profile) => matchesPartial(profile, where))
+          .map((profile) => Object.fromEntries(Object.entries(profile).filter(([key]) => !omit[key]))),
       findFirst: async ({ where }: { where: Partial<RoommateMatchingProfileRecord> }) =>
         state.roommateMatchingProfiles.find((profile) => matchesPartial(profile, where)) ?? null,
       update: async ({ where, data }: { where: { id: string }; data: Partial<RoommateMatchingProfileRecord> }) => {
@@ -730,14 +777,21 @@ export function createLaunchPrismaMock() {
       }
     },
     roommateProfile: {
-      findMany: async ({ where }: { where?: { status?: string } } = {}) =>
-        state.roommates.length > 0
-          ? [...state.roommates]
-              .filter((roommate) => !where?.status || (roommate.status ?? "active") === where.status)
-              .sort((a, b) => b.match - a.match)
-          : [],
-      findUnique: async ({ where }: { where: { id?: string; ownerId?: string } }) =>
-        state.roommates.find((roommate) => roommate.id === where.id || roommate.ownerId === where.ownerId) ?? null,
+      findMany: async ({ where, include }: { where?: { status?: string }; include?: RoommateCardInclude } = {}) =>
+        [...state.roommates]
+          .filter((roommate) => !where?.status || (roommate.status ?? "active") === where.status)
+          .sort((a, b) => b.match - a.match)
+          .map((roommate) => withCardIncludes(roommate, include)),
+      findFirst: async ({ where, include }: { where: { id: string; status?: string }; include?: RoommateCardInclude }) => {
+        const roommate = state.roommates.find(
+          (record) => record.id === where.id && (!where.status || (record.status ?? "active") === where.status)
+        );
+        return roommate ? withCardIncludes(roommate, include) : null;
+      },
+      findUnique: async ({ where, include }: { where: { id?: string; ownerId?: string }; include?: RoommateCardInclude }) => {
+        const roommate = state.roommates.find((record) => record.id === where.id || record.ownerId === where.ownerId);
+        return roommate ? withCardIncludes(roommate, include) : null;
+      },
       upsert: async ({
         where,
         create,
@@ -790,10 +844,28 @@ export function createLaunchPrismaMock() {
       }
     },
     roommateAction: {
-      findMany: async ({ where }: { where: { userId: string }; select?: { roommateProfileId: true } }) =>
-        state.actions
-          .filter((action) => action.userId === where.userId)
-          .map((action) => ({ roommateProfileId: action.roommateProfileId })),
+      findMany: async ({ where, include, orderBy, take }: { where?: RoommateActionWhere; include?: { roommateProfile?: { include?: RoommateCardInclude } }; orderBy?: unknown; take?: number }) =>
+        findActions(where, orderBy).slice(0, take).map((action) => withActionIncludes(action, include)),
+      findFirst: async ({ where, include, orderBy }: { where?: RoommateActionWhere; include?: { roommateProfile?: boolean }; orderBy?: unknown }) => {
+        const [action] = findActions(where, orderBy);
+        return action ? withActionIncludes(action, include) : null;
+      },
+      findUnique: async ({ where }: { where: { userId_roommateProfileId: { userId: string; roommateProfileId: string } } }) =>
+        state.actions.find((action) => matchesAction(action, where.userId_roommateProfileId)) ?? null,
+      groupBy: async ({ by: [key], where }: { by: ["roommateProfileId" | "userId"]; where?: RoommateActionWhere }) => {
+        const groups = new Map<string, RoommateActionRecord[]>();
+        for (const action of findActions(where)) groups.set(action[key], [...(groups.get(action[key]) ?? []), action]);
+        return [...groups].map(([value, actions]) => ({
+          [key]: value,
+          _count: { _all: actions.length },
+          _max: { updatedAt: sortByDate(actions, "updatedAt")[0].updatedAt }
+        }));
+      },
+      delete: async ({ where }: { where: { id: string } }) => {
+        const index = state.actions.findIndex((action) => action.id === where.id);
+        if (index < 0) throw new Error("Roommate action not found");
+        return state.actions.splice(index, 1)[0];
+      },
       upsert: async ({
         where,
         create,
@@ -822,6 +894,42 @@ export function createLaunchPrismaMock() {
         };
         state.actions.push(created);
         return created;
+      }
+    },
+    roommateMatch: {
+      findUnique: async ({ where }: { where: { firstUserId_secondUserId: { firstUserId: string; secondUserId: string } } }) => {
+        const match = state.roommateMatches.find((record) => matchesPartial(record, where.firstUserId_secondUserId));
+        return match ? { ...match, conversation: state.roommateConversations.find((record) => record.matchId === match.id) ?? null } : null;
+      },
+      upsert: async ({ where }: { where: { firstUserId_secondUserId: { firstUserId: string; secondUserId: string } } }) => {
+        const existing = state.roommateMatches.find((record) => matchesPartial(record, where.firstUserId_secondUserId));
+        if (existing) return existing;
+        const created: RoommateMatchRecord = {
+          id: `roommate-match-${state.roommateMatches.length + 1}`,
+          ...where.firstUserId_secondUserId,
+          status: "ACTIVE",
+          matchedAt: new Date()
+        };
+        state.roommateMatches.push(created);
+        return created;
+      }
+    },
+    roommateConversation: {
+      upsert: async ({ where }: { where: { matchId: string } }) => {
+        const existing = state.roommateConversations.find((record) => record.matchId === where.matchId);
+        if (existing) return existing;
+        const created = { id: `roommate-conversation-${state.roommateConversations.length + 1}`, matchId: where.matchId, members: [] };
+        state.roommateConversations.push(created);
+        return created;
+      }
+    },
+    roommateConversationMember: {
+      createMany: async ({ data }: { data: Array<{ conversationId: string; userId: string }> }) => {
+        for (const member of data) {
+          const conversation = state.roommateConversations.find((record) => record.id === member.conversationId)!;
+          if (!conversation.members.includes(member.userId)) conversation.members.push(member.userId);
+        }
+        return { count: data.length };
       }
     },
     dealRoom: {

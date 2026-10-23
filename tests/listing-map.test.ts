@@ -1,15 +1,21 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  defaultMapStyleUrl,
+  formatMapBounds,
+  getApproximateListingCoordinates,
   getListingCoordinates,
-  getMapCenterForListings,
-  getMapMarkers,
-  getMapSummary,
-  getMapTiles,
-  mapTileUrl
+  getMapStyle,
+  getListingPoint,
+  parseMapBounds
 } from "../lib/listing-map";
 
 describe("listing map", () => {
+  it("uses a listing's own coordinates before its neighbourhood", () => {
+    expect(getListingPoint({ id: "seattle-custom", area: "Seattle · Custom district", price: 2100, latitude: 47.62, longitude: -122.31 }))
+      .toEqual({ lat: 47.62, lng: -122.31 });
+  });
+
   it("resolves Los Angeles neighborhood coordinates", () => {
     expect(getListingCoordinates("Los Angeles · Westwood")).toMatchObject({
       lat: 34.0635,
@@ -38,85 +44,38 @@ describe("listing map", () => {
     expect(newYork.lng).toBeLessThan(-73.7);
   });
 
-  it("uses listing coordinates as the source of truth for map center and markers", () => {
-    const listings = [{
-      id: "seattle-custom",
-      area: "Seattle · Custom district",
-      price: 2100,
-      latitude: 47.62,
-      longitude: -122.31
-    }];
 
-    expect(getMapCenterForListings(listings)).toEqual({ lat: 47.62, lng: -122.31 });
-    expect(getMapMarkers(listings, { lat: 47.62, lng: -122.31 }, 11, { width: 640, height: 360 })[0])
-      .toMatchObject({ lat: 47.62, lng: -122.31, x: 320, y: 180 });
+
+
+
+
+
+  it("gives listings in one neighbourhood their own stable spot within about 300 m", () => {
+    const centre = getListingCoordinates("Los Angeles · Westwood");
+    const first = getApproximateListingCoordinates("listing-a", "Los Angeles · Westwood");
+    const second = getApproximateListingCoordinates("listing-b", "Los Angeles · Westwood");
+
+    expect(getApproximateListingCoordinates("listing-a", "Los Angeles · Westwood")).toEqual(first);
+    expect(second).not.toEqual(first);
+    for (const point of [first, second]) {
+      expect(Math.abs(point.lat - centre.lat)).toBeLessThanOrEqual(0.0025);
+      expect(Math.abs(point.lng - centre.lng)).toBeLessThanOrEqual(0.003);
+    }
   });
 
-  it("projects listing markers into the map viewport", () => {
-    const listings = [
-      { id: "westwood", area: "Los Angeles · Westwood", price: 1680 },
-      { id: "santa-monica", area: "Los Angeles · Santa Monica", price: 2380 }
-    ];
-    const center = getMapCenterForListings(listings);
-    const markers = getMapMarkers(
-      listings,
-      center,
-      11,
-      { width: 640, height: 360 }
-    );
-
-    expect(markers).toHaveLength(2);
-    expect(markers.every((marker) => marker.x >= 0 && marker.x <= 640)).toBe(true);
-    expect(markers.every((marker) => marker.y >= 0 && marker.y <= 360)).toBe(true);
-    expect(markers.every((marker) => Number.isInteger(marker.x) && Number.isInteger(marker.y))).toBe(true);
+  it("reads and writes the map area for the address bar and rejects bad areas", () => {
+    expect(parseMapBounds(formatMapBounds([-118.51234, 33.9, -118.2, 34.1]))).toEqual([-118.5123, 33.9, -118.2, 34.1]);
+    expect(parseMapBounds("-118.2,34,-118.5,34.1")).toBeNull();
+    expect(parseMapBounds("1,2,3")).toBeNull();
+    expect(parseMapBounds("a,b,c,d")).toBeNull();
+    expect(parseMapBounds(null)).toBeNull();
   });
 
-  it("keeps edge marker labels inside the visible map", () => {
-    const [marker] = getMapMarkers(
-      [{ id: "santa-monica", area: "Los Angeles · Santa Monica", price: 2380 }],
-      { lat: 34.0522, lng: -118.2437 },
-      11,
-      { width: 640, height: 360 }
-    );
-
-    expect(marker.x).toBeGreaterThanOrEqual(64);
-    expect(marker.x).toBeLessThanOrEqual(576);
-    expect(marker.y).toBeGreaterThanOrEqual(28);
-    expect(marker.y).toBeLessThanOrEqual(332);
-  });
-
-  it("uses the unblocked default basemap provider around the current map center", () => {
-    const tiles = getMapTiles({ lat: 34.0522, lng: -118.2437 }, 11, { width: 640, height: 360 });
-
-    expect(tiles.length).toBeGreaterThan(4);
-    expect(tiles[0].url).toBe(
-      `https://tile.openstreetmap.de/11/${tiles[0].xTile}/${tiles[0].yTile}.png`
-    );
-    expect(tiles.every((tile) => Number.isInteger(tile.x) && Number.isInteger(tile.y))).toBe(true);
-  });
-
-  it("supports a production map-provider tile template", () => {
-    expect(mapTileUrl(4, 5, 6, "https://maps.example.com/{z}/{x}/{y}.png?key=public"))
-      .toBe("https://maps.example.com/6/4/5.png?key=public");
-  });
-
-  it("summarizes visible listing prices for the map header", () => {
-    expect(
-      getMapSummary([
-        { id: "westwood", area: "Los Angeles · Westwood", price: 1800 },
-        { id: "dtla", area: "Los Angeles · DTLA", price: 2600 },
-        { id: "usc", area: "Los Angeles · USC North", price: 1400 }
-      ])
-    ).toEqual({
-      count: 3,
-      averagePrice: 1933,
-      minimumPrice: 1400
+  it("picks a vector style, then a raster tile template, then OpenFreeMap", () => {
+    expect(getMapStyle("https://maps.example.com/style.json", "https://tiles.example.com/{z}/{x}/{y}.png")).toBe("https://maps.example.com/style.json");
+    expect(getMapStyle("", "https://tiles.example.com/{z}/{x}/{y}.png", "© Example")).toMatchObject({
+      sources: { basemap: { type: "raster", tiles: ["https://tiles.example.com/{z}/{x}/{y}.png"], attribution: "© Example" } }
     });
-
-    expect(getMapSummary([])).toEqual({
-      count: 0,
-      averagePrice: 0,
-      minimumPrice: 0
-    });
+    expect(getMapStyle("", "")).toBe(defaultMapStyleUrl);
   });
 });

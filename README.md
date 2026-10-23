@@ -95,39 +95,25 @@ write to it.
 
 ## Roommate Matching Deck
 
-The roommate discovery flow is intentionally Tinder-like: quick cards, one-tap decisions, match reasons, tradeoffs, icebreakers, and a ranked queue.
+The roommate discovery flow is Tinder-like: one card at a time, LIKE / PASS / LATER, and a short reason list on each card.
 
-Backend endpoint:
+Backend endpoints:
 
 ```bash
-GET /api/v1/roommates/deck?limit=80&cursor=0&budgetMin=1200&budgetMax=1800&schools=UCLA,USC&hobbies=早睡,安静
+GET  /api/v1/roommates/deck?limit=20        # optional auth; limit 1-50, other params return 400
+GET  /api/v1/roommates/deck/:candidateId    # one card with the same fields
+POST /api/v1/roommates/:id/actions          # { "action": "LIKE" | "PASS" | "LATER" }
+POST /api/v1/roommates/actions/undo         # deletes the viewer's latest action within 10 minutes
+GET  /api/v1/roommate-profiles/me           # the viewer's own matching profile, or { "profile": null }
 ```
 
-The response includes paginated candidates plus discovery metadata:
+The deck returns `{ items, total, filteredOut, viewer: { signedIn, hasProfile, missing } }`. Each card carries the public profile fields plus `score` (0-100, `null` without a viewer profile), `tier`, `reasons`, `watchouts`, `icebreaker`, `breakdown`, `likedYou`, `youLiked`, `later` and `conversationId`. There is no padding: when nothing fits, `items` is empty.
 
-- `compatibilityScore`
-- `dimensions` (`budget`, `lifestyle`, `school`, `area`, `reliability`, `profile`)
-- `matchType` (`top-pick`, `strong-fit`, `explore`, `wildcard`)
-- `recommendation` (`action`, `confidence`, `primarySignals`, `watchouts`, `nextQuestions`)
-- `ranking` (`finalScore`, `confidenceScore`, `profileQualityScore`, `diversityBoost`, `explorationBoost`, `strategy`)
-- `decisionHint`
-- `rank`
-- `deckBatch`
-- `spark`
-- `reasons`
-- `tradeoffs`
-- `icebreaker`
-- `badges`
-- `pageInfo.nextCursor`
-- `discovery.weights`
-- `discovery.rankingWeights`
+The engine in `api/src/roommates/matching.ts` is two-sided:
 
-Use empty `school=` / `hobby=` or empty `schools=` / `hobbies=` for broad discovery instead of a narrow filter. The frontend sends both legacy single-value fields and full multi-value fields so older clients remain compatible.
-
-The algorithm is intentionally two-stage:
-
-1. Score roommate compatibility from roommate-relevant variables.
-2. Rank the swipe deck with confidence, profile quality, diversity, and exploration so large samples do not collapse into a repetitive list.
+1. Hard filters drop candidates that fail gender preference or dealbreakers in either direction, or have a different city, no stay overlap, or a large budget gap.
+2. Each side's weighted feature similarity is combined with a harmonic mean, so a one-sided fit scores low.
+3. After more than 10 LIKE/PASS swipes in 120 days, the viewer's history nudges ranking (never gender); then attention, recency and a daily jitter adjust it, MMR spreads out the top 60, and LATER cards go last.
 
 Admin/developer management endpoints:
 
@@ -157,6 +143,15 @@ stored in browser storage.
 
 This messaging scope intentionally does not include email or Web Push offline notifications,
 attachments, group chat, typing indicators, message editing, message recall, or presence claims.
+
+## AI Assistant
+
+When the web server has `ANTHROPIC_API_KEY`, the header shows an 「AI 助手」 button (signed-out
+visitors are asked to log in). It searches listings with the same rules as
+the search page, compares listings (including the total for the user's dates) and drafts messages to
+hosts; the user sends a draft from the inbox. Hosts get 「AI 帮我写」 in the listing form. The
+assistant runs in Next.js route handlers (`app/api/assistant/*`, `lib/assistant/*`). Per-user limits come from the API
+(`api/src/assistant`). Details: [`docs/external-integrations.md`](docs/external-integrations.md).
 
 ## Verify
 

@@ -5,7 +5,7 @@ import { HostListingEditorExperience, HostListingsExperience } from "../componen
 import { writeStoredAuthSession } from "../lib/auth-session";
 import type { PublishDraft } from "../lib/publish-listing";
 
-vi.mock("../components/sublet-app", () => ({ PublishingFlow: ({ initialDraft }: { initialDraft: PublishDraft | null }) =>
+vi.mock("../components/publishing-flow", () => ({ PublishingFlow: ({ initialDraft }: { initialDraft: PublishDraft | null }) =>
   <form aria-label="房源编辑表单"><input aria-label="房源标题" defaultValue={initialDraft?.title ?? ""} /></form>
 }));
 beforeEach(() => { writeStoredAuthSession("host-token"); });

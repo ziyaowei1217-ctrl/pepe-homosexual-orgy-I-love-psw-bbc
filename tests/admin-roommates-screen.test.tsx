@@ -226,7 +226,7 @@ describe("AdminRoommatesScreen", () => {
     expect(text).toContain("室友资料管理");
     expect(text).toContain("新增、调整和归档用于匹配推荐的室友资料。");
     expect(text).toContain("编辑 Avery Chen");
-    expect(text).toContain("基础匹配度 92%");
+    expect(text).toContain("排序权重 92");
     expect(text).toContain("启用");
     expect(text).not.toContain("Roommate Admin");
     expect(text).not.toContain("Save profile");

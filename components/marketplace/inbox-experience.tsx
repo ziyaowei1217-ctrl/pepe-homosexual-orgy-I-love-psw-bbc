@@ -11,6 +11,7 @@ import { Wowo } from "@/components/brand/wowo";
 import { apiGet, apiPost, getRoommateConversations, getRoommateMessages, markRoommateConversationRead, sendRoommateMessage } from "@/lib/api";
 import type { ApiDealThread, ApiRoommateConversation, ApiRoommateMessage, ApiViewingRequest } from "@/lib/api";
 import { authRoute } from "@/lib/app-routes";
+import { useAssistantDraftHandoff } from "@/lib/assistant/client";
 import { assertCurrentAuthSession, readStoredAuthSession } from "@/lib/auth-session";
 import { sendDealMessage } from "@/lib/deal-message-commands";
 import { createRoommateRealtimeClient } from "@/lib/roommate-realtime";
@@ -117,6 +118,9 @@ function InboxSessionExperience({ initialConversationId, initialListingId, initi
   }, [initialConversationId, initialListingId, initialApplicantId, initialRoommateId, token, loadAttempt]);
 
   const selectedConversation = conversations.find((item) => item.id === selectedId) ?? null;
+  // A draft the user picked in the AI assistant lands in the composer of the inbox opened for that listing
+  // (not an inbox that is about to be replaced by the navigation); the user still edits and sends it.
+  useAssistantDraftHandoff(token, selectedConversation?.listingId === initialListingId ? selectedConversation : null, setDraft);
   const activeId = selectedConversation?.id;
   const activeSource = selectedConversation?.source;
 
@@ -386,7 +390,7 @@ function InboxSessionExperience({ initialConversationId, initialListingId, initi
               {initialTour && active.source === "deal" && active.viewerRole === "renter" ? <form onSubmit={submitViewingRequest} className="border-b border-primary-soft bg-surface-subtle/60 px-4 py-4 sm:px-6"><div className="mx-auto grid max-w-3xl gap-3 sm:grid-cols-[minmax(0,1fr)_150px_auto] sm:items-end"><label className="grid gap-1.5 text-m-footnote font-bold text-ink-secondary">预约看房时间<input type="datetime-local" min={minimumTourDateTime()} value={tourAt} onChange={(event) => setTourAt(event.target.value)} className="application-input" /></label><label className="grid gap-1.5 text-m-footnote font-bold text-ink-secondary">方式<select value={tourMode} onChange={(event) => setTourMode(event.target.value as "in-person" | "video")} className="application-input"><option value="in-person">线下看房</option><option value="video">视频看房</option></select></label><button type="submit" disabled={tourPending} className="primary-action h-12 justify-center">{tourPending ? "发送中…" : "发送看房请求"}</button></div></form> : null}
               <div ref={messagesRef} className="min-h-0 flex-1 overflow-y-auto px-4 py-6 sm:px-8"><div className="mx-auto max-w-3xl space-y-4">{active.messages.length ? active.messages.map((message) => <MessageBubble key={message.id} message={message} />) : <p className="py-16 text-center text-d-subhead text-ink-secondary">发送第一条消息开始对话</p>}</div></div>
               {error ? <p role="alert" className="mx-4 mb-3 shrink-0 rounded-psw-md bg-danger-soft p-4 text-d-subhead font-semibold text-danger-text">{error}</p> : null}
-              <form onSubmit={sendMessage} className="shrink-0 border-t border-line-strong p-4"><div className="mx-auto flex max-w-3xl items-end gap-2 rounded-psw-xl border border-line-strong bg-surface-muted p-2 pl-4"><textarea value={draft} onChange={(event) => setDraft(event.target.value)} rows={1} placeholder="输入消息…" className="min-h-9 min-w-0 flex-1 resize-none bg-transparent py-2 text-base outline-none sm:text-sm" aria-label="消息内容" /><button type="submit" disabled={sending || !draft.trim()} className="grid size-11 shrink-0 place-items-center rounded-full bg-primary text-white disabled:opacity-40" aria-label="发送消息"><Send className="size-4" /></button></div></form>
+              <form onSubmit={sendMessage} className="shrink-0 border-t border-line-strong p-4"><div className="mx-auto flex max-w-3xl items-end gap-2 rounded-psw-xl border border-line-strong bg-surface-muted p-2 pl-4"><textarea value={draft} onChange={(event) => setDraft(event.target.value)} rows={1} placeholder="输入消息…" className="max-h-40 min-h-9 min-w-0 flex-1 resize-none bg-transparent py-2 text-base outline-none [field-sizing:content] sm:text-sm" aria-label="消息内容" /><button type="submit" disabled={sending || !draft.trim()} className="grid size-11 shrink-0 place-items-center rounded-full bg-primary text-white disabled:opacity-40" aria-label="发送消息"><Send className="size-4" /></button></div></form>
             </> : loading ? <p role="status" className="p-8 text-center text-sm text-ink-secondary">正在同步消息…</p> : <div className="grid flex-1 place-items-center p-8 text-center"><div><h2 className="text-m-headline sm:text-d-headline">选择一条对话</h2><p className="mt-2 text-d-subhead text-ink-secondary">和转租人、室友的消息都会显示在这里。</p></div></div>}
           </section>
         </div>

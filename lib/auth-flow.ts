@@ -3,7 +3,6 @@ import type { OnboardingProfileInput } from "./profile-input";
 import { toProductApiError } from "./product-errors";
 
 export type ProfileField = "displayName" | "role" | "school" | "city";
-export type OnboardingReason = "new-user" | "publish-required";
 
 export type PublishGateInput = {
   authenticated: boolean;
@@ -45,19 +44,6 @@ type EmailCodeRequestTransitionInput = {
   response: EmailCodeResponse;
   succeededAt: number;
   isDevelopment: boolean;
-};
-
-type EmailCodeRequestControllerInput = {
-  email: string;
-  currentCode: string;
-  isDevelopment: boolean;
-};
-
-type EmailCodeRequestControllerDependencies = {
-  lock: AuthActionLock;
-  request: (email: string) => Promise<EmailCodeResponse>;
-  now: () => number;
-  onPendingChange: (pending: boolean) => void;
 };
 
 export type EmailCodeRequestResult =
@@ -129,42 +115,6 @@ export function getEmailCodeRequestTransition({
   };
 }
 
-export async function runEmailCodeRequest(
-  input: EmailCodeRequestControllerInput,
-  dependencies: EmailCodeRequestControllerDependencies
-): Promise<EmailCodeRequestResult> {
-  if (!isValidAuthEmail(input.email)) {
-    return { status: "invalid-email", error: "请输入有效的邮箱地址。" };
-  }
-  if (!acquireAuthActionLock(dependencies.lock)) {
-    return { status: "blocked" };
-  }
-
-  dependencies.onPendingChange(true);
-  try {
-    const response = await dependencies.request(normalizeAuthEmail(input.email));
-    const succeededAt = dependencies.now();
-    return {
-      status: "success",
-      transition: getEmailCodeRequestTransition({
-        currentCode: input.currentCode,
-        response,
-        succeededAt,
-        isDevelopment: input.isDevelopment
-      }),
-      hasDevelopmentCode: Boolean(response.devCode)
-    };
-  } catch (requestError) {
-    return {
-      status: "error",
-      error: toProductApiError(requestError).message
-    };
-  } finally {
-    dependencies.onPendingChange(false);
-    releaseAuthActionLock(dependencies.lock);
-  }
-}
-
 export function getVerificationCodeStatus(
   code: string,
   expiresAt: string | null,
@@ -189,22 +139,6 @@ export function getVerificationCodeStatus(
   };
 }
 
-export function getCodeStepVisibleError({
-  localError,
-  apiError,
-  verificationStatus
-}: {
-  localError: string | null;
-  apiError: string | null;
-  verificationStatus: ReturnType<typeof getVerificationCodeStatus>;
-}) {
-  return (
-    localError ??
-    apiError ??
-    (verificationStatus.expired ? verificationStatus.error : null)
-  );
-}
-
 export function acquireAuthActionLock(lock: AuthActionLock) {
   if (lock.current) return false;
   lock.current = true;
@@ -213,45 +147,6 @@ export function acquireAuthActionLock(lock: AuthActionLock) {
 
 export function releaseAuthActionLock(lock: AuthActionLock) {
   lock.current = false;
-}
-
-export function reduceOnboardingProfileState(
-  state: OnboardingProfileState,
-  action: OnboardingProfileAction
-): OnboardingProfileState {
-  if (action.type === "set-error") {
-    return { ...state, error: action.error };
-  }
-
-  if (action.type === "hydrate-profile") {
-    const incoming = getOnboardingProfileDraft(action.profile);
-    const dirtyFields = new Set(state.dirtyFields ?? []);
-
-    return {
-      ...state,
-      draft: {
-        displayName: dirtyFields.has("displayName")
-          ? state.draft.displayName
-          : incoming.displayName,
-        school: dirtyFields.has("school")
-          ? state.draft.school
-          : incoming.school,
-        city: dirtyFields.has("city") ? state.draft.city : incoming.city,
-        role: dirtyFields.has("role") ? state.draft.role : incoming.role
-      }
-    };
-  }
-
-  return {
-    ...state,
-    draft: {
-      ...state.draft,
-      [action.field]: action.value
-    },
-    dirtyFields: Array.from(
-      new Set([...(state.dirtyFields ?? []), action.field])
-    )
-  };
 }
 
 export function getOnboardingProfileDraft(
@@ -315,35 +210,6 @@ export function getPublishAccess(
   }
 
   return getPublishGate(input);
-}
-
-export async function runGuardedPublishAction<T>(
-  input: PublishAccessInput,
-  action: () => Promise<T>
-) {
-  const gate = getPublishAccess(input);
-  if (gate.status !== "allowed") return { gate, value: null };
-
-  return { gate, value: await action() };
-}
-
-export function beginLatestRequest(guard: LatestRequestGuard) {
-  guard.current += 1;
-  return guard.current;
-}
-
-export function invalidateLatestRequests(guard: LatestRequestGuard) {
-  guard.current += 1;
-}
-
-export function commitLatestRequest(
-  guard: LatestRequestGuard,
-  requestVersion: number,
-  commit: () => void
-) {
-  if (guard.current !== requestVersion) return false;
-  commit();
-  return true;
 }
 
 export function shouldOpenNewUserOnboarding(input: NewUserOnboardingInput) {

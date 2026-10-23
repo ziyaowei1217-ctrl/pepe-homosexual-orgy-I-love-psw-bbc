@@ -92,17 +92,11 @@ If the database is empty, this returns the built-in seed profiles so developers 
 
 ## What fields matter for matching?
 
-- `match`: baseline profile-quality signal; keep this honest and broad rather than using it for every preference.
-- `budget`: parsed into a number for budget compatibility.
-- `role`: used for school/work-lane matching.
-- `commute`: used for city/area signals.
-- `tags`: used for lifestyle/hobby overlap plus inferred home-rhythm and reliability signals such as quiet, clean, stable, no smoking, pet-aware, or clear cost-splitting.
+The deck scores people from their own `RoommateMatchingProfile` (city, stay dates, budget, neighborhoods, school, room type, lifestyle, gender preference and dealbreakers), linked to the card through `matchingProfileId`. Users fill it in at `/roommates/me`.
 
-The deck enriches each profile with `compatibilityScore`, six visible `dimensions` (`budget`, `lifestyle`, `school`, `area`, `reliability`, `profile`), `matchType`, `recommendation`, `ranking`, `decisionHint`, `rank`, `spark`, `reasons`, `tradeoffs`, `icebreaker`, and `badges`.
+Admin-managed cards have no linked matching profile, so only `age` is scored and every other feature counts as unknown. `budget`, `role`, `commute` and `tags` are not used for matching, and `match` (排序权重 in the admin screen) only orders the plain `GET /roommates` list and the admin list. Cards without an owner are hidden from the deck in production.
 
-`recommendation.action` can be `like`, `later`, or `pass`. `ranking.finalScore` is the final swipe-deck score after compatibility, confidence, profile quality, diversity, and exploration are combined.
-
-For future tuning, edit `api/src/roommates/matching.ts`. Keep the ranking weights there instead of putting scoring rules in React components.
+There are no strategies, padding or random wildcards: the deck shows only cards that pass the hard filters for both people. Tune weights and copy in `api/src/roommates/matching.ts`, not in React components.
 
 ## Current limitation
 

@@ -98,6 +98,8 @@ describe("marketplace database API", () => {
 
   it("stores roommate profiles and keeps protected classes out of the API contract", async () => {
     const http = request(app.getHttpServer());
+
+    await http.get("/api/v1/roommate-profiles/me").set("Authorization", `Bearer ${token}`).expect(200).expect({ profile: null });
     const { age: _age, ...payloadWithoutAge } = roommateProfilePayload();
 
     await http
@@ -135,10 +137,40 @@ describe("marketplace database API", () => {
       .expect(200)
       .expect(({ body }: { body: Array<Record<string, unknown>> }) => {
         expect(body).toHaveLength(1);
-        expect(body[0]).toMatchObject({ name: "owner", age: 26, commute: "LA", budget: "$1,200–$1,800/month" });
+        expect(body[0]).toMatchObject({ name: "室友", age: 26, commute: "LA", budget: "$1,200–$1,800/month" });
         expect(body[0]).not.toHaveProperty("ownerId");
         expect(body[0]).not.toHaveProperty("localReciprocalLike");
+        expect(body[0]).not.toHaveProperty("matchingProfileId");
       });
+
+    await http
+      .get("/api/v1/roommate-profiles/me")
+      .set("Authorization", `Bearer ${token}`)
+      .expect(200)
+      .expect(({ body }: { body: { profile: Record<string, unknown> } }) => {
+        expect(body.profile).toMatchObject({
+          id: createdResponse.body.id,
+          cardId: expect.any(String),
+          displayName: null,
+          age: 26,
+          genderPreference: "any",
+          dealbreakers: ["smoking"],
+          moveInDate: "2026-08-15",
+          moveOutDate: "2027-05-15",
+          sleepSchedule: "night_owl",
+          pets: "none",
+          status: "active"
+        });
+        expect(body.profile).not.toHaveProperty("userId");
+      });
+
+    for (const invalid of [{ sleepSchedule: "早睡" }, { dealbreakers: ["smoking", "smoking"] }, { genderPreference: null }, { gender: "other" }]) {
+      await http.patch(`/api/v1/roommate-profiles/${createdResponse.body.id}`)
+        .set("Authorization", `Bearer ${token}`).send(invalid).expect(400);
+    }
+    await http.patch(`/api/v1/roommate-profiles/${createdResponse.body.id}`)
+      .set("Authorization", `Bearer ${token}`).send({ moveOutDate: null, gender: "female" }).expect(200)
+      .expect(({ body }: { body: Record<string, unknown> }) => expect(body).toMatchObject({ moveOutDate: null, gender: "female" }));
 
     await http
       .get("/api/v1/roommate-profiles?city=LA&school=USC")
@@ -148,6 +180,7 @@ describe("marketplace database API", () => {
         expect(body[0]).not.toHaveProperty("nationality");
         expect(body[0]).not.toHaveProperty("race");
         expect(body[0]).not.toHaveProperty("religion");
+        for (const hidden of ["userId", "gender", "genderPreference", "dealbreakers"]) expect(body[0]).not.toHaveProperty(hidden);
       });
 
     for (const patch of [{ budgetMin: 1900 }, { budgetMax: 1000 }]) {
@@ -247,8 +280,9 @@ function roommateProfilePayload() {
     cleanliness: "tidy",
     sleepSchedule: "night_owl",
     smoking: "no",
-    pets: "ok",
+    pets: "none",
     guests: "sometimes",
+    dealbreakers: ["smoking"],
     intro: "Grad student looking for a calm home base.",
     lookingFor: "Respectful roommate near campus."
   };

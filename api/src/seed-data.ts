@@ -731,6 +731,150 @@ export const seedRoommates = [
   }
 ];
 
+type SeedRoommateMatching = {
+  gender: string | null;
+  genderPreference: string;
+  school: string;
+  budgetMin: number;
+  budgetMax: number;
+  moveInDate: string;
+  moveOutDate: string | null;
+  preferredNeighborhoods: string[];
+  roomType: string;
+  sleepSchedule: string;
+  cleanliness: string;
+  guests: string;
+  smoking: string;
+  pets: string;
+  dealbreakers: string[];
+  intro: string;
+  lookingFor: string;
+};
+
+/** Structured matching data behind each seed card (all in Los Angeles). */
+export const seedRoommateMatching: Record<string, SeedRoommateMatching> = {
+  "seed-roommate-1": {
+    gender: "female", genderPreference: "any", school: "UCLA", budgetMin: 1450, budgetMax: 1750,
+    moveInDate: "2027-01-04", moveOutDate: "2027-06-12", preferredNeighborhoods: ["Westwood", "Sawtelle"],
+    roomType: "private_room", sleepSchedule: "early_bird", cleanliness: "very_tidy", guests: "rarely", smoking: "no", pets: "none", dealbreakers: [],
+    intro: "UCLA MSBA，冬春两个学期住 Westwood。平时早睡，周末在家做饭。", lookingFor: "作息规律、爱干净的室友，最好也在 UCLA。"
+  },
+  "seed-roommate-2": {
+    gender: "male", genderPreference: "any", school: "Culver City 科技公司", budgetMin: 1600, budgetMax: 1950,
+    moveInDate: "2027-06-14", moveOutDate: "2027-08-30", preferredNeighborhoods: ["Culver City", "Palms", "Santa Monica"],
+    roomType: "private_room", sleepSchedule: "regular", cleanliness: "tidy", guests: "sometimes", smoking: "no", pets: "none", dealbreakers: [],
+    intro: "暑期产品实习，公司在 Culver City，下班后去健身房。", lookingFor: "通勤方便、公共区域保持整洁就好。"
+  },
+  "seed-roommate-3": {
+    gender: "female", genderPreference: "any", school: "USC", budgetMin: 1300, budgetMax: 1600,
+    moveInDate: "2027-01-08", moveOutDate: "2027-05-15", preferredNeighborhoods: ["University Park", "DTLA"],
+    roomType: "private_room", sleepSchedule: "night_owl", cleanliness: "tidy", guests: "sometimes", smoking: "no", pets: "has_pet", dealbreakers: [],
+    intro: "USC 计算机硕士，春季学期。养了一只安静的猫。", lookingFor: "能接受猫，作息偏晚也没关系。"
+  },
+  "seed-roommate-4": {
+    gender: "male", genderPreference: "any", school: "Caltech", budgetMin: 1200, budgetMax: 1500,
+    moveInDate: "2027-01-10", moveOutDate: null, preferredNeighborhoods: ["Pasadena"],
+    roomType: "private_room", sleepSchedule: "regular", cleanliness: "tidy", guests: "rarely", smoking: "no", pets: "none", dealbreakers: [],
+    intro: "Caltech 研究助理，打算长租，工作日都在实验室。", lookingFor: "安静、按时分摊账单的室友。"
+  },
+  "seed-roommate-5": {
+    gender: "female", genderPreference: "female", school: "Otis College", budgetMin: 1500, budgetMax: 1800,
+    moveInDate: "2026-12-15", moveOutDate: "2027-05-31", preferredNeighborhoods: ["Culver City", "Palms"],
+    roomType: "private_room", sleepSchedule: "early_bird", cleanliness: "very_tidy", guests: "sometimes", smoking: "no", pets: "none", dealbreakers: [],
+    intro: "Otis 设计专业大三，白天在学校做作品。", lookingFor: "只找女生室友，作息不要太晚。"
+  },
+  "seed-roommate-6": {
+    gender: "male", genderPreference: "any", school: "Burbank 影视公司", budgetMin: 1100, budgetMax: 1450,
+    moveInDate: "2027-06-14", moveOutDate: "2027-08-30", preferredNeighborhoods: ["Burbank", "Hollywood"],
+    roomType: "private_room", sleepSchedule: "regular", cleanliness: "tidy", guests: "rarely", smoking: "no", pets: "none", dealbreakers: [],
+    intro: "暑期在 Burbank 影视公司实习，经常自己做饭。", lookingFor: "预算友好，厨房可以一起用。"
+  },
+  "seed-roommate-7": {
+    gender: "female", genderPreference: "female", school: "UCLA", budgetMin: 1550, budgetMax: 1850,
+    moveInDate: "2027-01-04", moveOutDate: "2027-06-12", preferredNeighborhoods: ["Westwood", "Santa Monica"],
+    roomType: "private_room", sleepSchedule: "night_owl", cleanliness: "tidy", guests: "sometimes", smoking: "no", pets: "none", dealbreakers: ["smoking"],
+    intro: "UCLA Extension 电影课程，晚上常剪片子。", lookingFor: "只找女生，不接受室内抽烟。"
+  },
+  "seed-roommate-8": {
+    gender: "male", genderPreference: "male", school: "DTLA 金融公司", budgetMin: 1700, budgetMax: 2200,
+    moveInDate: "2027-01-10", moveOutDate: null, preferredNeighborhoods: ["DTLA", "Koreatown"],
+    roomType: "private_room", sleepSchedule: "early_bird", cleanliness: "very_tidy", guests: "rarely", smoking: "no", pets: "none", dealbreakers: [],
+    intro: "DTLA 金融分析师，早上 6 点起床去健身。", lookingFor: "只找男生室友，希望楼里有门卫。"
+  },
+  "seed-roommate-9": {
+    gender: "female", genderPreference: "female", school: "USC", budgetMin: 1350, budgetMax: 1650,
+    moveInDate: "2027-01-08", moveOutDate: "2027-05-15", preferredNeighborhoods: ["University Park", "Koreatown"],
+    roomType: "private_room", sleepSchedule: "early_bird", cleanliness: "very_tidy", guests: "rarely", smoking: "no", pets: "none", dealbreakers: ["smoking", "pets"],
+    intro: "USC Marshall 春季学期，平时在图书馆学习。", lookingFor: "只找女生，不抽烟、不养宠物。"
+  },
+  "seed-roommate-10": {
+    gender: "male", genderPreference: "any", school: "Santa Monica 软件公司", budgetMin: 1800, budgetMax: 2400,
+    moveInDate: "2027-01-10", moveOutDate: null, preferredNeighborhoods: ["Santa Monica", "Palms"],
+    roomType: "private_room", sleepSchedule: "regular", cleanliness: "tidy", guests: "rarely", smoking: "no", pets: "has_pet", dealbreakers: [],
+    intro: "Santa Monica 软件工程师，养了一只小狗，需要车位。", lookingFor: "能接受狗、生活安静的室友。"
+  },
+  "seed-roommate-11": {
+    gender: "female", genderPreference: "any", school: "LMU", budgetMin: 1450, budgetMax: 1800,
+    moveInDate: "2026-12-15", moveOutDate: "2027-05-31", preferredNeighborhoods: ["Culver City", "Mid-City"],
+    roomType: "private_room", sleepSchedule: "night_owl", cleanliness: "tidy", guests: "sometimes", smoking: "no", pets: "none", dealbreakers: [],
+    intro: "LMU MBA 夜间班，白天上班，晚上上课。", lookingFor: "能接受晚归，偶尔有朋友来吃饭。"
+  },
+  "seed-roommate-12": {
+    gender: "male", genderPreference: "any", school: "Glendale 动画公司", budgetMin: 950, budgetMax: 1300,
+    moveInDate: "2027-05-20", moveOutDate: "2027-08-20", preferredNeighborhoods: ["Glendale", "Burbank"],
+    roomType: "shared_room", sleepSchedule: "night_owl", cleanliness: "relaxed", guests: "sometimes", smoking: "no", pets: "none", dealbreakers: [],
+    intro: "暑期动画实习，预算有限，可以合住一间。", lookingFor: "预算相近、作息偏晚的室友。"
+  },
+  "seed-roommate-13": {
+    gender: "female", genderPreference: "any", school: "ArtCenter", budgetMin: 1250, budgetMax: 1550,
+    moveInDate: "2026-12-15", moveOutDate: "2027-05-31", preferredNeighborhoods: ["Pasadena"],
+    roomType: "private_room", sleepSchedule: "early_bird", cleanliness: "tidy", guests: "rarely", smoking: "no", pets: "none", dealbreakers: [],
+    intro: "ArtCenter 设计学生，喜欢采光好的房间。", lookingFor: "安静、不熬夜的室友。"
+  },
+  "seed-roommate-14": {
+    gender: "male", genderPreference: "male", school: "El Segundo 航空公司", budgetMin: 1900, budgetMax: 2400,
+    moveInDate: "2027-01-10", moveOutDate: null, preferredNeighborhoods: ["El Segundo", "Playa Vista"],
+    roomType: "entire_place", sleepSchedule: "early_bird", cleanliness: "very_tidy", guests: "rarely", smoking: "no", pets: "none", dealbreakers: ["night_owl"],
+    intro: "航空公司项目经理，想和室友一起整租两居室。", lookingFor: "只找男生，作息早，不熬夜。"
+  },
+  "seed-roommate-15": {
+    gender: "female", genderPreference: "female", school: "Koreatown 医疗机构", budgetMin: 1100, budgetMax: 1450,
+    moveInDate: "2027-01-10", moveOutDate: null, preferredNeighborhoods: ["Koreatown", "Mid-City"],
+    roomType: "private_room", sleepSchedule: "regular", cleanliness: "tidy", guests: "rarely", smoking: "no", pets: "none", dealbreakers: ["frequent_guests"],
+    intro: "在 Koreatown 做医疗行政，坐地铁上班。", lookingFor: "只找女生，不希望经常有人来过夜。"
+  },
+  "seed-roommate-16": {
+    gender: "male", genderPreference: "any", school: "North Hollywood 后期公司", budgetMin: 1200, budgetMax: 1500,
+    moveInDate: "2026-12-15", moveOutDate: "2027-05-31", preferredNeighborhoods: ["North Hollywood", "Burbank"],
+    roomType: "private_room", sleepSchedule: "night_owl", cleanliness: "tidy", guests: "rarely", smoking: "outside", pets: "none", dealbreakers: [],
+    intro: "影视后期剪辑，工作到很晚，只在室外抽烟。", lookingFor: "晚上互不打扰的室友。"
+  },
+  "seed-roommate-17": {
+    gender: "female", genderPreference: "female", school: "UCLA", budgetMin: 1500, budgetMax: 1800,
+    moveInDate: "2027-01-04", moveOutDate: "2027-06-12", preferredNeighborhoods: ["Westwood", "Sawtelle"],
+    roomType: "private_room", sleepSchedule: "early_bird", cleanliness: "very_tidy", guests: "rarely", smoking: "no", pets: "none", dealbreakers: ["smoking"],
+    intro: "UCLA 公共卫生硕士，早睡，每天健身。", lookingFor: "只找女生，不抽烟，作息规律。"
+  },
+  "seed-roommate-18": {
+    gender: null, genderPreference: "any", school: "Arts District 设计工作室", budgetMin: 1600, budgetMax: 2000,
+    moveInDate: "2027-06-14", moveOutDate: "2027-08-30", preferredNeighborhoods: ["DTLA", "Koreatown"],
+    roomType: "shared_room", sleepSchedule: "night_owl", cleanliness: "relaxed", guests: "often", smoking: "outside", pets: "none", dealbreakers: [],
+    intro: "Arts District 设计师，周末常有朋友来家里。", lookingFor: "不介意热闹、可以合住的室友。"
+  },
+  "seed-roommate-19": {
+    gender: "female", genderPreference: "any", school: "USC", budgetMin: 1350, budgetMax: 1650,
+    moveInDate: "2027-01-08", moveOutDate: "2027-05-15", preferredNeighborhoods: ["University Park", "Koreatown"],
+    roomType: "private_room", sleepSchedule: "regular", cleanliness: "tidy", guests: "sometimes", smoking: "no", pets: "none", dealbreakers: [],
+    intro: "USC 新闻学院大三，偶尔在家做饭。", lookingFor: "离学校近，公共区域保持整洁。"
+  },
+  "seed-roommate-20": {
+    gender: "male", genderPreference: "any", school: "Silver Lake 创业公司", budgetMin: 1400, budgetMax: 1750,
+    moveInDate: "2027-01-10", moveOutDate: null, preferredNeighborhoods: ["Silver Lake", "Mid-City"],
+    roomType: "private_room", sleepSchedule: "regular", cleanliness: "relaxed", guests: "often", smoking: "no", pets: "has_pet", dealbreakers: [],
+    intro: "创业公司运营，养了一只猫，周末常请朋友来。", lookingFor: "能接受宠物和朋友来访。"
+  }
+};
+
 export const seedGroups = [
   {
     id: "seed-group-1",

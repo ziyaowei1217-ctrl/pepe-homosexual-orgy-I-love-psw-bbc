@@ -22,6 +22,9 @@ runtime. Server-rendered pages use that container-network address; browsers use
 `NEXT_PUBLIC_API_BASE_URL`. Other hosting platforms should set the server-only internal variable to
 their reachable API address, or omit it when the public API URL is reachable from the web server.
 
+`ANTHROPIC_API_KEY` is also a server-only runtime variable of the web server. It is optional; see the
+AI assistant section of [`external-integrations.md`](external-integrations.md).
+
 ## 3. API runtime configuration
 
 Use `api/.env.production.example` as the production variable inventory. Leave secrets in the

@@ -4,7 +4,6 @@ import {
   ArrowLeft,
   Bath,
   BedDouble,
-  Building2,
   CalendarDays,
   Check,
   Heart,
@@ -15,28 +14,36 @@ import {
   Sparkles,
   TrainFront,
   UserRound,
-  Wallet
+  Wallet,
+  X
 } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
+import { SimilarListings } from "@/components/marketplace/listing-feeds";
 import { useSavedListings } from "@/components/marketplace/saved-listings-provider";
+import { ListingLocationMap } from "@/components/marketplace/listing-map";
 import { ListingPhotoGallery } from "@/components/marketplace/listing-photo-gallery";
 import { ListingStayDialog, ListingStayFields } from "@/components/marketplace/listing-stay-selector";
+import { MatchPreferencesDialog } from "@/components/marketplace/match-preferences-dialog";
 import { TrustBadge } from "@/components/marketplace/trust-badge";
+import { useListingMatches } from "@/components/marketplace/use-listing-matches";
 import { formatDateLong, formatRangeLong } from "@/lib/date-format";
-import { defaultMapAttribution, getListingCoordinates, getMapTiles } from "@/lib/listing-map";
-import { applicationHref, earliestListingDate, listingHref, listingStayError, requestedListingStay, type ListingStay } from "@/lib/listing-stay";
+import { getListingPoint } from "@/lib/listing-map";
+import { rememberListingView } from "@/lib/feed-signals";
+import { applicationHref, earliestListingDate, isListingBookable, listingHref, listingStayError, requestedListingStay, type ListingStay } from "@/lib/listing-stay";
 import { listingTrust } from "@/lib/listing-trust";
 import type { PreviewListing } from "@/lib/preview-data";
-import { safeSearchReturn } from "@/lib/search-state";
+import { hasRenterPreferences } from "@/lib/renter-preferences";
+import { defaultSearch, openedSearchHref, parseSearchState } from "@/lib/search-state";
 import { formatStayLength, formatUsd, stayPrice } from "@/lib/stay-price";
 import { cn } from "@/lib/utils";
 
 const sections = [["listing-overview", "房源概况"], ["listing-highlights", "租期与亮点"], ["listing-amenities", "设施"], ["listing-location", "位置与通勤"]] as const;
 
-export function ListingDetailExperience({ listing, initialStay }: { listing: PreviewListing; initialStay?: Partial<ListingStay> }) {
-  const { savedIds, toggleSaved } = useSavedListings();
+/** listings is the whole catalog: the match is scored against the same saved homes as on the search page. */
+export function ListingDetailExperience({ listing, listings, initialStay }: { listing: PreviewListing; listings?: PreviewListing[]; initialStay?: Partial<ListingStay> }) {
+  const { savedIds, toggleSaved, hydrated } = useSavedListings();
   const saved = savedIds.has(listing.id);
   const [stay, setStay] = useState(() => {
     if (typeof window !== "undefined" && window.location.pathname === `/listing/${encodeURIComponent(listing.id)}`) {
@@ -56,10 +63,8 @@ export function ListingDetailExperience({ listing, initialStay }: { listing: Pre
   const stayDates = stayError ? (noDates ? "选择可租日期" : "这段日期不可租，改日期") : formatRangeLong(stay.moveIn, stay.moveOut);
   const applyHref = applicationHref(listing.id, stay, selectionId);
   const inboxHref = `/inbox?listingId=${encodeURIComponent(listing.id)}`;
-  const mapTiles = getMapTiles(getListingCoordinates(listing.area), 12, { width: 900, height: 340 });
-  const mapAttribution = process.env.NEXT_PUBLIC_MAP_ATTRIBUTION ?? defaultMapAttribution;
   const earliestMoveIn = earliestListingDate(listing);
-  const bookable = Boolean(listing.availableFrom && listing.availableTo > earliestMoveIn);
+  const bookable = isListingBookable(listing);
   // One availability range everywhere on the page: from today or the listing's start, whichever is later.
   const availabilityLabel = bookable ? `${formatDateLong(earliestMoveIn)}起可入住` : "租期待确认";
   const availableRange = bookable ? formatRangeLong(earliestMoveIn, listing.availableTo) : "请联系转租人确认";
@@ -69,9 +74,24 @@ export function ListingDetailExperience({ listing, initialStay }: { listing: Pre
   const visibleStayError = noDates && bookable ? null : stayError;
   const [shareStatus, setShareStatus] = useState<string | null>(null);
   const [returnHref, setReturnHref] = useState("/search");
+  const [preferencesOpen, setPreferencesOpen] = useState(false);
+  // Opened from a search card (the stored search selects this listing): score as that card did. Otherwise
+  // the renter came from home, 收藏 or a link, and only the saved preferences count.
+  const lastSearch = useMemo(() => {
+    const search = parseSearchState(new URLSearchParams(returnHref.split("?")[1] ?? ""));
+    return search.selected === listing.id ? search : defaultSearch;
+  }, [returnHref, listing.id]);
+  const catalog = useMemo(() => [listing, ...(listings ?? []).filter((item) => item.id !== listing.id)], [listing, listings]);
+  const { savedPreferences, savePreferences, matches } = useListingMatches(catalog, lastSearch);
+  const match = matches.get(listing.id);
+  const explained = match && (match.reasons.length || match.gaps.length) ? match : null;
+
+  // Feeds the home page's 最近浏览 and the saved-and-viewed interest. Recorded after the match snapshot (taken when
+  // saved homes load), so this page never counts the open listing as interest, however it was reached.
+  useEffect(() => { if (hydrated) rememberListingView(listing.id); }, [hydrated, listing.id]);
 
   useEffect(() => {
-    try { setReturnHref(safeSearchReturn(sessionStorage.getItem("sublet:last-search"))); } catch { /* The search route remains available without storage. */ }
+    setReturnHref(openedSearchHref());
   }, []);
 
   useEffect(() => {
@@ -157,6 +177,19 @@ export function ListingDetailExperience({ listing, initialStay }: { listing: Pre
                 <span className="flex items-center gap-1.5"><BedDouble className="size-4" aria-hidden="true" />{listing.beds} 间卧室</span>
                 <span className="flex items-center gap-1.5"><Bath className="size-4" aria-hidden="true" />{listing.baths} 间卫浴</span>
               </div>
+              <div className="mt-6 rounded-psw-lg bg-surface-subtle p-4">
+                <div className="flex flex-wrap items-center justify-between gap-x-3">
+                  {explained
+                    ? <h2 className="text-m-headline text-ink sm:text-d-headline">和你的匹配度 <span className="font-display text-primary-text">{explained.score}%</span></h2>
+                    : <p className="text-m-subhead text-ink-secondary sm:text-d-subhead">填写学校或公司、预算和日期，看这套房源和你的匹配度。</p>}
+                  {/* Rendered whether or not there is a score, so focus can return here after the dialog. */}
+                  <button type="button" onClick={() => setPreferencesOpen(true)} className="min-h-11 text-m-footnote font-semibold text-primary-text underline underline-offset-4">{hasRenterPreferences(savedPreferences) ? "修改匹配偏好" : "设置匹配偏好"}</button>
+                </div>
+                {explained ? <ul className="mt-1 space-y-1.5 text-m-subhead sm:text-d-subhead">
+                  {explained.reasons.map((reason) => <li key={reason} className="flex items-start gap-2 text-ink"><Check className="mt-1 size-4 shrink-0 text-primary-text" aria-hidden="true" />{reason}</li>)}
+                  {explained.gaps.map((gap) => <li key={gap} className="flex items-start gap-2 text-ink-secondary"><X className="mt-1 size-4 shrink-0" aria-hidden="true" />{gap}</li>)}
+                </ul> : null}
+              </div>
               <div className="mt-6 grid grid-cols-2 gap-3 lg:hidden">
                 <Link href={`${inboxHref}&tour=1`} className="flex min-h-12 items-center justify-center gap-2 rounded-full bg-primary-soft px-3 font-rounded text-[15px] font-bold text-primary-text"><CalendarDays className="size-4" aria-hidden="true" />预约看房</Link>
                 <Link href={inboxHref} className="flex min-h-12 items-center justify-center gap-2 rounded-full bg-primary-soft px-3 font-rounded text-[15px] font-bold text-primary-text"><MessageCircle className="size-4" aria-hidden="true" />联系转租人</Link>
@@ -188,15 +221,7 @@ export function ListingDetailExperience({ listing, initialStay }: { listing: Pre
 
             <section className="py-8">
               <h2 id="listing-location" className="scroll-mt-40 text-[22px] font-bold leading-[30px] sm:text-d-title">位置与通勤</h2>
-              <div className="relative mt-5 h-[340px] overflow-hidden rounded-psw-xl bg-line-strong" aria-label="房源位置地图">
-                <div className="map-tiles absolute left-1/2 top-0 h-[340px] w-[900px] -translate-x-1/2">
-                  {mapTiles.map((tile) => <div key={tile.id} className="absolute size-64 select-none bg-cover bg-center" style={{ backgroundImage: `url(${tile.url})`, left: tile.x, top: tile.y }} />)}
-                </div>
-                <div className="map-tint pointer-events-none absolute inset-0" aria-hidden="true" />
-                <div className="absolute left-1/2 top-1/2 grid size-14 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border-4 border-surface bg-primary text-white shadow-menu"><Building2 className="size-6" aria-hidden="true" /></div>
-                <div className="absolute bottom-4 left-4 rounded-psw-lg bg-surface p-4 shadow-menu"><p className="text-d-label text-ink">{listing.area}</p><p className="mt-1 text-m-footnote text-ink-secondary">准确地址将在申请流程中按规则展示</p></div>
-                <span className="absolute bottom-2 right-3 rounded bg-surface/90 px-1.5 py-0.5 text-m-footnote font-semibold text-ink-secondary">{mapAttribution}</span>
-              </div>
+              <ListingLocationMap point={getListingPoint(listing)} area={listing.area} />
             </section>
           </div>
 
@@ -233,6 +258,8 @@ export function ListingDetailExperience({ listing, initialStay }: { listing: Pre
               </div>
             </div>
           </aside>
+
+          <SimilarListings listing={listing} listings={catalog} matches={matches} search={lastSearch} className="border-t border-line-strong pt-10 lg:col-span-2" />
         </div>
       </div>
 
@@ -247,6 +274,7 @@ export function ListingDetailExperience({ listing, initialStay }: { listing: Pre
         </div>
       </div>
 
+      {preferencesOpen ? <MatchPreferencesDialog initial={savedPreferences} onSave={(next) => { savePreferences(next); setPreferencesOpen(false); }} onClose={() => setPreferencesOpen(false)} /> : null}
       {stayOpen ? <ListingStayDialog listing={listing} stay={stay} onClose={() => setStayOpen(false)} onApply={(value) => { updateStay(value); setStayOpen(false); }} /> : null}
     </main>
   );

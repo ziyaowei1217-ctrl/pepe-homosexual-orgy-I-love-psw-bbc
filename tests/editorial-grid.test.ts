@@ -33,46 +33,12 @@ describe("editorial grid redesign", () => {
     expect(input).toContain("bg-card");
   });
 
-  it("applies the editorial language to the global shell and Stay", () => {
-    const source = readFileSync("components/sublet-app.tsx", "utf8");
 
-    expect(source).toContain("01 / 短租");
-    expect(source).toContain("02 / 找房");
-    expect(source).toContain("editorial-context-strip");
-    expect(source).toContain("xl:col-span-7");
-    expect(source).toContain("xl:col-span-5");
-    expect(source).toContain("rounded-[18px]");
-  });
 
-  it("uses aligned editorial listing cards", () => {
-    const source = readFileSync("components/sublet-app.tsx", "utf8");
 
-    expect(source).toContain("aspect-[16/11]");
-    expect(source).toContain("border-t border-border");
-    expect(source).toContain("mt-auto");
-  });
-
-  it("labels the detail and roommate editorial workspaces", () => {
-    const source = readFileSync("components/sublet-app.tsx", "utf8");
-
-    for (const label of ["01 / 房源", "01 / 室友", "01 / 喜欢列表"]) {
-      expect(source).toContain(label);
-    }
-    expect(source).toContain("xl:col-span-4 xl:sticky xl:top-[var(--app-header-offset)]");
-    expect(source).toContain("xl:grid-cols-3");
-  });
-
-  it("labels every supporting editorial workspace", () => {
-    const source = readFileSync("components/sublet-app.tsx", "utf8");
-    const authSource = readFileSync("components/auth-flow-panel.tsx", "utf8");
+  it("labels the trust editorial workspace", () => {
     const trustSource = readFileSync("components/admin-trust-screen.tsx", "utf8");
 
-    for (const label of ["01 / 消息", "01 / 看房", "01 / 发布"]) {
-      expect(source).toContain(label);
-    }
-    expect(authSource).toContain("01 / 账户");
     expect(trustSource).toContain("01 / 信任");
-    expect(source).toContain("xl:col-span-3");
-    expect(source).toContain("xl:col-span-9");
   });
 });

@@ -68,20 +68,18 @@ export function SearchFiltersDialog({ initial, initialSection = "budget", prices
         </section>
         <fieldset ref={bedrooms} tabIndex={-1} className="border-b border-line-strong py-7 outline-none">
           <legend className="float-left w-full text-m-headline sm:text-d-headline font-bold">卧室数量</legend>
-          <div className="clear-both flex gap-2 pt-4">{[0, 1, 2, 3, 4].map((beds) => <button key={beds} type="button" onClick={() => update({ beds })} aria-pressed={draft.beds === beds} className={cn("min-h-11 min-w-0 flex-1 rounded-full border-[1.5px] px-2 text-[15px] font-semibold sm:text-sm", draft.beds === beds ? "border-primary bg-primary text-white" : "border-line-strong hover:border-control-border")}>{beds ? `${beds}+` : "不限"}</button>)}</div>
+          <BedsField value={draft.beds} onChange={(beds) => update({ beds })} className="clear-both pt-4" />
         </fieldset>
         <fieldset className="border-b border-line-strong py-7">
           <legend className="float-left w-full text-m-headline sm:text-d-headline font-bold">让生活更方便</legend>
           <p className="clear-both pt-1 text-m-subhead text-ink-secondary sm:text-d-subhead">可多选，房源需同时满足所选条件。</p>
-          <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">{searchAmenities.map((amenity) => <button key={amenity} type="button" aria-pressed={draft.amenities.includes(amenity)} onClick={() => update({ amenities: draft.amenities.includes(amenity) ? draft.amenities.filter((value) => value !== amenity) : [...draft.amenities, amenity] })} className={cn("flex min-h-12 items-center justify-between rounded-psw-md border-[1.5px] px-4 text-[15px] font-semibold sm:text-sm", draft.amenities.includes(amenity) ? "border-ink bg-surface-muted ring-1 ring-ink" : "border-line-strong hover:border-control-border")}>
-            {amenity}<Check className={cn("size-4", !draft.amenities.includes(amenity) && "invisible")} />
-          </button>)}</div>
+          <AmenityField value={draft.amenities} onChange={(amenities) => update({ amenities })} className="mt-4" />
         </fieldset>
         <section ref={dates} tabIndex={-1} aria-labelledby="filter-dates-title" className="py-7 outline-none">
           <div className="flex items-center justify-between"><h3 id="filter-dates-title" className="text-m-headline sm:text-d-headline font-bold">入住与退租</h3><button type="button" onClick={() => update({ moveIn: "", moveOut: "" })} className="min-h-11 px-1 text-m-footnote font-semibold underline underline-offset-4">日期灵活</button></div>
           <div className="mt-4 grid grid-cols-2 gap-3">
-            <label className="cursor-pointer rounded-psw-md border border-control-border p-3 text-m-footnote font-semibold text-ink-secondary focus-within:border-primary focus-within:ring-1 focus-within:ring-primary">入住日期<DateInput aria-label="筛选入住日期" value={draft.moveIn} min={today} onChange={(event) => update({ moveIn: event.target.value })} focusOutline={false} wrapperClassName="mt-1" className="text-base font-semibold text-ink sm:text-sm" /></label>
-            <label className="cursor-pointer rounded-psw-md border border-control-border p-3 text-m-footnote font-semibold text-ink-secondary focus-within:border-primary focus-within:ring-1 focus-within:ring-primary">退租日期<DateInput aria-label="筛选退租日期" value={draft.moveOut} min={draft.moveIn || today} onChange={(event) => update({ moveOut: event.target.value })} focusOutline={false} wrapperClassName="mt-1" className="text-base font-semibold text-ink sm:text-sm" /></label>
+            <DateField label="入住日期" ariaLabel="筛选入住日期" value={draft.moveIn} min={today} onChange={(moveIn) => update({ moveIn })} />
+            <DateField label="退租日期" ariaLabel="筛选退租日期" value={draft.moveOut} min={draft.moveIn || today} onChange={(moveOut) => update({ moveOut })} />
           </div>
           {error ? <p role="alert" className="mt-3 text-d-subhead text-danger-text">{error}</p> : null}
         </section>
@@ -94,6 +92,23 @@ export function SearchFiltersDialog({ initial, initialSection = "budget", prices
   </div>;
 }
 
-function BudgetField({ label, value, placeholder, onChange }: { label: string; value: number; placeholder: string; onChange: (value: number) => void }) {
+export function BudgetField({ label, value, placeholder, onChange }: { label: string; value: number; placeholder: string; onChange: (value: number) => void }) {
   return <label className="min-w-0 rounded-psw-md border border-control-border px-4 py-3 text-m-footnote font-semibold text-ink-secondary">{label}<span className="mt-1 flex items-center gap-2 text-base text-ink">$<input type="number" aria-label={label} min="0" max="1000000" step="100" value={value || ""} placeholder={placeholder} onChange={(event) => onChange(Math.min(1_000_000, Math.max(0, Number(event.target.value))))} className="w-full min-w-0 bg-transparent font-semibold outline-none" /></span></label>;
+}
+
+export function BedsField({ value, onChange, className }: { value: number; onChange: (beds: number) => void; className?: string }) {
+  return <div className={cn("flex gap-2", className)}>{[0, 1, 2, 3, 4].map((beds) => <button key={beds} type="button" onClick={() => onChange(beds)} aria-pressed={value === beds} className={cn("min-h-11 min-w-0 flex-1 rounded-full border-[1.5px] px-2 text-[15px] font-semibold sm:text-sm", value === beds ? "border-primary bg-primary text-on-primary" : "border-line-strong hover:border-control-border")}>{beds ? `${beds}+` : "不限"}</button>)}</div>;
+}
+
+export function AmenityField({ value, onChange, className }: { value: string[]; onChange: (amenities: string[]) => void; className?: string }) {
+  return <div className={cn("grid grid-cols-2 gap-3 sm:grid-cols-3", className)}>{searchAmenities.map((amenity) => {
+    const selected = value.includes(amenity);
+    return <button key={amenity} type="button" aria-pressed={selected} onClick={() => onChange(selected ? value.filter((item) => item !== amenity) : [...value, amenity])} className={cn("flex min-h-12 items-center justify-between rounded-psw-md border-[1.5px] px-4 text-[15px] font-semibold sm:text-sm", selected ? "border-ink bg-surface-muted ring-1 ring-ink" : "border-line-strong hover:border-control-border")}>
+      {amenity}<Check className={cn("size-4", !selected && "invisible")} aria-hidden="true" />
+    </button>;
+  })}</div>;
+}
+
+export function DateField({ label, ariaLabel, value, min, onChange }: { label: string; ariaLabel?: string; value: string; min: string; onChange: (value: string) => void }) {
+  return <label className="cursor-pointer rounded-psw-md border border-control-border p-3 text-m-footnote font-semibold text-ink-secondary focus-within:border-primary focus-within:ring-1 focus-within:ring-primary">{label}<DateInput aria-label={ariaLabel} value={value} min={min} onChange={(event) => onChange(event.target.value)} focusOutline={false} wrapperClassName="mt-1" className="text-base font-semibold text-ink sm:text-sm" /></label>;
 }

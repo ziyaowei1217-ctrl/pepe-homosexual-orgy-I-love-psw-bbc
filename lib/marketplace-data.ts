@@ -1,6 +1,6 @@
 import { apiGet } from "./api";
 import type { ApiListing } from "./api";
-import { getListingCoordinates } from "./listing-map";
+import { getApproximateListingCoordinates } from "./listing-map";
 import { getListingCoverUrl, getListingImageUrls } from "./listing-media";
 import { ProductApiError } from "./product-errors";
 import {
@@ -20,7 +20,7 @@ type LoadMarketplaceListingOptions = {
 };
 
 export function normalizeMarketplaceListing(listing: ApiListing): PreviewListing {
-  const coordinates = getListingCoordinates(listing.area);
+  const coordinates = getApproximateListingCoordinates(listing.id, listing.area);
 
   return {
     id: listing.id,
@@ -40,7 +40,8 @@ export function normalizeMarketplaceListing(listing: ApiListing): PreviewListing
     availableFrom: toDateOnly(listing.availableFrom),
     availableTo: toDateOnly(listing.availableTo),
     latitude: coordinates.lat,
-    longitude: coordinates.lng
+    longitude: coordinates.lng,
+    listedAt: listing.reviewedAt ?? listing.createdAt
   };
 }
 

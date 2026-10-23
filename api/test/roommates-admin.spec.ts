@@ -56,7 +56,7 @@ describe("RoommatesService admin profile management", () => {
     await expect(service.updateAdminProfile("missing-roommate", { match: 70 })).rejects.toThrow(NotFoundException);
   });
 
-  it("excludes inactive and already-actioned profiles from authenticated decks", async () => {
+  it("excludes inactive and liked profiles from authenticated decks", async () => {
     const prisma = createPrismaMock();
     await prisma.roommateProfile.create({ data: { ...roommateProfilePayload(), id: "active-roommate" } });
     await prisma.roommateProfile.create({
@@ -70,17 +70,13 @@ describe("RoommatesService admin profile management", () => {
     });
     prisma.roommateAction.records.push({
       userId: "user-1",
-      roommateProfileId: "active-roommate"
+      roommateProfileId: "active-roommate",
+      action: "LIKE",
+      updatedAt: new Date()
     });
     const service = new RoommatesService(prisma as never, {} as never);
 
-    await expect(service.findDeck({ limit: 5 }, "user-1")).resolves.toMatchObject({
-      items: [],
-      pageInfo: {
-        returned: 0,
-        totalCandidates: 0
-      }
-    });
+    await expect(service.findDeck(5, "user-1")).resolves.toMatchObject({ items: [], total: 0, filteredOut: 0 });
   });
 });
 
@@ -151,11 +147,10 @@ function createPrismaMock() {
       }
     },
     roommateAction: {
-      records: [] as Array<{ userId: string; roommateProfileId: string }>,
-      findMany: async ({ where }: { where: { userId: string }; select: { roommateProfileId: true } }) =>
-        mock.roommateAction.records
-          .filter((record) => record.userId === where.userId)
-          .map((record) => ({ roommateProfileId: record.roommateProfileId }))
+      records: [] as Array<{ userId: string; roommateProfileId: string; action: string; updatedAt: Date }>,
+      findMany: async ({ where }: { where: { userId?: string } }) =>
+        mock.roommateAction.records.filter((record) => record.userId === where.userId),
+      groupBy: async () => []
     }
   };
 

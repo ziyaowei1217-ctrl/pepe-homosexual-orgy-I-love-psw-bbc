@@ -49,31 +49,12 @@ export function normalizeUserUiState(value: unknown): UserUiState {
   };
 }
 
-export function addLocalReminder(
-  notifications: LocalReminder[],
-  notification: LocalReminder
-) {
-  return [notification, ...notifications.filter((item) => item.id !== notification.id)]
-    .sort((left, right) => right.createdAt - left.createdAt)
-    .slice(0, 50);
-}
-
 export function markNotificationRead(notifications: LocalReminder[], notificationId: string) {
   return notifications.map((notification) =>
     notification.id === notificationId && !notification.read
       ? { ...notification, read: true }
       : notification
   );
-}
-
-export function markAllNotificationsRead(notifications: LocalReminder[]) {
-  return notifications.map((notification) =>
-    notification.read ? notification : { ...notification, read: true }
-  );
-}
-
-export function clearLegacyProductStorage(storage: Pick<Storage, "removeItem">) {
-  legacyProductStorageKeys.forEach((key) => storage.removeItem(key));
 }
 
 function isLocalReminder(value: unknown): value is LocalReminder {

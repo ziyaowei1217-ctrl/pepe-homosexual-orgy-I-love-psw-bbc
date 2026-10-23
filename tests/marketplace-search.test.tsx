@@ -2,13 +2,20 @@
 
 import { renderToStaticMarkup } from "react-dom/server";
 import { fireEvent } from "@testing-library/react";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import TestRenderer, { act } from "./support/dom-test-renderer";
+import { Map as FakeMap } from "./support/fake-maplibre";
 
 import { SavedListingsProvider } from "../components/marketplace/saved-listings-provider";
 import { SearchExperience } from "../components/marketplace/search-experience";
 import { createPreviewListings } from "../lib/preview-data";
 import { defaultSearch } from "../lib/search-state";
+
+vi.mock("maplibre-gl", () => import("./support/fake-maplibre"));
+
+const pinLabels = () => [...document.querySelectorAll(".map-pin")].map((pin) => pin.textContent);
+// MapLibre is imported after render; let that import settle.
+const loadMap = () => act(async () => { await new Promise((resolve) => setTimeout(resolve, 50)); });
 
 describe("marketplace search", () => {
   beforeEach(() => window.history.replaceState(null, "", "/"));
@@ -30,25 +37,21 @@ describe("marketplace search", () => {
     // No breadcrumb: the header navigation already says where you are.
     expect(html).not.toContain("房源列表");
     expect(html).toContain('aria-label="房源地图"');
-    expect(html).toContain("tile.openstreetmap.de");
-    expect(html).toContain("© OpenStreetMap contributors");
+    expect(html).toContain("移动地图时更新结果");
     expect(html).not.toContain("示意地图");
     expect(html).toContain('href="/listing/preview-01"');
     expect(html).toContain(">筛选<");
-    // Map sheets sit above the phone view switch (82px + 52px from the bottom of the screen).
-    expect(html).toContain("bottom-[146px]");
     expect(html).not.toContain("申请材料");
     expect(html).not.toContain("室友偏好");
   });
 
-  it("does not draw map tiles or pins while the list view hides the map", () => {
+  it("does not mount the map in list view", () => {
     const html = renderToStaticMarkup(
       <SavedListingsProvider>
         <SearchExperience listings={createPreviewListings()} initialState={{ ...defaultSearch, view: "list" }} initialQuery="" initialMoveIn="" initialMoveOut="" />
       </SavedListingsProvider>
     );
-    expect(html).toContain('aria-label="房源地图"');
-    expect(html).not.toContain("tile.openstreetmap.de");
+    expect(html).not.toContain('aria-label="房源地图"');
     expect(html).toContain('href="/listing/');
   });
 
@@ -108,7 +111,8 @@ describe("marketplace search", () => {
     expect(pageText).toContain("Boston的可租房源");
     expect(pageText).toContain("Back Bay 阳光一居");
     expect(pageText).not.toContain(losAngelesListing.title);
-    expect(pageText).toContain("地图上是本页 1 套");
+    await loadMap();
+    expect(pinLabels()).toEqual(["$995"]);
   });
 
   it("lets keyboard users choose a location suggestion with ArrowDown and Enter", async () => {
@@ -177,7 +181,36 @@ describe("marketplace search", () => {
     expect(pageText).toContain("Seattle的可租房源");
     expect(pageText).toContain("South Lake Union 科技通勤一居");
     expect(pageText).not.toContain(losAngelesListing.title);
-    expect(pageText).toContain("地图上是本页 1 套");
+    await loadMap();
+    expect(pinLabels()).toEqual(["$995"]);
+  });
+
+  it("prices every match on the map and lets the results follow the map", async () => {
+    const listings = createPreviewListings();
+    await act(async () => {
+      TestRenderer.create(
+        <SavedListingsProvider>
+          <SearchExperience listings={listings} initialQuery="" initialMoveIn="" initialMoveOut="" />
+        </SavedListingsProvider>
+      );
+    });
+    await loadMap();
+    // The map carries every match, not only the 24 on the first page.
+    expect(pinLabels()).toHaveLength(listings.length);
+
+    const boston = listings.filter((listing) => listing.area.startsWith("Boston"));
+    await act(async () => FakeMap.last!.moveTo([-71.2, 42.3, -71.0, 42.4]));
+    expect(document.querySelector("#result-heading")?.textContent).toBe("地图区域内的可租房源");
+    expect(document.querySelector("[role=status]")?.textContent).toContain(`${boston.length} 套符合条件`);
+    expect(window.location.search).toContain("bbox=-71.2000%2C42.3000%2C-71.0000%2C42.4000");
+    // Only pins in view stay in the page.
+    expect(pinLabels()).toHaveLength(boston.length);
+
+    const pin = [...document.querySelectorAll<HTMLButtonElement>(".map-pin")].find((item) => item.getAttribute("aria-label")?.startsWith(boston[0].title));
+    await act(async () => pin!.click());
+    expect(pin!.classList.contains("is-active")).toBe(true);
+    expect(window.location.search).toContain(`selected=${boston[0].id}`);
+    expect(document.querySelector(".listing-map article")?.textContent).toContain(boston[0].title);
   });
 });
 

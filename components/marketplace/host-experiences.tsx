@@ -12,7 +12,7 @@ import { ApplicationCancellation } from "@/components/application-cancellation";
 import { assertCurrentAuthSession, readStoredAuthSession } from "@/lib/auth-session";
 import { useAuthSessionToken } from "@/lib/use-auth-session-token";
 import { PaymentPanel } from "@/components/payment-panel";
-import { PublishingFlow } from "@/components/sublet-app";
+import { PublishingFlow } from "@/components/publishing-flow";
 import { apiGet, apiPatch, apiPost } from "@/lib/api";
 import type { ApiDealThread, ApiListing } from "@/lib/api";
 import { authRoute } from "@/lib/app-routes";
