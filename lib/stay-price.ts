@@ -73,6 +73,10 @@ export function formatStayLength(price: Pick<StayPrice, "wholeMonths" | "extraDa
   return parts.filter(Boolean).join(" ");
 }
 
+let usdFormat: Intl.NumberFormat | undefined;
+
 export function formatUsd(value: number): string {
-  return `$${Math.round(value).toLocaleString("en-US")}`;
+  // One formatter for every price on the page; toLocaleString builds a new one per call.
+  usdFormat ??= new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
+  return `$${usdFormat.format(Math.round(value))}`;
 }

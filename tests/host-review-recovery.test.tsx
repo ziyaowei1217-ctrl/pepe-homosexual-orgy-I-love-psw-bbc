@@ -6,7 +6,7 @@ import { writeStoredAuthSession } from "../lib/auth-session";
 import type { ApiRentalApplication } from "../lib/rental-applications";
 
 vi.mock("../components/payment-panel", () => ({ PaymentPanel: () => null }));
-beforeEach(() => { writeStoredAuthSession("host-token"); vi.spyOn(window, "confirm").mockReturnValue(true); vi.spyOn(window, "prompt").mockReturnValue("入住时间不合适"); });
+beforeEach(() => { writeStoredAuthSession("host-token"); });
 afterEach(() => { cleanup(); localStorage.clear(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 function application(id = "app-1", status: ApiRentalApplication["status"] = "SUBMITTED"): ApiRentalApplication {
   return { id, listingId: `listing-${id}`, listingTitle: `房源 ${id}`, listingOwnerId: "host", submitterId: `renter-${id}`, teamId: null, scope: "SOLO", status,
@@ -24,6 +24,14 @@ function setup(options: { load?: () => Response | Promise<Response>; decision?: 
   });
   vi.stubGlobal("fetch", fetcher);
   return fetcher;
+}
+/** Decisions are confirmed in the site's dialog; rejecting asks for the reason there. */
+async function decide(button: HTMLElement, label: string, reason = "入住时间不合适") {
+  fireEvent.click(button);
+  const dialog = await screen.findByRole("alertdialog");
+  const box = within(dialog).queryByRole("textbox");
+  if (box) fireEvent.change(box, { target: { value: reason } });
+  await act(async () => { fireEvent.click(within(dialog).getByRole("button", { name: label })); });
 }
 const row = (id = "app-1") => within(screen.getByRole("heading", { name: `房源 ${id}` }).closest("article")!);
 
@@ -60,7 +68,7 @@ it.each([
     return Response.json({ ...application("app-1", status), listingTitle: undefined });
   } });
   render(<HostApplicationsExperience />);
-  fireEvent.click(await screen.findByRole("button", { name: label }));
+  await decide(await screen.findByRole("button", { name: label }), label);
   await row().findByText(copy);
   expect(row().queryByRole("button", { name: "接受申请" })).toBeNull();
   expect(row().queryByRole("button", { name: "不通过" })).toBeNull();
@@ -88,10 +96,10 @@ it.each([
     return key === firstKey ? Response.json(saved) : Response.json({}, { status: 409 });
   } });
   render(<HostApplicationsExperience />);
-  fireEvent.click(await screen.findByRole("button", { name: label }));
+  await decide(await screen.findByRole("button", { name: label }), label);
   await screen.findByRole("alert");
   await waitFor(() => expect((row().getByRole("button", { name: label }) as HTMLButtonElement).disabled).toBe(false));
-  fireEvent.click(row().getByRole("button", { name: label }));
+  await decide(row().getByRole("button", { name: label }), label);
   await row().findByText(copy);
   expect(attempts).toBe(2);
   expect(writes).toBe(1);
@@ -105,7 +113,7 @@ it("disables all review actions while a decision is running, then enables the ne
     decision: () => new Promise<Response>((resolve) => { finish = resolve; }) });
   render(<HostApplicationsExperience />);
   await screen.findByRole("heading", { name: "房源 app-2" });
-  fireEvent.click(row().getByRole("button", { name: "接受申请" }));
+  await decide(row().getByRole("button", { name: "接受申请" }), "接受申请");
   const secondAccept = row("app-2").getByRole("button", { name: "接受申请" }) as HTMLButtonElement;
   expect(secondAccept.disabled).toBe(true);
   fireEvent.click(secondAccept);
@@ -122,7 +130,7 @@ it("refreshes a conflicting decision so a withdrawn application cannot still be 
     return Response.json({}, { status: 409 });
   } });
   render(<HostApplicationsExperience />);
-  fireEvent.click(await screen.findByRole("button", { name: "接受申请" }));
+  await decide(await screen.findByRole("button", { name: "接受申请" }), "接受申请");
   await row().findByText("申请已撤回");
   expect(row().queryByRole("button", { name: "接受申请" })).toBeNull();
 });
@@ -137,12 +145,11 @@ it("uses separate commands when the rejection reason or decision changes after a
     return Response.json(application("app-1", "ACCEPTED"));
   } });
   render(<HostApplicationsExperience />);
-  fireEvent.click(await screen.findByRole("button", { name: "不通过" }));
+  await decide(await screen.findByRole("button", { name: "不通过" }), "不通过");
   await row().findByRole("alert");
-  vi.mocked(window.prompt).mockReturnValue("租期不匹配");
-  fireEvent.click(row().getByRole("button", { name: "不通过" }));
+  await decide(row().getByRole("button", { name: "不通过" }), "不通过", "租期不匹配");
   await row().findByRole("alert");
-  fireEvent.click(row().getByRole("button", { name: "接受申请" }));
+  await decide(row().getByRole("button", { name: "接受申请" }), "接受申请");
   await row().findByText("申请已接受");
   expect(commands.map((command) => command.body)).toEqual([{ reason: "入住时间不合适" }, { reason: "租期不匹配" }, {}]);
   expect(new Set(commands.map((command) => command.key)).size).toBe(3);

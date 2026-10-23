@@ -3,6 +3,8 @@
 import { ArrowLeft, CalendarDays, FileText, Search, Send, UsersRound } from "lucide-react";
 import { SmartImage } from "@/components/ui/smart-image";
 import Link from "next/link";
+
+import { EmptyState } from "@/components/marketplace/empty-state";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 
 import { Wowo } from "@/components/brand/wowo";
@@ -229,6 +231,13 @@ function InboxSessionExperience({ initialConversationId, initialListingId, initi
   }, [conversations, filter, searchQuery]);
   const active = filtered.find((item) => item.id === selectedId) ?? null;
   const showConversation = Boolean(selectedId && (active || loading));
+  // A thread opens at its newest message and follows the messages being sent, like any chat.
+  const messagesRef = useRef<HTMLDivElement>(null);
+  const messageCount = active?.messages.length ?? 0;
+  useEffect(() => {
+    const list = messagesRef.current;
+    if (list) list.scrollTop = list.scrollHeight;
+  }, [active?.id, messageCount]);
 
   async function sendMessage(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -335,6 +344,22 @@ function InboxSessionExperience({ initialConversationId, initialListingId, initi
     setConversations((current) => current.map((item) => item.id === id ? withMessages(item, messages) : item));
   }
 
+  // No conversations yet: one state for the page instead of an empty list next to "choose a conversation".
+  if (authenticated && !loading && !error && conversations.length === 0) {
+    return <main className="min-h-[calc(100dvh-72px)] bg-background"><div className="page-container pb-16 pt-8 sm:pt-12">
+      <h1 className="page-title">收件箱</h1>
+      <EmptyState className="mt-7" mood="sleepy" title="还没有消息" body="在房源页联系转租人、预约看房，或者和喜欢的室友互相喜欢后，对话会出现在这里。" action={<Link href="/search" className="primary-action">去找房</Link>} />
+    </div></main>;
+  }
+
+  // Signed out there is nothing to search, filter or open: one sign-in state instead of the two-pane inbox.
+  if (!authenticated && !loading) {
+    return <main className="min-h-[calc(100dvh-72px)] bg-background"><div className="page-container pb-16 pt-8 sm:pt-12">
+      <h1 className="page-title">收件箱</h1>
+      <EmptyState className="mt-7" mood="sleepy" title="登录后查看你的消息" body="和转租人、室友的消息都在这里。用邮箱验证码登录，不需要密码。" action={<Link href={authRoute({ returnTo: inboxReturnTo({ initialConversationId, initialListingId, initialApplicantId, initialRoommateId, initialTour }) })} className="primary-action">登录</Link>} />
+    </div></main>;
+  }
+
   return (
     <main className="min-h-[calc(100dvh-72px)] bg-background">
       <div className="mx-auto max-w-[1264px] px-0 sm:px-8 sm:py-6">
@@ -343,30 +368,30 @@ function InboxSessionExperience({ initialConversationId, initialListingId, initi
             <div className="border-b border-line-strong p-5 sm:p-6">
               <h1 className="page-title">收件箱</h1>
               <label className="mt-5 flex min-h-12 items-center gap-2 rounded-full border border-control-border bg-surface px-4 focus-within:border-primary"><Search className="size-4 text-ink-secondary" aria-hidden="true" /><input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} className="min-w-0 flex-1 bg-transparent text-base outline-none sm:text-sm" placeholder="搜索消息" aria-label="搜索消息" /></label>
-              <div className="mt-4 flex gap-2 overflow-x-auto [scrollbar-width:none]">{(["all", "application", "tour", "roommate"] as const).map((value) => <button key={value} type="button" onClick={() => setFilter(value)} aria-pressed={filter === value} className={cn("search-pill min-h-9 px-3.5", filter === value && "search-pill-active")}>{value === "all" ? "全部" : kindLabels[value]}</button>)}</div>
+              <div className="mt-4 flex gap-2 overflow-x-auto [mask-image:linear-gradient(to_right,#000_85%,transparent)] [scrollbar-width:none]">{(["all", "application", "tour", "roommate"] as const).map((value) => <button key={value} type="button" onClick={() => setFilter(value)} aria-pressed={filter === value} className={cn("search-pill min-h-9 px-3.5", filter === value && "search-pill-active")}>{value === "all" ? "全部" : kindLabels[value]}</button>)}</div>
             </div>
             <div className="max-h-[calc(100dvh-300px)] overflow-y-auto p-3">
-              {!authenticated && !loading ? <EmptyInbox title="登录后查看真实消息" actionHref={authRoute({ returnTo: inboxReturnTo({ initialConversationId, initialListingId, initialApplicantId, initialRoommateId, initialTour }) })} action="登录" /> : null}
               {!authenticated && loading ? <p className="p-5 text-center text-d-subhead text-ink-secondary">正在检查登录状态…</p> : null}
               {authenticated && !loading && conversations.length === 0 && !error ? <EmptyInbox title="还没有消息" actionHref="/search" action="浏览房源" /> : null}
               {loading && authenticated ? <p className="p-5 text-center text-d-subhead text-ink-secondary">正在同步消息…</p> : null}
               {error && !active ? <p role="alert" className="m-2 rounded-psw-md bg-danger-soft p-4 text-d-subhead font-semibold text-danger-text">{error}</p> : null}
               {loadFailed && !loading ? <button type="button" onClick={() => setLoadAttempt((attempt) => attempt + 1)} className="secondary-action m-2">重新加载消息</button> : null}
               {authenticated && !loading && conversations.length > 0 && filtered.length === 0 ? <p className="p-6 text-center text-d-subhead text-ink-secondary">没有匹配的消息</p> : null}
-              {filtered.map((conversation) => <Link key={conversation.id} href={`/inbox/${conversation.id}`} onClick={() => { if (selectedId !== conversation.id) setDraft(""); setSelectedId(conversation.id); }} className={cn("grid grid-cols-[48px_minmax(0,1fr)_auto] gap-3 rounded-[18px] p-3", active?.id === conversation.id ? "bg-surface-subtle" : "hover:bg-surface-subtle")}><Avatar name={conversation.person} src={conversation.avatar} /><div className="min-w-0"><div className="flex items-center gap-2"><p className="truncate text-sm font-black">{conversation.person}</p><span className="rounded-full bg-surface px-2 py-0.5 text-[11px] font-bold text-ink-secondary">{kindLabels[conversation.kind]}</span></div><p className="mt-1 truncate text-xs font-bold text-ink-secondary">{conversation.title}</p><p className="mt-1 truncate text-xs text-ink-secondary">{conversation.detail || "暂无消息"}</p></div>{conversation.unread ? <span className="grid size-5 place-items-center rounded-full bg-badge text-[11px] font-black text-on-badge">{conversation.unread}</span> : null}</Link>)}
+              {filtered.map((conversation) => <Link key={conversation.id} href={`/inbox/${conversation.id}`} onClick={() => { if (selectedId !== conversation.id) setDraft(""); setSelectedId(conversation.id); }} className={cn("grid grid-cols-[48px_minmax(0,1fr)_auto] gap-3 rounded-psw-lg p-3", active?.id === conversation.id ? "bg-surface-subtle" : "hover:bg-surface-subtle")}><Avatar name={conversation.person} src={conversation.avatar} /><div className="min-w-0"><div className="flex items-center gap-2"><p className="truncate text-sm font-bold">{conversation.person}</p><span className="shrink-0 whitespace-nowrap rounded-psw-sm bg-surface px-2 py-0.5 text-m-footnote font-bold text-ink-secondary">{kindLabels[conversation.kind]}</span></div><p className="mt-1 truncate text-m-footnote font-bold text-ink-secondary">{conversation.title}</p><p className="mt-1 truncate text-m-footnote text-ink-secondary">{conversation.detail || "暂无消息"}</p></div>{conversation.unread && active?.id !== conversation.id ? <span className="grid size-5 place-items-center rounded-full bg-badge text-m-footnote font-bold text-on-badge">{conversation.unread}</span> : null}</Link>)}
             </div>
           </section>
 
           <section className={cn("flex h-[calc(100dvh-136px)] min-w-0 flex-col lg:h-auto lg:min-h-0", !showConversation && "hidden lg:flex")} aria-label="对话内容">
+            <h1 className="sr-only lg:hidden">收件箱</h1>
             {active ? <>
-              <header className="flex items-center gap-3 border-b border-line-strong px-4 py-3 sm:px-6"><Link href="/inbox" onClick={() => setSelectedId(null)} className="grid size-11 place-items-center rounded-full lg:hidden" aria-label="返回会话列表"><ArrowLeft className="size-4" /></Link><Avatar name={active.person} src={active.avatar} small /><div className="min-w-0 flex-1"><h2 className="truncate text-sm font-black">{active.person}</h2><p className="truncate text-xs text-ink-secondary">{active.title}</p></div><span className="rounded-full bg-surface-subtle px-3 py-1.5 text-xs font-bold text-primary-text">{kindLabels[active.kind]}</span></header>
-              <div className="border-b border-line-strong bg-surface-muted px-6 py-3"><div className="flex items-center gap-3 text-xs font-black"><KindIcon kind={active.kind} />关联事项 · {active.title}</div></div>
+              <header className="flex items-center gap-3 border-b border-line-strong px-4 py-3 sm:px-6"><Link href="/inbox" onClick={() => setSelectedId(null)} className="grid size-11 place-items-center rounded-full lg:hidden" aria-label="返回会话列表"><ArrowLeft className="size-4" /></Link><Avatar name={active.person} src={active.avatar} small /><div className="min-w-0 flex-1"><h2 className="truncate text-sm font-bold">{active.person}</h2><p className="truncate text-m-footnote text-ink-secondary">{active.title}</p></div><span className="rounded-full bg-surface-subtle px-3 py-1.5 text-m-footnote font-bold text-primary-text">{kindLabels[active.kind]}</span></header>
+              {active.source === "deal" && active.listingId ? <div className="border-b border-line-strong bg-surface-muted px-4 py-2 sm:px-6"><Link href={`/listing/${encodeURIComponent(active.listingId)}`} className="flex min-h-11 items-center gap-3 text-m-footnote font-bold text-ink hover:text-primary-text"><KindIcon kind={active.kind} /><span className="min-w-0 truncate">房源 · {active.title}</span><span className="ml-auto shrink-0 text-primary-text">查看房源</span></Link></div> : null}
               {active.source === "deal" && active.viewingRequests?.length ? <ViewingRequestSummary request={active.viewingRequests.at(-1)!} viewerRole={active.viewerRole!} pending={tourPending} onDecision={decideViewingRequest} /> : null}
-              {initialTour && active.source === "deal" && active.viewerRole === "renter" ? <form onSubmit={submitViewingRequest} className="border-b border-primary-soft bg-surface-subtle/60 px-4 py-4 sm:px-6"><div className="mx-auto grid max-w-3xl gap-3 sm:grid-cols-[minmax(0,1fr)_150px_auto] sm:items-end"><label className="grid gap-1.5 text-xs font-black text-ink-secondary">预约看房时间<input type="datetime-local" min={minimumTourDateTime()} value={tourAt} onChange={(event) => setTourAt(event.target.value)} className="application-input" /></label><label className="grid gap-1.5 text-xs font-black text-ink-secondary">方式<select value={tourMode} onChange={(event) => setTourMode(event.target.value as "in-person" | "video")} className="application-input"><option value="in-person">线下看房</option><option value="video">视频看房</option></select></label><button type="submit" disabled={tourPending} className="primary-action h-12 justify-center">{tourPending ? "发送中…" : "发送看房请求"}</button></div></form> : null}
-              <div className="min-h-0 flex-1 overflow-y-auto px-4 py-6 sm:px-8"><div className="mx-auto max-w-3xl space-y-4">{active.messages.length ? active.messages.map((message) => <MessageBubble key={message.id} message={message} />) : <p className="py-16 text-center text-d-subhead text-ink-secondary">发送第一条消息开始对话</p>}</div></div>
+              {initialTour && active.source === "deal" && active.viewerRole === "renter" ? <form onSubmit={submitViewingRequest} className="border-b border-primary-soft bg-surface-subtle/60 px-4 py-4 sm:px-6"><div className="mx-auto grid max-w-3xl gap-3 sm:grid-cols-[minmax(0,1fr)_150px_auto] sm:items-end"><label className="grid gap-1.5 text-m-footnote font-bold text-ink-secondary">预约看房时间<input type="datetime-local" min={minimumTourDateTime()} value={tourAt} onChange={(event) => setTourAt(event.target.value)} className="application-input" /></label><label className="grid gap-1.5 text-m-footnote font-bold text-ink-secondary">方式<select value={tourMode} onChange={(event) => setTourMode(event.target.value as "in-person" | "video")} className="application-input"><option value="in-person">线下看房</option><option value="video">视频看房</option></select></label><button type="submit" disabled={tourPending} className="primary-action h-12 justify-center">{tourPending ? "发送中…" : "发送看房请求"}</button></div></form> : null}
+              <div ref={messagesRef} className="min-h-0 flex-1 overflow-y-auto px-4 py-6 sm:px-8"><div className="mx-auto max-w-3xl space-y-4">{active.messages.length ? active.messages.map((message) => <MessageBubble key={message.id} message={message} />) : <p className="py-16 text-center text-d-subhead text-ink-secondary">发送第一条消息开始对话</p>}</div></div>
               {error ? <p role="alert" className="mx-4 mb-3 shrink-0 rounded-psw-md bg-danger-soft p-4 text-d-subhead font-semibold text-danger-text">{error}</p> : null}
-              <form onSubmit={sendMessage} className="shrink-0 border-t border-line-strong p-4"><div className="mx-auto flex max-w-3xl items-end gap-2 rounded-[22px] border border-line-strong bg-surface-muted p-2 pl-4"><textarea value={draft} onChange={(event) => setDraft(event.target.value)} rows={1} placeholder="输入消息…" className="max-h-40 min-h-9 min-w-0 flex-1 resize-none bg-transparent py-2 text-base outline-none [field-sizing:content] sm:text-sm" aria-label="消息内容" /><button type="submit" disabled={sending || !draft.trim()} className="grid size-11 shrink-0 place-items-center rounded-full bg-primary text-white disabled:opacity-40" aria-label="发送消息"><Send className="size-4" /></button></div></form>
-            </> : loading ? <p role="status" className="p-8 text-center text-sm text-ink-secondary">正在同步消息…</p> : <div className="grid flex-1 place-items-center p-8 text-center"><div><h2 className="text-m-headline sm:text-d-headline">选择一条对话</h2><p className="mt-2 text-d-subhead text-ink-secondary">和房东、室友的消息都会显示在这里。</p></div></div>}
+              <form onSubmit={sendMessage} className="shrink-0 border-t border-line-strong p-4"><div className="mx-auto flex max-w-3xl items-end gap-2 rounded-psw-xl border border-line-strong bg-surface-muted p-2 pl-4"><textarea value={draft} onChange={(event) => setDraft(event.target.value)} rows={1} placeholder="输入消息…" className="max-h-40 min-h-9 min-w-0 flex-1 resize-none bg-transparent py-2 text-base outline-none [field-sizing:content] sm:text-sm" aria-label="消息内容" /><button type="submit" disabled={sending || !draft.trim()} className="grid size-11 shrink-0 place-items-center rounded-full bg-primary text-white disabled:opacity-40" aria-label="发送消息"><Send className="size-4" /></button></div></form>
+            </> : loading ? <p role="status" className="p-8 text-center text-sm text-ink-secondary">正在同步消息…</p> : <div className="grid flex-1 place-items-center p-8 text-center"><div><h2 className="text-m-headline sm:text-d-headline">选择一条对话</h2><p className="mt-2 text-d-subhead text-ink-secondary">和转租人、室友的消息都会显示在这里。</p></div></div>}
           </section>
         </div>
       </div>
@@ -395,17 +420,27 @@ function withMessages(conversation: InboxConversation, incoming: Message[]): Inb
 }
 function latestTime(conversation: InboxConversation) { return conversation.messages.at(-1)?.createdAt ?? ""; }
 function EmptyInbox({ title, actionHref, action }: { title: string; actionHref: string; action: string }) { return <div className="m-2 flex flex-col items-center rounded-psw-lg bg-surface-muted p-6 text-center"><Wowo mood="sleepy" size={64} /><p className="mt-3 text-d-label">{title}</p><Link href={actionHref} className="primary-action mt-4">{action}</Link></div>; }
-function Avatar({ name, src, small = false }: { name: string; src?: string | null; small?: boolean }) { return <div className={cn("relative grid shrink-0 place-items-center overflow-hidden rounded-full bg-surface-subtle font-black text-primary-text", small ? "size-10" : "size-12")}>{src ? <SmartImage src={src} alt="" fill sizes={small ? "40px" : "48px"} className="object-cover" /> : name.slice(0, 1).toUpperCase()}</div>; }
-function KindIcon({ kind }: { kind: ConversationKind }) { return <span className="grid size-8 place-items-center rounded-[11px] bg-surface text-primary-text">{kind === "application" ? <FileText className="size-4" /> : kind === "tour" ? <CalendarDays className="size-4" /> : <UsersRound className="size-4" />}</span>; }
-function MessageBubble({ message }: { message: Message }) { return <div className={cn("flex", message.align === "right" && "justify-end")}><div className={cn("min-w-0 max-w-[78%] rounded-[20px] px-4 py-3 text-sm leading-6", message.align === "right" ? "rounded-br-md bg-primary text-white" : "rounded-bl-md bg-tag-neutral text-ink")}><p className="whitespace-pre-wrap [overflow-wrap:anywhere]">{message.body}</p><p className={cn("mt-1 text-[11px]", message.align === "right" ? "text-on-primary" : "text-ink-secondary")}>{formatTime(message.createdAt)}</p></div></div>; }
-function formatTime(value: string) { const date = new Date(value); return Number.isNaN(date.getTime()) ? "" : new Intl.DateTimeFormat("zh-CN", { hour: "2-digit", minute: "2-digit" }).format(date); }
+function Avatar({ name, src, small = false }: { name: string; src?: string | null; small?: boolean }) { return <div className={cn("relative grid shrink-0 place-items-center overflow-hidden rounded-full bg-surface-subtle font-bold text-primary-text", small ? "size-10" : "size-12")}>{src ? <SmartImage src={src} alt="" fill sizes={small ? "40px" : "48px"} className="object-cover" /> : name.slice(0, 1).toUpperCase()}</div>; }
+function KindIcon({ kind }: { kind: ConversationKind }) { return <span className="grid size-8 place-items-center rounded-psw-md bg-surface text-primary-text">{kind === "application" ? <FileText className="size-4" /> : kind === "tour" ? <CalendarDays className="size-4" /> : <UsersRound className="size-4" />}</span>; }
+function MessageBubble({ message }: { message: Message }) { return <div className={cn("flex", message.align === "right" && "justify-end")}><div className={cn("min-w-0 max-w-[78%] rounded-psw-xl px-4 py-3 text-sm leading-6", message.align === "right" ? "rounded-br-md bg-primary text-white" : "rounded-bl-md bg-tag-neutral text-ink")}><p className="whitespace-pre-wrap [overflow-wrap:anywhere]">{message.body}</p><p className={cn("mt-1 text-m-footnote", message.align === "right" ? "text-on-primary" : "text-ink-secondary")}>{formatTime(message.createdAt)}</p></div></div>; }
+let timeFormat: Intl.DateTimeFormat | undefined;
+let dayFormat: Intl.DateTimeFormat | undefined;
+/** 「13:00」 today, 「10月20日 13:00」 on other days, so a thread over several days reads in order. */
+function formatTime(value: string, now = new Date()) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  timeFormat ??= new Intl.DateTimeFormat("zh-CN", { hour: "2-digit", minute: "2-digit", hour12: false });
+  dayFormat ??= new Intl.DateTimeFormat("zh-CN", { month: "numeric", day: "numeric" });
+  const time = timeFormat.format(date);
+  return date.toDateString() === now.toDateString() ? time : `${dayFormat.format(date)} ${time}`;
+}
 
 function ViewingRequestSummary({ request, viewerRole, pending, onDecision }: { request: ApiViewingRequest; viewerRole: "renter" | "host"; pending: boolean; onDecision: (request: ApiViewingRequest, decision: "confirm" | "decline") => Promise<void> }) {
-  return <div className="border-b border-primary-soft bg-surface-subtle/60 px-4 py-4 sm:px-6"><div className="mx-auto flex max-w-3xl flex-wrap items-center justify-between gap-3 rounded-[18px] bg-surface p-4 shadow-sm"><div><p className="text-xs font-black text-primary-text">看房预约 · {viewingStatusLabel(request.status)}</p><p className="mt-1 text-sm font-black text-ink">{request.timeLabel}</p><p className="mt-1 text-xs text-ink-secondary">{request.mode === "video" ? "视频看房" : "线下看房"} · {request.participantNames.join("、")}</p></div>{viewerRole === "host" && request.status === "REQUESTED" ? <div className="flex gap-2"><button type="button" disabled={pending} onClick={() => void onDecision(request, "confirm")} className="primary-action">确认预约</button><button type="button" disabled={pending} onClick={() => void onDecision(request, "decline")} className="secondary-action">拒绝</button></div> : null}</div></div>;
+  return <div className="border-b border-primary-soft bg-surface-subtle/60 px-4 py-4 sm:px-6"><div className="mx-auto flex max-w-3xl flex-wrap items-center justify-between gap-3 rounded-psw-lg bg-surface p-4"><div><p className="text-m-footnote font-bold text-primary-text">看房预约 · {viewingStatusLabel(request.status)}</p><p className="mt-1 text-sm font-bold text-ink">{request.timeLabel}</p><p className="mt-1 text-m-footnote text-ink-secondary">{request.mode === "video" ? "视频看房" : "线下看房"} · {request.participantNames.join("、")}</p></div>{viewerRole === "host" && request.status === "REQUESTED" ? <div className="flex gap-2"><button type="button" disabled={pending} onClick={() => void onDecision(request, "confirm")} className="primary-action">确认预约</button><button type="button" disabled={pending} onClick={() => void onDecision(request, "decline")} className="secondary-action">拒绝</button></div> : null}</div></div>;
 }
 
 function viewingStatusLabel(status: ApiViewingRequest["status"]) {
-  return { REQUESTED: "等待房东确认", CONFIRMED: "已确认", COMPLETED: "已完成", CANCELLED: "已取消" }[status];
+  return { REQUESTED: "等待转租人确认", CONFIRMED: "已确认", COMPLETED: "已完成", CANCELLED: "已取消" }[status];
 }
 
 function defaultTourDateTime() {

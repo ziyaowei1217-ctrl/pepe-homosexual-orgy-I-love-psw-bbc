@@ -197,7 +197,7 @@ function RoommateLikesSessionExperience({ token }: { token: string | null }) {
       <div className="mt-6 flex gap-2">
         {([["inbound", "喜欢我的"], ["outbound", "我喜欢的"], ["matched", "已匹配"]] as const).map(([value, label]) => <button key={value} type="button" onClick={() => setTab(value)} aria-pressed={tab === value} className={cn("search-pill", tab === value && "search-pill-active")}>{label}</button>)}
       </div>
-      {!authenticated ? <div className="mt-6 rounded-psw-xl bg-surface p-8 text-center"><p className="text-m-subhead text-ink-secondary sm:text-d-subhead">登录后查看真实喜欢与匹配</p><Link href={authRoute({ returnTo: "/roommates/likes" })} className="primary-action mt-4">登录</Link></div> : null}
+      {!authenticated ? <div className="mt-6 rounded-psw-xl bg-surface p-8 text-center"><p className="text-m-subhead text-ink-secondary sm:text-d-subhead">登录后查看你的喜欢和匹配</p><Link href={authRoute({ returnTo: "/roommates/likes" })} className="primary-action mt-4">登录</Link></div> : null}
       {error ? <StatusCard text={error} error /> : null}
       {authenticated && activity && items.length === 0 ? <StatusCard text="这里还没有记录。" /> : null}
       <div className="mt-6 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">

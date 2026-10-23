@@ -27,8 +27,8 @@ const publicNav = [
 const footerLinks = [
   { label: "找房", href: "/search" },
   { label: "找室友", href: "/roommates" },
-  { label: "发布我的房间", href: "/host/listings/new" },
-  { label: "房东中心", href: "/host" },
+  { label: "发布房间", href: "/host/listings/new" },
+  { label: "我发布的房间", href: "/host" },
   { label: "账户与隐私设置", href: "/account/settings" }
 ] as const;
 
@@ -84,7 +84,7 @@ export function PublicShell({ active, mobileNavigation = "bottom", wide = false,
               href="/host"
               className="hidden min-h-11 items-center rounded-full px-4 text-sm font-semibold text-ink-secondary transition-colors hover:bg-surface-subtle lg:inline-flex"
             >
-              房东中心
+              我发布的房间
             </Link>
             <Link
               href="/account"

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { ListingMediaUploader } from '../components/listing-media-uploader';
 import { writeStoredAuthSession } from '../lib/auth-session';
@@ -36,12 +36,12 @@ it('retries initialization after a transient failure before any remote media exi
 });
 it('removes a failed local selection without requesting deletion of a nonexistent remote ID', async () => {
   await mount();
-  vi.spyOn(window, 'confirm').mockReturnValue(true);
   vi.mocked(mediaApi.initializeListingMedia).mockRejectedValueOnce(new Error('temporary failure'));
   vi.mocked(mediaApi.removeListingMedia).mockRejectedValue(new Error('not found'));
   selectFile();
   await screen.findByRole('button', { name: '重试' });
   fireEvent.click(screen.getByRole('button', { name: '删除' }));
+  fireEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: '删除' }));
   await screen.findByText('尚未添加图片。');
   expect(mediaApi.removeListingMedia).not.toHaveBeenCalled();
 });
@@ -161,7 +161,6 @@ it('retains one initialization command per file after a lost POST response, with
 
 it('discards the remotely committed row when removing a local selection whose initialize response was lost', async () => {
   await mount();
-  vi.spyOn(window, 'confirm').mockReturnValue(true);
   vi.mocked(mediaApi.initializeListingMedia).mockImplementationOnce(async (_token, _listing, _file, _kind, commandId) => {
     vi.mocked(mediaApi.getOwnedListingMedia).mockResolvedValue([{ ...media, initializationCommandId: commandId }]);
     throw new Error('response lost after commit');
@@ -169,6 +168,7 @@ it('discards the remotely committed row when removing a local selection whose in
   selectFile();
   await screen.findByRole('button', { name: '重试' });
   fireEvent.click(screen.getByRole('button', { name: '删除' }));
+  fireEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: '删除' }));
   await screen.findByText('尚未添加图片。');
   expect(mediaApi.removeListingMedia).toHaveBeenCalledWith('token', 'listing', 'remote');
 });

@@ -85,4 +85,18 @@ describe("marketplace production data", () => {
 
     expect(listing.id).toBe("preview-01");
   });
+
+  it("treats an unknown id as not found in a preview build without the API", async () => {
+    await expect(loadMarketplaceListing("nope-999", {
+      fetchListing: async () => { throw new Error("offline"); },
+      previewEnabled: true
+    })).rejects.toMatchObject({ name: "ProductApiError", status: 404 });
+  });
+
+  it("keeps real API failures as they are outside preview builds", async () => {
+    await expect(loadMarketplaceListing("listing-real-1", {
+      fetchListing: async () => { throw new Error("offline"); },
+      previewEnabled: false
+    })).rejects.toThrow("offline");
+  });
 });

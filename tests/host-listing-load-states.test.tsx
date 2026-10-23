@@ -63,9 +63,9 @@ it("does not tell hosts their listings are empty while the request is still pend
   setup(() => new Promise<Response>((resolve) => { finish = resolve; }));
   render(<HostListingsExperience />);
   await screen.findByText("正在加载房源…");
-  expect(screen.queryByText("这个状态下还没有房源。")).toBeNull();
+  expect(screen.queryByText("你还没有发布房间")).toBeNull();
   await act(async () => { finish(Response.json([])); });
-  await screen.findByText("这个状态下还没有房源。");
+  await screen.findByText("你还没有发布房间");
 });
 
 it("lets hosts recover a failed listing list without reloading the entire page", async () => {
@@ -73,7 +73,7 @@ it("lets hosts recover a failed listing list without reloading the entire page",
   setup(() => failed ? Response.json({}, { status: 503 }) : Response.json([listing]));
   render(<HostListingsExperience />);
   await screen.findByRole("alert");
-  expect(screen.queryByText("这个状态下还没有房源。")).toBeNull();
+  expect(screen.queryByText("你还没有发布房间")).toBeNull();
   failed = false;
   fireEvent.click(screen.getByRole("button", { name: "重新加载房源" }));
   await screen.findByRole("heading", { name: listing.title });

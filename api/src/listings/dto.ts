@@ -103,10 +103,12 @@ export class CreateListingDto {
   @Max(maxPrice)
   price!: number;
 
+  /** The rent on the 转租人's own lease. Optional: when missing the listing stores its rent as the original. */
+  @IsOptional()
   @IsInt()
   @Min(1)
   @Max(maxPrice)
-  originalPrice!: number;
+  originalPrice?: number;
 
   @IsInt()
   @Min(0)
@@ -124,11 +126,12 @@ export class CreateListingDto {
   @MaxLength(maxLongTextLength)
   commute!: string;
 
+  /** Nearby transit. Optional, and may be empty: the commute line already says how to get to school or work. */
+  @IsOptional()
   @Trim()
   @IsString()
-  @IsNotEmpty()
   @MaxLength(maxLongTextLength)
-  transit!: string;
+  transit?: string;
 
   @Trim()
   @IsString()
@@ -215,10 +218,10 @@ export class UpdateListingDto {
   @MaxLength(maxLongTextLength)
   commute?: string;
 
+  // An empty string clears the nearby-transit line.
   @ValidateIf((_object, value) => value !== undefined)
   @Trim()
   @IsString()
-  @IsNotEmpty()
   @MaxLength(maxLongTextLength)
   transit?: string;
 

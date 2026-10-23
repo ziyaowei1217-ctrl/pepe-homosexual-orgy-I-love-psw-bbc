@@ -56,10 +56,10 @@ export function confirmDemoMoveIn(token: string, heldFundId: string, key: string
 
 export function demoPaymentStatusLabel(status: ApiDemoPaymentState["payment"]["status"]) {
   return {
-    AWAITING_ATTEMPT: "等待演示支付",
-    HELD: "资金已持有",
-    REFUNDED: "资金已退回",
-    RELEASED: "资金已释放",
+    AWAITING_ATTEMPT: "等待付款",
+    HELD: "平台代管中",
+    REFUNDED: "已退回",
+    RELEASED: "已转给转租人",
     CLOSED: "订单已关闭"
   }[status];
 }
@@ -75,6 +75,10 @@ export function demoLedgerAccountLabel(account: string) {
   return {
     RENTER_CLEARING: "租客清算账户",
     HELD_FUNDS: "托管资金账户",
-    HOST_CLEARING: "房东清算账户"
+    HOST_CLEARING: "转租人清算账户"
   }[account] ?? account;
+}
+
+export function demoLedgerEventLabel(event: ApiDemoPaymentState["ledgerEntries"][number]["event"]) {
+  return { HOLD: "代管", REFUND: "退回", RELEASE: "转出" }[event] ?? event;
 }

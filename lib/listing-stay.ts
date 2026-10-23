@@ -4,11 +4,16 @@ export type ListingStay = { moveIn: string; moveOut: string };
 type Availability = { availableFrom: string; availableTo: string };
 
 let dayFormat: Intl.DateTimeFormat | undefined;
+let cachedDay = { minute: Number.NaN, day: "" };
 
 export function localDate(now = new Date()) {
-  // One formatter for the whole page: every card and date check asks for today.
-  dayFormat ??= new Intl.DateTimeFormat("en-CA", { timeZone: "America/Los_Angeles", year: "numeric", month: "2-digit", day: "2-digit" });
-  return dayFormat.format(now);
+  // Every card and date check asks for today; formatting with a time zone is slow, so answer once per minute.
+  const minute = Math.floor(now.getTime() / 60_000);
+  if (minute !== cachedDay.minute) {
+    dayFormat ??= new Intl.DateTimeFormat("en-CA", { timeZone: "America/Los_Angeles", year: "numeric", month: "2-digit", day: "2-digit" });
+    cachedDay = { minute, day: dayFormat.format(now) };
+  }
+  return cachedDay.day;
 }
 
 /** The value if it is a real YYYY-MM-DD date, else "". */
@@ -27,6 +32,12 @@ export function isListingBookable(listing: Availability, today = localDate()) {
   return Boolean(listing.availableFrom && listing.availableTo > earliestListingDate(listing, today));
 }
 
+/** The dates the renter asked for, or none. The listing page starts here and never picks dates on the renter's behalf. */
+export function requestedListingStay(requested?: Partial<ListingStay>): ListingStay {
+  return { moveIn: dateOnly(requested?.moveIn), moveOut: dateOnly(requested?.moveOut) };
+}
+
+/** The application form starts from the requested dates, or the whole window, which the renter confirms in step 2. */
 export function initialListingStay(listing: Availability, requested?: Partial<ListingStay>, today = localDate()): ListingStay {
   if (requested?.moveIn || requested?.moveOut) return { moveIn: dateOnly(requested.moveIn), moveOut: dateOnly(requested.moveOut) };
   return { moveIn: earliestListingDate(listing, today), moveOut: dateOnly(listing.availableTo.slice(0, 10)) };
@@ -35,9 +46,9 @@ export function initialListingStay(listing: Availability, requested?: Partial<Li
 export function listingStayError(stay: ListingStay, listing: Availability, today = localDate()): string | null {
   const from = dateOnly(listing.availableFrom.slice(0, 10));
   const to = dateOnly(listing.availableTo.slice(0, 10));
-  if (!from || !to) return "请先联系房东确认可租日期。";
+  if (!from || !to) return "请先联系转租人确认可租日期。";
   const earliest = earliestListingDate(listing, today);
-  if (to <= earliest) return "该房源暂无可申请租期，可联系房东确认。";
+  if (to <= earliest) return "该房源暂无可申请租期，可联系转租人确认。";
   if (!dateOnly(stay.moveIn)) return "请选择有效的入住日期。";
   if (!dateOnly(stay.moveOut)) return "请选择有效的退租日期。";
   if (stay.moveOut <= stay.moveIn) return "退租日期必须晚于入住日期。";

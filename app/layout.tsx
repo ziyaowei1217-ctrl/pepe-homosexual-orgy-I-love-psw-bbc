@@ -18,10 +18,10 @@ const nunito = localFont({
 
 export const metadata: Metadata = {
   title: {
-    default: "psw｜全美学生与职场租房及室友匹配",
+    default: "psw｜留学生之间的转租",
     template: "%s｜psw"
   },
-  description: "搜索全美主要城市、学校或大企业附近的房源，并在地图上同步比较租期、通勤与信任信息。"
+  description: "留学生之间的转租：按城市、学校找能租的房间，选好日期就能看到这段日期的总价。"
 };
 
 export default function RootLayout({

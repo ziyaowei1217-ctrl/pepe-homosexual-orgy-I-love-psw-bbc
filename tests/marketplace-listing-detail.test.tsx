@@ -6,6 +6,7 @@ import TestRenderer, { act } from "./support/dom-test-renderer";
 
 import { ListingDetailExperience } from "../components/marketplace/listing-detail-experience";
 import { SavedListingsProvider } from "../components/marketplace/saved-listings-provider";
+import { earliestListingDate } from "../lib/listing-stay";
 import { createPreviewListings } from "../lib/preview-data";
 
 describe("marketplace listing detail", () => {
@@ -16,9 +17,10 @@ describe("marketplace listing detail", () => {
 
   it("makes rental application primary and keeps booking-like actions secondary", () => {
     const listing = createPreviewListings()[0];
+    const stay = { moveIn: earliestListingDate(listing), moveOut: listing.availableTo.slice(0, 10) };
     const html = renderToStaticMarkup(
       <SavedListingsProvider>
-        <ListingDetailExperience listing={listing} />
+        <ListingDetailExperience listing={listing} initialStay={stay} />
       </SavedListingsProvider>
     );
 
@@ -26,7 +28,7 @@ describe("marketplace listing detail", () => {
     expect(html).toContain("申请租住");
     expect(html).toContain(`href="/applications/new?listingId=${listing.id}&amp;moveIn=`);
     expect(html).toContain("预约看房");
-    expect(html).toContain("联系房东");
+    expect(html).toContain("联系转租人");
     expect(html).toContain("费用明细");
     expect(html).toContain('aria-label="房源位置地图"');
     expect(html).toContain("地图显示大致位置");
@@ -35,16 +37,22 @@ describe("marketplace listing detail", () => {
     expect(html).not.toContain("阅读完整介绍");
   });
 
-  it("does not prefill a move-in date that has already passed", () => {
+  it("never picks dates for the renter and asks for them instead", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-09-03T18:00:00.000Z"));
     const listing = { ...createPreviewListings()[0], availableFrom: "2026-08-01", availableTo: "2027-08-01" };
     const html = renderToStaticMarkup(<SavedListingsProvider><ListingDetailExperience listing={listing} /></SavedListingsProvider>);
 
-    expect(html).toContain('value="2026-09-03"');
+    // No dates filled in, no total, no "your dates can be applied for": the monthly rent and a prompt for dates.
+    expect(html).not.toContain('value="2026-');
+    expect(html).not.toContain("这段日期可以申请");
+    expect(html).not.toContain("房租总价");
+    expect(html).toContain("选好入住和退租日期，这里就是这段日期的总价。");
+    expect(html).toContain("选择日期");
+    // The earliest date offered is today, not a start date that has already passed.
+    expect(html).toContain('min="2026-09-03"');
     expect(html).toContain("9月3日起可入住");
-    expect(html).not.toContain('value="2026-08-01"');
-    expect(html).not.toContain("可 8/20 入住");
+    expect(html).not.toContain('role="alert"');
   });
 
   it("opens the complete photo gallery from the detail page", async () => {
@@ -52,18 +60,24 @@ describe("marketplace listing detail", () => {
     await act(async () => {
       renderer = TestRenderer.create(
         <SavedListingsProvider>
-          <ListingDetailExperience listing={createPreviewListings()[0]} />
+          <ListingDetailExperience listing={{ ...createPreviewListings()[0], images: ["https://images.example/one.jpg", "https://images.example/two.jpg", "https://images.example/three.jpg"] }} />
         </SavedListingsProvider>
       );
     });
 
-    const openGallery = renderer.root.findAllByType("button").find((button) => nodeText(button).includes("查看全部图片"));
+    const openGallery = renderer.root.findAllByType("button").find((button) => nodeText(button).includes("查看全部 3 张"));
     expect(openGallery).toBeDefined();
     await act(async () => openGallery!.props.onClick());
 
     expect(renderer.root.findByProps({ role: "dialog" })).toBeDefined();
     expect(nodeText(renderer.root)).toContain("全部图片");
-    expect(nodeText(renderer.root)).toContain("1 张");
+    expect(nodeText(renderer.root)).toContain("3 张");
+  });
+
+  it("offers a single photo as a larger view instead of a gallery of one", () => {
+    const html = renderToStaticMarkup(<SavedListingsProvider><ListingDetailExperience listing={createPreviewListings()[0]} /></SavedListingsProvider>);
+    expect(html).toContain("放大看照片");
+    expect(html).not.toContain("查看全部");
   });
 
   it("restores focus to the gallery trigger after closing", async () => {
@@ -76,7 +90,7 @@ describe("marketplace listing detail", () => {
       );
     });
 
-    const openGallery = renderer.root.findAllByType("button").find((button) => nodeText(button).includes("查看全部图片"))!;
+    const openGallery = renderer.root.findAllByType("button").find((button) => nodeText(button).includes("放大看照片"))!;
     (openGallery.element as HTMLButtonElement).focus();
     await act(async () => openGallery.props.onClick());
     const closeGallery = renderer.root.findByProps({ "aria-label": "关闭全部图片" });

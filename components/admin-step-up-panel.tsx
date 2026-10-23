@@ -110,7 +110,7 @@ export function AdminStepUpPanel({
     >
       <div className="editorial-panel mx-auto max-w-xl p-4 md:p-6">
         <div className="editorial-kicker">管理员安全验证</div>
-        <h2 id={`${panelId}-title`} className="mt-2 text-xl font-black text-foreground">
+        <h2 id={`${panelId}-title`} className="mt-2 font-rounded text-m-title sm:text-d-title font-bold text-foreground">
           再次验证管理员邮箱
         </h2>
         <p className="mt-1 text-sm font-semibold text-muted-foreground">
@@ -128,7 +128,7 @@ export function AdminStepUpPanel({
           </div>
         ) : (
           <form className="mt-5 grid gap-3" onSubmit={verifyCode} noValidate>
-            <label htmlFor={`${panelId}-code`} className="grid gap-1 text-xs font-black uppercase text-muted-foreground">
+            <label htmlFor={`${panelId}-code`} className="grid gap-1 text-m-footnote font-bold uppercase text-muted-foreground">
               六位管理员验证码
               <Input
                 id={`${panelId}-code`}

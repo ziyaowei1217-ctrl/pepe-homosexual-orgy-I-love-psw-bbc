@@ -34,7 +34,8 @@ describe("marketplace search", () => {
 
     expect(html).toContain("Westwood的可租房源");
     expect(html).not.toContain("Westwood 的可租房源");
-    expect(html).toContain("房源列表");
+    // No breadcrumb: the header navigation already says where you are.
+    expect(html).not.toContain("房源列表");
     expect(html).toContain('aria-label="房源地图"');
     expect(html).toContain("移动地图时更新结果");
     expect(html).not.toContain("示意地图");
@@ -42,6 +43,16 @@ describe("marketplace search", () => {
     expect(html).toContain(">筛选<");
     expect(html).not.toContain("申请材料");
     expect(html).not.toContain("室友偏好");
+  });
+
+  it("does not mount the map in list view", () => {
+    const html = renderToStaticMarkup(
+      <SavedListingsProvider>
+        <SearchExperience listings={createPreviewListings()} initialState={{ ...defaultSearch, view: "list" }} initialQuery="" initialMoveIn="" initialMoveOut="" />
+      </SavedListingsProvider>
+    );
+    expect(html).not.toContain('aria-label="房源地图"');
+    expect(html).toContain('href="/listing/');
   });
 
   it("labels the budget control inside the filter panel", async () => {

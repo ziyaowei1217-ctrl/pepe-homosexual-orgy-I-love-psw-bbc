@@ -19,6 +19,7 @@ import {
   leaveRoommateTeam
 } from "@/lib/roommate-teams";
 import type { ApiRoommateTeam, ApiRoommateTeamInvite } from "@/lib/roommate-teams";
+import { useConfirm } from "@/components/marketplace/confirm-dialog";
 
 export function RoommateTeamExperience() {
   const token = useAuthSessionToken();
@@ -26,6 +27,7 @@ export function RoommateTeamExperience() {
 }
 
 function RoommateTeamSessionExperience({ token }: { token: string | null }) {
+  const [confirmDialog, confirm] = useConfirm();
   const [userId, setUserId] = useState<string | null>(null);
   const [team, setTeam] = useState<ApiRoommateTeam | null>(null);
   const [invites, setInvites] = useState<ApiRoommateTeamInvite[]>([]);
@@ -63,9 +65,9 @@ function RoommateTeamSessionExperience({ token }: { token: string | null }) {
     finally { setPending(false); }
   }
 
-  function confirmLeave() {
+  async function confirmLeave() {
     if (!team || pending || loading) return;
-    if (!window.confirm("退出后小组将解散，待审核的小组申请会自动撤回。确定退出吗？")) return;
+    if (await confirm({ title: "退出合租小组？", body: "退出后小组会解散，还在审核的小组申请会自动撤回。", confirmLabel: "退出小组", tone: "danger" }) === false) return;
     void run((value) => leaveRoommateTeam(value, team.id));
   }
 
@@ -73,19 +75,20 @@ function RoommateTeamSessionExperience({ token }: { token: string | null }) {
     <div className="page-container pb-16 pt-8 sm:pt-12">
       <PageHeader title="合租小组" description="查看组队邀请和成员，找到合拍的室友后一起找房。" />
       {!token ? <EmptyState className="mt-7" mood="default" title="登录后查看小组" body="登录后可以看到组队邀请和已经确认的合租成员。" action={<Link href={authRoute({ returnTo: "/roommates/teams" })} className="primary-action">登录</Link>} /> : null}
-      {loading ? <p role="status" className="mt-7 rounded-[24px] border border-line-strong bg-surface p-6 text-sm text-ink-secondary">正在加载小组和邀请…</p> : null}
-      {error ? <div className="mt-6 rounded-[16px] bg-danger-soft p-4"><p role="alert" className="text-sm font-bold text-danger-text">{error}</p><button type="button" disabled={loading || pending} onClick={() => setLoadAttempt((value) => value + 1)} className="mt-3 text-sm font-bold text-danger-text underline underline-offset-4">重新加载</button></div> : null}
-      {team ? <section className="mt-7 rounded-[26px] border border-line-strong bg-surface p-6">
-        <h2 className="text-xl font-black">已确认小组</h2>
+      {loading ? <p role="status" className="mt-7 rounded-psw-xl border border-line-strong bg-surface p-6 text-sm text-ink-secondary">正在加载小组和邀请…</p> : null}
+      {error ? <div className="mt-6 rounded-psw-lg bg-danger-soft p-4"><p role="alert" className="text-sm font-bold text-danger-text">{error}</p><button type="button" disabled={loading || pending} onClick={() => setLoadAttempt((value) => value + 1)} className="mt-3 text-sm font-bold text-danger-text underline underline-offset-4">重新加载</button></div> : null}
+      {team ? <section className="mt-7 rounded-psw-xl border border-line-strong bg-surface p-6">
+        <h2 className="font-rounded text-m-title sm:text-d-title font-bold">已确认小组</h2>
         <p className="mt-2 text-sm text-ink-secondary">{team.members.filter((item) => item.active).length} 位成员 · {team.status === "ACTIVE" ? "进行中" : "已解散"}</p>
-        <ul aria-label="小组成员" className="mt-5 divide-y divide-line">{team.members.filter((item) => item.active).map((member) => <li key={member.id} className="flex items-center justify-between gap-3 py-3 text-sm font-bold"><span className="min-w-0 [overflow-wrap:anywhere]">{typeof member.snapshot.name === "string" ? member.snapshot.name : "小组成员"}</span>{member.userId === userId ? <span className="shrink-0 rounded-full bg-surface-subtle px-2.5 py-1 text-xs text-primary-text">你</span> : null}</li>)}</ul>
-        <div className="mt-5 flex flex-wrap gap-3"><Link href="/search?groupTour=1" className="primary-action">一起找房</Link><Link href="/inbox" className="secondary-action">小组相关消息</Link>{team.status === "ACTIVE" ? <button disabled={pending || loading} onClick={confirmLeave} className="secondary-action text-danger-text">退出小组</button> : null}</div>
+        <ul aria-label="小组成员" className="mt-5 divide-y divide-line">{team.members.filter((item) => item.active).map((member) => <li key={member.id} className="flex items-center justify-between gap-3 py-3 text-sm font-bold"><span className="min-w-0 [overflow-wrap:anywhere]">{typeof member.snapshot.name === "string" ? member.snapshot.name : "小组成员"}</span>{member.userId === userId ? <span className="shrink-0 rounded-psw-sm bg-surface-subtle px-2.5 py-1 text-m-footnote text-primary-text">你</span> : null}</li>)}</ul>
+        <div className="mt-5 flex flex-wrap gap-3"><Link href="/search?groupTour=1" className="primary-action">一起找房</Link><Link href="/inbox" className="secondary-action">小组相关消息</Link>{team.status === "ACTIVE" ? <button disabled={pending || loading} onClick={() => void confirmLeave()} className="secondary-action text-danger-text">退出小组</button> : null}</div>
       </section> : null}
-      {token && !loading && !error && !team && invites.length === 0 ? <section className="mt-7 rounded-[24px] border border-dashed border-outline bg-surface p-8 text-center"><p className="text-sm font-bold leading-6 text-ink-secondary">暂无小组或待处理邀请。双方匹配后可发起邀请。</p><Link href="/roommates/likes" className="secondary-action mt-5">查看喜欢与匹配</Link></section> : null}
-      {invites.length ? <section className="mt-7"><h2 className="text-lg font-black">待处理邀请</h2><div className="mt-3 space-y-3">{invites.map((invite) => {
+      {token && !loading && !error && !team && invites.length === 0 ? <section className="mt-7 rounded-psw-xl border border-dashed border-outline bg-surface p-8 text-center"><p className="text-sm font-bold leading-6 text-ink-secondary">暂无小组或待处理邀请。双方匹配后可发起邀请。</p><Link href="/roommates/likes" className="secondary-action mt-5">查看喜欢与匹配</Link></section> : null}
+      {invites.length ? <section className="mt-7"><h2 className="text-m-headline sm:text-d-headline font-bold">待处理邀请</h2><div className="mt-3 space-y-3">{invites.map((invite) => {
         const outgoing = invite.inviterId === userId;
-        return <article key={invite.id} className="flex flex-wrap items-center justify-between gap-3 rounded-[20px] border border-line-strong bg-surface p-5"><p className="text-sm font-bold">小组邀请 · {outgoing ? "我发出" : "待确认"}</p><div className="flex gap-2">{!outgoing ? <button disabled={pending || loading} onClick={() => void run((value) => acceptRoommateTeamInvite(value, invite.id))} className="primary-action">接受</button> : null}<button disabled={pending || loading} onClick={() => void run((value) => outgoing ? cancelRoommateTeamInvite(value, invite.id) : declineRoommateTeamInvite(value, invite.id))} className="secondary-action">{outgoing ? "取消" : "拒绝"}</button></div></article>;
+        return <article key={invite.id} className="flex flex-wrap items-center justify-between gap-3 rounded-psw-xl border border-line-strong bg-surface p-5"><p className="text-sm font-bold">小组邀请 · {outgoing ? "我发出" : "待确认"}</p><div className="flex gap-2">{!outgoing ? <button disabled={pending || loading} onClick={() => void run((value) => acceptRoommateTeamInvite(value, invite.id))} className="primary-action">接受</button> : null}<button disabled={pending || loading} onClick={() => void run((value) => outgoing ? cancelRoommateTeamInvite(value, invite.id) : declineRoommateTeamInvite(value, invite.id))} className="secondary-action">{outgoing ? "取消" : "拒绝"}</button></div></article>;
       })}</div></section> : null}
     </div>
+    {confirmDialog}
   </main>;
 }

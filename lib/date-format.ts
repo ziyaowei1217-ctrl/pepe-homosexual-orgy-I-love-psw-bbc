@@ -8,12 +8,17 @@
 const isoDate = /^(\d{4})-(\d{2})-(\d{2})/;
 
 let yearFormat: Intl.DateTimeFormat | undefined;
+let cachedYear = { minute: Number.NaN, year: 0 };
 
 /** Current year in the marketplace's time zone, the same clock as the availability checks. */
 export function currentYear(now = new Date()) {
-  // Building an Intl formatter is slow; a page of cards asks for the year many times.
-  yearFormat ??= new Intl.DateTimeFormat("en-CA", { timeZone: "America/Los_Angeles", year: "numeric" });
-  return Number(yearFormat.format(now));
+  // Formatting with a time zone is slow and a page of cards asks many times, so answer once per minute.
+  const minute = Math.floor(now.getTime() / 60_000);
+  if (minute !== cachedYear.minute) {
+    yearFormat ??= new Intl.DateTimeFormat("en-CA", { timeZone: "America/Los_Angeles", year: "numeric" });
+    cachedYear = { minute, year: Number(yearFormat.format(now)) };
+  }
+  return cachedYear.year;
 }
 
 function parts(value: string) {

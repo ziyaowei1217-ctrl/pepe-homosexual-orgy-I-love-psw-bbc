@@ -26,11 +26,13 @@ import { ListingLocationMap } from "@/components/marketplace/listing-map";
 import { ListingPhotoGallery } from "@/components/marketplace/listing-photo-gallery";
 import { ListingStayDialog, ListingStayFields } from "@/components/marketplace/listing-stay-selector";
 import { MatchPreferencesDialog } from "@/components/marketplace/match-preferences-dialog";
+import { TrustBadge } from "@/components/marketplace/trust-badge";
 import { useListingMatches } from "@/components/marketplace/use-listing-matches";
 import { formatDateLong, formatRangeLong } from "@/lib/date-format";
 import { getListingPoint } from "@/lib/listing-map";
 import { rememberListingView } from "@/lib/feed-signals";
-import { applicationHref, earliestListingDate, initialListingStay, isListingBookable, listingHref, listingStayError, type ListingStay } from "@/lib/listing-stay";
+import { applicationHref, earliestListingDate, isListingBookable, listingHref, listingStayError, requestedListingStay, type ListingStay } from "@/lib/listing-stay";
+import { listingTrust } from "@/lib/listing-trust";
 import type { PreviewListing } from "@/lib/preview-data";
 import { hasRenterPreferences } from "@/lib/renter-preferences";
 import { defaultSearch, openedSearchHref, parseSearchState } from "@/lib/search-state";
@@ -46,27 +48,30 @@ export function ListingDetailExperience({ listing, listings, initialStay }: { li
   const [stay, setStay] = useState(() => {
     if (typeof window !== "undefined" && window.location.pathname === `/listing/${encodeURIComponent(listing.id)}`) {
       const params = new URLSearchParams(window.location.search);
-      return initialListingStay(listing, { moveIn: params.get("moveIn") ?? "", moveOut: params.get("moveOut") ?? "" });
+      return requestedListingStay({ moveIn: params.get("moveIn") ?? "", moveOut: params.get("moveOut") ?? "" });
     }
-    return initialListingStay(listing, initialStay);
+    return requestedListingStay(initialStay);
   });
   const [stayOpen, setStayOpen] = useState(false);
   const [selectionId, setSelectionId] = useState("");
   const activeSection = useActiveSection(sections.map(([id]) => id));
+  // No dates is a normal start, not an error: the page never picks dates for the renter.
+  const noDates = !stay.moveIn && !stay.moveOut;
   const stayError = listingStayError(stay, listing);
-  const hasDates = Boolean(stay.moveIn && stay.moveOut);
   // psw: with valid dates the headline is the rent for exactly those dates (whole months + extra days by the month's length).
   const price = stayError ? null : stayPrice(listing.price, stay.moveIn, stay.moveOut);
-  const stayDates = stayError ? (hasDates ? "这段日期不可租，改日期" : "选择可租日期") : formatRangeLong(stay.moveIn, stay.moveOut);
+  const stayDates = stayError ? (noDates ? "选择可租日期" : "这段日期不可租，改日期") : formatRangeLong(stay.moveIn, stay.moveOut);
   const applyHref = applicationHref(listing.id, stay, selectionId);
   const inboxHref = `/inbox?listingId=${encodeURIComponent(listing.id)}`;
   const earliestMoveIn = earliestListingDate(listing);
   const bookable = isListingBookable(listing);
   // One availability range everywhere on the page: from today or the listing's start, whichever is later.
   const availabilityLabel = bookable ? `${formatDateLong(earliestMoveIn)}起可入住` : "租期待确认";
-  const availableRange = bookable ? formatRangeLong(earliestMoveIn, listing.availableTo) : "请联系房东确认";
+  const availableRange = bookable ? formatRangeLong(earliestMoveIn, listing.availableTo) : "请联系转租人确认";
   const amenities = listing.tags.filter((tag) => !tag.includes("入住") && tag !== "房东知情");
-  const hostVerified = listing.trust.includes("平台已审核");
+  const trust = listingTrust(listing.trust);
+  // Shown only when the renter has entered dates, or when the listing itself cannot be booked.
+  const visibleStayError = noDates && bookable ? null : stayError;
   const [shareStatus, setShareStatus] = useState<string | null>(null);
   const [returnHref, setReturnHref] = useState("/search");
   const [preferencesOpen, setPreferencesOpen] = useState(false);
@@ -94,12 +99,20 @@ export function ListingDetailExperience({ listing, listings, initialStay }: { li
     function restoreStay() {
       if (window.location.pathname !== `/listing/${encodeURIComponent(listing.id)}`) return;
       const params = new URLSearchParams(window.location.search);
-      setStay(initialListingStay(listing, { moveIn: params.get("moveIn") ?? "", moveOut: params.get("moveOut") ?? "" }));
+      setStay(requestedListingStay({ moveIn: params.get("moveIn") ?? "", moveOut: params.get("moveOut") ?? "" }));
       setSelectionId(newSelectionId());
     }
     window.addEventListener("popstate", restoreStay);
     return () => window.removeEventListener("popstate", restoreStay);
   }, [listing]);
+
+  /** Desktop: the date fields are right above the decision block, so the button moves there and opens the picker. */
+  function pickDates() {
+    const input = document.getElementById("booking-move-in") as HTMLInputElement | null;
+    if (!input) { setStayOpen(true); return; }
+    input.focus();
+    try { input.showPicker?.(); } catch { /* Focus alone is enough where the picker cannot open programmatically. */ }
+  }
 
   function updateStay(value: ListingStay) {
     setStay(value);
@@ -128,8 +141,8 @@ export function ListingDetailExperience({ listing, listings, initialStay }: { li
   const highlights = [
     [TrainFront, "通勤", listing.commute],
     [CalendarDays, "可住日期", availableRange],
-    [Sparkles, "入住条件", amenities.length ? amenities.join(" · ") : "房东暂未补充"],
-    [Wallet, "什么时候付钱", "提交申请不付款，房东接受后再付"]
+    [Sparkles, "入住条件", amenities.length ? amenities.join(" · ") : "转租人暂未补充"],
+    [Wallet, "什么时候付钱", "提交申请不付款，转租人接受后再付"]
   ] as const;
 
   return (
@@ -155,8 +168,8 @@ export function ListingDetailExperience({ listing, listings, initialStay }: { li
           <div className="min-w-0">
             <section id="listing-overview" className="scroll-mt-40 border-b border-line-strong pb-8">
               <div className="flex flex-wrap items-center gap-2 text-m-footnote font-bold">
-                {listing.trust ? <span className="flex items-center gap-1 rounded-psw-sm bg-tag-neutral px-2.5 py-1 text-ink-secondary"><ShieldCheck className="size-3.5" aria-hidden="true" />{listing.trust}</span> : null}
                 <span className="rounded-psw-sm bg-primary-soft px-2.5 py-1 text-primary-text">{availabilityLabel}</span>
+                <TrustBadge trust={trust} />
               </div>
               <h1 className="mt-4 text-m-title text-ink md:text-d-large-title">{listing.title}</h1>
               <p className="mt-3 flex items-center gap-2 text-m-subhead font-semibold text-ink-secondary sm:text-d-subhead"><MapPin className="size-4 text-primary-text" aria-hidden="true" />{listing.area}</p>
@@ -179,16 +192,17 @@ export function ListingDetailExperience({ listing, listings, initialStay }: { li
               </div>
               <div className="mt-6 grid grid-cols-2 gap-3 lg:hidden">
                 <Link href={`${inboxHref}&tour=1`} className="flex min-h-12 items-center justify-center gap-2 rounded-full bg-primary-soft px-3 font-rounded text-[15px] font-bold text-primary-text"><CalendarDays className="size-4" aria-hidden="true" />预约看房</Link>
-                <Link href={inboxHref} className="flex min-h-12 items-center justify-center gap-2 rounded-full bg-primary-soft px-3 font-rounded text-[15px] font-bold text-primary-text"><MessageCircle className="size-4" aria-hidden="true" />联系房东</Link>
+                <Link href={inboxHref} className="flex min-h-12 items-center justify-center gap-2 rounded-full bg-primary-soft px-3 font-rounded text-[15px] font-bold text-primary-text"><MessageCircle className="size-4" aria-hidden="true" />联系转租人</Link>
               </div>
             </section>
 
+            {/* psw trust: only what the platform knows. The landlord's consent is the 转租人's declaration, not a checked lease. */}
             <section aria-labelledby="listing-host" className="border-b border-line-strong py-7">
-              <div className="flex items-center gap-4">
-                <span className="grid size-14 shrink-0 place-items-center rounded-full bg-primary-soft text-primary-text"><UserRound className="size-6" aria-hidden="true" /></span>
-                <div className="min-w-0 flex-1"><h2 id="listing-host" className="text-m-headline sm:text-d-headline">平台房东发布</h2><p className="mt-1 text-m-subhead text-ink-secondary sm:text-d-subhead">{hostVerified ? "平台已审核房东授权，可在站内消息里确认身份和看房安排" : "房东授权还在审核，可以先在站内消息里确认身份和看房安排"}</p></div>
-                {hostVerified ? <ShieldCheck className="size-6 shrink-0 text-success-text" role="img" aria-label="平台已审核房东授权" /> : null}
-              </div>
+              <h2 id="listing-host" className="text-m-headline sm:text-d-headline">关于这次转租</h2>
+              <ul className="mt-4 grid gap-4">
+                <li className="flex gap-3"><span className={cn("grid size-10 shrink-0 place-items-center rounded-full", trust.reviewed ? "bg-success-soft text-success-text" : "bg-tag-neutral text-ink-secondary")}><ShieldCheck className="size-5" aria-hidden="true" /></span><div className="min-w-0"><h3 className="text-d-label text-ink">{trust.reviewed ? "平台已审核" : "待平台审核"}</h3><p className="mt-0.5 text-m-subhead text-ink-secondary sm:text-d-subhead">{trust.reviewed ? "平台审核过这套房源的资料，才让它出现在搜索里。" : "平台还在审核这套房源的资料。"}</p></div></li>
+                <li className="flex gap-3"><span className="grid size-10 shrink-0 place-items-center rounded-full bg-primary-soft text-primary-text"><UserRound className="size-5" aria-hidden="true" /></span><div className="min-w-0"><h3 className="text-d-label text-ink">{trust.landlordAware ? "房东知情：转租人声明" : "房东是否知情：转租人还没声明"}</h3><p className="mt-0.5 text-m-subhead text-ink-secondary sm:text-d-subhead">{trust.landlordAware ? "转租人声明房东知道并同意这次转租。平台没有核验租约，签约前请在消息里请对方出示租约。" : "签约前请在消息里确认房东同意转租，并请对方出示租约。"}</p></div></li>
+              </ul>
             </section>
 
             <section className="border-b border-line-strong py-8">
@@ -199,15 +213,10 @@ export function ListingDetailExperience({ listing, listings, initialStay }: { li
             </section>
 
             <section className="border-b border-line-strong py-8">
-              <h2 className="text-[22px] font-bold leading-[30px] sm:text-d-title">关于这个家</h2>
-              <p className="mt-4 max-w-[640px] text-m-body text-ink-secondary sm:text-d-body">房源的租期、价格、设施、交通与信任状态已汇总在本页。申请前建议通过站内消息确认细节，并按需预约看房。</p>
-            </section>
-
-            <section className="border-b border-line-strong py-8">
               <h2 id="listing-amenities" className="scroll-mt-40 text-[22px] font-bold leading-[30px] sm:text-d-title">房源设施</h2>
               {amenities.length ? <ul className="mt-5 grid gap-3 sm:grid-cols-2">
                 {amenities.map((item) => <li key={item} className="flex items-center gap-3 text-m-subhead font-semibold text-ink sm:text-d-subhead"><Check className="size-5 text-primary-text" aria-hidden="true" />{item}</li>)}
-              </ul> : <p className="mt-4 text-d-subhead text-ink-secondary">房东暂未补充设施信息，可在站内消息中确认。</p>}
+              </ul> : <p className="mt-4 text-d-subhead text-ink-secondary">转租人暂未补充设施信息，可在站内消息中确认。</p>}
             </section>
 
             <section className="py-8">
@@ -220,8 +229,8 @@ export function ListingDetailExperience({ listing, listings, initialStay }: { li
             <div className="sticky top-[148px] rounded-psw-xl bg-surface p-6 shadow-menu">
               <p><span className="font-display text-[28px] font-extrabold leading-none text-primary-text">{formatUsd(listing.price)}</span><span className="text-d-subhead text-ink-secondary"> / 月</span></p>
               <h2 className="mt-5 text-d-label">你的日期</h2>
-              <div className="mt-2"><ListingStayFields listing={listing} stay={stay} onChange={updateStay} /></div>
-              {stayError ? <p role="alert" className="mt-3 text-d-subhead text-danger-text">{stayError}</p> : <p className="mt-3 flex items-center gap-1.5 text-m-footnote font-semibold text-success-text"><Check className="size-3.5" aria-hidden="true" />所选租期可申请</p>}
+              <div className="mt-2"><ListingStayFields listing={listing} stay={stay} onChange={updateStay} moveInId="booking-move-in" /></div>
+              {visibleStayError ? <p role="alert" className="mt-3 text-d-subhead text-danger-text">{visibleStayError}</p> : noDates ? <p className="mt-3 flex items-center gap-1.5 text-m-footnote text-ink-secondary"><CalendarDays className="size-3.5" aria-hidden="true" />可租日期：{availableRange}</p> : <p className="mt-3 flex items-center gap-1.5 text-m-footnote font-semibold text-success-text"><Check className="size-3.5" aria-hidden="true" />这段日期可以申请</p>}
               <div className="mt-5 border-t border-line-strong pt-5">
                 <h2 className="text-d-label">费用明细</h2>
                 <dl className="mt-3 space-y-3 text-d-subhead">
@@ -235,15 +244,17 @@ export function ListingDetailExperience({ listing, listings, initialStay }: { li
               </div>
               {/* psw 决定块: 夜墨底、青柠总价、青柠「申请租住」, the same block as the phone's bottom bar. */}
               <div className="mt-5 rounded-psw-lg bg-ink-block p-5 text-on-dark">
-                <p className="text-d-subhead text-on-dark-secondary">{price ? `房租总价 · ${formatStayLength(price)}` : hasDates ? "这段日期不可租，换一段日期后显示总价" : "选好日期后显示总价"}</p>
-                <p className="font-display text-[32px] font-extrabold leading-10 text-accent">{price ? formatUsd(price.total) : `${formatUsd(listing.price)}/月`}</p>
-                {price ? <p className="text-d-subhead text-on-dark-secondary">月租 {formatUsd(listing.price)} · 零头按当月天数折算</p> : null}
-                {stayError ? <button type="button" disabled className="mt-4 min-h-12 w-full rounded-full bg-on-dark/10 px-5 font-rounded text-base font-bold text-on-dark-secondary">先选可租的日期</button> : <Link href={applyHref} className="mt-4 flex min-h-12 w-full items-center justify-center rounded-full bg-accent px-5 font-rounded text-base font-bold text-on-accent transition-colors hover:bg-accent-hover active:scale-[0.97]">申请租住</Link>}
+                {price ? <>
+                  <p className="text-d-subhead text-on-dark-secondary">房租总价 · {formatStayLength(price)}</p>
+                  <p className="font-display text-[32px] font-extrabold leading-10 text-accent">{formatUsd(price.total)}</p>
+                  <p className="text-d-subhead text-on-dark-secondary">月租 {formatUsd(listing.price)} · 零头按当月天数折算</p>
+                </> : <p className="text-d-subhead text-on-dark">{noDates ? "选好入住和退租日期，这里就是这段日期的总价。" : "这段日期不可租。换一段可租的日期，这里就是总价。"}</p>}
+                {stayError ? <button type="button" onClick={pickDates} className="mt-4 min-h-12 w-full rounded-full bg-accent px-5 font-rounded text-base font-bold text-on-accent transition-colors hover:bg-accent-hover active:scale-[0.97]">{noDates ? "选择日期" : "改日期"}</button> : <Link href={applyHref} className="mt-4 flex min-h-12 w-full items-center justify-center rounded-full bg-accent px-5 font-rounded text-base font-bold text-on-accent transition-colors hover:bg-accent-hover active:scale-[0.97]">申请租住</Link>}
               </div>
               <p className="mt-3 text-center text-m-footnote text-ink-secondary">提交申请不会立即扣款</p>
               <div className="mt-4 grid grid-cols-2 gap-2">
                 <Link href={`${inboxHref}&tour=1`} className="flex min-h-11 items-center justify-center gap-1.5 rounded-full bg-primary-soft px-3 font-rounded text-sm font-bold text-primary-text hover:bg-primary-soft-hover"><CalendarDays className="size-4" aria-hidden="true" />预约看房</Link>
-                <Link href={inboxHref} className="flex min-h-11 items-center justify-center gap-1.5 rounded-full bg-primary-soft px-3 font-rounded text-sm font-bold text-primary-text hover:bg-primary-soft-hover"><MessageCircle className="size-4" aria-hidden="true" />联系房东</Link>
+                <Link href={inboxHref} className="flex min-h-11 items-center justify-center gap-1.5 rounded-full bg-primary-soft px-3 font-rounded text-sm font-bold text-primary-text hover:bg-primary-soft-hover"><MessageCircle className="size-4" aria-hidden="true" />联系转租人</Link>
               </div>
             </div>
           </aside>
@@ -256,10 +267,10 @@ export function ListingDetailExperience({ listing, listings, initialStay }: { li
       <div className="fixed inset-x-0 bottom-0 z-40 bg-ink-block px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 text-on-dark shadow-[0_-8px_30px_rgba(29,22,64,0.18)] lg:hidden">
         <div className="mx-auto flex max-w-2xl items-center gap-3">
           <div className="min-w-0 flex-1">
-            <p className="flex items-baseline gap-1.5"><span className="text-m-footnote text-on-dark-secondary">{price ? "总价" : "月租"}</span><span className="font-display text-[22px] font-extrabold leading-7 text-accent">{formatUsd(price ? price.total : listing.price)}</span>{price ? null : <span className="text-m-footnote text-on-dark-secondary">/ 月</span>}</p>
-            <p className="flex min-w-0 items-center gap-1 text-m-footnote text-on-dark-secondary"><button type="button" onClick={() => setStayOpen(true)} className="tap-target min-w-0 shrink truncate font-semibold text-on-dark underline underline-offset-4">{stayDates}</button>{price ? <span className="shrink-0">· {formatStayLength(price)}</span> : null}</p>
+            <p className="flex min-w-0 items-baseline gap-1.5 whitespace-nowrap"><span className="text-m-footnote text-on-dark-secondary">{price ? "总价" : "月租"}</span><span className="font-display text-[22px] font-extrabold leading-7 text-accent">{formatUsd(price ? price.total : listing.price)}</span><span className="truncate text-m-footnote text-on-dark-secondary">{price ? `· ${formatStayLength(price)}` : "/ 月"}</span></p>
+            <p className="min-w-0 text-m-footnote"><button type="button" onClick={() => setStayOpen(true)} className="tap-target inline-flex max-w-full font-semibold text-on-dark underline underline-offset-4"><span className="truncate">{stayDates}</span></button></p>
           </div>
-          {stayError ? <button type="button" onClick={() => setStayOpen(true)} className="flex min-h-12 shrink-0 basis-[44%] items-center justify-center rounded-full bg-accent px-5 font-rounded text-base font-bold text-on-accent active:scale-[0.97]">选择租期</button> : <Link href={applyHref} className="flex min-h-12 shrink-0 basis-[44%] items-center justify-center rounded-full bg-accent px-5 font-rounded text-base font-bold text-on-accent hover:bg-accent-hover active:scale-[0.97]">申请租住</Link>}
+          {stayError ? <button type="button" onClick={() => setStayOpen(true)} className="flex min-h-12 shrink-0 basis-[40%] items-center justify-center rounded-full bg-accent px-5 font-rounded text-base font-bold text-on-accent active:scale-[0.97]">选择租期</button> : <Link href={applyHref} className="flex min-h-12 shrink-0 basis-[40%] items-center justify-center rounded-full bg-accent px-5 font-rounded text-base font-bold text-on-accent hover:bg-accent-hover active:scale-[0.97]">申请租住</Link>}
         </div>
       </div>
 

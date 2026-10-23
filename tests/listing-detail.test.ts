@@ -36,7 +36,7 @@ describe("listing detail", () => {
     expect(detail.monthlySavings).toBe(300);
     expect(detail.sections.highlights).toContain("步行 8 分钟到 UCLA");
     expect(detail.sections.houseRules).toContain("房东知情为用户声明，待平台审核");
-    expect(detail.sections.moveIn).toContain("在线申请后由房东处理，接受后进入签约与付款流程");
+    expect(detail.sections.moveIn).toContain("在线申请后由转租人处理，接受后进入签约与付款流程");
     expect(detail.sections.moveIn.join(" ")).not.toContain("暂未开放");
   });
 

@@ -124,7 +124,7 @@
   }
 
   .application-input {
-    @apply h-12 min-w-0 w-full rounded-psw-md border border-control-border bg-surface px-4 text-base font-semibold text-ink outline-none transition-colors placeholder:text-ink-placeholder focus:border-primary focus:ring-4 focus:ring-primary-soft sm:text-sm;
+    @apply h-12 min-w-0 w-full rounded-psw-md border border-control-border bg-surface px-4 text-base font-semibold text-ink outline-none transition-colors placeholder:text-ink-placeholder focus:border-primary focus:ring-4 focus:ring-primary-soft aria-[invalid=true]:border-danger sm:text-sm;
   }
 
   .primary-action {

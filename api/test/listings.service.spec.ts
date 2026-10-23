@@ -309,6 +309,17 @@ describe("ListingsService", () => {
     expect(prisma.listing.createCalls[0]?.data.status).toBe("DRAFT");
   });
 
+  it("stores the rent as the original rent and no transit line when a 转租人 leaves both out", async () => {
+    const prisma = createPrismaMock();
+    const service = new ListingsService(prisma as never, new AuditService());
+    const { originalPrice: _originalPrice, transit: _transit, ...dto } = listingDto();
+
+    await service.create("owner-1", dto as ListingDto);
+
+    expect(prisma.listing.createCalls[0]?.data.originalPrice).toBe(dto.price);
+    expect(prisma.listing.createCalls[0]?.data.transit).toBe("");
+  });
+
   it("keeps the draft cover image server-controlled until media is published", async () => {
     const prisma = createPrismaMock();
     const service = new ListingsService(prisma as never, new AuditService());
@@ -778,11 +789,11 @@ function listingRecord(overrides: Partial<ListingRecord> = {}): ListingRecord {
     availableFrom: new Date(`${dto.availableFrom}T00:00:00.000Z`),
     availableTo: new Date(`${dto.availableTo}T00:00:00.000Z`),
     price: dto.price,
-    originalPrice: dto.originalPrice,
+    originalPrice: dto.originalPrice ?? dto.price,
     beds: dto.beds,
     baths: dto.baths,
     commute: dto.commute,
-    transit: dto.transit,
+    transit: dto.transit ?? "",
     trust: dto.trust,
     tags: dto.tags,
     status: "DRAFT",

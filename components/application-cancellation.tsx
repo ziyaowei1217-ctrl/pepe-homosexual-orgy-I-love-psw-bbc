@@ -68,11 +68,11 @@ function CancellationSession({ application, token, currentUserId, onApplicationC
 
   return <div className="mt-5">
     {!open ? <button type="button" onClick={() => setOpen(true)} className="secondary-action text-danger-text">取消申请</button> :
-      <div className="space-y-3 rounded-2xl border border-danger-soft bg-danger-soft/50 p-4">
+      <div className="space-y-3 rounded-psw-lg border border-danger-soft bg-danger-soft/50 p-4">
         <p className="text-sm text-ink-secondary">确认取消这份已接受的申请。已付款的申请会进入退款处理，结果以最新状态为准。</p>
         <label htmlFor={reasonId} className="block text-sm font-bold">取消原因</label>
         <textarea id={reasonId} value={reason} maxLength={500} readOnly={Boolean(request)} disabled={pending} onChange={(event) => setReason(event.target.value)} className="application-input min-h-24 py-3" />
-        {request ? <p className="text-xs text-ink-secondary">重试会继续处理上次的取消请求。</p> : null}
+        {request ? <p className="text-m-footnote text-ink-secondary">重试会继续处理上次的取消请求。</p> : null}
         <div className="flex gap-2"><button type="button" disabled={pending || !reason.trim()} onClick={() => void cancel()} className="primary-action">{pending ? "正在取消…" : "确认取消申请"}</button><button type="button" disabled={pending} onClick={() => setOpen(false)} className="secondary-action">暂不取消</button></div>
       </div>}
     {error ? <p role="alert" className="mt-3 text-sm text-danger-text">{error}</p> : null}

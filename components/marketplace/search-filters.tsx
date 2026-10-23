@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { localDate } from "@/lib/listing-stay";
 import { emptyFilters, searchAmenities, searchDateError, type SearchState } from "@/lib/search-state";
 import { cn } from "@/lib/utils";
+import { DateInput } from "@/components/ui/date-input";
 
 export type SearchFilterSection = "budget" | "beds" | "dates";
 
@@ -41,7 +42,7 @@ export function SearchFiltersDialog({ initial, initialSection = "budget", prices
   const update = (patch: Partial<SearchState>) => setDraft((value) => ({ ...value, ...patch }));
 
   return <div className="marketplace-modal-backdrop fixed inset-0 z-[80] flex items-end justify-center bg-ink-block/35 p-0 backdrop-blur-sm sm:items-center sm:p-8" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-    <section ref={dialog} role="dialog" aria-modal="true" aria-labelledby="filter-title" className="marketplace-modal-panel search-filter-dialog flex max-h-[94dvh] w-full flex-col overflow-hidden rounded-t-[28px] bg-surface shadow-2xl sm:max-h-[88dvh] sm:max-w-[640px] sm:rounded-[28px]" onKeyDown={(event) => {
+    <section ref={dialog} role="dialog" aria-modal="true" aria-labelledby="filter-title" className="marketplace-modal-panel search-filter-dialog flex max-h-[94dvh] w-full flex-col overflow-hidden rounded-t-psw-2xl bg-surface shadow-dialog sm:max-h-[88dvh] sm:max-w-[640px] sm:rounded-psw-2xl" onKeyDown={(event) => {
       if (event.key === "Escape") { event.stopPropagation(); onClose(); }
       if (event.key !== "Tab") return;
       const nodes = dialog.current?.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), a[href]');
@@ -55,7 +56,7 @@ export function SearchFiltersDialog({ initial, initialSection = "budget", prices
       </header>
       <div ref={content} className="relative overflow-y-auto px-6 sm:px-8">
         <section className="border-b border-line-strong py-7">
-          <h3 className="text-lg font-bold">每月预算</h3>
+          <h3 className="text-m-headline sm:text-d-headline font-bold">每月预算</h3>
           <p className="mt-1 text-m-subhead text-ink-secondary sm:text-d-subhead">按月租筛选，其他费用请在房源详情中确认。</p>
           <div className="mt-7 flex h-20 items-end gap-[3px]" aria-hidden="true">{histogram.map((count, index) => <span key={index} className={cn("flex-1 rounded-t-[3px]", index * ceiling / 28 >= draft.priceMin && (!draft.priceMax || index * ceiling / 28 < draft.priceMax) ? "bg-primary/75" : "bg-line-strong")} style={{ height: `${Math.max(4, count / Math.max(1, ...histogram) * 100)}%` }} />)}</div>
           <input type="range" min="0" max={ceiling} step="100" value={draft.priceMax || ceiling} onChange={(event) => update({ priceMax: Number(event.target.value) === ceiling ? 0 : Math.max(100, Number(event.target.value)) })} className="mt-1 w-full accent-primary" aria-label="每月最高预算" />
@@ -66,16 +67,16 @@ export function SearchFiltersDialog({ initial, initialSection = "budget", prices
           </div>
         </section>
         <fieldset ref={bedrooms} tabIndex={-1} className="border-b border-line-strong py-7 outline-none">
-          <legend className="float-left w-full text-lg font-bold">卧室数量</legend>
+          <legend className="float-left w-full text-m-headline sm:text-d-headline font-bold">卧室数量</legend>
           <BedsField value={draft.beds} onChange={(beds) => update({ beds })} className="clear-both pt-4" />
         </fieldset>
         <fieldset className="border-b border-line-strong py-7">
-          <legend className="float-left w-full text-lg font-bold">让生活更方便</legend>
+          <legend className="float-left w-full text-m-headline sm:text-d-headline font-bold">让生活更方便</legend>
           <p className="clear-both pt-1 text-m-subhead text-ink-secondary sm:text-d-subhead">可多选，房源需同时满足所选条件。</p>
           <AmenityField value={draft.amenities} onChange={(amenities) => update({ amenities })} className="mt-4" />
         </fieldset>
         <section ref={dates} tabIndex={-1} aria-labelledby="filter-dates-title" className="py-7 outline-none">
-          <div className="flex items-center justify-between"><h3 id="filter-dates-title" className="text-lg font-bold">入住与退租</h3><button type="button" onClick={() => update({ moveIn: "", moveOut: "" })} className="min-h-11 px-1 text-m-footnote font-semibold underline underline-offset-4">日期灵活</button></div>
+          <div className="flex items-center justify-between"><h3 id="filter-dates-title" className="text-m-headline sm:text-d-headline font-bold">入住与退租</h3><button type="button" onClick={() => update({ moveIn: "", moveOut: "" })} className="min-h-11 px-1 text-m-footnote font-semibold underline underline-offset-4">日期灵活</button></div>
           <div className="mt-4 grid grid-cols-2 gap-3">
             <DateField label="入住日期" ariaLabel="筛选入住日期" value={draft.moveIn} min={today} onChange={(moveIn) => update({ moveIn })} />
             <DateField label="退租日期" ariaLabel="筛选退租日期" value={draft.moveOut} min={draft.moveIn || today} onChange={(moveOut) => update({ moveOut })} />
@@ -109,5 +110,5 @@ export function AmenityField({ value, onChange, className }: { value: string[]; 
 }
 
 export function DateField({ label, ariaLabel, value, min, onChange }: { label: string; ariaLabel?: string; value: string; min: string; onChange: (value: string) => void }) {
-  return <label className="rounded-psw-md border border-control-border p-3 text-m-footnote font-semibold text-ink-secondary">{label}<input type="date" aria-label={ariaLabel} value={value} min={min} onChange={(event) => onChange(event.target.value)} className="mt-1 block w-full min-w-0 bg-transparent text-base font-semibold text-ink sm:text-sm" /></label>;
+  return <label className="cursor-pointer rounded-psw-md border border-control-border p-3 text-m-footnote font-semibold text-ink-secondary focus-within:border-primary focus-within:ring-1 focus-within:ring-primary">{label}<DateInput aria-label={ariaLabel} value={value} min={min} onChange={(event) => onChange(event.target.value)} focusOutline={false} wrapperClassName="mt-1" className="text-base font-semibold text-ink sm:text-sm" /></label>;
 }

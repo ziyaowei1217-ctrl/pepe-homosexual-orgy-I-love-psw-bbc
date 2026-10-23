@@ -45,16 +45,20 @@ describe("host workspace experiences", () => {
   it("keeps the host overview limited to operational priorities", () => {
     const html = renderToStaticMarkup(<HostDashboardExperience />);
     expect(html).toContain("今天需要处理什么");
-    expect(html).toContain("待处理申请");
-    expect(html).toContain("预约");
-    expect(html).toContain("登录后读取实时数据");
+    // Signed out there is one sign-in state; metrics and to-dos appear once there is data to count.
+    expect(html).toContain("登录后查看你发布的房间");
+    expect(html).not.toContain("待处理申请");
+    expect(html).not.toContain("优先待办");
     expect(html).not.toContain("Maya Chen");
     expect(html).not.toContain("室友推荐");
   });
 
   it("organizes listings by lifecycle state", () => {
     const html = renderToStaticMarkup(<HostListingsExperience />);
-    for (const label of ["我的房源", "草稿", "审核中", "已发布", "已出租"]) expect(html).toContain(label);
+    expect(html).toContain("我的房源");
+    expect(html).toContain("登录后查看你发布的房间");
+    // The lifecycle tabs filter listings a signed-out visitor does not have.
+    expect(html).not.toContain("审核中");
     expect(html).toContain('href="/host/listings/new"');
     expect(html).not.toContain("Westwood 校园步行圈阳光主卧");
   });
@@ -65,13 +69,13 @@ describe("host workspace experiences", () => {
     expect(html).toContain("申请资料");
     expect(html).toContain("要求补充");
     expect(html).toContain("接受申请");
-    expect(html).toContain("登录后读取真实申请");
+    expect(html).toContain("登录后查看收到的申请");
     expect(html).not.toContain("上传房源图片");
   });
 
   it("localizes application status and changes the contact action after review", () => {
     expect(getHostApplicationPresentation("SUBMITTED")).toEqual({
-      statusLabel: "等待房东处理",
+      statusLabel: "待你处理",
       contactLabel: "要求补充"
     });
     expect(getHostApplicationPresentation("COMPLETED")).toEqual({
@@ -106,7 +110,7 @@ describe("host workspace experiences", () => {
       renderer = TestRenderer.create(<HostListingEditorExperience />);
     });
 
-    expect(nodeText(renderer.root)).toContain("请先在账户资料中将身份设置为房东");
+    expect(nodeText(renderer.root)).toContain("请先在账户资料中将身份设置为转租人");
     expect(renderer.root.findAllByType("a").some((link) => String(link.props.href).endsWith("/account/profile"))).toBe(true);
   });
 });

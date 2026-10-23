@@ -78,8 +78,8 @@ export function validateRentalApplicationDraft(
 }
 
 const statusCopy: Record<RentalApplicationStatus, { label: string; description: string }> = {
-  DRAFT: { label: "草稿", description: "资料尚未提交给房东。" },
-  SUBMITTED: { label: "等待房东处理", description: "申请已保存，房东可接受或拒绝。" },
+  DRAFT: { label: "草稿", description: "资料尚未提交给转租人。" },
+  SUBMITTED: { label: "等待转租人处理", description: "申请已保存，转租人可接受或拒绝。" },
   ACCEPTED: { label: "申请已接受", description: "可进入签约与付款流程。" },
   REJECTED: { label: "申请未通过", description: "本次申请已结束。" },
   WITHDRAWN: { label: "申请已撤回", description: "你或系统已撤回申请。" },

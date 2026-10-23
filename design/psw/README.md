@@ -30,7 +30,12 @@ The site follows the **psw 设计系统** (the psw Design System artifact). This
   One per screen.
 - **夜墨:** the home hero and the booking decision block (desktop box, phone bar). Other panels stay light.
 - **Dates:** `lib/date-format.ts`. Long「11月1日 – 1月15日」where people choose or confirm, short「11/1 – 1/15」on
-  cards; the year only when it is not this year.
+  cards; the year only when it is not this year. Date fields use `DateInput` (`components/ui/date-input.tsx`): the
+  browser's own picker underneath, the date written「11月1日」on top, 「选择日期」in the placeholder colour before a
+  choice. Clicking anywhere on the field, Enter or Space opens the picker; give it an `aria-label` that matches the
+  visible label.
+- **Class merging:** `cn()` knows the `text-m-*` / `text-d-*` scale is a size, so a status colour after it no longer
+  drops the size.
 - **States:** hover one shade darker, press scales to 97%, focus is the design system's `shadow-focus`: a 2px white
   gap inside a 3px 夜墨 ring, visible on light pages and on 夜墨 blocks. Small controls use `tap-target` to reach 44px.
 
@@ -39,3 +44,37 @@ The site follows the **psw 设计系统** (the psw Design System artifact). This
 With dates chosen, the headline is the rent for exactly those dates (`lib/stay-price.ts`): whole months from the
 move-in date at the monthly rent, remaining days prorated by the actual length of that month. Without dates the monthly
 rent is the headline. Cards, map pins, the booking box and the phone bottom bar show the same number.
+The page never picks dates for the renter: a listing opened without dates shows the monthly rent and asks for dates.
+The 青柠 number in the decision block is only ever a total. The application page shows the same total and dates, and
+dates the listing cannot be rented for send the renter back to the listing.
+
+## Who is who
+
+- **转租人:** the person posting the room (usually a student subletting). Buttons say「联系转租人」; their area is
+  「我发布的房间」.
+- **房东:** only the actual landlord, as in「房东知情」.
+
+## Trust
+
+Show only what the platform knows (`lib/listing-trust.ts`, `TrustBadge`):
+
+- 「平台已审核」/「待平台审核」: the platform reviewed the listing's details. Public catalog listings are reviewed, so
+  cards do not carry the badge; the listing page does.
+- 「房东知情：转租人声明」: a declaration made when publishing. The platform does not check leases, so no copy may say
+  a lease or consent letter was verified; the listing page tells renters to ask for the lease before signing.
+
+## Payment
+
+One `付款` panel (`components/payment-shell.tsx`) for real and demo payments: a status label (`rounded-psw-sm`), one
+sentence on what it means for the person looking, then at most one primary action. Real payments do not show an amount:
+the payment provider sets it and shows it on the payment page, so the panel says 「金额以付款页为准」 rather than guess.
+Demo payments show the amount the platform holds, that it is released to the 转租人 only when both sides confirm the
+move-in, and keep the ledger behind 「查看资金流水」. Inside another card it is an outlined block (`inset`).
+
+Decisions that end something (withdraw, reject, cancel, leave, delete) ask in the site's `ConfirmDialog`, never the
+browser's `confirm()` / `prompt()`; a reason, when needed, is written in the same dialog.
+
+## Dead ends
+
+Missing pages, removed listings and load errors use `DeadEnd` inside the site shell: 窝窝 sorry, one sentence on what
+happened, one way forward and「回首页」. A removed listing also shows listings that can still be rented.

@@ -29,7 +29,7 @@ it("refreshes a cancelled order and immediately removes its payment actions", as
   expect(screen.queryByRole("button", { name: "模拟支付成功" })).toBeNull();
   await act(async () => { closeOrder(Response.json(state("CLOSED", "CANCELLED"))); });
   expect(await screen.findByText("订单已关闭")).toBeDefined();
-  expect(screen.queryByText("等待演示支付")).toBeNull();
+  expect(screen.queryByText("等待付款")).toBeNull();
 });
 
 it("does not let an older read reopen a payment after cancellation refresh", async () => {
@@ -41,5 +41,5 @@ it("does not let an older read reopen a payment after cancellation refresh", asy
   await screen.findByText("订单已关闭");
   await act(async () => { oldResponse(Response.json(state("AWAITING_ATTEMPT"))); });
   expect(screen.getByText("订单已关闭")).toBeDefined();
-  expect(screen.queryByText("等待演示支付")).toBeNull();
+  expect(screen.queryByText("等待付款")).toBeNull();
 });
