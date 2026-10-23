@@ -2,6 +2,7 @@ import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
+import { stripVTControlCharacters } from "node:util";
 import { describe, expect, it } from "vitest";
 
 describe("local backend scripts", () => {
@@ -30,8 +31,9 @@ describe("local backend scripts", () => {
         shell: !useNode && process.platform === "win32"
       });
       expect(result.status, result.stderr).toBe(0);
-      expect(result.stdout).toMatch(/^\. dev: WEB_STARTED$/m);
-      expect(result.stdout).toMatch(/^api dev: API_STARTED$/m);
+      const output = stripVTControlCharacters(result.stdout);
+      expect(output).toMatch(/^\. dev: WEB_STARTED$/m);
+      expect(output).toMatch(/^api dev: API_STARTED$/m);
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }
