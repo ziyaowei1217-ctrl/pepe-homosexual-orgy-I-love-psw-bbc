@@ -6,7 +6,7 @@ import { HealthController } from "../src/health/health.controller";
 import { MessagingInfrastructureHealth } from "../src/health/messaging-infrastructure-health";
 import { HealthService } from "../src/health/health.service";
 
-afterEach(() => { vi.unstubAllEnvs(); vi.useRealTimers(); });
+afterEach(() => { vi.unstubAllEnvs(); vi.useRealTimers(); vi.restoreAllMocks(); });
 
 describe("HealthService", () => {
   it("returns process liveness without checking dependencies", () => {
@@ -56,6 +56,8 @@ describe("HealthService", () => {
 
   it("keeps required production dependencies out of rotation and becomes ready after recovery", async () => {
     vi.stubEnv("NODE_ENV", "production");
+    let now = Date.now();
+    vi.spyOn(Date, "now").mockImplementation(() => now);
     const infrastructure = new MessagingInfrastructureHealth();
     infrastructure.markDistributed("realtime");
     infrastructure.markDistributed("messageRateLimit");
@@ -69,10 +71,12 @@ describe("HealthService", () => {
       expect(error.getResponse().checks).toMatchObject({ database: "ok", authRateLimit: { status: "error" } });
     });
     authAvailable = true;
+    now += 5_000;
     await expect(service.ready()).resolves.toMatchObject({ status: "ok", checks: { authRateLimit: { status: "ok", mode: "distributed" } } });
     infrastructure.markLocalFallback("realtime", "connection");
     await expect(service.ready()).rejects.toMatchObject({ status: 503 });
     infrastructure.markDistributed("realtime");
+    now += 5_000;
     await expect(service.ready()).resolves.toMatchObject({ status: "ok" });
   });
 

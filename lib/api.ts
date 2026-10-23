@@ -433,6 +433,7 @@ export function archiveAdminRoommate(token: string, id: string) {
 }
 
 export const API_REQUEST_TIMEOUT_MS = 45_000;
+export const NEON_AUTH_EXCHANGE_TIMEOUT_MS = 75_000;
 
 async function apiRequest<T>(path: string, init: RequestInit, token?: string): Promise<T> {
   const controller = new AbortController();
@@ -440,7 +441,9 @@ async function apiRequest<T>(path: string, init: RequestInit, token?: string): P
   const abort = () => controller.abort(init.signal?.reason);
   if (init.signal?.aborted) abort();
   else init.signal?.addEventListener("abort", abort, { once: true });
-  const timer = setTimeout(() => { timedOut = true; controller.abort(); }, API_REQUEST_TIMEOUT_MS);
+  const timeout = path === "/auth/neon/exchange" && init.method === "POST"
+    ? NEON_AUTH_EXCHANGE_TIMEOUT_MS : API_REQUEST_TIMEOUT_MS;
+  const timer = setTimeout(() => { timedOut = true; controller.abort(); }, timeout);
   try {
     return await performApiRequest<T>(path, { ...init, signal: controller.signal }, token);
   } catch (error) {

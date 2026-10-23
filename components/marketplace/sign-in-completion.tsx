@@ -28,6 +28,6 @@ export function SignInCompletion({ failed = false }: { failed?: boolean }) {
   }, [failed]);
   return <main className="page-container py-16"><section className="mx-auto max-w-lg rounded-psw-xl bg-surface p-8">
     <h1 className="text-m-title">{error ? "请重新登录" : "正在完成登录"}</h1>
-    {error ? <><p role="alert" className="mt-4 text-danger-text">{error}</p><Link href="/account" className="primary-action mt-6">返回账户</Link></> : <p role="status" className="mt-4 text-ink-secondary">正在安全连接你的 psw 账户…</p>}
+    {error ? <><p role="alert" className="mt-4 text-danger-text">{error}</p><Link href="/account" className="primary-action mt-6">返回账户</Link></> : <p role="status" className="mt-4 text-ink-secondary">正在安全连接你的 psw 账户…首次连接可能需要约一分钟，请稍候。</p>}
   </section></main>;
 }

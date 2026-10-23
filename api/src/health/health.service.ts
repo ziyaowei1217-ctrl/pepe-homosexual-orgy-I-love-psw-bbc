@@ -5,9 +5,14 @@ import { PrismaService } from "../prisma/prisma.service";
 import { MessagingInfrastructureHealth } from "./messaging-infrastructure-health";
 import { AuthInfrastructureHealth } from "./auth-infrastructure-health";
 
+type CachedReadiness = { expiresAt: number } & (
+  { outcome: "success"; value: unknown } | { outcome: "failure"; error: unknown }
+);
+
 @Injectable()
 export class HealthService {
   private inFlightCheck?: Promise<unknown>;
+  private cachedReadiness?: CachedReadiness;
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(MessagingInfrastructureHealth)
@@ -21,8 +26,25 @@ export class HealthService {
   }
 
   async ready() {
+    const production = process.env.NODE_ENV === "production";
+    const cached = this.cachedReadiness;
+    if (production && cached && Date.now() < cached.expiresAt) {
+      if (cached.outcome === "failure") throw cached.error;
+      // Operations can discover messaging failures between scheduled probes.
+      // Never keep serving a cached success after that degradation is known.
+      if (Object.values(this.messagingInfrastructure.snapshot()).every(
+        component => component.status === "ok" && component.mode === "distributed"
+      )) return cached.value;
+      this.cachedReadiness = undefined;
+    }
     if (!this.inFlightCheck) {
-      this.inFlightCheck = this.checkDependencies().finally(() => { this.inFlightCheck = undefined; });
+      this.inFlightCheck = this.checkDependencies().then(value => {
+        if (production) this.cachedReadiness = { outcome: "success", value, expiresAt: Date.now() + 60_000 };
+        return value;
+      }, error => {
+        if (production) this.cachedReadiness = { outcome: "failure", error, expiresAt: Date.now() + 5_000 };
+        throw error;
+      }).finally(() => { this.inFlightCheck = undefined; });
     }
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {

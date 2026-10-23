@@ -14,6 +14,7 @@ import { authRoute } from "@/lib/app-routes";
 import { useAssistantDraftHandoff } from "@/lib/assistant/client";
 import { assertCurrentAuthSession, readStoredAuthSession } from "@/lib/auth-session";
 import { sendDealMessage } from "@/lib/deal-message-commands";
+import { usesNeonAuth } from "@/lib/neon-auth-client";
 import { createRoommateRealtimeClient } from "@/lib/roommate-realtime";
 import { cn } from "@/lib/utils";
 import { useAuthSessionToken } from "@/lib/use-auth-session-token";
@@ -403,7 +404,7 @@ function InboxSessionExperience({ initialConversationId, initialListingId, initi
   if (!authenticated && !loading) {
     return <main className="min-h-[calc(100dvh-72px)] bg-background"><div className="page-container pb-16 pt-8 sm:pt-12">
       <h1 className="page-title">收件箱</h1>
-      <EmptyState className="mt-7" mood="sleepy" title="登录后查看你的消息" body="和转租人、室友的消息都在这里。用邮箱验证码登录，不需要密码。" action={<Link href={authRoute({ returnTo: inboxReturnTo({ initialConversationId, initialListingId, initialApplicantId, initialRoommateId, initialTour }) })} className="primary-action">登录</Link>} />
+      <EmptyState className="mt-7" mood="sleepy" title="登录后查看你的消息" body={usesNeonAuth() ? "和转租人、室友的消息都在这里。使用 Google 账户登录后查看。" : "和转租人、室友的消息都在这里。用邮箱验证码登录，不需要密码。"} action={<Link href={authRoute({ returnTo: inboxReturnTo({ initialConversationId, initialListingId, initialApplicantId, initialRoommateId, initialTour }) })} className="primary-action">登录</Link>} />
     </div></main>;
   }
 

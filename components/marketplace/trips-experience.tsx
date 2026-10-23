@@ -11,6 +11,7 @@ import { useAuthSessionToken } from "@/lib/use-auth-session-token";
 
 import { authRoute } from "@/lib/app-routes";
 import { readStoredAuthSession } from "@/lib/auth-session";
+import { usesNeonAuth } from "@/lib/neon-auth-client";
 import { getMyRentalApplications } from "@/lib/rental-applications";
 import type { ApiRentalApplication } from "@/lib/rental-applications";
 
@@ -49,7 +50,7 @@ function TripsSessionExperience({ token }: { token: string | null }) {
   return <main className="min-h-[calc(100dvh-72px)] bg-background"><div className="page-container pb-16 pt-8 sm:pt-12">
     <PageHeader title="我的租住" description="申请被接受后，签约、付款和入住都在这里跟进。" action={authenticated ? <Link href="/applications" className="secondary-action">查看其他申请<ArrowRight className="size-4" aria-hidden="true" /></Link> : undefined} />
     <span className="sr-only">申请已接受 签约 付款 入住</span>
-    {!authenticated ? <EmptyState className="mt-8" mood="default" title="登录后查看你的租住进度" body="用邮箱验证码登录，就能看到已接受的申请和下一步要做的事。" action={<Link href={authRoute({ returnTo: "/trips" })} className="primary-action">登录</Link>} /> : null}
+    {!authenticated ? <EmptyState className="mt-8" mood="default" title="登录后查看你的租住进度" body={usesNeonAuth() ? "使用 Google 账户登录，就能看到已接受的申请和下一步要做的事。" : "用邮箱验证码登录，就能看到已接受的申请和下一步要做的事。"} action={<Link href={authRoute({ returnTo: "/trips" })} className="primary-action">登录</Link>} /> : null}
     {loading ? <p className="mt-8 text-center text-d-subhead text-ink-secondary">正在同步租住状态…</p> : null}
     {error ? <div role="alert"><EmptyState className="mt-8" mood="sorry" title="租住进度没加载出来" body={error} action={<button type="button" onClick={() => { setError(null); setAttempt((value) => value + 1); }} className="primary-action">重试</button>} /></div> : null}
     {authenticated && !loading && stays.length === 0 && !error ? <EmptyState className="mt-8" mood="sleepy" title="暂时没有已接受的申请" body="转租人接受你的申请后，租住进度会出现在这里。" action={<Link href="/search" className="primary-action">去找房</Link>} /> : null}

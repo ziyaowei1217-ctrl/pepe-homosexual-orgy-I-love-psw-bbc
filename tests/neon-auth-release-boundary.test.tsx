@@ -94,6 +94,7 @@ describe("OAuth completion safety", () => {
     await startGoogleSignIn("/inbox");
     render(<SignInCompletion />);
     await waitFor(() => expect(exchanges()).toHaveLength(1));
+    expect(screen.getByRole("status").textContent).toContain("首次连接可能需要约一分钟");
     act(() => writeStoredAuthSession("account-selected-during-exchange"));
     await act(async () => result.resolve(Response.json({ accessToken: "late-old-app-session", user: { id: "old" }, isNewUser: false })));
     await screen.findByRole("alert");

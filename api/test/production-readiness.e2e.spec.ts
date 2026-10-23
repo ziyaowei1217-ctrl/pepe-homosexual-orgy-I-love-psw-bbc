@@ -16,10 +16,13 @@ describe("production readiness HTTP policy", () => {
   afterEach(async () => {
     await app?.close();
     vi.unstubAllEnvs();
+    vi.restoreAllMocks();
   });
 
   it("returns 503 for required distributed outages and 200 after recovery without changing liveness", async () => {
     vi.stubEnv("NODE_ENV", "production");
+    let now = Date.now();
+    vi.spyOn(Date, "now").mockImplementation(() => now);
     const moduleRef = await Test.createTestingModule({ imports: [PrismaModule, HealthModule] })
       .overrideProvider(PrismaService).useValue({ $queryRaw: async () => [{ ok: 1 }] }).compile();
     const messaging = moduleRef.get(MessagingInfrastructureHealth);
@@ -40,10 +43,12 @@ describe("production readiness HTTP policy", () => {
     expect(failed.body.checks).toMatchObject({ database: "ok", authRateLimit: { status: "error" } });
     expect(JSON.stringify(failed.body)).not.toContain("credential");
     authAvailable = true;
+    now += 5_000;
     await http.get("/api/v1/ready").expect(200);
     messaging.markLocalFallback("messageRateLimit", "timeout");
     await http.get("/api/v1/ready").expect(503);
     messaging.markDistributed("messageRateLimit");
+    now += 5_000;
     await http.get("/api/v1/ready").expect(200);
   });
 });

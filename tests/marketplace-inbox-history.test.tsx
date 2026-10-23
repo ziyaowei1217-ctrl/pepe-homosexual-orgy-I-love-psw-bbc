@@ -107,8 +107,10 @@ describe.each(["deal", "roommate"] as const)("%s bounded Inbox history", source 
     const requests = backend({ deals: () => source === "deal" ? [deal()] : [], roommates: () => source === "roommate" ? [roommate()] : [], history: () => initial.promise });
     render(<InboxExperience initialConversationId={id} />);
     await content().findByText(body(id, 60));
+    // Rendering a summary precedes the separate initial-history effect. Wait
+    // for that observable request while its response remains deliberately held.
+    await waitFor(() => expect(requests).toEqual([{ source, id, cursor: null }]));
     expect(content().queryByRole("button", { name: "加载较早消息" })).toBeNull();
-    expect(requests).toEqual([{ source, id, cursor: null }]);
     await act(async () => initial.resolve(page(source, id, 11, 60, olderCursor)));
     expect(content().getByRole("button", { name: "加载较早消息" })).toBeTruthy();
     expectMessages(id, 11, 60);

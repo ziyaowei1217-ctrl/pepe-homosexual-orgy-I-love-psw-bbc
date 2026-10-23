@@ -19,8 +19,9 @@ export function neonServerConfiguration(environment: Environment = process.env) 
         !/^ep-[a-z0-9-]+\.neonauth\.(?:c-[0-9]{1,3}\.)?[a-z0-9-]+\.aws\.neon\.tech$/.test(url.hostname) ||
         !/^\/[a-zA-Z0-9_-]+\/auth\/?$/.test(url.pathname)) return null;
     const origins = [app.origin];
-    // Netlify supplies this immutable URL at build/runtime. Accept only this
-    // site's exact deploy URL, never an arbitrary Host/X-Forwarded-Host header
+    // A trusted operator may explicitly supply these build variables to the
+    // function runtime; Netlify does not inject them into Functions by default.
+    // Accept only this site's exact deploy URL, never Host/Forwarded headers
     // or every application under the shared netlify.app parent domain.
     if (environment.NETLIFY === "true" && environment.DEPLOY_URL) {
       const deploy = new URL(environment.DEPLOY_URL);

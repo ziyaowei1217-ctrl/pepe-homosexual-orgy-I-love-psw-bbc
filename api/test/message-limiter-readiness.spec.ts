@@ -8,11 +8,14 @@ import { createRoommateMessageRateLimiter } from "../src/roommate-conversations/
 afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllEnvs();
+  vi.restoreAllMocks();
 });
 
 describe("message limiter readiness recovery", () => {
   it("restores readiness on a drained production replica without sending or spending message quota", async () => {
     vi.stubEnv("NODE_ENV", "production");
+    let now = Date.now();
+    vi.spyOn(Date, "now").mockImplementation(() => now);
     const health = new MessagingInfrastructureHealth();
     health.markDistributed("realtime");
     const failed = client({ eval: vi.fn().mockRejectedValue(new Error("provider fault")) });
@@ -27,6 +30,7 @@ describe("message limiter readiness recovery", () => {
 
     await expect(readiness.ready()).rejects.toMatchObject({ status: 503 });
     expect(failed.destroy).toHaveBeenCalledTimes(1);
+    now += 5_000;
     await expect(readiness.ready()).resolves.toMatchObject({ status: "ok" });
     await expect(readiness.ready()).resolves.toMatchObject({ status: "ok" });
     for (const command of [...failed.eval.mock.calls, ...recovered.eval.mock.calls]) {
