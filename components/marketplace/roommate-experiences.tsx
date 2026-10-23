@@ -26,6 +26,13 @@ function RoommatesSessionExperience({ token }: { token: string | null }) {
   const [loading, setLoading] = useState(true);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // A like or a skip moves to the next person; say what happened so it does not look like nothing did.
+  const [notice, setNotice] = useState<string | null>(null);
+  useEffect(() => {
+    if (!notice) return;
+    const timer = window.setTimeout(() => setNotice(null), 3200);
+    return () => window.clearTimeout(timer);
+  }, [notice]);
   const [loadFailed, setLoadFailed] = useState(false);
   const [loadAttempt, setLoadAttempt] = useState(0);
   const active = roommates[index] ?? null;
@@ -61,7 +68,9 @@ function RoommatesSessionExperience({ token }: { token: string | null }) {
       assertCurrentAuthSession(token);
       setRoommates((current) => current.filter((item) => getRoommateActionTargetId(item) !== actionTargetId));
       setIndex(0);
-      if (result.conversation) window.location.assign(`/inbox/${encodeURIComponent(result.conversation.id)}`);
+      if (result.conversation) { window.location.assign(`/inbox/${encodeURIComponent(result.conversation.id)}`); return; }
+      const name = active?.name ?? "TA";
+      setNotice(action === "LIKE" ? `已告诉 ${name} 你感兴趣。对方也感兴趣时，你们就能聊天。` : `已跳过 ${name}。`);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "操作失败，请重试。");
     } finally { setPending(false); }
@@ -79,6 +88,7 @@ function RoommatesSessionExperience({ token }: { token: string | null }) {
         {active ? <article className="overflow-hidden rounded-psw-2xl border border-line-strong bg-surface shadow-dialog"><div className="relative h-[240px] bg-tag-neutral sm:h-[420px] lg:h-[560px]"><SmartImage src={active.image} alt={active.name} fill priority sizes="(max-width:1024px) 100vw, 65vw" className="object-cover object-[50%_20%]" /><div className="absolute inset-0 bg-gradient-to-t from-ink-block/80 via-transparent to-transparent" /><div className="absolute left-5 top-5 rounded-full bg-surface px-3 py-1.5 text-m-footnote font-bold text-primary-text">{active.compatibilityScore ?? active.match}% 匹配</div><div className="absolute inset-x-6 bottom-6 text-white"><h2 className="font-rounded text-m-large-title font-bold">{active.name}, {active.age}</h2><p className="mt-2 text-sm text-on-dark-secondary">{active.role}</p></div></div><div className="grid gap-4 p-4 sm:gap-6 sm:p-6 md:grid-cols-2"><div><p className="text-m-footnote font-bold text-ink-placeholder">预算与地点</p><p className="mt-2 text-sm font-bold">{active.budget} · {active.commute}</p><div className="mt-4 flex flex-wrap gap-2">{active.tags.map((tag) => <span key={tag} className="rounded-full bg-tag-neutral px-3 py-1.5 text-m-footnote font-bold text-ink-secondary">{tag}</span>)}</div></div><div className="hidden rounded-psw-xl bg-surface-subtle p-5 md:block"><h3 className="flex items-center gap-2 text-sm font-bold"><Sparkles className="size-4 text-primary-text" />为什么适合你</h3><ul className="mt-4 space-y-2">{(active.reasons ?? active.recommendation?.primarySignals ?? []).map((reason) => <li key={reason} className="flex gap-2 text-m-footnote text-ink"><Check className="size-3.5 shrink-0" />{reason}</li>)}</ul></div><details className="rounded-psw-lg bg-surface-subtle p-4 md:hidden"><summary className="cursor-pointer text-sm font-bold text-ink">为什么适合你</summary><ul className="mt-3 space-y-2">{(active.reasons ?? active.recommendation?.primarySignals ?? []).map((reason) => <li key={reason} className="flex gap-2 text-m-footnote leading-5 text-ink"><Check className="mt-0.5 size-3.5 shrink-0" />{reason}</li>)}</ul></details></div><div className="flex justify-center gap-2 border-t border-line-strong p-4 sm:gap-4 sm:p-5"><button disabled={pending} onClick={() => void decide("PASS")} className="grid size-14 place-items-center rounded-full border border-line-strong" aria-label={`跳过 ${active.name}`}><X className="size-5" /></button><button disabled={pending} onClick={() => void decide("LIKE")} className="primary-action px-4 sm:px-8"><Heart className="size-5" />感兴趣</button>{active.id ? <Link href={`/roommates/${encodeURIComponent(active.id)}`} className="secondary-action">查看资料</Link> : null}</div></article> : null}
       </section>
     </div>
+    {notice ? <div role="status" className="fixed bottom-[96px] left-1/2 z-[70] w-[min(92vw,420px)] -translate-x-1/2 rounded-psw-md bg-toast-bg px-5 py-3 text-d-subhead text-on-toast shadow-menu md:bottom-8">{notice}</div> : null}
   </main>;
 }
 

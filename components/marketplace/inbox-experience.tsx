@@ -227,6 +227,13 @@ function InboxSessionExperience({ initialConversationId, initialListingId, initi
   }, [conversations, filter, searchQuery]);
   const active = filtered.find((item) => item.id === selectedId) ?? null;
   const showConversation = Boolean(selectedId && (active || loading));
+  // A thread opens at its newest message and follows the messages being sent, like any chat.
+  const messagesRef = useRef<HTMLDivElement>(null);
+  const messageCount = active?.messages.length ?? 0;
+  useEffect(() => {
+    const list = messagesRef.current;
+    if (list) list.scrollTop = list.scrollHeight;
+  }, [active?.id, messageCount]);
 
   async function sendMessage(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -333,6 +340,14 @@ function InboxSessionExperience({ initialConversationId, initialListingId, initi
     setConversations((current) => current.map((item) => item.id === id ? withMessages(item, messages) : item));
   }
 
+  // No conversations yet: one state for the page instead of an empty list next to "choose a conversation".
+  if (authenticated && !loading && !error && conversations.length === 0) {
+    return <main className="min-h-[calc(100dvh-72px)] bg-background"><div className="page-container pb-16 pt-8 sm:pt-12">
+      <h1 className="page-title">收件箱</h1>
+      <EmptyState className="mt-7" mood="sleepy" title="还没有消息" body="在房源页联系转租人、预约看房，或者和喜欢的室友互相喜欢后，对话会出现在这里。" action={<Link href="/search" className="primary-action">去找房</Link>} />
+    </div></main>;
+  }
+
   // Signed out there is nothing to search, filter or open: one sign-in state instead of the two-pane inbox.
   if (!authenticated && !loading) {
     return <main className="min-h-[calc(100dvh-72px)] bg-background"><div className="page-container pb-16 pt-8 sm:pt-12">
@@ -358,7 +373,7 @@ function InboxSessionExperience({ initialConversationId, initialListingId, initi
               {error && !active ? <p role="alert" className="m-2 rounded-psw-md bg-danger-soft p-4 text-d-subhead font-semibold text-danger-text">{error}</p> : null}
               {loadFailed && !loading ? <button type="button" onClick={() => setLoadAttempt((attempt) => attempt + 1)} className="secondary-action m-2">重新加载消息</button> : null}
               {authenticated && !loading && conversations.length > 0 && filtered.length === 0 ? <p className="p-6 text-center text-d-subhead text-ink-secondary">没有匹配的消息</p> : null}
-              {filtered.map((conversation) => <Link key={conversation.id} href={`/inbox/${conversation.id}`} onClick={() => { if (selectedId !== conversation.id) setDraft(""); setSelectedId(conversation.id); }} className={cn("grid grid-cols-[48px_minmax(0,1fr)_auto] gap-3 rounded-psw-lg p-3", active?.id === conversation.id ? "bg-surface-subtle" : "hover:bg-surface-subtle")}><Avatar name={conversation.person} src={conversation.avatar} /><div className="min-w-0"><div className="flex items-center gap-2"><p className="truncate text-sm font-bold">{conversation.person}</p><span className="rounded-psw-sm bg-surface px-2 py-0.5 text-m-footnote font-bold text-ink-secondary">{kindLabels[conversation.kind]}</span></div><p className="mt-1 truncate text-m-footnote font-bold text-ink-secondary">{conversation.title}</p><p className="mt-1 truncate text-m-footnote text-ink-secondary">{conversation.detail || "暂无消息"}</p></div>{conversation.unread && active?.id !== conversation.id ? <span className="grid size-5 place-items-center rounded-full bg-badge text-m-footnote font-bold text-on-badge">{conversation.unread}</span> : null}</Link>)}
+              {filtered.map((conversation) => <Link key={conversation.id} href={`/inbox/${conversation.id}`} onClick={() => { if (selectedId !== conversation.id) setDraft(""); setSelectedId(conversation.id); }} className={cn("grid grid-cols-[48px_minmax(0,1fr)_auto] gap-3 rounded-psw-lg p-3", active?.id === conversation.id ? "bg-surface-subtle" : "hover:bg-surface-subtle")}><Avatar name={conversation.person} src={conversation.avatar} /><div className="min-w-0"><div className="flex items-center gap-2"><p className="truncate text-sm font-bold">{conversation.person}</p><span className="shrink-0 whitespace-nowrap rounded-psw-sm bg-surface px-2 py-0.5 text-m-footnote font-bold text-ink-secondary">{kindLabels[conversation.kind]}</span></div><p className="mt-1 truncate text-m-footnote font-bold text-ink-secondary">{conversation.title}</p><p className="mt-1 truncate text-m-footnote text-ink-secondary">{conversation.detail || "暂无消息"}</p></div>{conversation.unread && active?.id !== conversation.id ? <span className="grid size-5 place-items-center rounded-full bg-badge text-m-footnote font-bold text-on-badge">{conversation.unread}</span> : null}</Link>)}
             </div>
           </section>
 
@@ -369,7 +384,7 @@ function InboxSessionExperience({ initialConversationId, initialListingId, initi
               {active.source === "deal" && active.listingId ? <div className="border-b border-line-strong bg-surface-muted px-4 py-2 sm:px-6"><Link href={`/listing/${encodeURIComponent(active.listingId)}`} className="flex min-h-11 items-center gap-3 text-m-footnote font-bold text-ink hover:text-primary-text"><KindIcon kind={active.kind} /><span className="min-w-0 truncate">房源 · {active.title}</span><span className="ml-auto shrink-0 text-primary-text">查看房源</span></Link></div> : null}
               {active.source === "deal" && active.viewingRequests?.length ? <ViewingRequestSummary request={active.viewingRequests.at(-1)!} viewerRole={active.viewerRole!} pending={tourPending} onDecision={decideViewingRequest} /> : null}
               {initialTour && active.source === "deal" && active.viewerRole === "renter" ? <form onSubmit={submitViewingRequest} className="border-b border-primary-soft bg-surface-subtle/60 px-4 py-4 sm:px-6"><div className="mx-auto grid max-w-3xl gap-3 sm:grid-cols-[minmax(0,1fr)_150px_auto] sm:items-end"><label className="grid gap-1.5 text-m-footnote font-bold text-ink-secondary">预约看房时间<input type="datetime-local" min={minimumTourDateTime()} value={tourAt} onChange={(event) => setTourAt(event.target.value)} className="application-input" /></label><label className="grid gap-1.5 text-m-footnote font-bold text-ink-secondary">方式<select value={tourMode} onChange={(event) => setTourMode(event.target.value as "in-person" | "video")} className="application-input"><option value="in-person">线下看房</option><option value="video">视频看房</option></select></label><button type="submit" disabled={tourPending} className="primary-action h-12 justify-center">{tourPending ? "发送中…" : "发送看房请求"}</button></div></form> : null}
-              <div className="min-h-0 flex-1 overflow-y-auto px-4 py-6 sm:px-8"><div className="mx-auto max-w-3xl space-y-4">{active.messages.length ? active.messages.map((message) => <MessageBubble key={message.id} message={message} />) : <p className="py-16 text-center text-d-subhead text-ink-secondary">发送第一条消息开始对话</p>}</div></div>
+              <div ref={messagesRef} className="min-h-0 flex-1 overflow-y-auto px-4 py-6 sm:px-8"><div className="mx-auto max-w-3xl space-y-4">{active.messages.length ? active.messages.map((message) => <MessageBubble key={message.id} message={message} />) : <p className="py-16 text-center text-d-subhead text-ink-secondary">发送第一条消息开始对话</p>}</div></div>
               {error ? <p role="alert" className="mx-4 mb-3 shrink-0 rounded-psw-md bg-danger-soft p-4 text-d-subhead font-semibold text-danger-text">{error}</p> : null}
               <form onSubmit={sendMessage} className="shrink-0 border-t border-line-strong p-4"><div className="mx-auto flex max-w-3xl items-end gap-2 rounded-psw-xl border border-line-strong bg-surface-muted p-2 pl-4"><textarea value={draft} onChange={(event) => setDraft(event.target.value)} rows={1} placeholder="输入消息…" className="min-h-9 min-w-0 flex-1 resize-none bg-transparent py-2 text-base outline-none sm:text-sm" aria-label="消息内容" /><button type="submit" disabled={sending || !draft.trim()} className="grid size-11 shrink-0 place-items-center rounded-full bg-primary text-white disabled:opacity-40" aria-label="发送消息"><Send className="size-4" /></button></div></form>
             </> : loading ? <p role="status" className="p-8 text-center text-sm text-ink-secondary">正在同步消息…</p> : <div className="grid flex-1 place-items-center p-8 text-center"><div><h2 className="text-m-headline sm:text-d-headline">选择一条对话</h2><p className="mt-2 text-d-subhead text-ink-secondary">和转租人、室友的消息都会显示在这里。</p></div></div>}

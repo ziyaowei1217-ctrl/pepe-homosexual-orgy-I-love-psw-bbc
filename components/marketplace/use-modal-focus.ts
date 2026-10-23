@@ -8,7 +8,7 @@ export function useModalFocus(dialog: RefObject<HTMLElement | null>, onClose: ()
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null;
     const overflow = document.body.style.overflow;
-    const focusable = () => Array.from(dialog.current?.querySelectorAll<HTMLElement>('button:not([disabled]), a[href], input:not([disabled]), [tabindex="0"]') ?? []);
+    const focusable = () => Array.from(dialog.current?.querySelectorAll<HTMLElement>('button:not([disabled]), a[href], input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex="0"]') ?? []);
     document.body.style.overflow = "hidden";
     focusable()[0]?.focus();
     function keydown(event: KeyboardEvent) {

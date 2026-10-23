@@ -3,7 +3,6 @@
 import {
   ArrowLeft,
   ArrowRight,
-  CheckCircle2,
   ChevronRight,
   Clock3,
   FileText,
@@ -15,6 +14,7 @@ import { SmartImage } from "@/components/ui/smart-image";
 import Link from "next/link";
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 
+import { EmptyState } from "@/components/marketplace/empty-state";
 import { PageHeader } from "@/components/marketplace/page-header";
 
 import { ApplicationCancellation } from "@/components/application-cancellation";
@@ -42,6 +42,7 @@ import {
   type RentalApplicationDraft
 } from "@/lib/rental-applications";
 import { cn } from "@/lib/utils";
+import { useConfirm } from "@/components/marketplace/confirm-dialog";
 
 // Four characters each, so the step labels never break on a phone.
 const applicationSteps = ["基本资料", "租住信息", "身份材料", "确认提交"];
@@ -197,8 +198,9 @@ function ApplicationFormSession({ listing, initialStay, selectionId }: Applicati
   }
 
   if (submitted) {
-    return <main className="min-h-[calc(100dvh-72px)] bg-surface-subtle px-4 py-12 sm:px-6"><section className="mx-auto max-w-2xl rounded-psw-2xl border border-line-strong bg-surface p-8 text-center shadow-dialog sm:p-12"><span className="mx-auto grid size-16 place-items-center rounded-full bg-surface-subtle text-primary-text"><CheckCircle2 className="size-8" /></span><h1 className="mt-6 font-rounded text-m-title sm:text-d-title font-bold">申请已提交</h1><p className="mt-3 text-sm leading-6 text-ink-secondary">转租人会在消息中心与你联系。状态变化会显示在“我的申请”。</p><div className="mt-7 flex justify-center gap-3"><Link href="/applications" className="rounded-full bg-primary px-5 py-3 font-rounded text-sm font-bold text-white hover:bg-primary-hover">查看申请</Link><Link href={`/inbox?listingId=${encodeURIComponent(listing.id)}`} className="rounded-full border border-line-strong px-5 py-3 text-sm font-bold">打开消息</Link></div></section></main>;
+    return <SubmittedApplication listing={listing} />;
   }
+
 
   return (
     <main className="min-h-[calc(100dvh-72px)] bg-background">
@@ -258,6 +260,7 @@ function ApplicationsSession() {
   const [loading, setLoading] = useState(false);
   const [authenticated, setAuthenticated] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     const token = readStoredAuthSession()?.accessToken;
@@ -274,7 +277,7 @@ function ApplicationsSession() {
       if (!cancelled) setLoadError(error instanceof Error ? error.message : "申请状态暂时无法加载。");
     }).finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, []);
+  }, [attempt]);
 
   return (
     <main className="min-h-[calc(100dvh-72px)] bg-background">
@@ -288,7 +291,7 @@ function ApplicationsSession() {
           })}
           {!loading && !authenticated ? <EmptyApplications title="登录后查看你的申请" detail="登录后可查看草稿、审核进度和转租人决定。" actionHref={authRoute({ returnTo: "/applications" })} action="登录" /> : null}
           {!loading && authenticated && applications.length === 0 && !loadError ? <EmptyApplications title="还没有申请" detail="找到合适房源后，可以从房源详情页发起申请。" actionHref="/search" action="浏览房源" /> : null}
-          {loadError ? <p role="alert" className="rounded-psw-lg bg-danger-soft px-5 py-4 text-sm font-bold text-danger-text">{loadError}</p> : null}
+          {loadError ? <div role="alert"><EmptyState mood="sorry" title="申请没加载出来" body={loadError} action={<button type="button" onClick={() => { setLoadError(null); setAttempt((value) => value + 1); }} className="primary-action">重试</button>} /></div> : null}
         </div>
         {loading ? <p className="mt-5 text-center text-m-footnote font-bold text-ink-placeholder">正在同步申请状态…</p> : null}
       </div>
@@ -302,12 +305,14 @@ export function ApplicationDetailExperience({ applicationId }: { applicationId: 
 }
 
 function ApplicationDetailSession({ applicationId }: { applicationId: string }) {
+  const [confirmDialog, confirm] = useConfirm();
   const [application, setApplication] = useState<ApiRentalApplication | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [authenticated, setAuthenticated] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
   // The listing gives the monthly rent, so the page can show what these dates cost before anyone pays.
   const [listing, setListing] = useState<PreviewListing | null>(null);
 
@@ -331,7 +336,7 @@ function ApplicationDetailSession({ applicationId }: { applicationId: string }) 
       })
       .catch((caught) => setError(caught instanceof Error ? caught.message : "申请详情暂时无法加载。"))
       .finally(() => setLoading(false));
-  }, [applicationId]);
+  }, [applicationId, attempt]);
 
   async function continueDraft() {
     if (!token || !application || currentUserId !== application.submitterId) return;
@@ -351,7 +356,8 @@ function ApplicationDetailSession({ applicationId }: { applicationId: string }) 
   }
 
   async function withdraw() {
-    if (!token || !application || !window.confirm("确认撤回这份申请？")) return;
+    if (!token || !application) return;
+    if (await confirm({ title: "撤回这份申请？", body: "撤回后这份申请就结束了。想再租这个房间，需要重新申请。", confirmLabel: "撤回申请", tone: "danger" }) === false) return;
     try {
       assertCurrentAuthSession(token);
       setApplication(await withdrawRentalApplication(token, application.id, `applicant-withdraw-${application.id}`));
@@ -362,13 +368,16 @@ function ApplicationDetailSession({ applicationId }: { applicationId: string }) 
 
   const status = application ? getRentalApplicationStatusCopy(application.status) : null;
   const ownApplication = Boolean(application && currentUserId === application.submitterId);
-  const stayTotal = application && listing ? stayPrice(listing.price, application.moveIn.slice(0, 10), application.moveOut.slice(0, 10)) : null;
+  // Withdrawn, rejected and cancelled applications will not be paid, so they do not show what the dates would cost.
+  const ended = Boolean(application && ["WITHDRAWN", "REJECTED", "CANCELLED"].includes(application.status));
+  const stayTotal = application && listing && !ended ? stayPrice(listing.price, application.moveIn.slice(0, 10), application.moveOut.slice(0, 10)) : null;
   const hasPayment = Boolean(application && ["ACCEPTED", "COMPLETED", "CANCELLATION_PENDING", "CANCELLED"].includes(application.status));
   return <main className="min-h-[calc(100dvh-72px)] bg-background"><div className="page-container max-w-[880px] pb-16 pt-4 sm:pt-8">
     <Link href="/applications" className="-ml-3 inline-flex min-h-11 items-center gap-2 rounded-full px-3 text-[15px] font-bold text-ink-secondary hover:bg-surface sm:text-sm"><ArrowLeft className="size-4" aria-hidden="true" />返回我的申请</Link>
     {!authenticated ? <EmptyApplications title="登录后查看这份申请" detail="用邮箱验证码登录，不需要密码。" actionHref={authRoute({ returnTo: `/applications/${applicationId}` })} action="登录" /> : null}
     {loading ? <p role="status" className="mt-6 text-center text-d-subhead text-ink-secondary">正在加载申请…</p> : null}
-    {error ? <p role="alert" className="mt-6 rounded-psw-md bg-danger-soft p-4 text-d-subhead font-semibold text-danger-text">{error}</p> : null}
+    {error && !application ? <div role="alert" className="mt-6"><EmptyState mood="sorry" title="申请没加载出来" body={error} action={<button type="button" onClick={() => { setError(null); setAttempt((value) => value + 1); }} className="primary-action">重试</button>} /></div> : null}
+    {error && application ? <p role="alert" className="mt-6 rounded-psw-md bg-danger-soft p-4 text-d-subhead font-semibold text-danger-text">{error}</p> : null}
     {authenticated && !loading && !application && !error ? <EmptyApplications title="找不到这份申请" detail="可能已经撤回，或者你没有权限查看。" actionHref="/applications" action="回到我的申请" /> : null}
     {application && status ? <section className="mt-3 space-y-4 sm:mt-5">
       <div className="rounded-psw-xl bg-surface p-5 sm:p-8">
@@ -398,6 +407,7 @@ function ApplicationDetailSession({ applicationId }: { applicationId: string }) 
         {application.note ? <p className="mt-5 whitespace-pre-wrap rounded-psw-lg bg-surface-subtle p-4 text-d-subhead text-ink-secondary">{application.note}</p> : null}
       </div>
     </section> : null}
+    {confirmDialog}
   </div></main>;
 }
 
@@ -499,4 +509,16 @@ function DetailItem({ label, value }: { label: string; value: string }) {
 
 function ReviewRow({ label, value }: { label: string; value: string }) {
   return <div className="grid grid-cols-[5rem_minmax(0,1fr)] items-start gap-3 px-4 py-3 text-sm sm:grid-cols-[auto_minmax(0,1fr)] sm:gap-6 sm:py-4"><span className="font-semibold text-ink-secondary">{label}</span><span className="min-w-0 whitespace-pre-wrap text-right font-bold text-ink [overflow-wrap:anywhere]">{value}</span></div>;
+}
+
+/** After submitting: the page starts at its heading, wherever the long form was scrolled to. */
+function SubmittedApplication({ listing }: { listing: PreviewListing }) {
+  const confirmation = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    window.scrollTo({ top: 0 });
+    confirmation.current?.focus({ preventScroll: true });
+  }, []);
+  return <main className="min-h-[calc(100dvh-72px)] bg-background"><div ref={confirmation} tabIndex={-1} className="page-container max-w-[640px] pb-16 pt-8 outline-none sm:pt-14">
+    <EmptyState mood="happy" title="申请已提交" headingLevel={1} body={<>转租人会在消息里联系你，状态变化会出现在「我的申请」。提交申请不付款，转租人接受后再付。</>} action={<div className="flex flex-wrap justify-center gap-3"><Link href="/applications" className="primary-action">查看我的申请</Link><Link href={`/inbox?listingId=${encodeURIComponent(listing.id)}`} className="secondary-action">打开消息</Link></div>} />
+  </div></main>;
 }

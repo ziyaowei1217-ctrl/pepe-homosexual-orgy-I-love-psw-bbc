@@ -31,6 +31,7 @@ import type { ApiRentalApplication, RentalApplicationStatus } from "@/lib/rental
 import { useMarketplaceSession } from "@/lib/use-marketplace-session";
 import { formatRangeLong, formatRangeShort } from "@/lib/date-format";
 import { cn } from "@/lib/utils";
+import { useConfirm } from "@/components/marketplace/confirm-dialog";
 
 export function HostDashboardExperience() {
   const token = useAuthSessionToken();
@@ -79,7 +80,8 @@ function HostDashboardExperienceSession() {
     {error || session.error ? <ErrorNotice text={error ?? session.error!} /> : null}
     {error || session.error ? <button type="button" onClick={() => { if (session.error) session.reload(); setLoadAttempt((attempt) => attempt + 1); }} className="secondary-action mt-4">重新加载工作台</button> : null}
     {session.token && (session.loading || loading) ? <p role="status" className="mt-6 text-sm font-bold text-ink-secondary">正在加载工作台…</p> : null}
-    {session.token ? <><section className="mt-7 grid grid-cols-3 gap-3 sm:gap-4" aria-label="关键指标">
+    {totalsReady && listings.length === 0 ? <SharedEmptyState className="mt-7" mood="happy" title="发布你的第一间房" body="准备好可租日期、转租月租和几张照片，再声明房东知情。平台审核通过后，租客就能在搜索里看到它。" action={<Link href="/host/listings/new" className="primary-action"><Plus className="size-4" aria-hidden="true" />发布房间</Link>} /> : null}
+    {session.token && !(totalsReady && listings.length === 0) ? <><section className="mt-7 grid grid-cols-3 gap-3 sm:gap-4" aria-label="关键指标">
       <Metric icon={ClipboardCheck} label="待处理申请" value={totalsReady ? String(pendingApplications) : "—"} href="/host/applications" />
       <Metric icon={CalendarDays} label="待确认预约" value={totalsReady ? String(pendingTours) : "—"} href="/inbox" />
       <Metric icon={Building2} label="在线房源" value={totalsReady ? String(publishedListings) : "—"} href="/host/listings" />
@@ -90,6 +92,7 @@ function HostDashboardExperienceSession() {
       {waitingApplications.length || waitingTours.length || inReview.length ? <ul className="mt-3 divide-y divide-line-strong">
         {waitingApplications.slice(0, 5).map((item) => <TodoRow key={item.id} href="/host/applications" icon={ClipboardCheck} title={`${item.contactName ?? item.memberSnapshots?.[0]?.displayName ?? "有人"}申请了「${item.listingTitle ?? "你的房间"}」`} detail={[item.moveIn && item.moveOut ? formatRangeLong(item.moveIn.slice(0, 10), item.moveOut.slice(0, 10)) : "", "看资料后接受或不通过"].filter(Boolean).join(" · ")} action="看申请" />)}
         {waitingTours.slice(0, 5).map(({ request, thread }) => <TodoRow key={request.id} href={`/inbox/${encodeURIComponent(thread.id)}`} icon={CalendarDays} title={`${thread.contactName ?? "有人"}想${request.mode === "video" ? "视频" : "线下"}看房`} detail={[request.timeLabel, thread.listingTitle].filter(Boolean).join(" · ")} action="确认时间" />)}
+        {waitingApplications.length > 5 ? <li><Link href="/host/applications" className="flex min-h-11 items-center py-3 font-rounded text-d-label text-primary-text">还有 {waitingApplications.length - 5} 份申请，去申请审核看全部</Link></li> : null}
         {inReview.slice(0, 5).map((item) => <TodoRow key={item.id} href="/host/listings" icon={Building2} title={`「${item.title}」在等平台审核`} detail="审核通过后会出现在搜索里，不用做什么。" />)}
       </ul> : <p className="mt-2 text-d-subhead text-ink-secondary">现在没有要处理的事。新的申请和看房请求会出现在这里。</p>}
     </section> : null}</> : null}
@@ -128,7 +131,7 @@ function HostListingsExperienceSession() {
     {error || session.error ? <ErrorNotice text={error ?? session.error!} /> : null}
     {error || session.error ? <button type="button" onClick={() => { if (session.error) session.reload(); setLoadAttempt((attempt) => attempt + 1); }} className="secondary-action mt-4">重新加载房源</button> : null}
     {session.token && (session.loading || loading) ? <p role="status" className="mt-6 text-sm font-bold text-ink-secondary">正在加载房源…</p> : null}
-    {session.user && !loading && visible.length === 0 && !error && !session.error ? <EmptyState text="这个状态下还没有房源。" /> : null}
+    {session.user && !loading && visible.length === 0 && !error && !session.error ? tab === "all" ? <SharedEmptyState className="mt-6" mood="sleepy" title="你还没有发布房间" body="寒暑假要回国？把房间挂出来，别让空房白交房租。" action={<Link href="/host/listings/new" className="primary-action"><Plus className="size-4" aria-hidden="true" />发布房间</Link>} /> : <EmptyState text="这个状态下还没有房源。" /> : null}
     <div className="mt-6 grid gap-5 lg:grid-cols-2">{visible.map((listing, index) => <article key={listing.id} className="grid overflow-hidden rounded-psw-xl bg-surface sm:grid-cols-[190px_minmax(0,1fr)]"><div className="relative min-h-48 bg-tag-neutral"><SmartImage src={getListingCoverUrl(listing)} alt={listing.title} fill priority={index < 4} fetchPriority={index < 4 ? "high" : "auto"} sizes="190px" className="object-cover" /></div><div className="flex flex-col p-5"><span className={cn("w-fit rounded-psw-sm px-2.5 py-1 text-m-footnote font-bold", listing.status === "APPROVED" ? "bg-success-soft text-success-text" : listing.status === "SUBMITTED" ? "bg-warning-soft text-warning-text" : "bg-tag-neutral text-ink-secondary")}>{statusLabel(listing.status)}</span><h2 className="mt-3 text-d-card-title text-ink">{listing.title}</h2><p className="mt-1 flex items-center gap-1 text-m-footnote text-ink-secondary"><MapPin className="size-3.5" aria-hidden="true" />{listing.area}</p>{listing.availableFrom && listing.availableTo ? <p className="mt-1 flex items-center gap-1 text-m-footnote font-semibold text-ink"><CalendarDays className="size-3.5" aria-hidden="true" />{formatRangeShort(listing.availableFrom.slice(0, 10), listing.availableTo.slice(0, 10))} 可住</p> : null}{listing.status === "SUBMITTED" ? <p className="mt-1 text-m-footnote text-ink-secondary">平台审核通过后出现在搜索里。</p> : null}<p className="mt-3"><span className="font-display text-[22px] font-extrabold leading-7 text-primary-text">${listing.price.toLocaleString("en-US")}</span><span className="ml-1 text-m-footnote text-ink-secondary">/ 月</span></p><div className="mt-auto flex gap-2 pt-5"><Link href={`/host/listings/${listing.id}`} className="secondary-action"><Pencil className="size-3.5" />管理</Link>{listing.status === "APPROVED" ? <Link href={`/listing/${listing.id}`} className="secondary-action"><Eye className="size-3.5" aria-hidden="true" />看租客看到的样子</Link> : null}</div></div></article>)}</div>
   </HostPage>;
 }
@@ -139,6 +142,7 @@ export function HostApplicationsExperience() {
 }
 
 function HostApplicationsExperienceSession() {
+  const [confirmDialog, confirm] = useConfirm();
   const session = useMarketplaceSession();
   const [applications, setApplications] = useState<ApiRentalApplication[]>([]);
   const [pendingId, setPendingId] = useState<string | null>(null);
@@ -185,9 +189,12 @@ function HostApplicationsExperienceSession() {
       setDecisionError({ id: application.id, message: "登录账号已变化，请刷新页面后再操作。" });
       return;
     }
-    const reason = decision === "reject" ? window.prompt("请输入拒绝原因")?.trim() : undefined;
-    if (decision === "reject" && !reason) return;
-    if (!window.confirm(decision === "accept" ? "确认接受这份申请？" : "确认拒绝这份申请？")) return;
+    const who = application.contactName ?? application.memberSnapshots?.[0]?.displayName ?? "申请人";
+    const answer = await confirm(decision === "accept"
+      ? { title: `接受${who}的申请？`, body: "接受后，这份申请进入签约和付款。", confirmLabel: "接受申请" }
+      : { title: `不通过${who}的申请？`, body: "请写一句原因，对方会看到。", confirmLabel: "不通过", tone: "danger", reason: { label: "不通过的原因", placeholder: "例如：入住日期和可租期对不上" } });
+    if (answer === false) return;
+    const reason = decision === "reject" ? answer : undefined;
     busy.current = true;
     loadVersion.current++;
     setPendingId(application.id);
@@ -226,11 +233,12 @@ function HostApplicationsExperienceSession() {
     {!session.token ? <LoginGate text="登录后查看收到的申请" returnTo="/host/applications" /> : null}
     {loadError || session.error ? <ErrorNotice text={loadError ?? session.error!} /> : null}
     {session.token && (session.loading || loading) ? <p role="status" className="mt-6 text-sm font-bold text-ink-secondary">正在加载申请…</p> : null}
-    {session.user && !loading && applications.length === 0 && !loadError && !session.error ? <EmptyState text="暂时没有租房申请。" /> : null}
+    {session.user && !loading && applications.length === 0 && !loadError && !session.error ? <SharedEmptyState className="mt-6" mood="sleepy" title="暂时没有租房申请。" body="房间上架后，租客的申请会出现在这里，你可以先看资料再决定。" action={<Link href="/host/listings" className="secondary-action">看我的房源</Link>} /> : null}
     <fieldset disabled={loading || session.loading || Boolean(pendingId)} className="mt-6 grid min-w-0 gap-4" aria-label="申请列表">{applications.map((application) => {
       const presentation = getHostApplicationPresentation(application.status);
       return <article key={application.id} className="min-w-0 [overflow-wrap:anywhere] rounded-psw-xl border border-line-strong bg-surface p-5"><div className="flex flex-col justify-between gap-4 sm:flex-row"><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><h2 className="text-m-headline sm:text-d-headline font-bold">{application.listingTitle ?? "房源申请"}</h2><span className={cn("rounded-psw-sm px-2.5 py-1 text-m-footnote font-bold", application.status === "SUBMITTED" ? "bg-warning-soft text-warning-text" : "bg-tag-neutral text-ink-secondary")}>{presentation.statusLabel}</span></div><p className="mt-2 text-d-subhead text-ink-secondary">{application.memberSnapshots.map((item) => item.displayName).join("、") || "个人申请"} · {formatRangeLong(application.moveIn.slice(0, 10), application.moveOut.slice(0, 10))}</p><p className="mt-3 text-sm font-bold">{application.schoolOrOccupation}</p>{application.contactName || application.contactEmail ? <p className="mt-2 text-sm text-ink-secondary">联系人：{[application.contactName, application.contactEmail].filter(Boolean).join(" · ")}</p> : null}<HostApplicationFacts application={application} />{application.note ? <p className="mt-3 whitespace-pre-wrap rounded-psw-lg bg-surface-muted p-4 text-sm leading-6 text-ink-secondary">{application.note}</p> : null}</div><div className="flex shrink-0 flex-wrap gap-2 sm:flex-col">{application.status === "SUBMITTED" ? <><button disabled={Boolean(pendingId) || loading || session.loading || Boolean(session.error)} onClick={() => void decide(application, "accept")} className="primary-action">{pendingId === application.id ? "正在处理…" : "接受申请"}</button><button disabled={Boolean(pendingId) || loading || session.loading || Boolean(session.error)} onClick={() => void decide(application, "reject")} className="secondary-action text-danger-text">不通过</button></> : null}<Link href={`/inbox?${new URLSearchParams({ listingId: application.listingId, applicantId: application.submitterId }).toString()}`} className="secondary-action"><MessageCircle className="size-4" />{presentation.contactLabel}</Link></div></div>{decisionError?.id === application.id ? <p role="alert" className="mt-4 rounded-psw-lg bg-danger-soft p-4 text-sm font-bold text-danger-text">{decisionError.message}</p> : null}{notice?.id === application.id ? <p role="status" className="mt-4 rounded-psw-lg bg-surface-subtle p-4 text-sm font-bold text-ink">{notice.message}</p> : null}{session.token && session.user ? <ApplicationCancellation application={application} token={session.token} currentUserId={session.user.id} onApplicationChange={applyApplication} /> : null}{session.token && session.user && (application.status === "ACCEPTED" || application.status === "COMPLETED" || application.status === "CANCELLATION_PENDING" || application.status === "CANCELLED") ? <div className="mt-5"><PaymentPanel application={application} token={session.token} currentUserId={session.user.id} onApplicationChange={applyApplication} /></div> : null}</article>;
     })}</fieldset>
+    {confirmDialog}
   </HostPage>;
 }
 

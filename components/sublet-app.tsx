@@ -262,6 +262,7 @@ import {
   type PublishSaveResult,
   type PublishStep
 } from "@/lib/publish-listing";
+import { formatRangeLong } from "@/lib/date-format";
 
 type Listing = {
   id: string;
@@ -6709,6 +6710,10 @@ export function PublishingFlow({
   const [submittedResult, setSubmittedResult] = useState<PublishSaveResult | null>(null);
   const formRef = useRef<HTMLDivElement>(null);
   const step = steps[stepIndex];
+  // Each error sits under its own field; only errors without a field (photos) stay at the bottom.
+  const fieldErrors: Record<string, string> = {};
+  for (const error of errors) { const field = getPublishErrorFieldName(error); if (field && !fieldErrors[field]) fieldErrors[field] = error; }
+  const otherErrors = errors.filter((error) => !getPublishErrorFieldName(error));
 
   function updateDraft(patch: Partial<PublishDraft>) {
     setDraft((current) => ({ ...current, ...patch }));
@@ -6854,14 +6859,14 @@ export function PublishingFlow({
         <div ref={formRef} className="mt-4 rounded-md border bg-surface p-4">
           {step.key === "basic" ? (
             <div className="grid gap-3 md:grid-cols-2">
-              <PublishField name="title" label="房源标题" placeholder="例如：Westwood 两室中的主卧，步行到 UCLA" value={draft.title} onChange={(value) => updateDraft({ title: value })} />
-              <PublishField name="area" label="区域" placeholder="例如：Los Angeles · Westwood" value={draft.area} onChange={(value) => updateDraft({ area: value })} />
-              <PublishField name="availableFrom" type="date" label="可入住日期" value={draft.availableFrom} onChange={(value) => updateDraft({ availableFrom: value })} />
-              <PublishField name="availableTo" type="date" label="最晚退租日期" value={draft.availableTo} onChange={(value) => updateDraft({ availableTo: value })} />
-              <PublishNumberField name="beds" label="卧室" value={draft.beds} min={0} onChange={(value) => updateDraft({ beds: value })} />
-              <PublishNumberField name="baths" label="卫浴" value={draft.baths} min={0} onChange={(value) => updateDraft({ baths: value })} />
-              <PublishField name="commute" label="通勤说明" placeholder="例如：步行 8 分钟到 UCLA" value={draft.commute} onChange={(value) => updateDraft({ commute: value })} />
-              <PublishField name="transit" label="交通说明" placeholder="例如：楼下有 Metro 公交站" value={draft.transit} onChange={(value) => updateDraft({ transit: value })} />
+              <PublishField error={fieldErrors.title} name="title" label="房源标题" placeholder="例如：Westwood 两室中的主卧，步行到 UCLA" value={draft.title} onChange={(value) => updateDraft({ title: value })} />
+              <PublishField error={fieldErrors.area} name="area" label="区域" placeholder="例如：Los Angeles · Westwood" value={draft.area} onChange={(value) => updateDraft({ area: value })} />
+              <PublishField error={fieldErrors.availableFrom} name="availableFrom" type="date" label="可入住日期" value={draft.availableFrom} onChange={(value) => updateDraft({ availableFrom: value })} />
+              <PublishField error={fieldErrors.availableTo} name="availableTo" type="date" label="最晚退租日期" value={draft.availableTo} onChange={(value) => updateDraft({ availableTo: value })} />
+              <PublishNumberField error={fieldErrors.beds} name="beds" label="卧室" value={draft.beds} min={0} onChange={(value) => updateDraft({ beds: value })} />
+              <PublishNumberField error={fieldErrors.baths} name="baths" label="卫浴" value={draft.baths} min={0} onChange={(value) => updateDraft({ baths: value })} />
+              <PublishField error={fieldErrors.commute} name="commute" label="到学校或公司的通勤" placeholder="例如：步行 8 分钟到 UCLA" value={draft.commute} onChange={(value) => updateDraft({ commute: value })} />
+              <PublishField error={fieldErrors.transit} name="transit" label="附近交通" placeholder="例如：楼下有 Metro 公交站，可以路边停车" value={draft.transit} onChange={(value) => updateDraft({ transit: value })} />
             </div>
           ) : null}
 
@@ -6883,8 +6888,8 @@ export function PublishingFlow({
           {step.key === "pricing" ? (
             <div className="grid gap-4">
               <div className="grid gap-3 md:grid-cols-2">
-                <PublishNumberField name="price" label="月租" value={draft.price} min={1} onChange={(value) => updateDraft({ price: value })} />
-                <PublishNumberField name="originalPrice" label="原价" value={draft.originalPrice} min={1} onChange={(value) => updateDraft({ originalPrice: value })} />
+                <PublishNumberField error={fieldErrors.price} name="price" label="转租月租（美元）" hint="租客看到的月租；选了日期的租客会看到按天折算的总价。" value={draft.price} min={1} onChange={(value) => updateDraft({ price: value })} />
+                <PublishNumberField error={fieldErrors.originalPrice} name="originalPrice" label="原租约月租（美元）" hint="你和房东签的月租。转租价可以比它低。" value={draft.originalPrice} min={1} onChange={(value) => updateDraft({ originalPrice: value })} />
               </div>
               <fieldset>
                 <legend className="text-sm font-semibold">设施</legend>
@@ -6893,11 +6898,13 @@ export function PublishingFlow({
                     <Button key={tag} name={tag === "Wi-Fi" ? "tags" : undefined} variant={draft.tags.includes(tag) ? "secondary" : "outline"} aria-pressed={draft.tags.includes(tag)} onClick={() => toggleTag(tag)}>{tag}</Button>
                   ))}
                 </div>
+                {fieldErrors.tags ? <p className="mt-2 text-m-footnote font-semibold text-danger-text">{fieldErrors.tags}</p> : null}
               </fieldset>
               <label className="flex items-start gap-3 rounded-md border bg-secondary p-3 text-sm font-semibold">
                 <input name="landlordAware" type="checkbox" className="mt-1" checked={draft.landlordAware} onChange={(event) => updateDraft({ landlordAware: event.target.checked })} />
                 <span>我声明房东知道并同意这次转租。这是你的声明，平台不核验租约，租客可能会请你出示租约。</span>
               </label>
+              {fieldErrors.landlordAware ? <p className="-mt-2 text-m-footnote font-semibold text-danger-text">{fieldErrors.landlordAware}</p> : null}
             </div>
           ) : null}
 
@@ -6906,9 +6913,8 @@ export function PublishingFlow({
               <div className="grid gap-3 md:grid-cols-2">
                 <PublishReviewItem label="标题" value={draft.title || "未填写"} />
                 <PublishReviewItem label="区域" value={draft.area || "未填写"} />
-                <PublishReviewItem label="可入住日期" value={draft.availableFrom || "未填写"} />
-                <PublishReviewItem label="最晚退租日期" value={draft.availableTo || "未填写"} />
-                <PublishReviewItem label="价格" value={`$${draft.price.toLocaleString("en-US")} / 月`} />
+                <PublishReviewItem label="可租日期" value={draft.availableFrom && draft.availableTo ? formatRangeLong(draft.availableFrom, draft.availableTo) : "未填写"} />
+                <PublishReviewItem label="转租月租" value={`$${draft.price.toLocaleString("en-US")} / 月`} />
                 <PublishReviewItem label="图片" value={`${mediaSummary.readyCount} 张已保存图片`} />
                 <PublishReviewItem label="设施" value={draft.tags.join("、") || "未选择"} />
                 <PublishReviewItem label="信任信息" value={draft.landlordAware ? "房东知情：转租人声明 · 待平台审核" : "房东是否知情：未声明 · 待平台审核"} />
@@ -6928,8 +6934,9 @@ export function PublishingFlow({
           ) : null}
 
           {errors.length > 0 ? (
-            <div className="mt-4 rounded-md border border-danger/30 bg-danger-soft p-3 text-sm font-semibold text-danger-text" role="alert">
-              {errors.map((error) => <div key={error}>{error}</div>)}
+            <div className="mt-4 rounded-psw-md bg-danger-soft p-3 text-d-subhead font-semibold text-danger-text" role="alert">
+              {otherErrors.map((error) => <div key={error}>{error}</div>)}
+              {errors.length > otherErrors.length ? <div>还有 {errors.length - otherErrors.length} 处要填，已标在对应的输入框下面。</div> : null}
             </div>
           ) : null}
           <div className="mt-4 flex items-center justify-between">
@@ -6951,6 +6958,8 @@ function PublishField({
   type = "text",
   disabled = false,
   placeholder,
+  hint,
+  error,
   onChange
 }: {
   name: string;
@@ -6960,12 +6969,18 @@ function PublishField({
   disabled?: boolean;
   /** An example of a good answer, so a first-time 转租人 knows what to write. */
   placeholder?: string;
+  hint?: string;
+  /** The field's own error, shown under it and announced with it. */
+  error?: string;
   onChange: (value: string) => void;
 }) {
+  const describedBy = [hint ? `${name}-hint` : "", error ? `${name}-error` : ""].filter(Boolean).join(" ") || undefined;
   return (
     <label className="grid gap-2 text-d-label text-ink-secondary">
       {label}
-      <Input name={name} type={type} value={value} disabled={disabled} placeholder={placeholder} onChange={(event) => onChange(event.target.value)} />
+      <Input name={name} type={type} value={value} disabled={disabled} placeholder={placeholder} aria-invalid={error ? true : undefined} aria-describedby={describedBy} className={error ? "border-danger" : undefined} onChange={(event) => onChange(event.target.value)} />
+      {hint ? <span id={`${name}-hint`} className="text-m-footnote font-normal text-ink-secondary">{hint}</span> : null}
+      {error ? <span id={`${name}-error`} className="text-m-footnote font-semibold text-danger-text">{error}</span> : null}
     </label>
   );
 }
@@ -6975,18 +6990,25 @@ function PublishNumberField({
   label,
   value,
   min,
+  hint,
+  error,
   onChange
 }: {
   name: string;
   label: string;
   value: number;
   min: number;
+  hint?: string;
+  error?: string;
   onChange: (value: number) => void;
 }) {
+  const describedBy = [hint ? `${name}-hint` : "", error ? `${name}-error` : ""].filter(Boolean).join(" ") || undefined;
   return (
-    <label className="grid gap-2 text-sm font-semibold">
+    <label className="grid gap-2 text-d-label text-ink-secondary">
       {label}
-      <Input name={name} type="number" min={min} value={value} onChange={(event) => onChange(Number(event.target.value))} />
+      <Input name={name} type="number" inputMode="numeric" min={min} value={value} aria-invalid={error ? true : undefined} aria-describedby={describedBy} className={error ? "border-danger" : undefined} onChange={(event) => onChange(Number(event.target.value))} />
+      {hint ? <span id={`${name}-hint`} className="text-m-footnote font-normal text-ink-secondary">{hint}</span> : null}
+      {error ? <span id={`${name}-error`} className="text-m-footnote font-semibold text-danger-text">{error}</span> : null}
     </label>
   );
 }

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 
 import { RoommateTeamExperience } from "../components/marketplace/roommate-team-experience";
@@ -15,7 +15,6 @@ afterEach(() => {
 
 it("keeps the team intact when the user dismisses the leave confirmation", async () => {
   writeStoredAuthSession("team-token");
-  vi.spyOn(window, "confirm").mockReturnValue(false);
   let leaveRequests = 0;
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
@@ -28,6 +27,9 @@ it("keeps the team intact when the user dismisses the leave confirmation", async
   render(<RoommateTeamExperience />);
   const leave = await screen.findByRole("button", { name: "退出小组" });
   await act(async () => { fireEvent.click(leave); });
+  // The site's dialog asks first; dismissing it leaves the team alone.
+  await act(async () => { fireEvent.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "先不" })); });
+  expect(screen.queryByRole("alertdialog")).toBeNull();
   expect(leaveRequests).toBe(0);
   expect(screen.getByRole("button", { name: "退出小组" })).toBeDefined();
 });
@@ -75,7 +77,6 @@ it("recovers a failed team load without falsely reporting that there are no team
 });
 
 it("sends the displayed team ID when another tab replaces the current team under the same session", async () => {
-  vi.spyOn(window, "confirm").mockReturnValue(true);
   writeStoredAuthSession("same-session");
   const first = team("team-a", "user-b");
   let current = first;
@@ -96,6 +97,7 @@ it("sends the displayed team ID when another tab replaces the current team under
   const leave = await screen.findByRole("button", { name: "退出小组" });
   current = team("team-b", "user-c");
   fireEvent.click(leave);
+  fireEvent.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "退出小组" }));
 
   await waitFor(() => expect(commands).toEqual([{ teamId: "team-a" }]));
   expect((await screen.findByRole("alert")).textContent).toBeTruthy();

@@ -20,6 +20,7 @@ import {
   runMediaUploadQueue
 } from "@/lib/listing-media";
 import { toProductApiError } from "@/lib/product-errors";
+import { useConfirm } from "@/components/marketplace/confirm-dialog";
 
 type MediaRow = {
   key: string;
@@ -44,6 +45,7 @@ export function ListingMediaUploader({
   onSummaryChange(summary: ListingMediaSummary): void;
 }) {
   const [rows, setRows] = useState<MediaRow[]>([]);
+  const [confirmDialog, confirm] = useConfirm();
   const [mutationPending, setMutationPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const previews = useRef(new Set<string>());
@@ -200,7 +202,7 @@ export function ListingMediaUploader({
 
   async function remove(row: MediaRow) {
     if (disabled || mutationPending) return;
-    if (typeof window !== "undefined" && !window.confirm("删除这张图片？")) return;
+    if (await confirm({ title: "删除这张照片？", confirmLabel: "删除", tone: "danger" }) === false) return;
     setMutationPending(true);
     try {
       assertCurrentAuthSession(token);
@@ -297,6 +299,7 @@ export function ListingMediaUploader({
       )}
 
       {error ? <p role="alert" className="text-sm font-semibold text-destructive">{error}</p> : null}
+      {confirmDialog}
     </section>
   );
 }
