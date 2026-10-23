@@ -17,7 +17,7 @@ const required = {
   tags: ["带家具"]
 };
 
-async function errors(type: typeof CreateListingDto | typeof UpdateListingDto, body: Record<string, unknown>) {
+async function errors<T extends object>(type: new () => T, body: Record<string, unknown>) {
   return (await validate(plainToInstance(type, body), { whitelist: true, forbidNonWhitelisted: true })).map((error) => error.property);
 }
 
