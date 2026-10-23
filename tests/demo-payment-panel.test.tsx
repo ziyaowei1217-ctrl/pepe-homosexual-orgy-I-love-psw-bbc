@@ -33,7 +33,7 @@ describe("DemoPaymentPanel", () => {
     expect(renderer.root.findAllByType("input")).toHaveLength(0);
     const success = renderer.root.findAllByType("button").find((node) => text(node).includes("模拟支付成功"))!;
     await act(async () => success.props.onClick());
-    expect(text(renderer.root)).toContain("资金已持有");
+    expect(text(renderer.root)).toContain("平台代管中");
   });
 
   it("disables move-in confirmation before the agreed date and explains when it becomes available", async () => {
@@ -52,7 +52,7 @@ describe("DemoPaymentPanel", () => {
 
     const confirm = renderer.root.findAllByType("button").find((node) => text(node).includes("确认已入住"));
     expect(confirm?.props.disabled).toBe(true);
-    expect(text(renderer.root)).toContain("2026-09-01 起可确认入住");
+    expect(text(renderer.root)).toContain("9月1日起可确认入住");
   });
 
   it("renders the immutable double-entry ledger returned by the server", async () => {
@@ -72,7 +72,7 @@ describe("DemoPaymentPanel", () => {
     });
 
     const rendered = text(renderer.root);
-    expect(rendered).toContain("不可变资金流水");
+    expect(rendered).toContain("查看资金流水");
     expect(rendered).toContain("租客清算账户");
     expect(rendered).toContain("托管资金账户");
     expect(rendered).toContain("$1,850.00");

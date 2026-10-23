@@ -2,14 +2,16 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { Badge } from "@/components/ui/badge";
+import { CheckCircle2, Circle, Info } from "lucide-react";
+
+import { PaymentAmount, PaymentError, PaymentShell, paymentQuietAction, type PaymentTone } from "@/components/payment-shell";
 import { assertCurrentAuthSession } from "@/lib/auth-session";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { formatDateLong } from "@/lib/date-format";
 import {
   DEMO_PAYMENT_DISCLAIMER,
   canConfirmDemoMoveIn,
   demoLedgerAccountLabel,
+  demoLedgerEventLabel,
   confirmDemoMoveIn,
   demoPaymentStatusLabel,
   getDemoPaymentState,
@@ -24,12 +26,14 @@ export function DemoPaymentPanel({
   application,
   token,
   currentUserId,
-  onApplicationChange
+  onApplicationChange,
+  inset = false
 }: {
   application: ApiRentalApplication;
   token: string;
   currentUserId: string;
   onApplicationChange?: (application: ApiRentalApplication) => void;
+  inset?: boolean;
 }) {
   const [state, setState] = useState<ApiDemoPaymentState | null>(null);
   const [pending, setPending] = useState(false);
@@ -84,56 +88,62 @@ export function DemoPaymentPanel({
   const needsConfirmation = application.status === "ACCEPTED" && heldFund?.status === "HELD" && ((isRenter && !heldFund.renterConfirmedAt) || (isOwner && !heldFund.ownerConfirmedAt));
   const moveInEligible = canConfirmDemoMoveIn(application.moveIn);
   const canConfirm = needsConfirmation && moveInEligible;
+  const canSimulate = payment?.status === "AWAITING_ATTEMPT" && isRenter && application.status === "ACCEPTED";
+  const tone: PaymentTone = !payment ? "neutral" : payment.status === "AWAITING_ATTEMPT" ? "waiting" : payment.status === "HELD" || payment.status === "RELEASED" ? "done" : "neutral";
 
   return (
-    <Card className="border-primary-soft-hover bg-surface-subtle/30 shadow-card">
-      <CardHeader>
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div><CardTitle>演示支付与资金状态</CardTitle><CardDescription>{DEMO_PAYMENT_DISCLAIMER}</CardDescription></div>
-          {payment ? <Badge variant={payment.status === "RELEASED" ? "success" : "trust"}>{demoPaymentStatusLabel(payment.status)}</Badge> : <Badge variant="secondary">读取中</Badge>}
+    <PaymentShell inset={inset} status={payment ? demoPaymentStatusLabel(payment.status) : "读取中"} tone={tone}>
+      <p className="mt-3 flex items-start gap-2 rounded-psw-md bg-surface-subtle p-3 text-d-subhead font-semibold text-ink"><Info className="mt-0.5 size-4 shrink-0 text-primary-text" aria-hidden="true" />{DEMO_PAYMENT_DISCLAIMER}。下面的按钮只用来模拟付款结果。</p>
+      {payment ? <PaymentAmount label="付款金额" amount={money(payment.amountCents, payment.currency)} detail={application.scope === "TEAM" ? "两人小组申请" : "个人申请"} note={amountNote[payment.status]} /> : null}
+      {state?.attempts.at(-1)?.outcome === "FAILED" && canSimulate ? <p className="mt-4 text-d-subhead font-semibold text-danger-text">上次模拟付款失败，可以再试；没有真实扣款。</p> : null}
+      {heldFund ? <ul className="mt-5 grid gap-2" aria-label="确认入住">
+        <ConfirmRow done={Boolean(heldFund.renterConfirmedAt)} label={isRenter ? "你确认入住" : "租客确认入住"} />
+        <ConfirmRow done={Boolean(heldFund.ownerConfirmedAt)} label={isOwner ? "你确认入住" : "转租人确认入住"} />
+      </ul> : null}
+      {needsConfirmation && !moveInEligible ? <p className="mt-3 text-m-footnote text-ink-secondary">{formatDateLong(application.moveIn.slice(0, 10))}起可确认入住。</p> : null}
+      {canSimulate || needsConfirmation ? <div className="mt-5 flex flex-wrap items-center gap-2">
+        {canSimulate ? <><button type="button" disabled={pending} onClick={() => void run("success")} className="primary-action">模拟支付成功</button><button type="button" disabled={pending} onClick={() => void run("failure")} className={paymentQuietAction}>模拟支付失败</button></> : null}
+        {needsConfirmation ? <button type="button" disabled={pending || !canConfirm} onClick={() => void run("confirm")} className="primary-action disabled:opacity-50">确认已入住</button> : null}
+      </div> : null}
+      {state?.ledgerEntries.length ? <details className="group mt-5 rounded-psw-lg border border-line-strong">
+        <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 px-4 font-rounded text-sm font-bold text-ink">查看资金流水<span className="text-m-footnote font-normal text-ink-secondary group-open:hidden">{state.ledgerEntries.length} 条</span></summary>
+        <div className="border-t border-line-strong px-4 pb-4 pt-3">
+          <p className="text-m-footnote text-ink-secondary">每笔事件按借贷成对记录，历史记录不可修改。</p>
+          <ul className="mt-2 grid gap-1.5">
+            {state.ledgerEntries.map((entry) => (
+              <li key={entry.id} className="flex flex-wrap items-center justify-between gap-2 text-m-footnote text-ink-secondary">
+                <span>{demoLedgerEventLabel(entry.event)} · {demoLedgerAccountLabel(entry.account)} · {entry.direction === "DEBIT" ? "借记" : "贷记"}</span>
+                <span className="font-semibold tabular-nums text-ink">{money(entry.amountCents, "USD", true)}</span>
+              </li>
+            ))}
+          </ul>
         </div>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <p className="rounded-md bg-surface p-3 text-sm font-extrabold text-foreground">{DEMO_PAYMENT_DISCLAIMER}</p>
-        {payment ? (
-          <div className="grid gap-3">
-            <div className="flex justify-between rounded-md border bg-surface p-3 text-sm font-bold"><span>{application.scope === "TEAM" ? "两人小组申请" : "个人申请"}</span><span>${(payment.amountCents / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {payment.currency}</span></div>
-            {payment.status === "AWAITING_ATTEMPT" && isRenter && application.status === "ACCEPTED" ? <div className="flex flex-wrap gap-2"><Button disabled={pending} onClick={() => void run("success")}>模拟支付成功</Button><Button variant="outline" disabled={pending} onClick={() => void run("failure")}>模拟支付失败</Button></div> : null}
-            {state?.attempts.at(-1)?.outcome === "FAILED" ? <p className="text-sm font-semibold text-destructive">上次模拟失败，可重试；未发生真实扣款。</p> : null}
-            {heldFund ? (
-              <div className="grid gap-2 rounded-md border bg-surface p-3 text-sm font-semibold">
-                <div className="flex justify-between"><span>租客确认入住</span><span>{heldFund.renterConfirmedAt ? "已确认" : "待确认"}</span></div>
-                <div className="flex justify-between"><span>房东确认入住</span><span>{heldFund.ownerConfirmedAt ? "已确认" : "待确认"}</span></div>
-                <div className="flex justify-between"><span>资金状态</span><span>{demoPaymentStatusLabel(payment.status)}</span></div>
-              </div>
-            ) : null}
-            {state?.ledgerEntries.length ? (
-              <section className="grid gap-2 rounded-md border bg-surface p-3" aria-label="不可变资金流水">
-                <div>
-                  <h4 className="text-sm font-extrabold text-foreground">不可变资金流水</h4>
-                  <p className="text-m-footnote font-semibold text-muted-foreground">每笔事件按借贷成对记录，历史记录不可修改。</p>
-                </div>
-                <ul className="grid gap-2">
-                  {state.ledgerEntries.map((entry) => (
-                    <li key={entry.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-secondary/50 px-3 py-2 text-m-footnote font-semibold">
-                      <span>{entry.event} · {demoLedgerAccountLabel(entry.account)} · {entry.direction === "DEBIT" ? "借记" : "贷记"}</span>
-                      <span>${(entry.amountCents / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            ) : null}
-            {needsConfirmation ? (
-              <div className="grid gap-2">
-                <Button variant="accept" disabled={pending || !canConfirm} onClick={() => void run("confirm")}>确认已入住</Button>
-                {!moveInEligible ? <p className="text-m-footnote font-semibold text-muted-foreground">{application.moveIn.slice(0, 10)} 起可确认入住。</p> : null}
-              </div>
-            ) : null}
-          </div>
-        ) : null}
-        {pending ? <p className="text-m-footnote text-muted-foreground">正在同步服务端状态…</p> : null}
-        {error ? <p role="alert" className="text-sm font-semibold text-destructive">{error}</p> : null}
-      </CardContent>
-    </Card>
+      </details> : null}
+      {pending ? <p className="mt-4 text-m-footnote text-ink-secondary">正在同步付款状态…</p> : null}
+      {error ? <PaymentError message={error} /> : null}
+    </PaymentShell>
   );
+}
+
+const amountNote: Record<ApiDemoPaymentState["payment"]["status"], string> = {
+  AWAITING_ATTEMPT: "付款后由平台代管，你和转租人都确认入住后才转给转租人。",
+  HELD: "平台代管中，双方都确认入住后转给转租人。",
+  RELEASED: "双方都确认了入住，款项已转给转租人。",
+  REFUNDED: "款项已退回给租客。",
+  CLOSED: "订单已关闭。"
+};
+
+function ConfirmRow({ done, label }: { done: boolean; label: string }) {
+  const Icon = done ? CheckCircle2 : Circle;
+  return <li className="flex items-center justify-between gap-3 text-d-subhead">
+    <span className="flex items-center gap-2 text-ink"><Icon className={done ? "size-5 text-success-text" : "size-5 text-line-strong"} aria-hidden="true" />{label}</span>
+    <span className={done ? "font-semibold text-success-text" : "text-ink-secondary"}>{done ? "已确认" : "待确认"}</span>
+  </li>;
+}
+
+/** Whole dollars read like every other price on the site; the ledger keeps the cents. */
+function money(cents: number, currency: string, exact = false) {
+  const dollars = cents / 100;
+  const text = `$${dollars.toLocaleString("en-US", { minimumFractionDigits: exact || !Number.isInteger(dollars) ? 2 : 0, maximumFractionDigits: 2 })}`;
+  return currency === "USD" ? text : `${text} ${currency}`;
 }

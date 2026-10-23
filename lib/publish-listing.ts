@@ -8,8 +8,10 @@ export type PublishDraft = {
   beds: number;
   baths: number;
   commute: string;
+  /** Optional: may be empty. */
   transit: string;
   price: number;
+  /** Optional: 0 means "not given", sent as the rent (no discount). */
   originalPrice: number;
   tags: string[];
   landlordAware: boolean;
@@ -66,7 +68,6 @@ export function getPublishStepErrors(
     if (!Number.isInteger(draft.beds) || draft.beds < 0) errors.push("请填写有效卧室数。");
     if (!Number.isInteger(draft.baths) || draft.baths < 0) errors.push("请填写有效卫浴数。");
     if (!draft.commute.trim()) errors.push("请填写通勤说明。");
-    if (!draft.transit.trim()) errors.push("请填写交通说明。");
   }
 
   if (step === "media" || step === "review") {
@@ -83,7 +84,7 @@ export function getPublishStepErrors(
 
   if (step === "pricing" || step === "review") {
     if (!Number.isInteger(draft.price) || draft.price < 1) errors.push("请填写有效月租。");
-    if (!Number.isInteger(draft.originalPrice) || draft.originalPrice < 1) errors.push("请填写有效原价。");
+    if (draft.originalPrice && (!Number.isInteger(draft.originalPrice) || draft.originalPrice < 1)) errors.push("原租约月租要填整数美元，或者留空。");
     if (draft.tags.length === 0) errors.push("请至少选择一项设施。");
     if (!draft.landlordAware) errors.push("请确认房东知情声明。");
   }
@@ -105,7 +106,7 @@ export function mapPublishDraftToListingDto(draft: PublishDraft): ListingDto {
     availableFrom: draft.availableFrom,
     availableTo: draft.availableTo,
     price: draft.price,
-    originalPrice: draft.originalPrice,
+    originalPrice: draft.originalPrice > 0 ? draft.originalPrice : draft.price,
     beds: draft.beds,
     baths: draft.baths,
     commute: draft.commute.trim(),
@@ -129,7 +130,8 @@ export function mapApiListingToPublishDraft(listing: ApiListing): PublishDraft {
     commute: listing.commute,
     transit: listing.transit,
     price: listing.price,
-    originalPrice: listing.originalPrice,
+    // An original rent equal to the rent is what an empty field was saved as; show it empty again.
+    originalPrice: listing.originalPrice === listing.price ? 0 : listing.originalPrice,
     tags: listing.tags.filter((tag) => tag !== "房东知情"),
     landlordAware:
       listing.tags.includes("房东知情") ||

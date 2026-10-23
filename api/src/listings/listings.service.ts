@@ -66,11 +66,12 @@ export class ListingsService {
         image: null,
         ...availability,
         price: dto.price,
-        originalPrice: dto.originalPrice,
+        // Both are optional for the 转租人: no original rent means no discount, no transit line means none shown.
+        originalPrice: dto.originalPrice ?? dto.price,
         beds: dto.beds,
         baths: dto.baths,
         commute: dto.commute,
-        transit: dto.transit,
+        transit: dto.transit ?? "",
         trust: dto.trust,
         tags: dto.tags,
         score: dto.score ?? 4.8

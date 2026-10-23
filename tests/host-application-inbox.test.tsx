@@ -19,7 +19,7 @@ describe("HostApplicationInbox", () => {
       .mockResolvedValueOnce(jsonResponse({ mode: "demo" }))
       .mockResolvedValueOnce(jsonResponse(paymentState()));
     vi.stubGlobal("fetch", fetchMock);
-    const confirmDecision = vi.fn(() => true);
+    const confirmDecision = vi.fn(async () => "");
     let renderer!: TestRenderer.ReactTestRenderer;
     await act(async () => {
       renderer = TestRenderer.create(
@@ -45,8 +45,8 @@ describe("HostApplicationInbox", () => {
       .mockResolvedValueOnce(jsonResponse(application("CANCELLED")))
       .mockResolvedValueOnce(jsonResponse([application("CANCELLED")]));
     vi.stubGlobal("fetch", fetchMock);
-    const confirmDecision = vi.fn(() => true);
-    const requestReason = vi.fn(() => "房源计划改变");
+    // The reason is asked for in the same dialog.
+    const confirmDecision = vi.fn(async () => "房源计划改变");
     let renderer!: TestRenderer.ReactTestRenderer;
     await act(async () => {
       renderer = TestRenderer.create(
@@ -54,7 +54,6 @@ describe("HostApplicationInbox", () => {
           token="token-1"
           currentUserId="owner-1"
           confirmDecision={confirmDecision}
-          requestReason={requestReason}
         />
       );
     });
@@ -63,8 +62,8 @@ describe("HostApplicationInbox", () => {
     expect(cancel).toBeDefined();
     await act(async () => cancel!.props.onClick());
 
-    expect(confirmDecision).toHaveBeenCalledWith("确认取消已接受的申请？持有资金会按服务端状态退款。");
-    expect(requestReason).toHaveBeenCalledOnce();
+    expect(confirmDecision).toHaveBeenCalledWith(expect.objectContaining({ title: "取消已接受的申请？", tone: "danger", reason: expect.objectContaining({ label: "取消的原因" }) }));
+    expect(fetchMock.mock.calls.find(([url]) => String(url).includes("/cancel"))?.[1]?.body).toContain("房源计划改变");
     expect(fetchMock.mock.calls.some(([url]) => String(url).includes("/applications/application-1/cancel"))).toBe(true);
     expect(text(renderer.root)).toContain("申请已取消");
   });

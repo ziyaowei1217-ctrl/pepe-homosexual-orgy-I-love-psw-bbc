@@ -6,6 +6,7 @@ import { ListingCard } from "@/components/marketplace/listing-card";
 import { LocationAutocomplete } from "@/components/marketplace/location-autocomplete";
 import { localDate } from "@/lib/listing-stay";
 import type { PreviewListing } from "@/lib/preview-data";
+import { DateInput } from "@/components/ui/date-input";
 
 // Labels in Chinese; the query stays the catalog's English market name.
 const destinations = [
@@ -32,14 +33,14 @@ export function HomeExperience({ listings, totalListings = listings.length }: { 
           </div>
           <p className="mt-4 text-m-subhead text-on-dark-secondary sm:mt-6 sm:leading-7">留学生之间的转租。选好日期，总价一次算清。</p>
           <form action="/search" method="get" aria-label="搜索房源" className="relative z-10 mt-6 flex flex-col gap-1 rounded-psw-xl bg-surface p-2 text-ink shadow-search sm:mt-8 lg:max-w-[720px] lg:flex-row lg:items-center lg:rounded-full lg:p-2 lg:pl-3">
-            <label className="flex min-w-0 flex-1 items-center gap-3 rounded-full px-3 py-2 focus-within:bg-surface-subtle lg:flex-[1.3]">
+            <label className="flex min-w-0 flex-1 items-center gap-3 rounded-full px-3 py-2 focus-within:bg-surface-subtle lg:flex-1">
               <MapPin className="size-5 shrink-0 text-primary-text" aria-hidden="true" />
               <span className="min-w-0 flex-1"><span className="block text-m-footnote font-bold text-ink">城市</span><LocationAutocomplete name="q" ariaLabel="想住在哪里？" placeholder="城市、学校或公司" inputClassName="text-base font-semibold text-ink lg:text-sm" /></span>
             </label>
             <span className="hidden h-8 w-px bg-line-strong lg:block" aria-hidden="true" />
-            <div className="grid grid-cols-2 gap-1 border-t border-line-strong pt-1 lg:flex lg:flex-1 lg:border-0 lg:pt-0">
-              <label className="min-w-0 rounded-full px-3 py-2 focus-within:bg-surface-subtle lg:flex-1"><span className="flex items-center gap-1.5 text-m-footnote font-bold text-ink"><CalendarDays className="size-3.5" aria-hidden="true" />入住</span><input type="date" name="moveIn" min={today} aria-label="入住日期" className="mt-0.5 block w-full min-w-0 bg-transparent text-base font-semibold text-ink outline-none lg:text-sm" /></label>
-              <label className="min-w-0 rounded-full px-3 py-2 focus-within:bg-surface-subtle lg:flex-1"><span className="flex items-center gap-1.5 text-m-footnote font-bold text-ink"><CalendarDays className="size-3.5" aria-hidden="true" />退租</span><input type="date" name="moveOut" min={today} aria-label="退租日期" className="mt-0.5 block w-full min-w-0 bg-transparent text-base font-semibold text-ink outline-none lg:text-sm" /></label>
+            <div className="grid grid-cols-2 gap-1 border-t border-line-strong pt-1 lg:flex lg:flex-[1.25] lg:border-0 lg:pt-0">
+              <label className="min-w-0 cursor-pointer rounded-full px-3 py-2 focus-within:bg-surface-subtle focus-within:ring-2 focus-within:ring-primary lg:flex-1"><span className="flex items-center gap-1.5 text-m-footnote font-bold text-ink"><CalendarDays className="size-3.5" aria-hidden="true" />入住</span><DateInput name="moveIn" min={today} aria-label="入住日期" focusOutline={false} placeholder="哪天搬进去" wrapperClassName="mt-0.5" className="text-base font-semibold text-ink lg:text-sm" /></label>
+              <label className="min-w-0 cursor-pointer rounded-full px-3 py-2 focus-within:bg-surface-subtle focus-within:ring-2 focus-within:ring-primary lg:flex-1"><span className="flex items-center gap-1.5 text-m-footnote font-bold text-ink"><CalendarDays className="size-3.5" aria-hidden="true" />退租</span><DateInput name="moveOut" min={today} aria-label="退租日期" focusOutline={false} placeholder="哪天搬走" wrapperClassName="mt-0.5" className="text-base font-semibold text-ink lg:text-sm" /></label>
             </div>
             <button type="submit" className="flex min-h-12 items-center justify-center gap-2 rounded-full bg-primary px-6 font-rounded text-base font-bold text-on-primary transition-colors hover:bg-primary-hover active:scale-[0.97] lg:min-h-12 lg:shrink-0"><Search className="size-[18px]" aria-hidden="true" />搜索房源</button>
           </form>

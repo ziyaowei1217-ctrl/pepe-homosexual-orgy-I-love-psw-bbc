@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, type ComponentProps } from "react";
 import { DemoPaymentPanel } from "@/components/demo-payment-panel";
+import { PaymentError, PaymentShell, paymentQuietAction, type PaymentTone } from "@/components/payment-shell";
 import { apiGet } from "@/lib/api";
 import { assertCurrentAuthSession } from "@/lib/auth-session";
 import { createPaymentCheckout, newIdempotencyKey, type ApiRentalApplication } from "@/lib/rental-applications";
@@ -9,9 +10,15 @@ import { useWindowFocusRefresh } from "@/lib/use-window-focus-refresh";
 
 type Props = ComponentProps<typeof DemoPaymentPanel>;
 type PaymentStatus = "AWAITING_PAYMENT" | "PROCESSING" | "PAID" | "REFUNDED" | "RELEASED" | "CANCELLED";
-const labels: Record<PaymentStatus, string> = {
-  AWAITING_PAYMENT: "等待付款", PROCESSING: "付款或退款处理中，请稍后刷新", PAID: "已付款",
-  REFUNDED: "已退款", RELEASED: "资金已结算", CANCELLED: "付款已取消"
+type Viewer = "payer" | "host" | "member";
+// The amount is set by the payment provider and only shown on its checkout page, so this panel does not guess it.
+const statusCopy: Record<PaymentStatus, { label: string; tone: PaymentTone; say: (viewer: Viewer, accepted: boolean) => string }> = {
+  AWAITING_PAYMENT: { label: "等待付款", tone: "waiting", say: (viewer, accepted) => viewer !== "payer" ? "等待申请人完成付款。" : accepted ? "转租人接受了你的申请。付款在付款页完成，金额以付款页为准。" : "申请状态变了，现在不能付款。" },
+  PROCESSING: { label: "处理中", tone: "neutral", say: () => "付款或退款正在处理，稍后刷新看看。" },
+  PAID: { label: "已付款", tone: "done", say: (viewer) => viewer === "payer" ? "付款已完成。" : "申请人已付款。" },
+  REFUNDED: { label: "已退款", tone: "neutral", say: () => "这笔付款已退款。" },
+  RELEASED: { label: "已结算", tone: "done", say: (viewer) => viewer === "host" ? "款项已结算给你。" : "款项已结算给转租人。" },
+  CANCELLED: { label: "付款已取消", tone: "neutral", say: () => "这笔付款已取消。" }
 };
 
 export function PaymentPanel(props: Props) {
@@ -45,7 +52,7 @@ function PaymentSession(props: Props) {
           onApplicationChange.current ? apiGet<ApiRentalApplication>(`/applications/${encodeURIComponent(application.id)}`, token) : null
         ]);
         if (!mounted.current || version !== loadVersion.current) return;
-        if (!(payment.status in labels)) throw new Error("付款状态暂时不可用。");
+        if (!(payment.status in statusCopy)) throw new Error("付款状态暂时不可用。");
         setStatus(payment.status);
         if (updatedApplication) onApplicationChange.current?.(updatedApplication);
       }
@@ -81,13 +88,16 @@ function PaymentSession(props: Props) {
   }
 
   if (mode === "demo") return <DemoPaymentPanel {...props} />;
-  return <section aria-label="付款状态" className="space-y-3 rounded-psw-lg border bg-surface p-5">
-    <h2 className="font-bold">付款与资金状态</h2>
-    <p role="status">{status ? labels[status] : error ? "付款状态未确认" : "正在读取付款状态…"}</p>
-    {status === "AWAITING_PAYMENT" && application.status === "ACCEPTED" ? currentUserId === application.submitterId
-      ? <button disabled={pending} onClick={() => void checkout()} className="primary-action">{pending ? "正在打开付款…" : "继续付款"}</button>
-      : <p>等待申请人完成付款。</p> : null}
-    <button disabled={pending} onClick={() => void load()} className="secondary-action">刷新付款状态</button>
-    {error ? <p role="alert" className="text-sm text-danger-text">{error}</p> : null}
-  </section>;
+  const viewer: Viewer = currentUserId === application.submitterId ? "payer" : currentUserId === application.listingOwnerId ? "host" : "member";
+  const copy = status ? statusCopy[status] : null;
+  const canPay = status === "AWAITING_PAYMENT" && application.status === "ACCEPTED" && viewer === "payer";
+  return <PaymentShell liveStatus inset={props.inset} status={copy ? copy.label : error ? "状态未确认" : "读取中"} tone={copy ? copy.tone : "neutral"}>
+    {copy ? <p className="mt-2 text-d-subhead text-ink-secondary">{copy.say(viewer, application.status === "ACCEPTED")}</p> : null}
+    {!copy && !error ? <p className="mt-2 text-d-subhead text-ink-secondary">正在读取付款状态…</p> : null}
+    {error ? <PaymentError message={error} /> : null}
+    <div className="mt-5 flex flex-wrap items-center gap-2">
+      {canPay ? <button type="button" disabled={pending} onClick={() => void checkout()} className="primary-action">{pending ? "正在打开付款…" : "继续付款"}</button> : null}
+      <button type="button" disabled={pending} onClick={() => void load()} className={paymentQuietAction}>刷新付款状态</button>
+    </div>
+  </PaymentShell>;
 }

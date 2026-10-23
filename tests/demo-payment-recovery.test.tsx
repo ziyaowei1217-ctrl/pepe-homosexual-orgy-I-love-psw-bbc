@@ -47,7 +47,7 @@ it('keeps retries bound to their operation and uses a distinct key when switchin
     fireEvent.click(success);
     await waitFor(() => expect(commands).toHaveLength(attempt + 2));
     if (attempt === 0) await screen.findByRole('alert');
-    else await screen.findByText('资金已持有');
+    else await screen.findByText('平台代管中');
   }
   expect(commands.map(command => command.outcome)).toEqual(['failure', 'success', 'success']);
   expect(commands[1].key).not.toBe(commands[0].key);

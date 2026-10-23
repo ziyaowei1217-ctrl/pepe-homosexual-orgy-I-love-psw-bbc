@@ -263,6 +263,8 @@ import {
   type PublishStep
 } from "@/lib/publish-listing";
 import { formatRangeLong } from "@/lib/date-format";
+import { DateInput } from "@/components/ui/date-input";
+import { useConfirm } from "@/components/marketplace/confirm-dialog";
 
 type Listing = {
   id: string;
@@ -747,6 +749,7 @@ export default function HomePage({
     listings[0] ??
     emptyListing;
   const [allListings, setAllListings] = useState(listings);
+  const [leaveDialog, confirmLeave] = useConfirm();
   const [selectedListing, setSelectedListing] = useState(initialSelectedListing);
   const [apiRoommates, setApiRoommates] = useState<Roommate[]>(roommates);
   const [apiTrustQueues, setApiTrustQueues] = useState<ApiTrustQueue[]>([]);
@@ -2335,12 +2338,9 @@ export default function HomePage({
     );
   }
 
-  function handleLeaveRoommateTeam() {
-    if (!token || !roommateTeam) return Promise.resolve(false);
-    const confirmed =
-      typeof window.confirm !== "function" ||
-      window.confirm("退出后小组将立即解散；未接受的小组申请会自动撤回，历史消息仍会保留。确定退出吗？");
-    if (!confirmed) return Promise.resolve(false);
+  async function handleLeaveRoommateTeam() {
+    if (!token || !roommateTeam) return false;
+    if (await confirmLeave({ title: "退出合租小组？", body: "退出后小组会解散，还在审核的小组申请会自动撤回，历史消息会保留。", confirmLabel: "退出小组", tone: "danger" }) === false) return false;
     return runRoommateTeamCommand(
       () => leaveRoommateTeam(token, roommateTeam.id),
       "两人小组已解散，历史消息仍然保留。"
@@ -2975,6 +2975,7 @@ export default function HomePage({
         />
       ) : null}
       <StatusToast message={toast} />
+      {leaveDialog}
     </main>
   );
 }
@@ -5785,12 +5786,12 @@ function ListingDetailScreen({
                 <div className="text-left md:text-right">
                   <div className="text-3xl font-extrabold text-foreground">${listing.price.toLocaleString("en-US")}</div>
                   <div className="text-sm font-semibold text-muted-foreground">
-                    <span className="line-through">${listing.originalPrice.toLocaleString("en-US")}</span>
+                    {listing.originalPrice > listing.price ? <span className="line-through">${listing.originalPrice.toLocaleString("en-US")}</span> : null}
                     <span> / 月</span>
                   </div>
-                  <div className="mt-1 text-sm font-bold text-trust-verified">
+                  {detail.monthlySavings > 0 ? <div className="mt-1 text-sm font-bold text-trust-verified">
                     省 ${detail.monthlySavings.toLocaleString("en-US")}/月
-                  </div>
+                  </div> : null}
                 </div>
               </div>
 
@@ -6596,9 +6597,9 @@ function ListingCard({
         </div>
         <div className="flex items-baseline gap-2">
           <span className="text-2xl font-black text-foreground">${listing.price}</span>
-          <span className="text-sm font-semibold text-muted-foreground line-through">
+          {listing.originalPrice > listing.price ? <span className="text-sm font-semibold text-muted-foreground line-through">
             ${listing.originalPrice}
-          </span>
+          </span> : null}
           <span className="text-sm font-semibold text-muted-foreground">/月</span>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -6866,7 +6867,7 @@ export function PublishingFlow({
               <PublishNumberField error={fieldErrors.beds} name="beds" label="卧室" value={draft.beds} min={0} onChange={(value) => updateDraft({ beds: value })} />
               <PublishNumberField error={fieldErrors.baths} name="baths" label="卫浴" value={draft.baths} min={0} onChange={(value) => updateDraft({ baths: value })} />
               <PublishField error={fieldErrors.commute} name="commute" label="到学校或公司的通勤" placeholder="例如：步行 8 分钟到 UCLA" value={draft.commute} onChange={(value) => updateDraft({ commute: value })} />
-              <PublishField error={fieldErrors.transit} name="transit" label="附近交通" placeholder="例如：楼下有 Metro 公交站，可以路边停车" value={draft.transit} onChange={(value) => updateDraft({ transit: value })} />
+              <PublishField error={fieldErrors.transit} name="transit" label="附近交通（选填）" placeholder="例如：楼下有 Metro 公交站，可以路边停车" value={draft.transit} onChange={(value) => updateDraft({ transit: value })} />
             </div>
           ) : null}
 
@@ -6889,7 +6890,7 @@ export function PublishingFlow({
             <div className="grid gap-4">
               <div className="grid gap-3 md:grid-cols-2">
                 <PublishNumberField error={fieldErrors.price} name="price" label="转租月租（美元）" hint="租客看到的月租；选了日期的租客会看到按天折算的总价。" value={draft.price} min={1} onChange={(value) => updateDraft({ price: value })} />
-                <PublishNumberField error={fieldErrors.originalPrice} name="originalPrice" label="原租约月租（美元）" hint="你和房东签的月租。转租价可以比它低。" value={draft.originalPrice} min={1} onChange={(value) => updateDraft({ originalPrice: value })} />
+                <PublishNumberField error={fieldErrors.originalPrice} name="originalPrice" label="原租约月租（美元，选填）" hint="你和房东签的月租。留空就按转租月租算。" value={draft.originalPrice} min={1} onChange={(value) => updateDraft({ originalPrice: value })} />
               </div>
               <fieldset>
                 <legend className="text-sm font-semibold">设施</legend>
@@ -6976,9 +6977,11 @@ function PublishField({
 }) {
   const describedBy = [hint ? `${name}-hint` : "", error ? `${name}-error` : ""].filter(Boolean).join(" ") || undefined;
   return (
-    <label className="grid gap-2 text-d-label text-ink-secondary">
+    <label className="grid content-start gap-2 text-d-label text-ink-secondary">
       {label}
-      <Input name={name} type={type} value={value} disabled={disabled} placeholder={placeholder} aria-invalid={error ? true : undefined} aria-describedby={describedBy} className={error ? "border-danger" : undefined} onChange={(event) => onChange(event.target.value)} />
+      {type === "date"
+        ? <DateInput name={name} aria-label={label} value={value} disabled={disabled} aria-invalid={error ? true : undefined} aria-describedby={describedBy} onChange={(event) => onChange(event.target.value)} focusOutline={false} className={cn("flex h-11 w-full items-center rounded-psw-md border border-input bg-card px-3 text-base font-medium text-ink sm:text-sm peer-focus-visible:ring-2 peer-focus-visible:ring-ring peer-focus-visible:ring-offset-2", error && "border-danger")} />
+        : <Input name={name} type={type} value={value} disabled={disabled} placeholder={placeholder} aria-invalid={error ? true : undefined} aria-describedby={describedBy} className={error ? "border-danger" : undefined} onChange={(event) => onChange(event.target.value)} />}
       {hint ? <span id={`${name}-hint`} className="text-m-footnote font-normal text-ink-secondary">{hint}</span> : null}
       {error ? <span id={`${name}-error`} className="text-m-footnote font-semibold text-danger-text">{error}</span> : null}
     </label>
@@ -7004,9 +7007,9 @@ function PublishNumberField({
 }) {
   const describedBy = [hint ? `${name}-hint` : "", error ? `${name}-error` : ""].filter(Boolean).join(" ") || undefined;
   return (
-    <label className="grid gap-2 text-d-label text-ink-secondary">
+    <label className="grid content-start gap-2 text-d-label text-ink-secondary">
       {label}
-      <Input name={name} type="number" inputMode="numeric" min={min} value={value} aria-invalid={error ? true : undefined} aria-describedby={describedBy} className={error ? "border-danger" : undefined} onChange={(event) => onChange(Number(event.target.value))} />
+      <Input name={name} type="number" inputMode="numeric" min={min} value={value === 0 && min > 0 ? "" : value} aria-invalid={error ? true : undefined} aria-describedby={describedBy} className={error ? "border-danger" : undefined} onChange={(event) => onChange(Number(event.target.value))} />
       {hint ? <span id={`${name}-hint`} className="text-m-footnote font-normal text-ink-secondary">{hint}</span> : null}
       {error ? <span id={`${name}-error`} className="text-m-footnote font-semibold text-danger-text">{error}</span> : null}
     </label>
@@ -7023,9 +7026,8 @@ function getPublishErrorFieldName(error?: string) {
     "请填写有效卧室数。": "beds",
     "请填写有效卫浴数。": "baths",
     "请填写通勤说明。": "commute",
-    "请填写交通说明。": "transit",
     "请填写有效月租。": "price",
-    "请填写有效原价。": "originalPrice",
+    "原租约月租要填整数美元，或者留空。": "originalPrice",
     "请至少选择一项设施。": "tags",
     "请确认房东知情声明。": "landlordAware"
   }[error ?? ""];

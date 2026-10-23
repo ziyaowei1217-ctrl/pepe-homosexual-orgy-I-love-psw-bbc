@@ -277,7 +277,7 @@ describe("rental application experiences", () => {
     });
 
     const rendered = text(renderer.root);
-    expect(rendered).toContain("演示支付与资金状态");
+    expect(rendered).toContain("演示模式，不会真实扣款");
     expect(rendered).toContain("模拟支付成功");
     expect(rendered).not.toContain("继续付款");
   });

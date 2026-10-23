@@ -38,7 +38,7 @@ describe("ApplicationStatusPanel", () => {
     expect(text(renderer.root)).toContain("申请已接受");
     expect(text(renderer.root)).toContain("Westwood 阳光主卧");
     expect(text(renderer.root)).not.toContain("房源 listing-1");
-    expect(text(renderer.root)).toContain("资金已持有");
+    expect(text(renderer.root)).toContain("平台代管中");
     expect(text(renderer.root)).toContain("演示模式，不会真实扣款");
   });
 

@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { toProductApiError } from "@/lib/product-errors";
 import type { ApiRoommateTeam } from "@/lib/roommate-teams";
+import { DateInput } from "@/components/ui/date-input";
 import {
   applicationScopeOptions,
   applicationDraftScope,
@@ -127,8 +128,8 @@ function RentalApplicationSession({
 
           {step === 1 ? (
             <section className="grid gap-4 md:grid-cols-2" aria-label="日期与资料">
-              <label className="grid gap-2 text-sm font-bold">入住日期<Input type="date" value={draft.moveIn} onChange={(event) => setDraft({ ...draft, moveIn: event.target.value })} /></label>
-              <label className="grid gap-2 text-sm font-bold">退租日期<Input type="date" value={draft.moveOut} onChange={(event) => setDraft({ ...draft, moveOut: event.target.value })} /></label>
+              <label className="grid gap-2 text-sm font-bold">入住日期<DateInput aria-label="入住日期" value={draft.moveIn} onChange={(event) => setDraft({ ...draft, moveIn: event.target.value })} focusOutline={false} className="flex h-11 w-full items-center rounded-psw-md border border-input bg-card px-3 text-base font-medium text-ink sm:text-sm peer-focus-visible:ring-2 peer-focus-visible:ring-ring peer-focus-visible:ring-offset-2" /></label>
+              <label className="grid gap-2 text-sm font-bold">退租日期<DateInput aria-label="退租日期" value={draft.moveOut} onChange={(event) => setDraft({ ...draft, moveOut: event.target.value })} focusOutline={false} className="flex h-11 w-full items-center rounded-psw-md border border-input bg-card px-3 text-base font-medium text-ink sm:text-sm peer-focus-visible:ring-2 peer-focus-visible:ring-ring peer-focus-visible:ring-offset-2" /></label>
               <label className="grid gap-2 text-sm font-bold md:col-span-2">学校或职业<Input value={draft.schoolOrOccupation} maxLength={140} onChange={(event) => setDraft({ ...draft, schoolOrOccupation: event.target.value })} /></label>
               <label className="grid gap-2 text-sm font-bold">收入区间
                 <select className="h-10 rounded-md border bg-surface px-3" value={draft.incomeBand} onChange={(event) => setDraft({ ...draft, incomeBand: event.target.value as RentalApplicationDraft["incomeBand"] })}>

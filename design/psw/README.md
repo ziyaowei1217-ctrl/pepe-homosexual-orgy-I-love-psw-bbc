@@ -30,7 +30,12 @@ The site follows the **psw 设计系统** (the psw Design System artifact). This
   One per screen.
 - **夜墨:** the home hero and the booking decision block (desktop box, phone bar). Other panels stay light.
 - **Dates:** `lib/date-format.ts`. Long「11月1日 – 1月15日」where people choose or confirm, short「11/1 – 1/15」on
-  cards; the year only when it is not this year.
+  cards; the year only when it is not this year. Date fields use `DateInput` (`components/ui/date-input.tsx`): the
+  browser's own picker underneath, the date written「11月1日」on top, 「选择日期」in the placeholder colour before a
+  choice. Clicking anywhere on the field, Enter or Space opens the picker; give it an `aria-label` that matches the
+  visible label.
+- **Class merging:** `cn()` knows the `text-m-*` / `text-d-*` scale is a size, so a status colour after it no longer
+  drops the size.
 - **States:** hover one shade darker, press scales to 97%, focus is the design system's `shadow-focus`: a 2px white
   gap inside a 3px 夜墨 ring, visible on light pages and on 夜墨 blocks. Small controls use `tap-target` to reach 44px.
 
@@ -57,6 +62,17 @@ Show only what the platform knows (`lib/listing-trust.ts`, `TrustBadge`):
   cards do not carry the badge; the listing page does.
 - 「房东知情：转租人声明」: a declaration made when publishing. The platform does not check leases, so no copy may say
   a lease or consent letter was verified; the listing page tells renters to ask for the lease before signing.
+
+## Payment
+
+One `付款` panel (`components/payment-shell.tsx`) for real and demo payments: a status label (`rounded-psw-sm`), one
+sentence on what it means for the person looking, then at most one primary action. Real payments do not show an amount:
+the payment provider sets it and shows it on the payment page, so the panel says 「金额以付款页为准」 rather than guess.
+Demo payments show the amount the platform holds, that it is released to the 转租人 only when both sides confirm the
+move-in, and keep the ledger behind 「查看资金流水」. Inside another card it is an outlined block (`inset`).
+
+Decisions that end something (withdraw, reject, cancel, leave, delete) ask in the site's `ConfirmDialog`, never the
+browser's `confirm()` / `prompt()`; a reason, when needed, is written in the same dialog.
 
 ## Dead ends
 

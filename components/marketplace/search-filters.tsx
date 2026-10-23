@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { localDate } from "@/lib/listing-stay";
 import { emptyFilters, searchAmenities, searchDateError, type SearchState } from "@/lib/search-state";
 import { cn } from "@/lib/utils";
+import { DateInput } from "@/components/ui/date-input";
 
 export type SearchFilterSection = "budget" | "beds" | "dates";
 
@@ -79,8 +80,8 @@ export function SearchFiltersDialog({ initial, initialSection = "budget", prices
         <section ref={dates} tabIndex={-1} aria-labelledby="filter-dates-title" className="py-7 outline-none">
           <div className="flex items-center justify-between"><h3 id="filter-dates-title" className="text-m-headline sm:text-d-headline font-bold">入住与退租</h3><button type="button" onClick={() => update({ moveIn: "", moveOut: "" })} className="min-h-11 px-1 text-m-footnote font-semibold underline underline-offset-4">日期灵活</button></div>
           <div className="mt-4 grid grid-cols-2 gap-3">
-            <label className="rounded-psw-md border border-control-border p-3 text-m-footnote font-semibold text-ink-secondary">入住日期<input type="date" aria-label="筛选入住日期" value={draft.moveIn} min={today} onChange={(event) => update({ moveIn: event.target.value })} className="mt-1 block w-full min-w-0 bg-transparent text-base font-semibold text-ink sm:text-sm" /></label>
-            <label className="rounded-psw-md border border-control-border p-3 text-m-footnote font-semibold text-ink-secondary">退租日期<input type="date" aria-label="筛选退租日期" value={draft.moveOut} min={draft.moveIn || today} onChange={(event) => update({ moveOut: event.target.value })} className="mt-1 block w-full min-w-0 bg-transparent text-base font-semibold text-ink sm:text-sm" /></label>
+            <label className="cursor-pointer rounded-psw-md border border-control-border p-3 text-m-footnote font-semibold text-ink-secondary focus-within:border-primary focus-within:ring-1 focus-within:ring-primary">入住日期<DateInput aria-label="筛选入住日期" value={draft.moveIn} min={today} onChange={(event) => update({ moveIn: event.target.value })} focusOutline={false} wrapperClassName="mt-1" className="text-base font-semibold text-ink sm:text-sm" /></label>
+            <label className="cursor-pointer rounded-psw-md border border-control-border p-3 text-m-footnote font-semibold text-ink-secondary focus-within:border-primary focus-within:ring-1 focus-within:ring-primary">退租日期<DateInput aria-label="筛选退租日期" value={draft.moveOut} min={draft.moveIn || today} onChange={(event) => update({ moveOut: event.target.value })} focusOutline={false} wrapperClassName="mt-1" className="text-base font-semibold text-ink sm:text-sm" /></label>
           </div>
           {error ? <p role="alert" className="mt-3 text-d-subhead text-danger-text">{error}</p> : null}
         </section>

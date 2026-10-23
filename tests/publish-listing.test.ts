@@ -57,6 +57,23 @@ describe("publish listing", () => {
     });
   });
 
+  it("lets a 转租人 leave nearby transit and the original rent empty", () => {
+    const sparse = { ...draft, transit: "  ", originalPrice: 0 };
+    expect(getPublishStepErrors(sparse, "basic")).toEqual([]);
+    expect(getPublishStepErrors(sparse, "pricing")).toEqual([]);
+    // An empty original rent is sent as the rent itself, so no discount is claimed.
+    expect(mapPublishDraftToListingDto(sparse)).toMatchObject({ transit: "", originalPrice: 1680 });
+    expect(getPublishStepErrors({ ...draft, originalPrice: 12.5 }, "pricing")).toEqual(["原租约月租要填整数美元，或者留空。"]);
+  });
+
+  it("shows an original rent equal to the rent as an empty field again", () => {
+    const restored = mapApiListingToPublishDraft({
+      id: "remote-4", title: draft.title, area: draft.area, image: "", availableFrom: draft.availableFrom, availableTo: draft.availableTo,
+      price: 1680, originalPrice: 1680, beds: 1, baths: 1, commute: draft.commute, transit: "", trust: "", tags: [], score: 4.8, status: "DRAFT"
+    });
+    expect(restored).toMatchObject({ originalPrice: 0, transit: "" });
+  });
+
   it("blocks submission until every retained image is ready", () => {
     expect(getPublishStepErrors(draft, "media", { ...readyMedia, totalCount: 0, readyCount: 0 }))
       .toContain("请至少上传一张图片。");

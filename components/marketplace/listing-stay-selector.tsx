@@ -2,6 +2,7 @@
 
 import { CalendarDays, X } from "lucide-react";
 import { useRef, useState } from "react";
+import { DateInput } from "@/components/ui/date-input";
 import { formatRangeLong } from "@/lib/date-format";
 import { earliestListingDate, listingStayError, type ListingStay } from "@/lib/listing-stay";
 import type { PreviewListing } from "@/lib/preview-data";
@@ -10,8 +11,8 @@ import { useModalFocus } from "./use-modal-focus";
 export function ListingStayFields({ listing, stay, onChange, moveInId }: { listing: PreviewListing; stay: ListingStay; onChange: (stay: ListingStay) => void; moveInId?: string }) {
   const earliest = earliestListingDate(listing);
   return <div className="grid grid-cols-2 overflow-hidden rounded-psw-md border border-control-border focus-within:border-primary focus-within:ring-1 focus-within:ring-primary">
-    <label className="min-w-0 p-3 text-m-footnote font-semibold text-ink-secondary">入住日期<input id={moveInId} type="date" min={earliest} max={listing.availableTo || undefined} value={stay.moveIn} onChange={(event) => onChange({ ...stay, moveIn: event.target.value })} className="mt-1 block w-full min-w-0 bg-transparent text-base font-semibold text-ink lg:text-sm" /></label>
-    <label className="min-w-0 border-l border-control-border p-3 text-m-footnote font-semibold text-ink-secondary">退租日期<input type="date" min={stay.moveIn || earliest} max={listing.availableTo || undefined} value={stay.moveOut} onChange={(event) => onChange({ ...stay, moveOut: event.target.value })} className="mt-1 block w-full min-w-0 bg-transparent text-base font-semibold text-ink lg:text-sm" /></label>
+    <label className="min-w-0 cursor-pointer p-3 text-m-footnote font-semibold text-ink-secondary">入住日期<DateInput id={moveInId} aria-label="入住日期" min={earliest} max={listing.availableTo || undefined} value={stay.moveIn} onChange={(event) => onChange({ ...stay, moveIn: event.target.value })} focusOutline={false} wrapperClassName="mt-1" className="text-base font-semibold text-ink lg:text-sm" /></label>
+    <label className="min-w-0 cursor-pointer border-l border-control-border p-3 text-m-footnote font-semibold text-ink-secondary">退租日期<DateInput aria-label="退租日期" min={stay.moveIn || earliest} max={listing.availableTo || undefined} value={stay.moveOut} onChange={(event) => onChange({ ...stay, moveOut: event.target.value })} focusOutline={false} wrapperClassName="mt-1" className="text-base font-semibold text-ink lg:text-sm" /></label>
   </div>;
 }
 

@@ -263,7 +263,7 @@ function VerificationRow({ icon: Icon, title, detail, done }: { icon: typeof Mai
   return <div className="flex items-center gap-3 py-5 sm:gap-4">
     <span className="grid size-11 shrink-0 place-items-center rounded-psw-md bg-tag-neutral"><Icon className="size-5" aria-hidden="true" /></span>
     <span className="min-w-0 flex-1"><span className="block text-sm font-bold">{title}</span><span className="mt-1 block text-m-footnote leading-5 text-ink-secondary">{detail}</span></span>
-    <span className={cn("shrink-0 rounded-full px-3 py-1.5 text-m-footnote font-bold", done ? "bg-surface-subtle text-primary-text" : "bg-tag-neutral text-ink-secondary")}>{done ? "已完成" : "暂未开放"}</span>
+    <span className={cn("shrink-0 rounded-psw-sm px-2.5 py-1 text-m-footnote font-bold", done ? "bg-surface-subtle text-primary-text" : "bg-tag-neutral text-ink-secondary")}>{done ? "已完成" : "暂未开放"}</span>
   </div>;
 }
 function SettingsRow({ icon: Icon, title, detail, href }: { icon: typeof Bell; title: string; detail: string; href?: string }) {

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import { useConfirm, type ConfirmOptions } from "@/components/marketplace/confirm-dialog";
 import { PaymentPanel } from "@/components/payment-panel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -21,12 +22,15 @@ import {
 export function ApplicationStatusPanel({
   token,
   currentUserId,
-  confirmAction = (message) => typeof window !== "undefined" && window.confirm(message)
+  confirmAction
 }: {
   token: string;
   currentUserId: string;
-  confirmAction?: (message: string) => boolean;
+  /** Defaults to the site's confirmation dialog; resolves to false when dismissed, otherwise the reason it asked for. */
+  confirmAction?: (options: ConfirmOptions) => Promise<string | false>;
 }) {
+  const [dialog, siteConfirm] = useConfirm();
+  const confirm = confirmAction ?? siteConfirm;
   const [applications, setApplications] = useState<ApiRentalApplication[]>([]);
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -46,14 +50,13 @@ export function ApplicationStatusPanel({
   useWindowFocusRefresh(load);
 
   async function withdraw(application: ApiRentalApplication) {
-    if (!confirmAction("确认撤回这份申请？")) return;
+    if (await confirm({ title: "撤回这份申请？", body: "撤回后这份申请就结束了。想再租这个房间，需要重新申请。", confirmLabel: "撤回申请", tone: "danger" }) === false) return;
     await mutate(application.id, () => withdrawRentalApplication(token, application.id, newIdempotencyKey("applicant-withdraw")));
   }
 
   async function cancel(application: ApiRentalApplication) {
-    if (!confirmAction("确认取消已接受的申请？持有资金会按服务端状态退款。")) return;
-    const reason = typeof window !== "undefined" ? window.prompt("请输入取消原因") : null;
-    if (!reason?.trim()) return;
+    const reason = await confirm({ title: "取消已接受的申请？", body: "如果已经付款，会按付款状态退款。请写一句原因，对方会看到。", confirmLabel: "取消申请", cancelLabel: "先不", tone: "danger", reason: { label: "取消的原因", placeholder: "例如：学校宿舍批下来了" } });
+    if (reason === false || !reason.trim()) return;
     await mutate(application.id, () => cancelRentalApplication(token, application.id, reason.trim(), newIdempotencyKey("applicant-cancel")));
   }
 
@@ -84,12 +87,13 @@ export function ApplicationStatusPanel({
               {application.status === "DRAFT" && application.submitterId === currentUserId ? <Button disabled={pendingId === application.id} onClick={() => void mutate(application.id, () => submitRentalApplication(token, application.id, `application-submit-${application.id}`))}>继续提交</Button> : null}
               {(application.status === "SUBMITTED" || application.status === "DRAFT") && application.submitterId === currentUserId ? <Button variant="outline" disabled={pendingId === application.id} onClick={() => void withdraw(application)}>撤回申请</Button> : null}
               {application.status === "ACCEPTED" ? <Button variant="outline" disabled={pendingId === application.id} onClick={() => void cancel(application)}>取消申请</Button> : null}
-              {application.status === "ACCEPTED" || application.status === "COMPLETED" || application.status === "CANCELLATION_PENDING" ? <PaymentPanel application={application} token={token} currentUserId={currentUserId} /> : null}
+              {application.status === "ACCEPTED" || application.status === "COMPLETED" || application.status === "CANCELLATION_PENDING" ? <PaymentPanel inset application={application} token={token} currentUserId={currentUserId} /> : null}
             </article>
           );
         })}
         {error ? <p role="alert" className="text-sm font-semibold text-destructive">{error}</p> : null}
       </CardContent>
+      {dialog}
     </Card>
   );
 }
