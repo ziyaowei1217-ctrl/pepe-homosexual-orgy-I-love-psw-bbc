@@ -66,6 +66,20 @@
     outline-offset: 2px;
     box-shadow: 0 0 0 2px theme("colors.focus.gap");
   }
+
+  /* A field drawn as a box around a bare input (search pills, message composers, label-as-box fields): the box takes
+     the focus ring, so the input does not draw a square ring inside a rounded box. Without :has the input keeps its own. */
+  @supports selector(:has(*)) {
+    .field-shell:has(:is(input, textarea, select):focus-visible) {
+      outline: 3px solid theme("colors.focus.ring");
+      outline-offset: 2px;
+      box-shadow: 0 0 0 2px theme("colors.focus.gap");
+    }
+    .field-shell :is(input, textarea, select):focus-visible {
+      outline: none !important;
+      box-shadow: none !important;
+    }
+  }
 }
 
 @layer components {
@@ -202,7 +216,7 @@
     filter: saturate(0.55) contrast(0.96) brightness(1.03);
   }
   .listing-map .maplibregl-ctrl-attrib {
-    @apply text-[11px];
+    @apply text-m-footnote;
   }
   /* Price pin: white pill; dark when its card is hovered or open, grey once opened, a heart when saved. */
   .map-pin {
@@ -222,7 +236,7 @@
   }
   .map-pin.is-saved::before {
     content: "♥";
-    @apply text-[12px] text-primary-text;
+    @apply text-m-footnote text-primary-text;
   }
   .map-pin.is-active.is-saved::before {
     @apply text-on-dark;

@@ -17,7 +17,7 @@ import {
 const titleMax = 140;
 const noteMax = 280;
 
-const systemPrompt = `你帮 psw 的房东根据一段描述填写房源表单。只用描述和表单里已有的事实，不添加没有提到的距离、时间、设施、价格或政策。
+const systemPrompt = `你帮 psw 的转租人（发布房源的人）根据一段描述填写房源表单。只用描述和表单里已有的事实，不添加没有提到的距离、时间、设施、价格或政策。
 - title：一句中文标题，30 字以内，写清区域、房型和最主要的一两个卖点。不用感叹号、表情或"超值""绝佳"之类的词。
 - commute：20 字以内，到学校、公司或商圈的方式和时间，例如「步行 10 分钟到 UCLA」。描述里没有就返回空字符串。
 - transit：20 字以内，附近的地铁、公交或停车，例如「近地铁 · Westwood」。描述说靠近地铁时必须包含"地铁"二字。描述里没有就返回空字符串。
@@ -78,7 +78,7 @@ function describeListing({ notes, draft }: ListingCopyRequest) {
     `现有通勤说明：${draft.commute || "无"}`,
     `现有交通说明：${draft.transit || "无"}`
   ];
-  return `表单内容：\n${facts.join("\n")}\n\n房东的描述：\n${notes}\n\n设施选项：${publishAmenities.join("、")}`;
+  return `表单内容：\n${facts.join("\n")}\n\n转租人的描述：\n${notes}\n\n设施选项：${publishAmenities.join("、")}`;
 }
 
 /** Empty strings mean "nothing to fill"; the form keeps what the host typed. */

@@ -155,7 +155,7 @@ export function SearchExperience({ listings, initialQuery, initialMoveIn, initia
     {/* On phones the site header scrolls away and only this toolbar stays, so results keep most of the screen. */}
     <section className="search-toolbar sticky top-0 z-40 border-b border-line-strong bg-surface md:top-[72px]">
       <div className="mx-auto flex max-w-[1920px] flex-col gap-2 px-4 py-2 sm:px-6 lg:flex-row lg:items-center lg:gap-4 lg:px-8 lg:py-4">
-        <form action="/search" aria-label="修改搜索" onSubmit={(event) => { event.preventDefault(); update({}, "replace"); }} className="flex min-w-0 items-center gap-3 rounded-full border-[1.5px] border-ink bg-surface p-1 pl-4 lg:w-[380px] lg:shrink-0 lg:p-1.5 lg:pl-4">
+        <form action="/search" aria-label="修改搜索" onSubmit={(event) => { event.preventDefault(); update({}, "replace"); }} className="field-shell flex min-w-0 items-center gap-3 rounded-full border-[1.5px] border-ink bg-surface p-1 pl-4 lg:w-[380px] lg:shrink-0 lg:p-1.5 lg:pl-4">
           <MapPin className="size-4 shrink-0 text-primary-text" aria-hidden="true" />
           <div className="min-w-0 flex-1"><LocationAutocomplete name="q" value={state.query} onValueChange={(query) => update({ query, bounds: null }, "replace")} inputClassName="text-base font-semibold lg:text-sm" ariaLabel="地点或学校" placeholder="城市、学校或公司" /></div>
           {state.query ? <button type="button" onClick={() => update({ query: "", bounds: null })} aria-label="清除地点" className="tap-target grid size-7 shrink-0 place-items-center rounded-full hover:bg-surface-subtle"><X className="size-3.5" /></button> : null}
@@ -171,11 +171,13 @@ export function SearchExperience({ listings, initialQuery, initialMoveIn, initia
       </div>
     </section>
 
+    {/* The map view hides the list and its heading; the page still needs its title. */}
+    {state.view === "map" ? <h1 id="result-heading" className="sr-only">{catalog.heading}</h1> : null}
     <div className={cn("mx-auto grid max-w-[1920px]", state.view === "split" && "lg:grid-cols-[minmax(480px,0.95fr)_minmax(0,1.05fr)]")}>
       <section className={cn("min-w-0 px-4 pb-28 pt-1 sm:px-6 sm:pt-6 lg:px-8", state.view === "map" && "hidden")} aria-labelledby="result-heading">
         {/* Phones get a title-size heading so the first price is on the first screen. */}
         {/* The results are the page; the heading names them without out-shouting the prices. */}
-        <h1 id="result-heading" className="font-rounded text-m-title text-ink sm:mt-2 sm:text-d-title">{catalog.heading}</h1>
+        {state.view !== "map" ? <h1 id="result-heading" className="font-rounded text-m-title text-ink sm:mt-2 sm:text-d-title">{catalog.heading}</h1> : null}
         {dateError ? <p role="alert" className="mt-3 rounded-psw-md bg-warning-soft px-3 py-2 text-d-subhead text-warning-text">{dateError}</p> : null}
         {chips.length ? <div className="mt-4 flex flex-wrap items-center gap-2" aria-label="已选条件">{chips.map((chip) => <button key={chip.label} type="button" aria-label={`移除 ${chip.label}`} onClick={chip.clear} className="tap-target flex h-9 items-center gap-1.5 rounded-full bg-primary px-3.5 text-m-footnote font-semibold text-on-primary hover:bg-primary-hover">{chip.label}<X className="size-3.5" aria-hidden="true" /></button>)}<button type="button" onClick={() => update({ ...emptyFilters, moveIn: "", moveOut: "", bounds: null })} className="min-h-11 px-2 text-m-footnote font-semibold text-ink-secondary underline underline-offset-4">重置条件</button></div> : null}
         <div className="mt-2 flex items-center justify-between gap-3 border-b border-line-strong pb-2 sm:mt-4 sm:pb-4">
@@ -228,12 +230,14 @@ export function SearchExperience({ listings, initialQuery, initialMoveIn, initia
           onSearch: (bounds) => update({ bounds, query: "", page: 1, selected: state.selected }, "replace"),
           onClear: () => update({ bounds: null, page: 1, selected: state.selected }, "replace")
         }}
+        controls={viewSwitch}
       /> : null}
     </div>
     {/* Phones and tablets have two views, so one button to the other view, on the right where it does not cover a card's price. */}
     <button type="button" onClick={() => update({ view: state.view === "map" ? "list" : "map", page: state.page, selected: state.selected })} className="fixed bottom-[82px] right-4 z-40 flex min-h-12 items-center gap-2 rounded-full bg-ink-block px-5 text-d-subhead font-semibold text-white shadow-menu active:scale-[0.97] md:bottom-6 lg:hidden">{state.view === "map" ? <><List className="size-4" aria-hidden="true" />列表</> : <><Map className="size-4" aria-hidden="true" />地图</>}</button>
-    {/* Desktop: the three-way view switch floats at the bottom of the page. */}
-    <div className="fixed bottom-6 left-1/2 z-40 hidden -translate-x-1/2 lg:block">{viewSwitch}</div>
+    {/* Desktop: in list view the three-way switch floats over the list; with a map on screen it sits at the bottom of
+        the map, so in split view it does not straddle the list and cover its cards. */}
+    {state.view === "list" ? <div className="fixed bottom-6 left-1/2 z-40 hidden -translate-x-1/2 lg:block">{viewSwitch}</div> : null}
     {notice ? <div role="status" className="fixed bottom-[144px] left-1/2 z-[70] flex -translate-x-1/2 items-center gap-2 whitespace-nowrap rounded-psw-md bg-toast-bg px-5 py-3 text-d-subhead text-on-toast shadow-menu md:bottom-24"><Check className="size-4 text-toast-success" aria-hidden="true" />{notice}<Link href="/saved" className="ml-2 flex min-h-6 items-center font-semibold text-toast-action underline">查看</Link></div> : null}
     {preferencesOpen ? <MatchPreferencesDialog initial={savedPreferences} onSave={(next) => { savePreferences(next); setPreferencesOpen(false); }} onClose={() => setPreferencesOpen(false)} /> : null}
     {filterOpen ? <SearchFiltersDialog initialSection={filterOpen} initial={state} prices={searchCatalog(listings, { ...state, ...emptyFilters, page: 1 }, Number.MAX_SAFE_INTEGER).items.map((listing) => listing.price)} getCount={(draft) => searchCatalog(listings, draft).total} onApply={(draft) => { update({ ...draft, page: 1, selected: "" }); setFilterOpen(null); }} onClose={() => setFilterOpen(null)} /> : null}

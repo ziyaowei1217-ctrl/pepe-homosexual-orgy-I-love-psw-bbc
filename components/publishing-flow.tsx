@@ -144,11 +144,11 @@ export function PublishingFlow({
             <CheckCircle2 className="size-7" aria-hidden="true" />
           </div>
           <div>
-            <h2 className="font-rounded text-m-title sm:text-d-title font-bold text-foreground">房源已提交审核</h2>
-            <p className="mt-2 max-w-md text-sm font-semibold text-muted-foreground">
+            <h2 className="font-rounded text-m-title sm:text-d-title font-bold text-ink">房源已提交审核</h2>
+            <p className="mt-2 max-w-md text-m-subhead text-ink-secondary sm:text-d-subhead">
               当前房源及图片已锁定，审核完成前不能继续编辑。你可以在“我的房源”查看审核状态。
             </p>
-            <p className="mt-2 text-m-footnote font-semibold text-muted-foreground">
+            <p className="mt-2 text-m-footnote font-semibold text-ink-secondary">
               房源编号：{submittedResult.remoteListingId}
             </p>
           </div>
@@ -205,12 +205,12 @@ export function PublishingFlow({
               onClick={() => void goToStep(index)}
             >
               <div className="text-m-footnote font-bold text-primary-text">{item.code}</div>
-              <div className="mt-1 whitespace-nowrap text-m-footnote font-bold text-foreground md:mt-2 md:text-sm">{item.title}</div>
-              <div className="mt-1 hidden text-m-footnote text-muted-foreground md:block">{item.detail}</div>
+              <div className="mt-1 whitespace-nowrap text-m-footnote font-bold text-ink md:mt-2 md:text-sm">{item.title}</div>
+              <div className="mt-1 hidden text-m-footnote text-ink-secondary md:block">{item.detail}</div>
             </button>
           ))}
         </div>
-        <div ref={formRef} className="mt-4 rounded-md border bg-surface p-4">
+        <div ref={formRef} className="mt-4 rounded-psw-md border bg-surface p-4">
           {step.key === "basic" ? (
             <div className="grid gap-3 md:grid-cols-2">
               <ListingCopyHelper token={token} draft={draft} onApply={updateDraft} />
@@ -234,7 +234,7 @@ export function PublishingFlow({
                 onSummaryChange={setMediaSummary}
               />
             ) : (
-              <div className="rounded-md border border-dashed bg-secondary p-4 text-sm font-semibold text-muted-foreground">
+              <div className="rounded-psw-md border border-dashed bg-surface-subtle p-4 text-m-subhead text-ink-secondary sm:text-d-subhead">
                 请先完成基础信息和价格设置，系统会保存草稿后开放图片上传。
               </div>
             )
@@ -255,7 +255,7 @@ export function PublishingFlow({
                 </div>
                 {fieldErrors.tags ? <p className="mt-2 text-m-footnote font-semibold text-danger-text">{fieldErrors.tags}</p> : null}
               </fieldset>
-              <label className="flex items-start gap-3 rounded-md border bg-secondary p-3 text-sm font-semibold">
+              <label className="flex items-start gap-3 rounded-psw-md border bg-surface-subtle p-3 text-sm font-semibold">
                 <input name="landlordAware" type="checkbox" className="mt-1" checked={draft.landlordAware} onChange={(event) => updateDraft({ landlordAware: event.target.checked })} />
                 <span>我声明房东知道并同意这次转租。这是你的声明，平台不核验租约，租客可能会请你出示租约。</span>
               </label>
@@ -275,7 +275,7 @@ export function PublishingFlow({
                 <PublishReviewItem label="信任信息" value={draft.landlordAware ? "房东知情：转租人声明 · 待平台审核" : "房东是否知情：未声明 · 待平台审核"} />
               </div>
               {confirmSubmit ? (
-                <div className="rounded-md border border-trust-amber bg-warning-soft p-4 text-sm font-semibold text-foreground">
+                <div className="rounded-psw-md border border-trust-amber bg-warning-soft p-4 text-sm font-semibold text-ink">
                   请再次确认提交。提交后房源进入平台审核，在审核完成前不会标记为“平台已审核”。
                 </div>
               ) : null}
@@ -334,7 +334,7 @@ function PublishField({
     <label className="grid content-start gap-2 text-d-label text-ink-secondary">
       {label}
       {type === "date"
-        ? <DateInput name={name} aria-label={label} value={value} disabled={disabled} aria-invalid={error ? true : undefined} aria-describedby={describedBy} onChange={(event) => onChange(event.target.value)} focusOutline={false} className={cn("flex h-11 w-full items-center rounded-psw-md border border-input bg-card px-3 text-base font-medium text-ink sm:text-sm peer-focus-visible:ring-2 peer-focus-visible:ring-ring peer-focus-visible:ring-offset-2", error && "border-danger")} />
+        ? <DateInput name={name} aria-label={label} value={value} disabled={disabled} aria-invalid={error ? true : undefined} aria-describedby={describedBy} onChange={(event) => onChange(event.target.value)} className={cn("flex h-11 w-full items-center rounded-psw-md border border-input bg-card px-3 text-base font-medium text-ink sm:text-sm", error && "border-danger")} />
         : <Input name={name} type={type} value={value} disabled={disabled} placeholder={placeholder} aria-invalid={error ? true : undefined} aria-describedby={describedBy} className={error ? "border-danger" : undefined} onChange={(event) => onChange(event.target.value)} />}
       {hint ? <span id={`${name}-hint`} className="text-m-footnote font-normal text-ink-secondary">{hint}</span> : null}
       {error ? <span id={`${name}-error`} className="text-m-footnote font-semibold text-danger-text">{error}</span> : null}
@@ -389,9 +389,9 @@ function getPublishErrorFieldName(error?: string) {
 
 function PublishReviewItem({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-md border bg-secondary p-3">
-      <div className="text-m-footnote font-bold text-muted-foreground">{label}</div>
-      <div className="mt-1 break-words text-sm font-extrabold text-foreground">{value}</div>
+    <div className="rounded-psw-md border bg-surface-subtle p-3">
+      <div className="text-m-footnote font-bold text-ink-secondary">{label}</div>
+      <div className="mt-1 break-words text-d-label text-ink">{value}</div>
     </div>
   );
 }

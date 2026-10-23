@@ -93,7 +93,7 @@ export function SearchFiltersDialog({ initial, initialSection = "budget", prices
 }
 
 export function BudgetField({ label, value, placeholder, onChange }: { label: string; value: number; placeholder: string; onChange: (value: number) => void }) {
-  return <label className="min-w-0 rounded-psw-md border border-control-border px-4 py-3 text-m-footnote font-semibold text-ink-secondary">{label}<span className="mt-1 flex items-center gap-2 text-base text-ink">$<input type="number" aria-label={label} min="0" max="1000000" step="100" value={value || ""} placeholder={placeholder} onChange={(event) => onChange(Math.min(1_000_000, Math.max(0, Number(event.target.value))))} className="w-full min-w-0 bg-transparent font-semibold outline-none" /></span></label>;
+  return <label className="field-shell min-w-0 cursor-text rounded-psw-md border border-control-border px-4 py-3 text-m-footnote font-semibold text-ink-secondary">{label}<span className="mt-1 flex items-center gap-2 text-base text-ink">$<input type="number" inputMode="numeric" aria-label={label} min="0" max="1000000" step="100" value={value || ""} placeholder={placeholder} onChange={(event) => onChange(Math.min(1_000_000, Math.max(0, Number(event.target.value))))} className="w-full min-w-0 bg-transparent font-semibold outline-none [appearance:textfield] placeholder:text-ink-placeholder [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" /></span></label>;
 }
 
 export function BedsField({ value, onChange, className }: { value: number; onChange: (beds: number) => void; className?: string }) {
@@ -110,5 +110,5 @@ export function AmenityField({ value, onChange, className }: { value: string[]; 
 }
 
 export function DateField({ label, ariaLabel, value, min, onChange }: { label: string; ariaLabel?: string; value: string; min: string; onChange: (value: string) => void }) {
-  return <label className="cursor-pointer rounded-psw-md border border-control-border p-3 text-m-footnote font-semibold text-ink-secondary focus-within:border-primary focus-within:ring-1 focus-within:ring-primary">{label}<DateInput aria-label={ariaLabel} value={value} min={min} onChange={(event) => onChange(event.target.value)} focusOutline={false} wrapperClassName="mt-1" className="text-base font-semibold text-ink sm:text-sm" /></label>;
+  return <label className="field-shell cursor-pointer rounded-psw-md border border-control-border p-3 text-m-footnote font-semibold text-ink-secondary">{label}<DateInput aria-label={ariaLabel} value={value} min={min} onChange={(event) => onChange(event.target.value)} focusOutline={false} wrapperClassName="mt-1" className="text-base font-semibold text-ink sm:text-sm" /></label>;
 }

@@ -43,8 +43,9 @@ export function RoommateCardFace({ card, priority, children }: { card: RoommateC
   ].filter((fact) => fact.value);
   return (
     <article className="overflow-hidden rounded-psw-xl bg-surface">
-      {/* Full width but capped in height, so the name and the deck's buttons stay near the first screen. */}
-      <RoommatePhoto card={card} priority={priority} className="w-full max-h-[50dvh] lg:max-h-[calc(100dvh-32rem)]">{children}</RoommatePhoto>
+      {/* Full width but capped in height, so on the first screen the name and facts sit above the deck's buttons
+          (phones: the page header, the name block, the buttons and the tab bar take about 34rem). */}
+      <RoommatePhoto card={card} priority={priority} className="w-full max-h-[max(10rem,calc(100dvh-34rem))] md:max-h-[50dvh] lg:max-h-[calc(100dvh-32rem)]">{children}</RoommatePhoto>
       <div className="p-4 sm:p-5">
         <h2 className="text-m-title sm:text-d-title">{card.name}<span className="font-display">, {card.age}</span></h2>
         {card.school ? <p className="mt-0.5 text-m-subhead text-ink-secondary sm:text-d-subhead">{card.school}</p> : null}
@@ -84,7 +85,7 @@ export function RoommateDetailPanel({ card }: { card: RoommateCard }) {
     <section aria-labelledby={titleId} className="rounded-psw-xl bg-surface p-5 sm:p-6">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 id={titleId} className="text-m-headline sm:text-d-headline">匹配详情</h2>
-        {card.tier ? <div className="flex items-center gap-2"><span className="font-display text-m-price text-ink sm:text-d-price-large">{card.score}%</span><Badge className="text-[13px] leading-5">{tierLabels[card.tier]}</Badge></div> : null}
+        {card.tier ? <div className="flex items-center gap-2"><span className="font-display text-m-price text-ink sm:text-d-price-large">{card.score}%</span><Badge className="text-m-footnote">{tierLabels[card.tier]}</Badge></div> : null}
       </div>
       {card.tier ? null : <p className="mt-2 text-m-subhead text-ink-secondary sm:text-d-subhead">{card.watchouts.length ? "条件有冲突，不会互相推荐。" : "填写室友资料后显示双向匹配度。"}</p>}
       <NoteList items={card.reasons} className="mt-4" />

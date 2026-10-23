@@ -4,7 +4,7 @@ import "maplibre-gl/dist/maplibre-gl.css";
 
 import { Building2, LocateFixed, Minus, Plus, X } from "lucide-react";
 import type { Map as MapLibreMap, MapMouseEvent, MapOptions, Marker } from "maplibre-gl";
-import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import Supercluster from "supercluster";
 
@@ -97,7 +97,7 @@ type PinProperties = { id: string; label: string; title: string };
  * Interactive listing map for search and saved listings: price pins that merge into counts when crowded, a card for the
  * selected listing, and (with `searchArea`) results that follow the map as it moves.
  */
-export function ListingMap({ listings, fitKey, bounds = null, moveIn = "", moveOut = "", highlightedId, selectedId, onSelect, onOpen, onToggleSave, searchArea, className, label }: {
+export function ListingMap({ listings, fitKey, bounds = null, moveIn = "", moveOut = "", highlightedId, selectedId, onSelect, onOpen, onToggleSave, searchArea, controls, className, label }: {
   listings: PreviewListing[];
   /** When this changes and no map area is set, the map refits to `listings`. */
   fitKey?: string;
@@ -107,6 +107,8 @@ export function ListingMap({ listings, fitKey, bounds = null, moveIn = "", moveO
   highlightedId?: string | null; selectedId: string;
   onSelect: (id: string) => void; onOpen?: (id: string) => void; onToggleSave?: (listing: PreviewListing) => void;
   searchArea?: { onSearch: (bounds: MapBounds) => void; onClear: () => void };
+  /** Shown at the bottom centre of the map on large screens (the search page's view switch). */
+  controls?: ReactNode;
   className?: string; label: string;
 }) {
   const container = useRef<HTMLDivElement>(null);
@@ -266,6 +268,7 @@ export function ListingMap({ listings, fitKey, bounds = null, moveIn = "", moveO
     {popupNode && card ? createPortal(card, popupNode) : null}
     {/* Narrow maps: the card sits above the phone tab bar and the view switcher. */}
     {compact && card ? <div className="fixed inset-x-0 bottom-[148px] z-30 flex justify-center px-4 md:bottom-[92px]">{card}</div> : null}
+    {controls ? <div className="absolute bottom-6 left-1/2 z-20 hidden -translate-x-1/2 lg:block">{controls}</div> : null}
     <MapNotice failed={failed} />
   </section>;
 }
@@ -313,7 +316,7 @@ export function ListingLocationMap({ point, area }: { point: MapPoint; area: str
   return <div className="listing-map relative mt-5 h-[340px] overflow-hidden rounded-psw-xl bg-line-strong" role="region" aria-label="房源位置地图">
     {/* !absolute: MapLibre marks its container position: relative. */}
     <div ref={container} className="!absolute inset-0" />
-    {markerNode ? createPortal(<span className="grid size-14 place-items-center rounded-full border-4 border-surface bg-primary text-white shadow-menu"><Building2 className="size-6" aria-hidden="true" /></span>, markerNode) : null}
+    {markerNode ? createPortal(<span className="grid size-14 place-items-center rounded-full border-4 border-surface bg-primary text-on-primary shadow-menu"><Building2 className="size-6" aria-hidden="true" /></span>, markerNode) : null}
     <MapZoomControls map={map} />
     <div className="absolute bottom-4 left-4 z-10 rounded-psw-lg bg-surface p-4 shadow-menu"><p className="text-d-label text-ink">{area}</p><p className="mt-1 text-m-footnote text-ink-secondary">地图显示大致位置，准确地址将在申请流程中按规则展示</p></div>
     <MapNotice failed={failed} />

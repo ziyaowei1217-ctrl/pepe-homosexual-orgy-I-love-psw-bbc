@@ -80,16 +80,16 @@ describe("assistant UI", () => {
     fireEvent.click(await screen.findByRole("button", { name: "打开 AI 助手" }));
     const dialog = screen.getByRole("dialog", { name: "AI 助手" });
     await act(async () => {
-      fireEvent.click(within(dialog).getByRole("button", { name: "帮我写一条消息，问房东能不能看房" }));
+      fireEvent.click(within(dialog).getByRole("button", { name: "帮我写一条消息，问转租人能不能看房" }));
     });
 
     expect(requests[0].url).toBe("/api/assistant/chat");
-    expect(requests[0].body).toMatchObject({ messages: [{ role: "user", content: "帮我写一条消息，问房东能不能看房" }], context: { shownListingIds: [] } });
+    expect(requests[0].body).toMatchObject({ messages: [{ role: "user", content: "帮我写一条消息，问转租人能不能看房" }], context: { shownListingIds: [] } });
     expect(await within(dialog).findByText("找到 5 套，这套最便宜。")).toBeTruthy();
     expect(within(dialog).getByRole("link", { name: listing.title }).getAttribute("href")).toBe(`/listing/${listing.id}`);
     expect(within(dialog).getByRole("link", { name: "在找房页查看全部 5 套" }).getAttribute("href")).toBe("/search?q=Westwood");
 
-    const draft = within(dialog).getByRole("region", { name: "给房东的消息草稿" });
+    const draft = within(dialog).getByRole("region", { name: /^给转租人的消息草稿/ });
     fireEvent.click(within(draft).getByRole("button", { name: "去发送" }));
     expect(navigation.push).toHaveBeenCalledWith(`/inbox?listingId=${listing.id}`);
     expect(screen.queryByRole("dialog")).toBeNull();

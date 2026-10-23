@@ -11,6 +11,7 @@ import { assertCurrentAuthSession, readStoredAuthSession } from "@/lib/auth-sess
 import { getMyRoommateProfile, roommateLabels, saveMyRoommateProfile, type MyRoommateProfile, type RoommateField, type RoommateProfileInput } from "@/lib/roommate-matching";
 import { cn } from "@/lib/utils";
 import { useAuthSessionToken } from "@/lib/use-auth-session-token";
+import { DateInput } from "@/components/ui/date-input";
 
 type ChoiceKey = "gender" | "genderPreference" | "roomType" | "sleepSchedule" | "cleanliness" | "guests" | "smoking" | "pets";
 type TextKey = "displayName" | "age" | "moveInDate" | "moveOutDate" | "city" | "school" | "neighborhoods" | "budgetMin" | "budgetMax" | "intro" | "lookingFor";
@@ -116,8 +117,8 @@ function RoommateProfileForm({ token, profile, displayName }: { token: string; p
       <Chips label="室友性别偏好" {...single("genderPreference", true)} />
     </Section>
     <Section title="入住">
-      <Field label="入住日期"><input type="date" {...bind("moveInDate")} className="application-input" /></Field>
-      <Field label="搬走日期" error={errors.dates}><input type="date" {...bind("moveOutDate")} min={draft.moveInDate || undefined} className="application-input" /></Field>
+      <Field label="入住日期"><DateInput aria-label="入住日期" {...bind("moveInDate")} className="application-input flex items-center peer-aria-[invalid=true]:border-danger" /></Field>
+      <Field label="搬走日期" error={errors.dates}><DateInput aria-label="搬走日期" {...bind("moveOutDate")} min={draft.moveInDate || undefined} className="application-input flex items-center peer-aria-[invalid=true]:border-danger" /></Field>
       <Field label="城市"><input {...bind("city")} maxLength={140} placeholder="Los Angeles" className="application-input" /></Field>
       <Field label="学校或公司"><input {...bind("school")} maxLength={140} placeholder="UCLA" className="application-input" /></Field>
       <Field label="想住的区域" hint="多个区域用逗号或顿号分开" error={errors.neighborhoods} wide><input {...bind("neighborhoods")} placeholder="Westwood、Sawtelle" className="application-input" /></Field>

@@ -216,7 +216,7 @@ function ProfileCard({ profile, matched, onLikeBack, liking }: { profile: ApiRoo
       <div className="mt-3 flex">
         {matched ? <Link href={`/inbox?roommateId=${encodeURIComponent(profile.id ?? "")}`} className="primary-action"><MessageCircle className="size-4" aria-hidden="true" />开始聊天</Link>
           : onLikeBack ? <button type="button" disabled={liking} onClick={onLikeBack} className="primary-action"><Heart className="size-4" aria-hidden="true" />也喜欢 TA</button>
-          : <Badge className="text-[13px] leading-5">等待回应</Badge>}
+          : <Badge className="text-m-footnote">等待回应</Badge>}
       </div>
     </div>
   </article>;

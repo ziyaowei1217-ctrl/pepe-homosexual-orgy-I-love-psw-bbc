@@ -37,7 +37,8 @@ The site follows the **psw 设计系统** (the psw Design System artifact). This
 - **Class merging:** `cn()` knows the `text-m-*` / `text-d-*` scale is a size, so a status colour after it no longer
   drops the size.
 - **States:** hover one shade darker, press scales to 97%, focus is the design system's `shadow-focus`: a 2px white
-  gap inside a 3px 夜墨 ring, visible on light pages and on 夜墨 blocks. Small controls use `tap-target` to reach 44px.
+  gap inside a 3px 夜墨 ring, visible on light pages and on 夜墨 blocks. Small controls use `tap-target` to reach 44px. A field drawn as a box around a bare input (search pills, message composers, label-as-box fields) adds
+  `field-shell` to the box: the box takes the ring, the input inside does not draw a square one.
 
 ## Price display
 

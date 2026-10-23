@@ -82,14 +82,15 @@ export function AssistantPanel({ token, onClose }: { token: string | null; onClo
         onMouseDown={(event) => event.stopPropagation()}
         className="marketplace-modal-panel flex h-dvh w-full flex-col bg-surface shadow-dialog sm:m-3 sm:h-[calc(100dvh-24px)] sm:max-w-[440px] sm:rounded-psw-xl"
       >
-        <header className="flex items-start gap-2 border-b border-line-strong py-3 pl-4 pr-2 sm:pl-5">
+        {/* A div, not <header>: outside a section a header is the page banner, and the page already has one. */}
+        <div className="flex items-start gap-2 border-b border-line-strong py-3 pl-4 pr-2 sm:pl-5">
           <div className="min-w-0 flex-1 pt-1">
             <h2 id="assistant-title" className="text-m-title sm:text-d-title">AI 助手</h2>
-            <p className="mt-0.5 text-m-footnote text-ink-secondary">可以帮你找房、比较房源、起草给房东的消息。消息由你自己发送。</p>
+            <p className="mt-0.5 text-m-footnote text-ink-secondary">可以帮你找房、比较房源、起草给转租人的消息。消息由你自己发送。</p>
           </div>
           {items.length ? <button type="button" onClick={() => { clearAssistantConversation(); input.current?.focus(); }} className="min-h-11 shrink-0 rounded-full px-3 text-sm font-semibold text-ink-secondary hover:bg-surface-subtle">清空</button> : null}
           <button type="button" onClick={onClose} className="grid size-11 shrink-0 place-items-center rounded-full hover:bg-surface-subtle" aria-label="关闭 AI 助手"><X className="size-5" aria-hidden="true" /></button>
-        </header>
+        </div>
 
         <p role="status" className="sr-only">{announcement(items.at(-1)?.role === "assistant" ? (items.at(-1) as AssistantAnswer) : undefined)}</p>
         <div
@@ -110,7 +111,7 @@ export function AssistantPanel({ token, onClose }: { token: string | null; onClo
           ) : (
             items.map((item) =>
               item.role === "user" ? (
-                <p key={item.id} className="ml-auto w-fit max-w-[85%] whitespace-pre-wrap rounded-[20px] rounded-br-md bg-primary px-4 py-2.5 text-[15px] leading-6 text-white [overflow-wrap:anywhere]"><span className="sr-only">你：</span>{item.text}</p>
+                <p key={item.id} className="ml-auto w-fit max-w-[85%] whitespace-pre-wrap rounded-psw-xl rounded-br-psw-sm bg-primary px-4 py-2.5 text-m-subhead text-on-primary [overflow-wrap:anywhere]"><span className="sr-only">你：</span>{item.text}</p>
               ) : (
                 <Answer key={item.id} answer={item} token={token} savedIds={savedIds} onToggleSave={toggleSaved} onLeave={onClose} />
               )
@@ -120,7 +121,7 @@ export function AssistantPanel({ token, onClose }: { token: string | null; onClo
 
         {token ? (
           <form onSubmit={submit} className="shrink-0 border-t border-line-strong p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-            <div className="flex items-end gap-2 rounded-[22px] border border-line-strong bg-surface-muted p-2 pl-4 focus-within:border-primary">
+            <div className="field-shell flex items-end gap-2 rounded-psw-xl border border-line-strong bg-surface-muted p-2 pl-4">
               <textarea
                 ref={input}
                 value={question}
@@ -136,13 +137,13 @@ export function AssistantPanel({ token, onClose }: { token: string | null; onClo
                 maxLength={assistantLimits.messageChars}
                 placeholder="输入问题…"
                 aria-label="问 AI 助手"
-                className="min-h-9 min-w-0 flex-1 resize-none bg-transparent py-1.5 text-base outline-none focus-visible:shadow-none focus-visible:outline-none sm:text-sm"
+                className="min-h-9 min-w-0 flex-1 resize-none bg-transparent py-1.5 text-base outline-none placeholder:text-ink-placeholder sm:text-sm"
               />
               <button
                 type="submit"
                 disabled={!running && !question.trim()}
                 aria-label={running ? "停止回答" : "发送"}
-                className="grid size-11 shrink-0 place-items-center rounded-full bg-primary text-white transition active:scale-[0.97] hover:bg-primary-hover disabled:opacity-40"
+                className="grid size-11 shrink-0 place-items-center rounded-full bg-primary text-on-primary transition active:scale-[0.97] hover:bg-primary-hover disabled:opacity-40"
               >
                 {running ? <Square className="size-4 fill-current" aria-hidden="true" /> : <Send className="size-4" aria-hidden="true" />}
               </button>
@@ -158,8 +159,8 @@ export function AssistantPanel({ token, onClose }: { token: string | null; onClo
 function Suggestions({ onAsk, hasSaved }: { onAsk: (text: string) => void; hasSaved: boolean }) {
   const onListing = window.location.pathname.startsWith("/listing/");
   const prompts = onListing
-    ? ["这套房按我的日期总价多少？", ...(hasSaved ? ["这套房和我收藏的比怎么样？"] : []), "帮我给这位房东写一条消息"]
-    : ["找 6 月到 8 月、每月 $1,500 以下的房间", ...(hasSaved ? ["比较我收藏的房源"] : []), "帮我写一条消息，问房东能不能看房"];
+    ? ["这套房按我的日期总价多少？", ...(hasSaved ? ["这套房和我收藏的比怎么样？"] : []), "帮我给这位转租人写一条消息"]
+    : ["找 6 月到 8 月、每月 $1,500 以下的房间", ...(hasSaved ? ["比较我收藏的房源"] : []), "帮我写一条消息，问转租人能不能看房"];
   return (
     <div>
       <p className="text-d-label">可以这样问：</p>
@@ -175,7 +176,7 @@ function Answer({ answer, token, savedIds, onToggleSave, onLeave }: {
 }) {
   return (
     <div className="space-y-3">
-      {answer.text ? <p className="w-fit max-w-[92%] whitespace-pre-wrap rounded-[20px] rounded-bl-md bg-tag-neutral px-4 py-2.5 text-[15px] leading-6 text-ink [overflow-wrap:anywhere]"><span className="sr-only">AI 助手：</span>{answer.text}</p> : null}
+      {answer.text ? <p className="w-fit max-w-[92%] whitespace-pre-wrap rounded-psw-xl rounded-bl-psw-sm bg-tag-neutral px-4 py-2.5 text-m-subhead text-ink [overflow-wrap:anywhere]"><span className="sr-only">AI 助手：</span>{answer.text}</p> : null}
       {answer.listings.map((event, index) => <ListingResults key={index} event={event} savedIds={savedIds} onToggleSave={onToggleSave} onLeave={onLeave} />)}
       {answer.drafts.map((draft, index) => <DraftCard key={index} draft={draft} token={token} onLeave={onLeave} />)}
       {answer.pending ? <p className="flex items-center gap-2 text-m-footnote text-ink-secondary" aria-hidden="true"><span className="size-2 animate-pulse rounded-full bg-primary" />{answer.status ?? "正在思考…"}</p> : null}
@@ -217,9 +218,10 @@ function DraftCard({ draft, token, onLeave }: { draft: AssistantDraftEvent; toke
   const router = useRouter();
   const [copy, setCopy] = useState<"idle" | "copied" | "failed">("idle");
   return (
-    <section className="rounded-psw-xl border border-line-strong p-4" aria-label="给房东的消息草稿">
-      <h3 className="text-m-headline">给房东的消息草稿 · <span className="font-sans font-semibold">{draft.listingTitle}</span></h3>
-      <p className="mt-2 whitespace-pre-wrap text-[15px] leading-6 text-ink [overflow-wrap:anywhere]">{draft.body}</p>
+    <section className="rounded-psw-xl border border-line-strong p-4" aria-label={`给转租人的消息草稿：${draft.listingTitle}`}>
+      <h3 className="text-m-headline">给转租人的消息草稿</h3>
+      <p className="mt-0.5 truncate text-m-footnote text-ink-secondary">{draft.listingTitle}</p>
+      <p className="mt-3 whitespace-pre-wrap rounded-psw-md bg-surface-subtle p-3 text-m-subhead text-ink [overflow-wrap:anywhere]">{draft.body}</p>
       <p className="mt-2 text-m-footnote text-ink-secondary">发送前可以修改。</p>
       <div className="mt-3 flex flex-wrap gap-2">
         <button

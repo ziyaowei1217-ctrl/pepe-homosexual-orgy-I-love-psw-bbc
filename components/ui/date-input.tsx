@@ -15,8 +15,8 @@ type Props = Omit<InputHTMLAttributes<HTMLInputElement>, "type" | "value" | "def
   /** Classes for the wrapper, e.g. to make it fill a grid cell. */
   wrapperClassName?: string;
   /**
-   * Draw a focus outline on the date text. Turn it off when the surrounding field already shows focus
-   * (focus-within), or when `className` styles focus itself with `peer-focus:` classes.
+   * Draw the design system's focus ring (shadow-focus) on the visible box. Turn it off when the surrounding box
+   * carries the ring instead (a `field-shell` label around the date).
    */
   focusOutline?: boolean;
 };
@@ -66,7 +66,7 @@ export const DateInput = forwardRef<HTMLInputElement, Props>(function DateInput(
       onKeyDown={key}
       className="peer absolute inset-0 z-10 h-full w-full cursor-pointer appearance-none text-base opacity-0 disabled:cursor-not-allowed [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:inset-0 [&::-webkit-calendar-picker-indicator]:h-full [&::-webkit-calendar-picker-indicator]:w-full [&::-webkit-calendar-picker-indicator]:cursor-pointer"
     />
-    <span aria-hidden="true" className={cn("block truncate", focusOutline && "rounded-psw-sm peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-primary", className, !shown && "text-ink-placeholder", disabled && "opacity-50")}>
+    <span aria-hidden="true" className={cn("block truncate", focusOutline && "peer-focus-visible:shadow-focus", className, !shown && "text-ink-placeholder", disabled && "opacity-50")}>
       {shown ? formatDateLong(shown) : placeholder}
     </span>
   </span>;

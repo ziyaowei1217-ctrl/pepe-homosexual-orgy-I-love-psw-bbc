@@ -231,7 +231,9 @@ export function RoommateSwipeDeck({ token, initial }: { token: string | null; in
               </div>
             ))}
           </div>
-          <div className="sticky bottom-[calc(5rem+env(safe-area-inset-bottom))] z-10 flex items-center justify-center gap-4 md:bottom-6 lg:static">
+          {/* Phones: pinned above the tab bar on a band of page colour, so a long card scrolls under the buttons instead of
+              colliding with them. */}
+          <div className="sticky bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-10 -mx-4 flex items-center justify-center gap-4 bg-gradient-to-t from-background from-60% to-transparent px-4 pb-2 pt-5 md:bottom-6 md:mx-0 md:bg-none md:p-0 lg:static">
             <button type="button" onClick={undo} disabled={!last} aria-label={undoButton} className={smallButton}><Undo2 className="size-5" aria-hidden="true" /></button>
             <button type="button" onClick={() => decide("PASS")} aria-label={`跳过 ${top.name}`} className="grid size-14 place-items-center rounded-full border-[1.5px] border-outline bg-surface text-ink hover:border-control-border active:scale-[0.97]"><X className="size-6" aria-hidden="true" /></button>
             <button type="button" onClick={() => decide("LATER")} aria-label={`稍后再看 ${top.name}`} className={smallButton}><Clock className="size-5" aria-hidden="true" /></button>

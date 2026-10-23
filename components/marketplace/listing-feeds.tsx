@@ -102,7 +102,7 @@ function FeedSection({ id, title, description, action, items, stay, onOpen, prio
   return <section aria-labelledby={id} className={cn("flex min-w-0 flex-col gap-6", className)}>
     <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-2">
       <div className="min-w-0">
-        <h2 id={id} tabIndex={-1} className="text-[22px] font-bold leading-[30px] text-ink outline-none sm:text-d-title">{title}</h2>
+        <h2 id={id} tabIndex={-1} className="text-m-title text-ink outline-none sm:text-d-title">{title}</h2>
         {description ? <p className="mt-1 text-m-subhead text-ink-secondary sm:text-d-subhead">{description}</p> : null}
       </div>
       {action}
