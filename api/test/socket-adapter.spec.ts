@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 const redis = vi.hoisted(() => ({ createClient: vi.fn() }));
 vi.mock("redis", () => redis);
@@ -6,7 +6,22 @@ vi.mock("redis", () => redis);
 import { MessagingInfrastructureHealth } from "../src/health/messaging-infrastructure-health";
 import { createRoommateSocketAdapter } from "../src/roommate-conversations/socket-adapter";
 
+const subscriptions = new Map<string, Set<(message: string) => void>>();
+afterEach(() => subscriptions.clear());
+
 describe("optional roommate Socket.IO Valkey adapter", () => {
+  it("rejects a production startup outage so the runtime can restart instead of remaining permanently local", async () => {
+    const pubClient = valkeyClient({ connectError: new Error("credential-bearing connection failure") });
+    const subClient = valkeyClient();
+    await expect(createRoommateSocketAdapter(appContext(), {
+      nodeEnv: "production", valkeyUrl: "rediss://cache.example.com",
+      clientFactory: vi.fn().mockReturnValueOnce(pubClient).mockReturnValueOnce(subClient),
+      health: messagingHealth(), logger: { warn: vi.fn() }
+    })).rejects.toThrow("Production realtime messaging infrastructure is unavailable");
+    expect(pubClient.destroy).toHaveBeenCalledTimes(1);
+    expect(subClient.destroy).toHaveBeenCalledTimes(1);
+  });
+
   it("marks realtime single-instance when VALKEY_URL is absent", async () => {
     const clientFactory = vi.fn();
     const health = messagingHealth();
@@ -329,6 +344,33 @@ describe("optional roommate Socket.IO Valkey adapter", () => {
     });
   });
 
+  it("keeps a failed adapter unready after reconnect signals until process restart", async () => {
+    const pubClient = valkeyClient();
+    const subClient = valkeyClient();
+    const health = messagingHealth();
+    const logger = { warn: vi.fn() };
+    const adapter = await createRoommateSocketAdapter(appContext(), {
+      valkeyUrl: "redis://valkey.internal:6379",
+      clientFactory: vi.fn().mockReturnValueOnce(pubClient).mockReturnValueOnce(subClient), health, logger
+    });
+    pubClient.isReady = false;
+    subClient.isReady = false;
+    pubClient.emitError(new Error("connection lost"));
+    expect(health.snapshot().realtime.status).toBe("degraded");
+    pubClient.isReady = true;
+    pubClient.emitReady();
+    expect(health.snapshot().realtime.status).toBe("degraded");
+    subClient.isReady = true;
+    subClient.emitReady();
+    await health.refresh();
+    expect(health.snapshot().realtime.status).toBe("degraded");
+    pubClient.emitError(new Error("later outage"));
+    expect(logger.warn).toHaveBeenCalledTimes(1);
+    await adapter?.dispose();
+    subClient.emitReady();
+    expect(health.snapshot().realtime.status).toBe("degraded");
+  });
+
   it("reports only the first runtime pub/sub error after activation", async () => {
     let timestamp = "2026-08-11T00:00:00.000Z";
     const health = new MessagingInfrastructureHealth(() => new Date(timestamp));
@@ -362,10 +404,8 @@ describe("optional roommate Socket.IO Valkey adapter", () => {
 
   it("reports and contains a rejected publish without a client error event", async () => {
     const leaked = "publish-rejection-secret redis://user:pass@valkey.internal:6379";
-    const pubClient = {
-      ...valkeyClient(),
-      publish: vi.fn().mockRejectedValue(new Error(leaked))
-    };
+    const pubClient = valkeyClient();
+    const transportPublish = pubClient.publish;
     const subClient = valkeyClient();
     const health = messagingHealth();
     const logger = { warn: vi.fn() };
@@ -376,6 +416,7 @@ describe("optional roommate Socket.IO Valkey adapter", () => {
       logger
     });
 
+    transportPublish.mockRejectedValue(new Error(leaked));
     await expect(pubClient.publish("roommate-channel", "payload")).resolves.toBeUndefined();
 
     expect(logger.warn).toHaveBeenCalledTimes(1);
@@ -390,12 +431,8 @@ describe("optional roommate Socket.IO Valkey adapter", () => {
   });
 
   it("reports and contains a synchronous publish throw without a client error event", async () => {
-    const pubClient = {
-      ...valkeyClient(),
-      publish: vi.fn((..._arguments: unknown[]) => {
-        throw new Error("synchronous publish secret redis://user:pass@valkey.internal:6379");
-      })
-    };
+    const pubClient = valkeyClient();
+    const transportPublish = pubClient.publish;
     const subClient = valkeyClient();
     const health = messagingHealth();
     const logger = { warn: vi.fn() };
@@ -406,6 +443,7 @@ describe("optional roommate Socket.IO Valkey adapter", () => {
       logger
     });
 
+    transportPublish.mockImplementation(() => { throw new Error("synchronous publish secret redis://user:pass@valkey.internal:6379"); });
     let publication: unknown;
     expect(() => {
       publication = pubClient.publish("roommate-channel", "payload");
@@ -421,6 +459,55 @@ describe("optional roommate Socket.IO Valkey adapter", () => {
     });
     expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("synchronous publish secret");
     expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("redis://");
+  });
+
+  it("requires an active matching pub/sub receipt even while both sockets are ready", async () => {
+    const pubClient = valkeyClient();
+    const subClient = valkeyClient();
+    const transportPublish = pubClient.publish;
+    const health = messagingHealth();
+    const adapter = await createRoommateSocketAdapter(appContext(), {
+      valkeyUrl: "redis://fixture", clientFactory: vi.fn().mockReturnValueOnce(pubClient).mockReturnValueOnce(subClient),
+      operationTimeoutMs: 5, health, logger: { warn: vi.fn() }
+    });
+    transportPublish.mockImplementation(async () => 1); // Command succeeds; subscribed delivery disappears.
+    await health.refresh();
+    expect(health.snapshot().realtime.status).toBe("degraded");
+    expect(pubClient.destroy).toHaveBeenCalledTimes(1);
+    expect(subClient.destroy).toHaveBeenCalledTimes(1);
+    transportPublish.mockImplementation(async (channel, message) => {
+      for (const callback of subscriptions.get(channel) ?? []) callback(message);
+      return 1;
+    });
+    await health.refresh();
+    expect(health.snapshot().realtime.status).toBe("degraded");
+    await adapter?.dispose();
+    const restarted = messagingHealth();
+    const freshClients = [valkeyClient(), valkeyClient()];
+    const freshAdapter = await createRoommateSocketAdapter(appContext(), {
+      valkeyUrl: "redis://fixture", clientFactory: () => freshClients.shift()!, operationTimeoutMs: 5, health: restarted
+    });
+    await restarted.refresh();
+    expect(restarted.snapshot().realtime).toEqual({ status: "ok", mode: "distributed" });
+    await freshAdapter?.dispose();
+  });
+
+  it("bounds hanging publications and retires both clients before another write can queue", async () => {
+    const pubClient = valkeyClient();
+    const subClient = valkeyClient();
+    const transportPublish = pubClient.publish;
+    const health = messagingHealth();
+    const adapter = await createRoommateSocketAdapter(appContext(), {
+      valkeyUrl: "redis://fixture", clientFactory: vi.fn().mockReturnValueOnce(pubClient).mockReturnValueOnce(subClient),
+      operationTimeoutMs: 5, health, logger: { warn: vi.fn() }
+    });
+    transportPublish.mockImplementation(() => new Promise(() => undefined));
+    await expect(pubClient.publish("events", "message")).resolves.toBeUndefined();
+    expect(health.snapshot().realtime).toMatchObject({ status: "degraded", reason: "timeout" });
+    const calls = transportPublish.mock.calls.length;
+    await pubClient.publish("events", "another message");
+    expect(transportPublish.mock.calls).toHaveLength(calls);
+    await adapter?.dispose();
   });
 
   it("does not include the raw client error or Valkey URL in warnings", async () => {
@@ -498,7 +585,7 @@ describe("optional roommate Socket.IO Valkey adapter", () => {
   });
 
   it("disables the default pub/sub clients' offline queues", async () => {
-    const pubClient = { ...valkeyClient(), publish: vi.fn().mockResolvedValue(1) };
+    const pubClient = valkeyClient();
     const subClient = valkeyClient();
     redis.createClient.mockReturnValueOnce(pubClient).mockReturnValueOnce(subClient);
 
@@ -527,7 +614,7 @@ function messagingHealth() {
 }
 
 function valkeyClient(options: { connectError?: Error; pendingConnect?: boolean } = {}) {
-  let errorListener: ((error: unknown) => void) | undefined;
+  const listeners = new Map<string, (error: unknown) => void>();
   return {
     isOpen: false,
     isReady: false,
@@ -543,12 +630,24 @@ function valkeyClient(options: { connectError?: Error; pendingConnect?: boolean 
       this.isReady = false;
       return Promise.resolve();
     }),
+    publish: vi.fn(async (channel: string, message: string) => {
+      for (const callback of subscriptions.get(channel) ?? []) callback(message);
+      return 1;
+    }),
+    subscribe: vi.fn(async (channel: string, callback: (message: string) => void) => {
+      const channelSubscriptions = subscriptions.get(channel) ?? new Set();
+      channelSubscriptions.add(callback);
+      subscriptions.set(channel, channelSubscriptions);
+    }),
     destroy: vi.fn(),
-    on: vi.fn((_event: "error", listener: (error: unknown) => void) => {
-      errorListener = listener;
+    on: vi.fn((event: "error" | "ready", listener: (error: unknown) => void) => {
+      listeners.set(event, listener);
     }),
     emitError(error: unknown) {
-      errorListener?.(error);
+      listeners.get("error")?.(error);
+    },
+    emitReady() {
+      listeners.get("ready")?.(undefined);
     }
   };
 }

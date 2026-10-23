@@ -1,6 +1,7 @@
 import { productErrorForStatus, toProductApiError } from "./product-errors";
 import { getBrowserDeviceId } from "./device-id";
 import { normalizeRoommateMessageBody } from "./roommate-conversations";
+import { clearStoredAuthSession, readStoredAuthSession } from "./auth-session";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000/api/v1";
 
@@ -245,6 +246,7 @@ export type ApiViewingRequest = {
 };
 
 export type ApiDealThread = {
+  messagePageInfo?: { nextCursor: string | null; hasMore: boolean };
   id: string;
   ownerId: string;
   listingOwnerId: string;
@@ -263,6 +265,11 @@ export type ApiDealThread = {
 
 export async function apiGet<T>(path: string, token?: string) {
   return apiRequest<T>(path, { method: "GET" }, token);
+}
+
+export function getDealMessages(token: string, conversationId: string, cursor?: string) {
+  const query = cursor ? `?cursor=${encodeURIComponent(cursor)}` : "";
+  return apiGet<{ messages: ApiDealMessage[]; nextCursor: string | null }>(`/deal-threads/${encodeURIComponent(conversationId)}/messages${query}`, token);
 }
 
 export async function apiPost<T>(path: string, body: unknown, token?: string) {
@@ -361,6 +368,7 @@ export async function getAdminListingMediaContent(token: string, path: string) {
   }
 
   if (!response.ok) {
+    clearRejectedSession(response.status, token, path);
     throw productErrorForStatus(response.status, await readSafeErrorCode(response));
   }
   return response.blob();
@@ -424,7 +432,27 @@ export function archiveAdminRoommate(token: string, id: string) {
   return apiPost<ApiRoommate>(`/admin/roommates/${encodeURIComponent(id)}/archive`, {}, token);
 }
 
+export const API_REQUEST_TIMEOUT_MS = 45_000;
+
 async function apiRequest<T>(path: string, init: RequestInit, token?: string): Promise<T> {
+  const controller = new AbortController();
+  let timedOut = false;
+  const abort = () => controller.abort(init.signal?.reason);
+  if (init.signal?.aborted) abort();
+  else init.signal?.addEventListener("abort", abort, { once: true });
+  const timer = setTimeout(() => { timedOut = true; controller.abort(); }, API_REQUEST_TIMEOUT_MS);
+  try {
+    return await performApiRequest<T>(path, { ...init, signal: controller.signal }, token);
+  } catch (error) {
+    if (timedOut) throw productErrorForStatus(408);
+    throw error;
+  } finally {
+    clearTimeout(timer);
+    init.signal?.removeEventListener("abort", abort);
+  }
+}
+
+async function performApiRequest<T>(path: string, init: RequestInit, token?: string): Promise<T> {
   let response: Response;
   const deviceId = getBrowserDeviceId();
   try {
@@ -442,6 +470,7 @@ async function apiRequest<T>(path: string, init: RequestInit, token?: string): P
   }
 
   if (!response.ok) {
+    clearRejectedSession(response.status, token, path);
     throw productErrorForStatus(response.status, await readSafeErrorCode(response));
   }
 
@@ -450,6 +479,13 @@ async function apiRequest<T>(path: string, init: RequestInit, token?: string): P
   } catch {
     throw productErrorForStatus(502);
   }
+}
+
+function clearRejectedSession(status: number, token: string | undefined, path: string) {
+  // A failed reauthentication code does not invalidate the underlying session.
+  // A late response for another account must never sign out the current one.
+  if (status === 401 && token && !path.startsWith("/auth/admin-step-up/") &&
+      readStoredAuthSession()?.accessToken === token) clearStoredAuthSession();
 }
 
 export async function readSafeErrorCode(response: Response) {

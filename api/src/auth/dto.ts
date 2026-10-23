@@ -1,5 +1,5 @@
 import { Transform } from "class-transformer";
-import { IsEmail, IsNotEmpty, IsString, Length, Matches } from "class-validator";
+import { IsEmail, IsNotEmpty, IsString, Length, Matches, MaxLength } from "class-validator";
 
 function Trim() {
   return Transform(({ value }) => (typeof value === "string" ? value.trim() : value));
@@ -33,4 +33,11 @@ export class AdminStepUpCodeDto {
   @Length(6, 6)
   @Matches(/^\d{6}$/)
   code!: string;
+}
+
+export class NeonTokenExchangeDto {
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(8192)
+  token!: string;
 }

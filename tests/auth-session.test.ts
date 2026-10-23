@@ -56,4 +56,9 @@ describe("auth session storage", () => {
     expect(window.localStorage.getItem("sublet_auth_session")).toBeNull();
     expect(window.localStorage.getItem("sublet_token")).toBeNull();
   });
+
+  it("treats denied browser storage as signed out without crashing page navigation", () => {
+    vi.spyOn(window.localStorage, "getItem").mockImplementation(() => { throw new DOMException("Storage denied", "SecurityError"); });
+    expect(readStoredAuthSession()).toBeNull();
+  });
 });

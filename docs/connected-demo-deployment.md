@@ -1,0 +1,114 @@
+# Connected psw website: deployment handoff
+
+The target is the existing website, <https://sublet-pipeline-demo-zihao.netlify.app/>, with real shared accounts, stored message history and authenticated actions. The Netlify site ID is `2ddeaae7-bd09-4deb-bd81-13bd84bb1be5`. There is no browser-local account simulator in this release.
+
+The initial inspection on October 22, 2026 found no configured production variables on that Netlify site. Subsequent authorized setup established the managed Neon project and verified its private object storage as described below. This does not establish that the API, migrations, distributed messaging, live Google login or connected Netlify deployment have passed their release checks.
+
+## Current handoff status
+
+| Item | Verified state at the October 23, 2026 setup checkpoint |
+| --- | --- |
+| Neon PostgreSQL | Free PostgreSQL 18 project in Ohio; all 25 migrations applied. The separate restricted runtime role passed actual Prisma CRUD/rollback and denial of schema creation, audit mutation, migration writes and provider-auth data access. See the runtime database verification record. |
+| Neon Auth settings | Exact stable website origin trusted; provider password policy hardened; localhost access and organization features disabled. The actual OAuth consent/callback and two-account application login still need hosted acceptance. |
+| Private object storage | Twelve live compatibility/privacy checks passed; the private `psw-listing-media` bucket is created with exact stable-origin CORS. No session-token credential is required by the current storage credentials. |
+| Render API | Free service form prepared; service not created or deployed at this checkpoint. |
+| Upstash | Human-owned account and Free Ohio database created; native TLS credential connection and real distributed quota/realtime checks remain pending. |
+| Netlify | Existing production site retained; connected candidate has not been accepted or published at this checkpoint. |
+| Dependency audit | Current web production dependency audit reports zero high/critical findings and one moderate finding. This is not a claim that every dependency or application path is risk-free. |
+
+The required next steps are to finish the distributed-store connection, deploy the configured API, verify readiness/authentication/realtime/storage together, then test and promote one immutable Netlify candidate. Preserve this distinction when reporting progress: successful source checks and provider probes do not equal a completed connected release.
+
+## Required services and configuration
+
+| Location | Required inputs | Purpose |
+| --- | --- | --- |
+| Netlify: build and functions | `NEXT_PUBLIC_API_BASE_URL` | Public HTTPS Nest API base ending in `/api/v1`; the browser and server use it. |
+| Netlify: functions, optionally builds | `API_INTERNAL_BASE_URL` | Optional server-side API base. It must also be reachable over HTTPS from Netlify. A Compose-only `http://api:4000` address does not work here. |
+| Netlify: builds | `NEXT_PUBLIC_MEDIA_UPLOAD_ORIGIN` | Exact HTTPS browser-upload origin; it must match the API's storage upload endpoint origin. |
+| Netlify: builds | `NEXT_PUBLIC_AUTH_PROVIDER=neon` | Selects real Google login through managed Neon Auth for this beta. Unset retains existing email authentication. |
+| Netlify: build preflight and functions | `NEON_AUTH_BASE_URL`, `NEON_AUTH_APP_ORIGIN`, `NEON_AUTH_COOKIE_SECRET` | Exact managed Neon Auth endpoint, exact stable HTTPS website origin, and a separate random secret of at least 32 characters. Never prefix these with `NEXT_PUBLIC_`. The proxy additionally accepts only this site's exact provider-created `DEPLOY_URL` when `NETLIFY=true`. |
+| Netlify: builds | `NEXT_PUBLIC_MAP_STYLE_URL`, optionally raster configuration | OpenFreeMap's public vector style is the default. A custom raster template needs `{z}`, `{x}`, `{y}` and attribution. No paid map key is required for the default. |
+| API host | `DATABASE_URL` | Persistent PostgreSQL, using the strict TLS and timeout settings below. Apply committed Prisma migrations before serving requests. |
+| API host | `VALKEY_URL` | TLS Valkey/Redis for shared rate limits and Socket.IO messaging; do not substitute an in-memory fallback. |
+| API host | `JWT_SECRET`, `OTP_HASH_SECRET`, `SECURITY_IDENTIFIER_HASH_SECRET` | Three independent strong secrets. The Blueprint generates separate values. Do not expose them through a `NEXT_PUBLIC_` variable or Netlify client bundle. |
+| API host | `WEB_ORIGIN`, `TRUSTED_PROXY_HOPS` | The exact stable website origin and the hosting provider's verified proxy-hop count. The API and WebSocket server enforce that origin. |
+| API host | `AUTH_PROVIDER=neon`, `NEON_AUTH_BASE_URL`, `PUBLIC_BETA_SIGNUP=true` | Managed Google identity verified by the API with the pinned project's JWKS, issuer and audience. A verified identity maps to an ordinary existing server account; it never grants administrator privileges. Public signup is explicit and applies only to this provider. |
+| API host, only in existing email mode | `EMAIL_SENDER=resend`, `EMAIL_FROM`, `RESEND_API_KEY` | Real email-code delivery with a verified sender domain. This transport is not required or enabled in Neon mode. Console codes are not a production substitute. |
+| API host | `LISTING_MEDIA_STORAGE_ENDPOINT`, `LISTING_MEDIA_UPLOAD_ENDPOINT`, `LISTING_MEDIA_STORAGE_REGION`, `LISTING_MEDIA_STORAGE_BUCKET`, `LISTING_MEDIA_STORAGE_ACCESS_KEY_ID`, `LISTING_MEDIA_STORAGE_SECRET_ACCESS_KEY` | Private S3-compatible storage, HTTPS uploads, a restricted credential and CORS permitting the exact website origin. |
+| API host | `PAYMENT_MODE` | `demo` is an explicit exception for simulated payments stored in the real database. Accounts, identity verification, authorization and messages remain real. Unset defaults to strict production payments. |
+| API host, when using real payments | `PAYMENT_SERVICE_URL`, `PAYMENT_SERVICE_API_KEY` | Existing HTTPS payment-adapter contract. Both are mandatory when production payments are selected. |
+| Netlify: functions, optional | `ANTHROPIC_API_KEY` | Enables the existing server-side assistant. Leave it unset to keep the assistant unavailable; do not expose the credential to the browser. |
+
+Use the API's strict PostgreSQL URL settings: exactly one `sslmode=require`, `sslaccept=strict`, `connect_timeout=2`, `pool_timeout=2` and `socket_timeout=3`. Optional `connection_limit` is an integer from 1 to 10. An optional schema is a literal PostgreSQL identifier. Unsupported or duplicate driver settings are rejected. The provider's certificate must validate normally; do not disable TLS verification.
+
+Keep the owner connection in the operator environment for migrations. `tools/provision-runtime-role.mjs` creates the initial `psw_runtime` login using `DATABASE_ADMIN_URL` and a separate random `DATABASE_RUNTIME_PASSWORD`, supplied through private environment settings. It refuses to alter an existing role/password. The running API uses that restricted account, not the migration owner. Audit events receive only SELECT/INSERT; provider-auth tables and migration metadata receive no runtime grants. Verify these permissions again after schema changes. The sanitized [runtime verification record](release/2026-10-23-runtime-database-verification.json) records the actual setup checks without credentials.
+
+### Proxy trust acceptance
+
+[Render's authentication guide](https://render.com/articles/how-to-implement-authentication-and-authorization) uses Express `trust proxy` with a numeric value of `1`. This is a documented starting point, not evidence that this deployment has exactly one visible hop or that the selected address is the final person's IP. [Render's edge-protection guide](https://render.com/articles/how-render-handles-ddos-attacks) describes both Cloudflare and its load balancers; [Express's own guidance](https://expressjs.com/en/guide/behind-proxies/) requires the trust configuration to match the actual paths. Do not switch to unlimited trust or read the leftmost forwarded address directly.
+
+Before calling the setting verified, make a few invalid-token exchange requests from the same controlled source: one without forged forwarding headers, then requests with distinct test `X-Forwarded-For` chains and forged `CF-Connecting-IP`, `True-Client-IP` and `X-Real-IP`. Read only the relevant hashed-IP quota counters in the private distributed store before and after each request. The same source must remain in the same quota bucket. Use fresh test device IDs to isolate that dimension, do not create real accounts, and let the few test quota entries expire normally. Store only pass/fail/count evidence, never raw IP addresses or public debug endpoints. A passing check establishes resistance to these forged headers; determining the actual end-user IP also requires verifying the real proxy chain and shortest ingress path.
+
+## Backend Blueprint
+
+`render.yaml` contains one API service in Ohio, aligned with the actual Neon project's region, pinned to the reviewed `connected-demo-2026-10-22` branch, with automatic deploys disabled. PostgreSQL, Valkey, managed identity and storage are deliberately supplied as explicit external inputs. This file does not silently create additional datastores or seed real people's data.
+
+The Blueprint now selects Render's **Free** compute plan. No resource was created while preparing these files. The free API sleeps after 15 idle minutes and can take about a minute to restart; its local filesystem is ephemeral. It is suitable for this demonstration within its account limits. Use external persistent storage. Do not use Render's free PostgreSQL for durable demo data because it expires after 30 days. [Render documents these free-plan limits](https://render.com/docs/free).
+
+The Blueprint intentionally omits the paid-only pre-deploy migration hook. Before the first deployment and each schema-changing release, run `pnpm -C api exec prisma migrate deploy` from an authorized operator environment with the target database credential supplied securely, then verify the migrations before manually deploying the API. Do not place the credential in the command text, repository or output logs. Render's `sync: false` placeholders prompt during initial creation; additions to an existing service must be supplied separately.
+
+The API's Node 22 Alpine image installs OpenSSL, CA certificates and zlib in both build and runtime stages. The pinned Prisma 6 client still uses native Linux/musl dependencies; it must detect the same OpenSSL family during generation and execution. Do not apply newer Prisma instructions about a native-engine-free runtime to this pinned version. [Prisma 6's system requirements](https://www.prisma.io/docs/orm/v6/reference/system-requirements) describe the distinction. A successful macOS build is not a Linux container acceptance test; the release pipeline must build and run the actual API image. The web standalone image retains its `public/` asset copy for the product fonts.
+
+The Blueprint selects `PAYMENT_MODE=demo`, keeping money movement simulated while the application uses real server accounts and messages. It does not turn on browser-local fixtures, bypass authentication, reveal verification codes or grant administrative access.
+
+The connected beta explicitly selects managed Google identity and public beta signup. Ordinary users must still authenticate with Google and pass the backend's identity validation and account controls. Existing email mode remains invite-only and still requires a verified sender. Do not use an automatic administrator role, public credential, universal test code or browser-local session substitute.
+
+## Free provider setup and remaining human steps
+
+1. Sign in to a human-owned Neon account and accept its terms. Create a Free project in a suitable region, enable managed Neon Auth and obtain its project endpoint. The current Free plan includes 1 GB PostgreSQL and 5 GB Object Storage per project, 100 compute-unit hours per month and up to 60,000 monthly active managed-auth users; these are quotas, not unlimited capacity. See [Neon's current pricing](https://neon.com/pricing).
+2. In Neon Auth's trusted domains, add the stable website origin and each exact immutable candidate origin that will be tested. Use full HTTPS origins without trailing slashes. Do not allow every `netlify.app` site. The Nest API does not need to be a trusted redirect domain because it does not host the Google callback. [Trusted-domain configuration](https://neon.com/docs/auth/guides/configure-domains) is separate from the API's `WEB_ORIGIN` CORS control.
+3. Google login can use Neon's built-in development credentials for a real private beta; users will see Neon's OAuth brand. This does not require buying a domain. Before a public production launch, configure the product's own Google OAuth client and branding. The provider redirect URI is the managed Neon endpoint plus `/callback/google`; the application's final callback is the website's `/api/auth/complete`. See [Neon's OAuth setup](https://neon.com/docs/auth/guides/setup-oauth).
+4. Create a human-owned Upstash Free Redis database, accept its terms and obtain its native TLS Redis URL, not its HTTP REST URL/token. Its listed Free quota is 256 MB, 500,000 commands/month and 10 GB bandwidth. Claim a persistent account-backed database; the anonymous temporary quickstart is not suitable. Verify the application's actual Lua rate limiter and Socket.IO pub/sub adapter against the chosen database. [Upstash pricing](https://upstash.com/pricing/redis) and [protocol compatibility](https://upstash.com/docs/redis/overall/compatibility) describe the limits.
+5. Configure private object storage and exact-origin upload CORS, using restricted branch-specific credentials. The real provider probe below confirms the application's required Neon S3 operations, including conditional writes not explicitly listed in the published matrix. Repeat those checks if the provider or upload protocol changes. [Neon's S3 compatibility matrix](https://neon.com/docs/storage/s3-compatibility) states that versioning/lifecycle settings are not enforced; this application must not rely on them.
+6. Create the Free Render API only after these inputs and migrations are ready. Configure the existing Netlify site rather than creating a replacement. Account signup, terms, OAuth consent, provider credentials, bucket policies/CORS and the final deployed end-to-end checks remain actual setup requirements. No purchase or paid plan is required by this Blueprint.
+
+A Resend test sender can send only to its owner's account address until a sender domain is verified; it cannot provide email login for arbitrary demo users. This is why the beta uses real managed Google identity instead of pretending email delivery is available. See [Resend's documented test-domain restriction](https://resend.com/docs/api-reference/errors).
+
+### Verified storage configuration
+
+An authorized probe against the actual managed Neon storage branch passed 12 checks on October 22, 2026 (October 23 UTC): a second conditional PUT returned `412` and preserved the original bytes; HEAD/GET returned accurate lengths; a bounded stream consumer stopped oversized reads; the application's exact presigned PUT parameters uploaded intact image bytes; expired signatures and unsigned reads/writes returned `403`; stable-site CORS preflight succeeded, and an unrelated origin received `403`.
+
+Only a uniquely named disposable verification bucket and its own objects were deleted. The authorized permanent bucket `psw-listing-media` was created with the default private access level, configured for the exact stable website origin, checked for denied anonymous reads, and left without its temporary verification object. Use `forcePathStyle: true`, region `us-east-2`, and the managed branch endpoint for both server storage and browser uploads. Credentials stay in the API's secret configuration. The [sanitized storage evidence](release/2026-10-22-storage-verification.json) records the checks, cleanup, SDK versions and public deployment mapping. No signed URL or access key is stored in that evidence or this document.
+
+This verifies provider compatibility and privacy controls for that configured bucket. It does not replace end-to-end authorization, image validation, approval-state or cross-account media tests against the deployed API. A candidate hostname needs its own deliberately reviewed CORS rule before testing browser uploads there; the production bucket currently permits only the stable website origin.
+
+### Next 15 authentication transport
+
+The pinned `@neondatabase/auth` 0.7.0-beta generic client and `/server` Fetch toolkit are used through the official framework-adapter interface. The SDK's optional Next peer targets Next 16; this release imports neither `/next` nor `/next/server` and does not upgrade the application. The project's own Next 15 Node route mounts only Google social sign-in, session/token reads, logout and a dedicated callback. It rejects arbitrary provider routes, cross-origin writes, unconfigured hosts, extra redirect targets and oversized JSON. Request bodies are canceled after five seconds.
+
+The callback uses the toolkit's challenge/verifier exchange and preserves individual first-party Secure/HttpOnly cookies, avoiding third-party-cookie dependence in Safari. On success it redirects to `/auth/complete`; the UI requests a Neon JWT and exchanges it with the existing Nest API. Tokens and return targets are not put in callback URLs. Client session data is not accepted as proof of identity. [Neon's JWT guide](https://neon.com/docs/auth/guides/plugins/jwt) describes the signed token and JWKS contract.
+
+The current toolkit does not expose an abort signal or fetch-timeout setting for its provider transport. The route declares `maxDuration=15` for compatible platforms, but this is **not a verified Netlify timeout**. Netlify documents a fixed 60-second synchronous function limit. Provider outages can therefore consume an invocation up to that platform limit; there is no early-response timeout that leaves a detached OAuth write running. Recheck the actual adapter/function settings when deploying. See [Netlify function limits](https://docs.netlify.com/build/functions/configuration/) and [the SDK's official adapter guide](https://github.com/neondatabase/neon-js/blob/main/packages/auth/BUILDING-AN-ADAPTER.md).
+
+## Build, verify and publish the existing Netlify site
+
+1. Record the exact reviewed Git commit. Install the lockfile with Node 22 and pnpm 9.15.4. Run normal web/API checks and the integration checks against actual PostgreSQL and Valkey.
+2. Configure and verify the API host, migrations, managed Google login and storage. Confirm `/api/v1/ready` reports healthy database, distributed realtime and distributed rate limiting. Verify browser CORS and the exact WebSocket origin against the stable Netlify URL.
+3. Configure Netlify's production-scoped public API/media/provider variables and server-only Neon proxy/optional assistant inputs. The proxy needs its configuration in both prebuild validation and Functions scope. Keep `NEXT_PUBLIC_WEBSITE_DEMO` and `NEXT_PUBLIC_ENABLE_PREVIEW_DATA` unset. Do not put database, mail or storage secrets in frontend variables.
+4. `node tools/netlify-build-config.mjs` checks the frontend configuration before building. It fails on missing endpoints, reserved examples, local addresses, insecure URLs and simulation flags. It reports only field names and required shapes, never configured values. The full environment gate remains `pnpm production:check-config`; it includes backend credentials and strict transport settings.
+5. Run **one** Netlify build-and-upload invocation for an unpublished candidate: `netlify deploy --context production --site 2ddeaae7-bd09-4deb-bd81-13bd84bb1be5 --json`. In the inspected CLI 27.10.2, `deploy` builds by default. Do not first build a candidate and then invoke a second implicit build. Netlify's Next.js adapter must prepare the server and middleware along with static assets; uploading `.next` as a plain static folder is insufficient.
+6. Preserve the candidate deploy ID, source commit, build output and actual adapter version. Check that exact immutable candidate on phone and desktop, including real invited login, two accounts on separate browser contexts/devices, profile updates, room/listing actions, matched messaging, history after reload, applications and the map. Verify rejected unauthorized requests, revoked sessions, upload checks and script CSP. For `PAYMENT_MODE=demo`, test simulated payment state without any real charge.
+7. Publish that accepted deploy ID to the existing site. Do not rebuild the accepted candidate during promotion. Verify the stable URL and retain the previous deploy for rollback.
+
+The immutable candidate has a different browser origin from the stable website. Production `WEB_ORIGIN` is a single exact HTTPS origin: a stable-only API will correctly reject candidate-origin authentication and sockets. Use a staging API configured for the exact candidate origin, or deliberately configure that API for the exact candidate during its review and restore the stable origin before publication. Recheck the stable site's authentication and WebSocket connection after this change. Do not use `*`, an unvalidated comma-separated value or a broadly permitted Netlify suffix to make preview tests pass.
+
+Do not publish an apparently interactive frontend while its real API or selected identity provider is missing. Keep the existing live release available until the connected candidate has actually passed its checks.
+
+## Provider references
+
+- [Render Blueprint specification](https://render.com/docs/blueprint-spec) defines manual deploys, Docker services, secret inputs and generated secrets.
+- [Render deployment lifecycle](https://render.com/docs/deploys) describes deployment hooks; this Free Blueprint omits the paid-only migration hook.
+- [Netlify environment variables](https://docs.netlify.com/configure-builds/environment-variables/) explains build-time and runtime configuration.
+- [Netlify CLI workflow](https://docs.netlify.com/api-and-cli-guides/cli-guides/get-started-with-cli/) covers production-context local builds and deployment.
+
+The Blueprint was checked against [Render's published JSON schema](https://render.com/schema/render.yaml.json) on October 22, 2026, with [schema and Blueprint hashes recorded](release/2026-10-22-render-blueprint-verification.json). This confirms configuration shape; it does not confirm account access, billing authorization, provider readiness or a successful live deployment.

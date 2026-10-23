@@ -24,6 +24,7 @@ import { RoommatesModule } from "./roommates/roommates.module";
 import { TripsModule } from "./trips/trips.module";
 import { TrustModule } from "./trust/trust.module";
 import { UsersModule } from "./users/users.module";
+import { getPaymentMode } from "./payments/payment-mode";
 
 @Module({
   imports: [
@@ -31,12 +32,13 @@ import { UsersModule } from "./users/users.module";
     JwtModule.register({
       global: true,
       secret: getJwtSecret(),
-      signOptions: { expiresIn: "7d" }
+      signOptions: { expiresIn: "7d", algorithm: "HS256" },
+      verifyOptions: { algorithms: ["HS256"], maxAge: "7d" }
     }),
     PrismaModule,
     AuditModule,
     AuthModule,
-    ...(process.env.NODE_ENV === "production" ? [] : [DemoPaymentsModule]),
+    ...(getPaymentMode() === "demo" ? [DemoPaymentsModule] : []),
     ApplicationsModule,
     AssistantModule,
     PaymentsModule,

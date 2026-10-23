@@ -319,7 +319,7 @@ class MemoryStorage implements Storage {
 }
 
 async function renderPanel(
-  onVerified: ReturnType<typeof vi.fn>,
+  onVerified: (session: api.AdminStepUpResponse) => void,
   onAuthenticationError?: (error: unknown) => boolean
 ) {
   let renderer: ReactTestRenderer | undefined;

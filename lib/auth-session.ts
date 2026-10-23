@@ -14,13 +14,12 @@ type StoredAuthSessionEnvelope = StoredAuthSession & {
 export function readStoredAuthSession(): StoredAuthSession | null {
   if (typeof window === "undefined") return null;
 
-  const raw = window.localStorage.getItem(authSessionKey);
-  if (!raw) {
-    const legacyToken = window.localStorage.getItem(legacyTokenKey);
-    return legacyToken ? { accessToken: legacyToken } : null;
-  }
-
   try {
+    const raw = window.localStorage.getItem(authSessionKey);
+    if (!raw) {
+      const legacyToken = window.localStorage.getItem(legacyTokenKey);
+      return legacyToken ? { accessToken: legacyToken } : null;
+    }
     const parsed = JSON.parse(raw) as Partial<StoredAuthSessionEnvelope>;
     if (parsed.version !== authSessionVersion || typeof parsed.accessToken !== "string" || !parsed.accessToken) {
       return null;

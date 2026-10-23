@@ -45,4 +45,34 @@ describe("production web configuration", () => {
     expect(imageRule).toContain("http://localhost:4100");
     expect(csp).not.toContain("private-api");
   });
+
+  it("uses per-request production CSP and never turns the image optimizer into an API proxy", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("NEXT_PUBLIC_API_BASE_URL", "https://api.example/api/v1");
+    vi.resetModules();
+    // @ts-expect-error Next.js loads its JavaScript configuration directly.
+    const { default: config } = await import("../next.config.mjs");
+    const headers = await config.headers();
+    expect(headers.flatMap((entry: { headers: Array<{ key: string }> }) => entry.headers).some((header: { key: string }) => header.key === "Content-Security-Policy")).toBe(false);
+    expect(config.poweredByHeader).toBe(false);
+    expect(config.images.minimumCacheTTL).toBe(0);
+    expect(config.images.localPatterns).toEqual([]);
+    expect(config.images.remotePatterns).toEqual([{ protocol: "https", hostname: "images.unsplash.com" }]);
+  });
+
+  it("never exposes configured backend origins in development demo connection rules", async () => {
+    vi.stubEnv("NODE_ENV", "development");
+    vi.stubEnv("NEXT_PUBLIC_WEBSITE_DEMO", "true");
+    vi.stubEnv("NEXT_PUBLIC_API_BASE_URL", "https://private-api.example/api/v1");
+    vi.stubEnv("NEXT_PUBLIC_MAP_STYLE_URL", "https://unapproved-map.example/style.json");
+    vi.resetModules();
+    // @ts-expect-error Next.js loads its JavaScript configuration directly.
+    const { default: config } = await import("../next.config.mjs");
+    const headers = await config.headers();
+    const csp = headers[0].headers.find((header: { key: string }) => header.key === "Content-Security-Policy").value;
+    expect(csp).toContain("connect-src 'self' https://tiles.openfreemap.org");
+    expect(csp).not.toMatch(/private-api|unapproved-map/);
+    expect(csp).toContain("worker-src 'self' blob:");
+    expect(csp).toContain("img-src 'self' data: blob: https://images.unsplash.com https://tiles.openfreemap.org;");
+  });
 });

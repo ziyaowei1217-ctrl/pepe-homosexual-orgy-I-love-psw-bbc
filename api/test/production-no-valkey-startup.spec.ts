@@ -6,7 +6,7 @@ describe("production startup without Valkey", () => {
   it("fails closed before the application starts", () => {
     expect(() => assertProductionRuntimeConfig({
       NODE_ENV: "production",
-      DATABASE_URL: "postgresql://db.example.com/app?sslmode=require",
+      DATABASE_URL: "postgresql://db.example.com/app?sslmode=require&sslaccept=strict&connect_timeout=2&pool_timeout=2&socket_timeout=3",
       WEB_ORIGIN: "https://app.example.com",
       VALKEY_URL: ""
     })).toThrow("VALKEY_URL is required in production");

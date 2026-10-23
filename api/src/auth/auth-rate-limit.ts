@@ -3,9 +3,9 @@ import { HttpException, ServiceUnavailableException } from "@nestjs/common";
 
 import { hashSecurityIdentifier, normalizeEmail } from "./code-security";
 
-export type AuthRateLimitAction = "send" | "verify";
+export type AuthRateLimitAction = "send" | "verify" | "exchange" | "identity";
 export type AuthRateLimitPurpose = "LOGIN" | "ADMIN_STEP_UP";
-export type AuthRateLimitIdentity = { email: string; ip: string; deviceId?: string };
+export type AuthRateLimitIdentity = { email: string; ip: string; deviceId?: string; actorId?: string };
 export type RateLimitRule = {
   key: string;
   dimension: string;
@@ -74,6 +74,18 @@ export class AuthRateLimiter {
     const purposeEmailHash = `${purpose.toLowerCase()}:${emailHash}`;
     const ipHash = hash(identity.ip);
     const deviceHash = hash(identity.deviceId ?? `ip-fallback:${identity.ip}`);
+
+    if (action === "identity") {
+      return [rule("identity", "actor-15m", hash(identity.actorId ?? "unknown"), 30, 900)];
+    }
+
+    if (action === "exchange") {
+      return [
+        rule("exchange", "device-15m", deviceHash, 30, 900),
+        rule("exchange", "ip-15m", ipHash, 100, 900),
+        rule("exchange", "global-minute", "all", 300, 60)
+      ];
+    }
 
     if (action === "send") {
       return [

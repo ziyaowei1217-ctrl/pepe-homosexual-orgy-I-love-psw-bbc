@@ -1,8 +1,13 @@
 import { Module } from "@nestjs/common";
 
 import { AuditModule } from "../audit/audit.module";
+import { HealthModule } from "../health/health.module";
+import { AuthInfrastructureHealth } from "../health/auth-infrastructure-health";
 import { getAuthSecurityConfig, type AuthSecurityConfig } from "../config/env";
-import { createEmailSender, EMAIL_PROVIDER_TOTAL_TIMEOUT_MS } from "../email/email-sender";
+import { createEmailSender, EmailDeliveryUnavailableError, EMAIL_PROVIDER_TOTAL_TIMEOUT_MS } from "../email/email-sender";
+import { getAuthProvider, getNeonAuthConfig } from "./auth-provider";
+import { NeonAuthService } from "./neon-auth.service";
+import { NeonTokenVerifier } from "./neon-token-verifier";
 import { AdminStepUpGuard } from "./admin-step-up.guard";
 import { AuthenticatedUserService } from "./authenticated-user.service";
 import { AuthRateLimiter, RateLimitStore } from "./auth-rate-limit";
@@ -12,10 +17,10 @@ import { AuthGuard } from "./auth.guard";
 import { AuthService, AuthServiceOptions } from "./auth.service";
 import { OptionalAuthGuard } from "./optional-auth.guard";
 import { createRateLimitStore } from "./valkey-rate-limit-store";
-import { ADMIN_STEP_UP_OPTIONS, AUTH_OPTIONS, AUTH_RATE_LIMIT_STORE, AUTH_SECURITY_CONFIG, EMAIL_SENDER } from "./auth.tokens";
+import { ADMIN_STEP_UP_OPTIONS, AUTH_OPTIONS, AUTH_RATE_LIMIT_STORE, AUTH_SECURITY_CONFIG, EMAIL_SENDER, NEON_AUTH_CONFIG } from "./auth.tokens";
 import { VerificationCodeCleanupService } from "./verification-code-cleanup.service";
 
-export { ADMIN_STEP_UP_OPTIONS, AUTH_OPTIONS, AUTH_RATE_LIMIT_STORE, AUTH_SECURITY_CONFIG, EMAIL_SENDER } from "./auth.tokens";
+export { ADMIN_STEP_UP_OPTIONS, AUTH_OPTIONS, AUTH_RATE_LIMIT_STORE, AUTH_SECURITY_CONFIG, EMAIL_SENDER, NEON_AUTH_CONFIG } from "./auth.tokens";
 
 export function createAuthServiceOptions(
   securityConfig: AuthSecurityConfig,
@@ -50,20 +55,26 @@ export function createAuthServiceOptions(
 }
 
 @Module({
-  imports: [AuditModule],
+  imports: [AuditModule, HealthModule],
   controllers: [AuthController],
   providers: [
+    { provide: NEON_AUTH_CONFIG, useFactory: () => getNeonAuthConfig() },
+    NeonTokenVerifier,
+    NeonAuthService,
     {
       provide: AUTH_SECURITY_CONFIG,
       useFactory: () => getAuthSecurityConfig()
     },
     {
       provide: AUTH_RATE_LIMIT_STORE,
-      useFactory: () => createRateLimitStore()
+      inject: [AuthInfrastructureHealth],
+      useFactory: (health: AuthInfrastructureHealth) => createRateLimitStore({ health })
     },
     {
       provide: EMAIL_SENDER,
-      useFactory: () => createEmailSender()
+      useFactory: () => getAuthProvider() === "neon"
+        ? { sendVerificationCode: async () => { throw new EmailDeliveryUnavailableError(); } }
+        : createEmailSender()
     },
     {
       provide: AUTH_OPTIONS,

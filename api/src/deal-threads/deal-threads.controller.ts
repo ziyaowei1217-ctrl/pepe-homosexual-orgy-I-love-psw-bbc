@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Inject, Param, Post, Req, UseGuards, ValidationPipe } from "@nestjs/common";
+import { Body, Controller, Get, Inject, Param, Post, Query, Req, UseGuards, ValidationPipe } from "@nestjs/common";
 
 import { AuthGuard, AuthenticatedRequest } from "../auth/auth.guard";
 import { CreateDealThreadDto, CreateViewingRequestDto, DecideViewingRequestDto, SendDealMessageDto } from "./dto";
@@ -51,6 +51,11 @@ export class DealThreadsController {
     @Body(sendMessageBodyPipe) dto: SendDealMessageDto
   ) {
     return this.dealThreads.sendMessage(request.user.id, id, dto);
+  }
+
+  @Get(":id/messages")
+  listMessages(@Req() request: AuthenticatedRequest, @Param("id") id: string, @Query() query: Record<string, unknown>) {
+    return this.dealThreads.listMessages(request.user.id, id, query);
   }
 
   @Post(":id/viewing-requests")

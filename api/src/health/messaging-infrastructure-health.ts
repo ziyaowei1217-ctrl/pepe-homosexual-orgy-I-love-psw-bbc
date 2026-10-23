@@ -15,12 +15,24 @@ export type MessagingInfrastructureComponentHealth = HealthyComponent | Degraded
 
 @Injectable()
 export class MessagingInfrastructureHealth {
+  private readonly probes = new Map<MessagingInfrastructureComponent, () => Promise<void>>();
   private readonly state: Record<MessagingInfrastructureComponent, MessagingInfrastructureComponentHealth> = {
     realtime: { status: "ok", mode: "single-instance" },
     messageRateLimit: { status: "ok", mode: "single-instance" }
   };
 
   constructor(private readonly now: () => Date = () => new Date()) {}
+
+  registerProbe(component: MessagingInfrastructureComponent, probe: () => Promise<void>) {
+    this.probes.set(component, probe);
+  }
+
+  async refresh() {
+    await Promise.all([...this.probes.entries()].map(async ([component, probe]) => {
+      try { await probe(); }
+      catch { this.markLocalFallback(component, "runtime"); }
+    }));
+  }
 
   markSingleInstance(component: MessagingInfrastructureComponent) {
     this.state[component] = { status: "ok", mode: "single-instance" };

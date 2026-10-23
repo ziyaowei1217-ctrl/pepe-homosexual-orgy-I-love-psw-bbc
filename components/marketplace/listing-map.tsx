@@ -3,7 +3,7 @@
 import "maplibre-gl/dist/maplibre-gl.css";
 
 import { Building2, LocateFixed, Minus, Plus, X } from "lucide-react";
-import type { Map as MapLibreMap, MapMouseEvent, MapOptions, Marker } from "maplibre-gl";
+import type { Map as MapLibreMap, MapMouseEvent, MapMovementEvent, MapOptions, Marker } from "maplibre-gl";
 import { useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import Supercluster from "supercluster";
@@ -39,6 +39,7 @@ export function useMapLibre(container: RefObject<HTMLElement | null>, options: P
 
   useEffect(() => {
     let cancelled = false;
+    let initialized = false;
     let map: MapLibreMap | undefined;
     import("maplibre-gl").then((maplibre) => {
       if (cancelled || !container.current) return;
@@ -61,9 +62,18 @@ export function useMapLibre(container: RefObject<HTMLElement | null>, options: P
       let styleLoaded = false;
       map.once("style.load", () => { styleLoaded = true; });
       map.on("error", () => { if (!styleLoaded) setFailed(true); });
+      initialized = true;
       setState({ map, maplibre });
-    }).catch(() => setFailed(true));
-    return () => { cancelled = true; map?.remove(); };
+    }).catch(() => { if (!cancelled) setFailed(true); });
+    return () => {
+      cancelled = true;
+      if (initialized) map?.remove();
+      else {
+        // A rejected GPU initialization can leave MapLibre without its painter.
+        // Its partially constructed instance cannot complete normal teardown.
+        try { map?.remove(); } catch { /* No initialized map was exposed to the page. */ }
+      }
+    };
   }, [container]);
 
   useEffect(() => {
@@ -205,7 +215,7 @@ export function ListingMap({ listings, fitKey, bounds = null, moveIn = "", moveO
   // Moves made by this file (fitting results, resizing, showing a card) carry `fromCode` and change nothing.
   useEffect(() => {
     if (!map) return;
-    const onMoveEnd = (event: { fromCode?: boolean }) => {
+    const onMoveEnd = (event: MapMovementEvent & { fromCode?: boolean }) => {
       const area = latest.current.searchArea;
       if (event.fromCode || !area) return;
       if (latest.current.followMap) area.onSearch(mapBounds(map));

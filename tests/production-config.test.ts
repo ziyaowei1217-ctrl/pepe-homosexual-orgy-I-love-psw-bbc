@@ -16,9 +16,10 @@ function validEnvironment() {
   return {
     NODE_ENV: "production",
     NEXT_PUBLIC_API_BASE_URL: "https://api.example.com/api/v1",
+    NEXT_PUBLIC_MEDIA_UPLOAD_ORIGIN: "https://uploads.example.com",
     NEXT_PUBLIC_MAP_TILE_URL_TEMPLATE: "https://maps.example.com/{z}/{x}/{y}.png?key=public-map-key",
     NEXT_PUBLIC_MAP_ATTRIBUTION: "Example Maps",
-    DATABASE_URL: "postgresql://app:database-password@db.example.com/app?sslmode=verify-full",
+    DATABASE_URL: "postgresql://app:database-password@db.example.com/app?sslmode=require&sslaccept=strict&connect_timeout=2&pool_timeout=2&socket_timeout=3",
     WEB_ORIGIN: "https://app.example.com",
     JWT_SECRET: "jwt-production-secret-with-more-than-32-bytes",
     OTP_HASH_SECRET: "otp-production-secret-with-more-than-32-bytes",
@@ -29,7 +30,7 @@ function validEnvironment() {
     PAYMENT_SERVICE_URL: "https://payments.example.com",
     PAYMENT_SERVICE_API_KEY: "payment-production-key",
     VALKEY_URL: "rediss://cache-user:cache-password@cache.example.com:6379",
-    LISTING_MEDIA_STORAGE_ENDPOINT: "http://private-storage:9000",
+    LISTING_MEDIA_STORAGE_ENDPOINT: "https://private-storage.example.com",
     LISTING_MEDIA_UPLOAD_ENDPOINT: "https://uploads.example.com",
     LISTING_MEDIA_STORAGE_REGION: "us-west-2",
     LISTING_MEDIA_STORAGE_BUCKET: "listing-media",
@@ -106,7 +107,7 @@ describe("production configuration gate", () => {
     expect(validateProductionConfig({})).toEqual(expect.arrayContaining([
       "RESEND_API_KEY is required",
       "PAYMENT_SERVICE_URL is required",
-      "NEXT_PUBLIC_MAP_TILE_URL_TEMPLATE is required",
+      "NEXT_PUBLIC_MEDIA_UPLOAD_ORIGIN is required",
       "VALKEY_URL is required"
     ]));
   });
@@ -165,9 +166,59 @@ describe("production configuration gate", () => {
       "EMAIL_SENDER must be resend"
     ]));
   });
+
+  it("accepts the built-in OpenFreeMap vector style without a raster template or provider key", () => {
+    const environment = { ...validEnvironment(), NEXT_PUBLIC_MAP_TILE_URL_TEMPLATE: "", NEXT_PUBLIC_MAP_ATTRIBUTION: "" };
+    expect(validateProductionConfig(environment)).toEqual([]);
+    expect(validateProductionConfig({ ...environment, NEXT_PUBLIC_MAP_STYLE_URL: "https://tiles.openfreemap.org/styles/liberty" })).toEqual([]);
+  });
+
+  it.each([
+    ["NEXT_PUBLIC_MAP_STYLE_URL", "http://maps.example.com/style.json"],
+    ["NEXT_PUBLIC_MAP_STYLE_URL", "https://user:secret@maps.example.com/style.json"],
+    ["NEXT_PUBLIC_MAP_TILE_URL_TEMPLATE", "https://maps.example.com/static.png"],
+    ["NEXT_PUBLIC_MAP_TILE_URL_TEMPLATE", "https://maps.example.com/{z}/{x}/{y}.png?key=replace-me"]
+  ])("rejects invalid map configuration %s", (name, value) => {
+    expect(validateProductionConfig({ ...validEnvironment(), [name]: value })).not.toEqual([]);
+  });
+
+  it("requires attribution for a custom raster basemap", () => {
+    expect(validateProductionConfig({ ...validEnvironment(), NEXT_PUBLIC_MAP_ATTRIBUTION: "" })).toContain("NEXT_PUBLIC_MAP_ATTRIBUTION is required for a custom raster basemap");
+  });
+
+  it("allows explicit database-backed demo payments while default production still requires its gateway", () => {
+    const environment = { ...validEnvironment(), PAYMENT_SERVICE_URL: "", PAYMENT_SERVICE_API_KEY: "" };
+    expect(validateProductionConfig(environment)).toContain("PAYMENT_SERVICE_URL is required");
+    expect(validateProductionConfig({ ...environment, PAYMENT_MODE: "demo" })).toEqual([]);
+    expect(validateProductionConfig({ ...environment, PAYMENT_MODE: "production" })).toContain("PAYMENT_SERVICE_API_KEY is required");
+    expect(validateProductionConfig({ ...environment, PAYMENT_MODE: "DEMO" })).toContain("PAYMENT_MODE must be production or demo");
+    expect(validateProductionConfig({ ...environment, PAYMENT_MODE: "demo", EMAIL_SENDER: "console" })).toContain("EMAIL_SENDER must be resend");
+  });
+
+  it.each(["ssl=0", "ssl=no-verify", "sslcert=path", "sslrootcert=path", "options=-c%20statement_timeout=0", "connection_limit=0", "connection_limit=11", "schema=", "schema=%24user", "schema=pg_temp", "socket_timeout=0"])("rejects unsafe database driver setting %s", setting => {
+    const environment = validEnvironment(); environment.DATABASE_URL += `&${setting}`;
+    const errors = validateProductionConfig(environment);
+    expect(errors.some((error: string) => error.startsWith("DATABASE_URL"))).toBe(true);
+    expect(errors.join(" ")).not.toContain("database-password");
+  });
+
+  it("keeps browser-local fixtures and TLS bypasses out of connected deployments", () => {
+    expect(validateProductionConfig({ ...validEnvironment(), NEXT_PUBLIC_WEBSITE_DEMO: "true" })).not.toEqual([]);
+    expect(validateProductionConfig({ ...validEnvironment(), NEXT_PUBLIC_ENABLE_PREVIEW_DATA: "true" })).not.toEqual([]);
+    expect(validateProductionConfig({ ...validEnvironment(), NODE_TLS_REJECT_UNAUTHORIZED: "0" })).not.toEqual([]);
+  });
 });
 
 describe("production configuration CLI", () => {
+  it("uses real managed Neon auth without requiring an unavailable email sender", () => {
+    const environment = { ...validEnvironment(), AUTH_PROVIDER: "neon", NEXT_PUBLIC_AUTH_PROVIDER: "neon", PUBLIC_BETA_SIGNUP: "true", NEON_AUTH_BASE_URL: "https://ep-psw-test.neonauth.us-east-1.aws.neon.tech/neondb/auth", NEON_AUTH_COOKIE_SECRET: "n".repeat(40), NEON_AUTH_APP_ORIGIN: "https://sublet-pipeline-demo-zihao.netlify.app", EMAIL_SENDER: "", EMAIL_FROM: "", RESEND_API_KEY: "" };
+    expect(validateProductionConfig(environment)).toEqual([]);
+    expect(validateProductionConfig({ ...environment, NEON_AUTH_BASE_URL: "https://attacker.com/auth" })).toContain("NEON_AUTH_BASE_URL must be a configured HTTPS managed Neon Auth project endpoint");
+    expect(validateProductionConfig({ ...environment, AUTH_PROVIDER: "email" })).toContain("RESEND_API_KEY is required");
+    expect(validateProductionConfig({ ...environment, AUTH_PROVIDER: "email" })).toContain("PUBLIC_BETA_SIGNUP requires AUTH_PROVIDER=neon");
+    expect(validateProductionConfig({ ...environment, NEXT_PUBLIC_AUTH_PROVIDER: "email" })).toContain("AUTH_PROVIDER and NEXT_PUBLIC_AUTH_PROVIDER must select the same authentication provider");
+  });
+
   it("loads repeated environment files in order and lets the process environment win", () => {
     const directory = mkdtempSync(join(tmpdir(), "production-config-"));
     temporaryDirectories.push(directory);

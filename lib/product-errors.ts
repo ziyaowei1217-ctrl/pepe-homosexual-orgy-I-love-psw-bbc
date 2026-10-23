@@ -63,6 +63,8 @@ export function productErrorForStatus(status: number, code?: unknown): ProductAp
   const safeCode = safeErrorCode(code);
   const productMessage = safeCode ? productCodeMessages[safeCode] : undefined;
 
+  if (status === 408) return new ProductApiError({ category: "service", message: "服务响应时间较长，请稍后重试。", retryable: true, status });
+
   if (productMessage) {
     return new ProductApiError({
       category: status >= 500 ? "service" : "validation",

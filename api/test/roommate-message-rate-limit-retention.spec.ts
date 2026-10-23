@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
@@ -18,11 +18,12 @@ describeParent("roommate message limiter retired-client retention", () => {
       process.execPath,
       [
         "--expose-gc",
-        require.resolve("vitest/vitest.mjs"),
+        join(dirname(require.resolve("vitest/package.json")), "vitest.mjs"),
         "run",
         "test/roommate-message-rate-limit-retention.spec.ts",
         "--pool=threads",
-        "--poolOptions.threads.singleThread"
+        "--maxWorkers=1",
+        "--no-file-parallelism"
       ],
       {
         cwd: join(__dirname, ".."),

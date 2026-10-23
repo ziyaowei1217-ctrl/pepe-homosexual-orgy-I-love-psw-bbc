@@ -107,6 +107,22 @@ model User {
   demoPaymentsAsPayer             DemoPayment[]                @relation("DemoPaymentPayer")
   demoPaymentsAsPayee             DemoPayment[]                @relation("DemoPaymentPayee")
   demoPaymentAttempts             DemoPaymentAttempt[]         @relation("DemoPaymentAttemptActor")
+  externalAuthIdentities           ExternalAuthIdentity[]
+}
+
+model ExternalAuthIdentity {
+  id        String   @id @default(cuid())
+  provider  String
+  issuer    String
+  subject   String
+  userId    String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, issuer, subject])
+  @@unique([provider, issuer, userId])
+  @@index([userId])
 }
 
 model Profile {

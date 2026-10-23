@@ -1,0 +1,26 @@
+{
+  "date": "2026-10-23",
+  "scope": "Live application database setup, separate from disposable test databases",
+  "migrations": { "committedMigrationsApplied": 25, "result": "passed" },
+  "runtimeRole": {
+    "name": "psw_runtime",
+    "verifiedTls": true,
+    "publicSchemaCreate": false,
+    "applicationCrud": true,
+    "auditUpdateDeleteTruncate": false,
+    "migrationTableWrites": false,
+    "providerAuthSchemaUsage": false,
+    "providerAuthTableAccess": false,
+    "separateOwnerCredential": true
+  },
+  "actualRuntimeDriver": {
+    "prismaCrud": true,
+    "externalIdentityBindingWrite": true,
+    "transactionRollbackVerified": true,
+    "verificationRecordPersisted": false
+  },
+  "limitations": [
+    "This verifies database setup and restricted application access, not live Google OAuth.",
+    "The hosted Render service, distributed messaging and browser acceptance must be verified separately."
+  ]
+}

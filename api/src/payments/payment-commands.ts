@@ -1,5 +1,6 @@
 import { ServiceUnavailableException } from "@nestjs/common";
 import type { Prisma } from "@prisma/client";
+import { getPaymentMode } from "./payment-mode";
 
 export const PAYMENT_COMMANDS = Symbol("PAYMENT_COMMANDS");
 
@@ -29,11 +30,12 @@ type PaymentCommandsFactoryInput = {
   apiKey?: string;
   fetchImpl?: typeof fetch;
   developmentCommands?: PaymentCommands;
+  paymentMode?: string;
 };
 
 export function createPaymentCommands(input: PaymentCommandsFactoryInput = {}): PaymentCommands {
   const nodeEnv = input.nodeEnv ?? process.env.NODE_ENV ?? "development";
-  if (nodeEnv !== "production") {
+  if (getPaymentMode(nodeEnv, input.paymentMode) === "demo") {
     if (!input.developmentCommands) throw new Error("Development payment commands are required");
     return input.developmentCommands;
   }

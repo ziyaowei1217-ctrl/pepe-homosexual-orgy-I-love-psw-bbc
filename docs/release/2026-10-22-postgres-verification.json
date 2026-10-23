@@ -1,0 +1,104 @@
+{
+  "scope": "Actual managed PostgreSQL integration against isolated disposable databases; not full application or live OAuth acceptance",
+  "runId": "remote-postgres-18-02",
+  "startedAt": "2026-10-23T04:01:59.311Z",
+  "durationMs": 19162,
+  "provider": "Neon PostgreSQL",
+  "serverVersion": 180006,
+  "verifiedTls": true,
+  "result": {
+    "exitCode": 0,
+    "testFilesPassed": 2,
+    "testsPassed": 8,
+    "testsSkipped": 0
+  },
+  "suites": [
+    {
+      "file": "api/test/neon-auth-binding.integration.spec.ts",
+      "cases": [
+        {
+          "name": "serializes concurrent exchanges into one immutable identity and account",
+          "passed": true
+        },
+        {
+          "name": "never remaps an established subject or links a recycled email to a different subject",
+          "passed": true
+        },
+        {
+          "name": "claims an invitation atomically and creates no account when the invitation is missing",
+          "passed": true
+        }
+      ]
+    },
+    {
+      "file": "api/test/prisma-query-deadline.integration.spec.ts",
+      "cases": [
+        {
+          "name": "terminates an accepted pg_sleep and permits a later query",
+          "passed": true
+        },
+        {
+          "name": "shares the actual readiness query across callers and recovers on a fresh connection",
+          "passed": true
+        },
+        {
+          "name": "aborts a timed-out transaction without committing its writes and recovers transactions",
+          "passed": true
+        },
+        {
+          "name": "preserves model error mapping for unique constraints",
+          "passed": true
+        },
+        {
+          "name": "quotes a custom schema for unqualified raw queries",
+          "passed": true
+        }
+      ]
+    }
+  ],
+  "isolation": {
+    "explicitRemoteOptInRequired": true,
+    "operatorAdministratorUrlRequired": true,
+    "uuidDatabaseNamesAndIndependentOwnershipMarkers": true,
+    "migrationTargetWasDisposableDatabaseOnly": true,
+    "credentialsInProcessArguments": false,
+    "credentialsOrConnectionUrlsInThisReport": false,
+    "mainPublicTablesBefore": 0,
+    "mainPublicTablesAfter": 0,
+    "disposableDatabasesBefore": [],
+    "disposableDatabasesAfter": []
+  },
+  "sourceUnchangedDuringRun": true,
+  "sourceSha256": {
+    "api/prisma/schema.prisma": "096a0e0a8e2a615414aa2c2b936f2e6f344e896b76e1545e06d8ffb0fcfcb3a5",
+    "api/prisma/migrations/20261023040000_external_auth_identities/migration.sql": "4bb21842061f53737a2a75574f41810d1f3f5eafc67d1ec36008e98cfe1f0109",
+    "api/src/auth/neon-auth.service.ts": "58af6d54de571de0db0a78094ac97e86d3b96648515a34ec37c4b4e23b668f95",
+    "api/src/prisma/bounded-postgres.ts": "ad632c16c3e7c308738ed0cd295f9345e2758b955ec65e739ef4ef00dd1de446",
+    "api/src/prisma/prisma.service.ts": "04a608c00efbf09e4690ee73b62e5acd87becb4b6985693cb60fc047cb5ee58d",
+    "api/src/config/env.ts": "0b48bf309368ffb7e1b58035575caa4a5520149b9d0d19dfb5da7fe2ef986273",
+    "api/test/support/disposable-postgres.ts": "d5db45b232cdcdb9fc25c7b9c08f011e706293e3911e1554e0aef31be53dbd59",
+    "api/test/neon-auth-binding.integration.spec.ts": "1219c247a87f497f64fe1c43ee3442afce67f04bbbc230f7157977f5c202a4c7",
+    "api/test/prisma-query-deadline.integration.spec.ts": "1b2286b10d6e3b219bc19c433440e6115379fbd999db41890e74031e3d88d313"
+  },
+  "helperSafetyUnitChecks": {
+    "file": "api/test/disposable-postgres.spec.ts",
+    "passed": 6
+  },
+  "previousAttempt": {
+    "runId": "remote-postgres-18-01",
+    "result": "failed",
+    "reason": "All eight test cases passed, but cleanup failed because database comments require the shared-object catalog lookup.",
+    "fix": "Cleanup now checks shobj_description against its independent ownership marker before dropping a disposable database.",
+    "markerVerifiedCleanupCompleted": true,
+    "ownedDatabasesRemoved": 2,
+    "mainPublicTablesAfterCleanup": 0,
+    "failedResultPreserved": true
+  },
+  "limitations": [
+    "The identity integration cases inject an already verified provider identity; they do not complete live Google OAuth or validate a live provider token.",
+    "These tests use an operator administrator connection for disposable database administration and migrations; they do not establish runtime-role privileges.",
+    "Main application database migrations and runtime-role probes occur after this isolated test run and require separate evidence.",
+    "The Docker PostgreSQL 16 path remains available but was not executed on this workstation.",
+    "External messaging, application media authorization and published-site user journeys require separate acceptance checks."
+  ]
+}
