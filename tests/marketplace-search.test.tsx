@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { renderToStaticMarkup } from "react-dom/server";
-import { fireEvent } from "@testing-library/react";
+import { fireEvent, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import TestRenderer, { act } from "./support/dom-test-renderer";
 import { Map as FakeMap } from "./support/fake-maplibre";
@@ -19,6 +19,19 @@ const loadMap = () => act(async () => { await new Promise((resolve) => setTimeou
 
 describe("marketplace search", () => {
   beforeEach(() => window.history.replaceState(null, "", "/"));
+  it("keeps the basemap on the searched city even when there are no listings", async () => {
+    await act(async () => {
+      TestRenderer.create(
+        <SavedListingsProvider>
+          <SearchExperience listings={[]} initialQuery="Boston" initialMoveIn="" initialMoveOut="" />
+        </SavedListingsProvider>
+      );
+    });
+    await loadMap();
+    expect(FakeMap.last!.getBounds().contains([-71.0589, 42.3601])).toBe(true);
+    expect(FakeMap.last!.getBounds().contains([-118.2437, 34.0522])).toBe(false);
+    expect(pinLabels()).toHaveLength(0);
+  });
   it("keeps results and map together without exposing unrelated workflows", () => {
     const html = renderToStaticMarkup(
       <SavedListingsProvider>
@@ -203,8 +216,8 @@ describe("marketplace search", () => {
     expect(document.querySelector("#result-heading")?.textContent).toBe("地图区域内的可租房源");
     expect(document.querySelector("[role=status]")?.textContent).toContain(`${boston.length} 套符合条件`);
     expect(window.location.search).toContain("bbox=-71.2000%2C42.3000%2C-71.0000%2C42.4000");
-    // Only pins in view stay in the page.
-    expect(pinLabels()).toHaveLength(boston.length);
+    // Marker repaint runs on the next animation frame after the viewport changes.
+    await waitFor(() => expect(pinLabels()).toHaveLength(boston.length));
 
     const pin = [...document.querySelectorAll<HTMLButtonElement>(".map-pin")].find((item) => item.getAttribute("aria-label")?.startsWith(boston[0].title));
     await act(async () => pin!.click());

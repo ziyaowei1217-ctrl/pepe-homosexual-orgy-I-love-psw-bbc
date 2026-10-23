@@ -53,7 +53,14 @@ describe("production web configuration", () => {
     // @ts-expect-error Next.js loads its JavaScript configuration directly.
     const { default: config } = await import("../next.config.mjs");
     const headers = await config.headers();
-    expect(headers.flatMap((entry: { headers: Array<{ key: string }> }) => entry.headers).some((header: { key: string }) => header.key === "Content-Security-Policy")).toBe(false);
+    const documentHeaders = headers.find((entry: { source: string }) => entry.source === "/(.*)").headers;
+    expect(documentHeaders.some((header: { key: string }) => header.key === "Content-Security-Policy")).toBe(false);
+    const workerHeaders = headers.find((entry: { source: string }) => entry.source === "/vendor/maplibre/:version/:file").headers;
+    const workerPolicy = workerHeaders.find((header: { key: string }) => header.key === "Content-Security-Policy").value;
+    expect(workerPolicy).toContain("default-src 'none'; script-src 'self'");
+    expect(workerPolicy).toContain("connect-src 'self' https://tiles.openfreemap.org");
+    expect(workerPolicy).toContain("worker-src 'none'");
+    expect(workerPolicy).not.toMatch(/unsafe-eval|unsafe-inline|api\.example|\*/);
     expect(config.poweredByHeader).toBe(false);
     expect(config.images.minimumCacheTTL).toBe(0);
     expect(config.images.localPatterns).toEqual([]);

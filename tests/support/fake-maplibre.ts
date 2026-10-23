@@ -5,6 +5,9 @@
 type Bounds = [number, number, number, number];
 type Listener = (event: Record<string, unknown>) => void;
 
+export const getVersion = () => "6.4.1";
+export function setWorkerUrl(_url: string) {}
+
 export class Map {
   static last: Map | null = null;
   container: HTMLElement;

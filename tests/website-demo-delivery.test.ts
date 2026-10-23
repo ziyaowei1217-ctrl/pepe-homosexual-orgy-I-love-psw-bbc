@@ -113,14 +113,14 @@ describe("path and asset dispatch", () => {
     expect(middleware(new NextRequest(`https://demo.example${path}`)).status).toBe(400);
   });
 
-  it.each(["/_next/static/chunks/app.js", "/_next/image", "/fonts/psw/rounded-bold-core.woff2", "/fonts/psw/rounded-bold-16.woff2", "/fonts/psw/slogan-heavy.woff2"])("serves inert assets %s without document nonce caching", path => {
+  it.each(["/_next/static/chunks/app.js", "/_next/image", "/fonts/psw/rounded-bold-core.woff2", "/fonts/psw/rounded-bold-16.woff2", "/fonts/psw/slogan-heavy.woff2", "/vendor/maplibre/6.4.1/maplibre-gl-worker.mjs", "/vendor/maplibre/6.4.1/maplibre-gl-shared.mjs"])("serves inert assets %s without document nonce caching", path => {
     useDemo();
     const response = middleware(new NextRequest(`https://demo.example${path}`));
     expect(response.headers.get("x-middleware-next")).toBe("1");
     expect(response.headers.get("Content-Security-Policy")).toBeNull();
   });
 
-  it.each(["/fonts/psw/.env", "/fonts/psw/rounded-bold-core.woff2/secret", "/_next/static%2fapi.js", "/fonts/psw/rounded-bold-99.woff2"])("never grants asset handling to %s", path => {
+  it.each(["/fonts/psw/.env", "/fonts/psw/rounded-bold-core.woff2/secret", "/_next/static%2fapi.js", "/fonts/psw/rounded-bold-99.woff2", "/vendor/maplibre/6.4.1/.env", "/vendor/maplibre/6.4.1/maplibre-gl-worker.mjs/secret", "/vendor/maplibre/6.4.1/unknown.mjs", "/vendor/maplibre%2f6.4.1/maplibre-gl-worker.mjs"])("never grants asset handling to %s", path => {
     expect(isCanonicalWebsiteStaticPath(path)).toBe(false);
   });
 

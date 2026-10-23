@@ -15,11 +15,13 @@ import { useListingMatches } from "@/components/marketplace/use-listing-matches"
 import { formatRangeLong } from "@/lib/date-format";
 import { rememberLastSearch } from "@/lib/feed-signals";
 import type { CatalogSort } from "@/lib/listing-catalog";
+import { getListingCoordinates } from "@/lib/listing-map";
 import type { PreviewListing } from "@/lib/preview-data";
 import { listingHref } from "@/lib/listing-stay";
 import { describeRenterPreferences, hasRenterPreferences } from "@/lib/renter-preferences";
 import { defaultSearch, emptyFilters, parseSearchState, rememberOpenedSearch, searchCatalog, searchDateError, searchHref, type SearchState } from "@/lib/search-state";
 import { cn } from "@/lib/utils";
+import { findUSMarketByArea } from "@/lib/us-market-catalog";
 
 export function SearchExperience({ listings, initialQuery, initialMoveIn, initialMoveOut, initialState }: {
   listings: PreviewListing[]; initialQuery: string; initialMoveIn: string; initialMoveOut: string; initialState?: SearchState;
@@ -219,6 +221,7 @@ export function SearchExperience({ listings, initialQuery, initialMoveIn, initia
         listings={catalog.mapItems}
         fitKey={searchHref({ ...state, bounds: null, page: 1, selected: "", view: "split", sort: "recommended" })}
         bounds={state.bounds}
+        center={findUSMarketByArea(state.query)?.center ?? getListingCoordinates(state.query)}
         moveIn={stayIn}
         moveOut={stayOut}
         highlightedId={hoveredId}

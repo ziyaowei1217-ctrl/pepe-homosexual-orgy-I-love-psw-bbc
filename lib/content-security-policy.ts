@@ -53,7 +53,7 @@ export function buildContentSecurityPolicy(
     `img-src ${[...new Set(["'self'", "data:", "blob:", "https://images.unsplash.com", ...(demo ? [DEMO_MAP_ORIGIN] : [apiOrigin, ...mapOrigins.map(httpOrigin)])].filter(Boolean))].join(" ")}`,
     "font-src 'self' data:",
     `connect-src ${connections}`,
-    // MapLibre starts its bundled worker from a blob, never through script-src.
+    // Worker permissions are separate from the document's nonce script policy.
     "worker-src 'self' blob:",
     ...(upgradeRequests ? ["upgrade-insecure-requests"] : [])
   ].join("; ");

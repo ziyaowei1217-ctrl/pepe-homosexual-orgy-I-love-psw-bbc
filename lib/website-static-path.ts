@@ -17,5 +17,6 @@ export function isCanonicalWebsiteStaticPath(pathname: string) {
   if (decoded === null) return false;
   if (["/_next/image", "/favicon.ico", "/icon.svg", "/apple-icon.png"].includes(decoded)) return true;
   if (/^\/fonts\/psw\/(?:rounded-bold-(?:core|0[1-9]|1[0-6])|slogan-heavy)\.woff2$/.test(decoded)) return true;
+  if (/^\/vendor\/maplibre\/\d+\.\d+\.\d+\/maplibre-gl-(?:worker|shared)\.mjs$/.test(decoded)) return true;
   return decoded.startsWith("/_next/static/") && decoded.split("/").length > 3;
 }

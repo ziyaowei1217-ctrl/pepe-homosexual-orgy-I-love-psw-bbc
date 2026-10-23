@@ -43,6 +43,9 @@ export function useMapLibre(container: RefObject<HTMLElement | null>, options: P
     let map: MapLibreMap | undefined;
     import("maplibre-gl").then((maplibre) => {
       if (cancelled || !container.current) return;
+      // Bundled v6 cannot infer its worker URL. Keep both worker modules on our
+      // own origin, matched to the library version prepared by dev/build.
+      maplibre.setWorkerUrl(`/vendor/maplibre/${maplibre.getVersion()}/maplibre-gl-worker.mjs`);
       map = new maplibre.Map({
         container: container.current,
         style: getMapStyle(),
@@ -107,12 +110,14 @@ type PinProperties = { id: string; label: string; title: string };
  * Interactive listing map for search and saved listings: price pins that merge into counts when crowded, a card for the
  * selected listing, and (with `searchArea`) results that follow the map as it moves.
  */
-export function ListingMap({ listings, fitKey, bounds = null, moveIn = "", moveOut = "", highlightedId, selectedId, onSelect, onOpen, onToggleSave, searchArea, controls, className, label }: {
+export function ListingMap({ listings, fitKey, bounds = null, center = { lat: 34.0522, lng: -118.2437 }, moveIn = "", moveOut = "", highlightedId, selectedId, onSelect, onOpen, onToggleSave, searchArea, controls, className, label }: {
   listings: PreviewListing[];
   /** When this changes and no map area is set, the map refits to `listings`. */
   fitKey?: string;
   /** The map area the results are limited to; the map opens on it. */
   bounds?: MapBounds | null;
+  /** Keep an empty search on the selected city rather than unrelated default geography. */
+  center?: MapPoint;
   moveIn?: string; moveOut?: string;
   highlightedId?: string | null; selectedId: string;
   onSelect: (id: string) => void; onOpen?: (id: string) => void; onToggleSave?: (listing: PreviewListing) => void;
@@ -122,9 +127,10 @@ export function ListingMap({ listings, fitKey, bounds = null, moveIn = "", moveO
   className?: string; label: string;
 }) {
   const container = useRef<HTMLDivElement>(null);
+  const { lat: centerLat, lng: centerLng } = center;
   // Only the first render decides where the map opens; later changes move it with fitBounds.
   const opening = bounds ?? getListingBounds(listings);
-  const { map, maplibre, failed } = useMapLibre(container, opening ? { bounds: opening } : { center: [-118.2437, 34.0522], zoom: 10 });
+  const { map, maplibre, failed } = useMapLibre(container, opening ? { bounds: opening } : { center: [center.lng, center.lat], zoom: 10 });
   const { savedIds, toggleSaved } = useSavedListings();
   const [viewed, setViewed] = useState<ReadonlySet<string>>(() => new Set());
   const [followMap, setFollowMap] = useState(true);
@@ -208,8 +214,8 @@ export function ListingMap({ listings, fitKey, bounds = null, moveIn = "", moveO
   useEffect(() => {
     if (!map || fittedKey.current === fitKey) return;
     fittedKey.current = fitKey;
-    if (!bounds) fitToListings(map, listings);
-  }, [map, fitKey, bounds, listings]);
+    if (!bounds) fitToListings(map, listings, { lat: centerLat, lng: centerLng });
+  }, [map, fitKey, bounds, listings, centerLat, centerLng]);
 
   // Moving the map by hand either updates the results right away or offers 搜索此区域.
   // Moves made by this file (fitting results, resizing, showing a card) carry `fromCode` and change nothing.
@@ -273,7 +279,7 @@ export function ListingMap({ listings, fitKey, bounds = null, moveIn = "", moveO
         ? <button type="button" onClick={() => { if (map) searchArea.onSearch(mapBounds(map)); setMoved(false); }} className="min-h-11 whitespace-nowrap rounded-full bg-ink-block px-5 font-rounded text-d-subhead font-bold text-on-dark shadow-menu hover:bg-ink">搜索此区域</button>
         : <label className="flex min-h-11 cursor-pointer items-center gap-2.5 whitespace-nowrap rounded-full bg-surface px-4 text-d-subhead font-semibold text-ink shadow-menu"><input type="checkbox" checked={followMap} onChange={(event) => { setFollowMap(event.target.checked); setMoved(false); }} className="size-[18px] accent-primary" />移动地图时更新结果</label>}
     </div> : null}
-    <MapZoomControls map={map} fitLabel="显示全部结果" onFit={() => { searchArea?.onClear(); setMoved(false); if (map) fitToListings(map, listings); }} />
+    <MapZoomControls map={map} fitLabel="显示全部结果" onFit={() => { searchArea?.onClear(); setMoved(false); if (map) fitToListings(map, listings, center); }} />
     {!listings.length ? <div className="pointer-events-none absolute inset-0 z-10 grid place-items-center px-6 text-center"><p className="rounded-full bg-surface px-4 py-2 text-d-subhead text-ink-secondary shadow-menu">当前条件下没有房源，调整筛选后再看看。</p></div> : null}
     {popupNode && card ? createPortal(card, popupNode) : null}
     {/* Narrow maps: the card sits above the phone tab bar and the view switcher. */}
@@ -298,9 +304,10 @@ function paintPins(markers: PinMarkers, { highlightedId, selectedId, savedIds, v
   }
 }
 
-function fitToListings(map: MapLibreMap, listings: PreviewListing[]) {
+function fitToListings(map: MapLibreMap, listings: PreviewListing[], center: MapPoint) {
   const target = getListingBounds(listings);
   if (target) map.fitBounds(target, { padding: fitPadding, maxZoom: clusterMaxZoom, duration: 600 }, { fromCode: true });
+  else map.easeTo({ center: [center.lng, center.lat], zoom: 10 }, { fromCode: true });
 }
 
 function mapBounds(map: MapLibreMap): MapBounds {

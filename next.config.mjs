@@ -6,6 +6,9 @@ const mapStyleUrl = process.env.NEXT_PUBLIC_MAP_STYLE_URL || "";
 const mapTileTemplate = process.env.NEXT_PUBLIC_MAP_TILE_URL_TEMPLATE || "";
 const mapOrigins = demo || (!mapStyleUrl && !mapTileTemplate) ? ["https://tiles.openfreemap.org"] : [safeOrigin(mapStyleUrl), safeOrigin(mapTileTemplate)];
 const connectSources = [...new Set(["'self'", apiOrigin, apiOrigin.replace(/^http/, "ws"), ...mapOrigins].filter(Boolean))].join(" ");
+// A module worker has its own policy. It may import its same-origin sibling
+// and fetch the approved basemap, without inheriting document-only nonces.
+const mapWorkerPolicy = `default-src 'none'; script-src 'self'; connect-src ${["'self'", ...mapOrigins].filter(Boolean).join(" ")}; worker-src 'none'; object-src 'none'`;
 const production = process.env.NODE_ENV === "production";
 const contentSecurityPolicy = [
   "default-src 'self'",
@@ -20,7 +23,7 @@ const contentSecurityPolicy = [
     : `img-src ${[...new Set(["'self'", "data:", "blob:", "https://images.unsplash.com", apiOrigin, ...mapOrigins].filter(Boolean))].join(" ")}`,
   "font-src 'self' data:",
   `connect-src ${connectSources}`,
-  // MapLibre renders tiles in a web worker it starts from a blob.
+  // MapLibre renders tiles in a worker rather than the main script context.
   "worker-src 'self' blob:",
   ...(production ? ["upgrade-insecure-requests"] : [])
 ].join("; ");
@@ -58,7 +61,11 @@ const nextConfig = {
       // Next applies the last matching value. Keep OAuth redirects and their
       // completion page from inheriting the broader site's referrer policy.
       { source: "/api/auth/:path*", headers: authHeaders },
-      { source: "/auth/complete", headers: authHeaders }
+      { source: "/auth/complete", headers: authHeaders },
+      { source: "/vendor/maplibre/:version/:file", headers: [
+        { key: "Content-Security-Policy", value: mapWorkerPolicy },
+        { key: "Cache-Control", value: "public, max-age=31536000, immutable" }
+      ] }
     ];
   }
 };
