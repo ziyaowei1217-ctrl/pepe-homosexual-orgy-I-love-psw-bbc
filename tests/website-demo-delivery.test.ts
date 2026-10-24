@@ -104,6 +104,11 @@ describe("functional website demo delivery boundary", () => {
     expect(config).toContain('NEXT_PUBLIC_MAP_STYLE_URL = "https://tiles.openfreemap.org/styles/liberty"');
     expect(config).toContain('NODE_VERSION = "22"');
     expect(config).toContain('PNPM_VERSION = "9.15.4"');
+    // The CDN serves public worker assets without calling Next's headers().
+    const workerHeaders = config.split('for = "/vendor/maplibre/*"')[1];
+    expect(workerHeaders).toContain("script-src 'self'; connect-src 'self' https://tiles.openfreemap.org; worker-src 'none'");
+    expect(workerHeaders).toContain('Cache-Control = "public, max-age=31536000, immutable"');
+    expect(workerHeaders).not.toContain("unsafe-eval");
   });
 });
 
