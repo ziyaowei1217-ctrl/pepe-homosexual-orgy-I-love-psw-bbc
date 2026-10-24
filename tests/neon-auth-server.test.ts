@@ -115,7 +115,7 @@ describe("Neon framework-independent Next 15 adapter", () => {
     const request = new Request(`${origin}/api/auth/complete?neon_auth_session_verifier=secret`, { headers: { Cookie: "__Secure-neon-auth.session_challenge=challenge" } });
     const response = await handleNeonAuthRequest(request, ["complete"]);
     expect(response.status).toBe(303);
-    expect(response.headers.get("Location")).toBe("/auth/complete");
+    expect(response.headers.get("Location")).toBe("/auth/complete?flow=google");
     expect(response.headers.getSetCookie()).toHaveLength(2);
     expect(response.headers.get("Location")).not.toMatch(/secret|token|ignored/);
     expect(response.headers.get("Referrer-Policy")).toBe("no-referrer");

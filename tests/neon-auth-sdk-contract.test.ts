@@ -69,7 +69,7 @@ describe("published Neon vanilla SDK and real Fetch-adapter contract", () => {
     vi.stubGlobal("fetch", fetch);
     const response = await handleNeonAuthRequest(new Request(`${origin}/api/auth/complete?neon_auth_session_verifier=test-verifier`, { headers: { Cookie: "__Secure-neon-auth.session_challenge=test-challenge" } }), ["complete"]);
     expect(response.status).toBe(303);
-    expect(response.headers.get("Location")).toBe("/auth/complete");
+    expect(response.headers.get("Location")).toBe("/auth/complete?flow=google");
     expect(fetch).toHaveBeenCalledTimes(2);
     const cookies = response.headers.getSetCookie();
     expect(cookies).toHaveLength(3);

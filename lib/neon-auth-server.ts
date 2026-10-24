@@ -101,7 +101,10 @@ async function completeOAuth(request: Request, configuration: NonNullable<Return
   // exchange reaches the UI completion page; neither tokens nor returnTo travel
   // in the redirect URL. Cookies must remain separate (Expires contains commas).
   const response = new Response(null, { status: 303, headers: {
-    Location: result.action === "redirect_oauth" ? "/auth/complete" : "/auth/complete?error=oauth"
+    // An explicit, non-secret query prevents hosting redirect layers from
+    // inheriting the one-time verifier from the incoming callback URL.
+    // This marker grants no authentication; the tab intent and JWT still do.
+    Location: result.action === "redirect_oauth" ? "/auth/complete?flow=google" : "/auth/complete?error=oauth"
   } });
   for (const cookie of result.cookies ?? []) response.headers.append("Set-Cookie", cookie);
   return secureResponse(response);

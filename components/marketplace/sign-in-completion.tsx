@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { readStoredAuthSession, writeStoredAuthSession } from "@/lib/auth-session";
-import { assertSignInAttemptCurrent, consumeSignInAttempt, discardSignInAttempt, exchangeGoogleSession, usesNeonAuth, type SignInAttempt } from "@/lib/neon-auth-client";
+import { assertSignInAttemptCurrent, consumeSignInAttempt, discardSignInAttempt, exchangeGoogleSession, signInFailureMessage, usesNeonAuth, type SignInAttempt } from "@/lib/neon-auth-client";
 
 export function SignInCompletion({ failed = false }: { failed?: boolean }) {
   const [error, setError] = useState<string | null>(failed ? "登录未完成，请返回账户页面重试。" : null);
@@ -23,7 +23,7 @@ export function SignInCompletion({ failed = false }: { failed?: boolean }) {
       if ((readStoredAuthSession()?.accessToken ?? null) !== previousToken) throw new Error("账户已在其他页面改变，请重新登录。");
       writeStoredAuthSession(response.accessToken);
       window.location.replace(attempt.returnTo);
-    }).catch(() => { if (active) setError("登录未完成。请返回账户页面重新尝试；若持续失败，请联系管理员。"); });
+    }).catch(error => { if (active) setError(signInFailureMessage(error)); });
     return () => { active = false; };
   }, [failed]);
   return <main className="page-container py-16"><section className="mx-auto max-w-lg rounded-psw-xl bg-surface p-8">

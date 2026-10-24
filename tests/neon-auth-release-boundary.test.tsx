@@ -35,6 +35,7 @@ beforeEach(() => {
   backend = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     const token = new Headers(init?.headers).get("Authorization")?.replace("Bearer ", "") ?? "guest";
+    if (url.endsWith("/api/auth/token")) return Response.json({ token: "signed-provider-proof" });
     if (url.endsWith("/auth/neon/exchange")) return Response.json({ accessToken: "new-app-session", user: { id: "new-user", email: "new@example.com", role: "USER" }, isNewUser: false });
     if (url.endsWith("/auth/me")) return Response.json({ id: token, email: `${token}@example.com`, role: "USER" });
     if (url.endsWith("/profiles/me")) return Response.json(profile(token));
@@ -44,13 +45,14 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); localStorage.clear(); sessionStorage.clear(); vi.clearAllMocks(); vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
 const exchanges = () => backend.mock.calls.filter(([url]) => String(url).endsWith("/auth/neon/exchange"));
+const tokenRequests = () => backend.mock.calls.filter(([url]) => String(url).endsWith("/api/auth/token"));
 
 describe("OAuth completion safety", () => {
   it("does not exchange a lingering provider cookie when no sign-in was started in this tab", async () => {
     writeStoredAuthSession("existing-account");
     render(<SignInCompletion />);
     await screen.findByRole("alert");
-    expect(provider.token).not.toHaveBeenCalled(); expect(exchanges()).toHaveLength(0);
+    expect(tokenRequests()).toHaveLength(0); expect(exchanges()).toHaveLength(0);
     expect(readStoredAuthSession()?.accessToken).toBe("existing-account"); expect(navigation).not.toHaveBeenCalled();
   });
 
@@ -60,18 +62,19 @@ describe("OAuth completion safety", () => {
     writeStoredAuthSession("different-account-before-callback");
     render(<SignInCompletion />);
     await screen.findByRole("alert");
-    expect(provider.token).not.toHaveBeenCalled(); expect(exchanges()).toHaveLength(0);
+    expect(tokenRequests()).toHaveLength(0); expect(exchanges()).toHaveLength(0);
     expect(readStoredAuthSession()?.accessToken).toBe("different-account-before-callback");
   });
 
   it("rechecks the active account before sending the provider proof to the backend", async () => {
-    const proof = deferred<{ data: { token: string }; error: null }>();
+    const proof = deferred<Response>();
     await startGoogleSignIn("/inbox");
-    provider.token.mockReturnValueOnce(proof.promise);
+    const normalFetch = backend.getMockImplementation()!;
+    backend.mockImplementation((input, init) => String(input).endsWith("/api/auth/token") ? proof.promise : normalFetch(input, init));
     render(<SignInCompletion />);
-    await waitFor(() => expect(provider.token).toHaveBeenCalledOnce());
+    await waitFor(() => expect(tokenRequests()).toHaveLength(1));
     act(() => writeStoredAuthSession("new-account-during-provider-check"));
-    await act(async () => proof.resolve({ data: { token: "old-provider-proof" }, error: null }));
+    await act(async () => proof.resolve(Response.json({ token: "old-provider-proof" })));
     await screen.findByRole("alert");
     expect(exchanges()).toHaveLength(0);
     expect(readStoredAuthSession()?.accessToken).toBe("new-account-during-provider-check");
@@ -83,7 +86,7 @@ describe("OAuth completion safety", () => {
     time.mockReturnValue(1_800_000_600_001);
     render(<SignInCompletion />);
     await screen.findByRole("alert");
-    expect(provider.token).not.toHaveBeenCalled(); expect(exchanges()).toHaveLength(0);
+    expect(tokenRequests()).toHaveLength(0); expect(exchanges()).toHaveLength(0);
     time.mockRestore();
   });
 
@@ -106,7 +109,7 @@ describe("OAuth completion safety", () => {
     await startGoogleSignIn("/inbox?listingId=listing-1");
     const view = render(<StrictMode><SignInCompletion /></StrictMode>);
     await waitFor(() => expect(navigation).toHaveBeenCalledWith("/inbox?listingId=listing-1"));
-    expect(exchanges()).toHaveLength(1); expect(provider.token).toHaveBeenCalledOnce();
+    expect(exchanges()).toHaveLength(1); expect(tokenRequests()).toHaveLength(1);
     expect(readStoredAuthSession()?.accessToken).toBe("new-app-session");
     view.unmount();
     render(<SignInCompletion />);
@@ -121,7 +124,7 @@ describe("OAuth completion safety", () => {
     view.unmount();
     render(<SignInCompletion />);
     await screen.findByRole("alert");
-    expect(provider.token).not.toHaveBeenCalled(); expect(exchanges()).toHaveLength(0);
+    expect(tokenRequests()).toHaveLength(0); expect(exchanges()).toHaveLength(0);
     expect(readStoredAuthSession()).toBeNull();
   });
 

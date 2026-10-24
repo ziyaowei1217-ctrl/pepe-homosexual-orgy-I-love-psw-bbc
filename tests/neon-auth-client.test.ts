@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { webcrypto } from "node:crypto";
 import { writeStoredAuthSession } from "../lib/auth-session";
 
-const mocks = vi.hoisted(() => ({ social: vi.fn(), token: vi.fn(), signOut: vi.fn(), post: vi.fn(), create: vi.fn() }));
+const mocks = vi.hoisted(() => ({ social: vi.fn(), token: vi.fn(), signOut: vi.fn(), post: vi.fn(), create: vi.fn(), fetch: vi.fn() }));
 vi.mock("@neondatabase/auth", () => ({ createAuthClient: mocks.create }));
 vi.mock("../lib/api", () => ({ apiPost: mocks.post }));
 
@@ -11,7 +11,8 @@ beforeEach(() => {
   vi.resetModules(); vi.stubEnv("NEXT_PUBLIC_AUTH_PROVIDER", "neon"); sessionStorage.clear(); localStorage.clear(); vi.stubGlobal("crypto", webcrypto);
   mocks.create.mockReturnValue({ signIn: { social: mocks.social }, token: mocks.token, signOut: mocks.signOut });
   mocks.social.mockResolvedValue({ data: {}, error: null });
-  mocks.token.mockResolvedValue({ data: { token: "verified-upstream-jwt" }, error: null });
+  mocks.fetch.mockImplementation(async () => Response.json({ token: "verified-upstream-jwt" }));
+  vi.stubGlobal("fetch", mocks.fetch);
   mocks.signOut.mockResolvedValue({ data: {}, error: null });
   mocks.post.mockResolvedValue({ accessToken: "app-jwt", user: { id: "user-1" }, isNewUser: false });
 });
@@ -36,14 +37,56 @@ describe("shared account sign-in boundary", () => {
     await auth.startGoogleSignIn("/inbox");
     await expect(auth.exchangeGoogleSession(auth.consumeSignInAttempt())).resolves.toMatchObject({ accessToken: "app-jwt" });
     expect(mocks.post).toHaveBeenCalledWith("/auth/neon/exchange", { token: "verified-upstream-jwt" });
+    expect(mocks.fetch).toHaveBeenCalledWith(`${window.location.origin}/api/auth/token`, expect.objectContaining({ credentials: "same-origin", cache: "no-store", redirect: "error" }));
+    expect(mocks.token).not.toHaveBeenCalled();
   });
   it("does not contact the backend when the provider session is unavailable", async () => {
-    mocks.token.mockResolvedValue({ data: null, error: { message: "expired" } });
+    mocks.fetch.mockResolvedValueOnce(Response.json({ code: "UNAUTHORIZED" }, { status: 401 }));
     const auth = await import("../lib/neon-auth-client");
     await auth.startGoogleSignIn("/inbox");
     await expect(auth.exchangeGoogleSession(auth.consumeSignInAttempt())).rejects.toThrow();
     expect(mocks.post).not.toHaveBeenCalled();
   });
+  it.each([
+    () => Response.json({ session: { token: "cookie-not-jwt" }, user: { id: "cached-user" } }),
+    () => Response.json({ token: 123 }),
+    () => Response.json({ token: "x".repeat(8193) }),
+    () => new Response("not-json", { headers: { "Content-Type": "application/json" } }),
+    () => new Response("<html>sign in</html>", { headers: { "Content-Type": "text/html" } }),
+    () => new Response("x".repeat(16_385), { headers: { "Content-Type": "application/json" } })
+  ])("rejects unexpected token responses before contacting the backend", async response => {
+    mocks.fetch.mockResolvedValueOnce(response());
+    const auth = await import("../lib/neon-auth-client");
+    await auth.startGoogleSignIn("/inbox");
+    await expect(auth.exchangeGoogleSession(auth.consumeSignInAttempt())).rejects.toThrow();
+    expect(mocks.post).not.toHaveBeenCalled();
+  });
+
+  it("bounds a stalled token response body and cancels its stream", async () => {
+    vi.useFakeTimers();
+    try {
+      const cancel = vi.fn();
+      mocks.fetch.mockResolvedValueOnce(new Response(new ReadableStream({ cancel }), { headers: { "Content-Type": "application/json" } }));
+      const auth = await import("../lib/neon-auth-client");
+      await auth.startGoogleSignIn("/inbox");
+      const result = auth.exchangeGoogleSession(auth.consumeSignInAttempt()).catch(error => error);
+      await vi.advanceTimersByTimeAsync(auth.PROVIDER_TOKEN_TIMEOUT_MS + 1);
+      expect(auth.signInFailureMessage(await result)).toContain("登录服务暂时无法连接");
+      expect(cancel).toHaveBeenCalledOnce();
+      expect(mocks.post).not.toHaveBeenCalled();
+    } finally { vi.useRealTimers(); }
+  });
+
+  it("shows a safe network explanation without exposing provider errors", async () => {
+    mocks.fetch.mockRejectedValueOnce(new TypeError("Failed to fetch private-token-or-provider-details"));
+    const auth = await import("../lib/neon-auth-client");
+    await auth.startGoogleSignIn("/inbox");
+    const error = await auth.exchangeGoogleSession(auth.consumeSignInAttempt()).catch(error => error);
+    expect(auth.signInFailureMessage(error)).toContain("网络连接失败");
+    expect(auth.signInFailureMessage(error)).not.toContain("private-token");
+    expect(auth.signInFailureMessage(new Error("sensitive-server-message"))).not.toContain("sensitive-server-message");
+  });
+
   it("does not open the provider for the unchanged email mode", async () => {
     vi.stubEnv("NEXT_PUBLIC_AUTH_PROVIDER", "");
     const auth = await import("../lib/neon-auth-client");
