@@ -42,9 +42,26 @@ function createPrismaMock(initialUsers: User[]) {
       return row;
     }
   };
+  const phoneIdentity = {
+    rows: [] as Array<{ userId: string; phoneNumber: string }>,
+    async deleteMany({ where }: { where: { userId: string } }) {
+      const before = phoneIdentity.rows.length;
+      phoneIdentity.rows = phoneIdentity.rows.filter((row) => row.userId !== where.userId);
+      return { count: before - phoneIdentity.rows.length };
+    }
+  };
+  const profile = {
+    phoneVerified: new Map<string, boolean>(),
+    async updateMany({ where, data }: { where: { email: string }; data: { phoneVerified: boolean } }) {
+      profile.phoneVerified.set(where.email, data.phoneVerified);
+      return { count: 1 };
+    }
+  };
   const transaction = {
     user: userStore,
     auditEvent,
+    phoneIdentity,
+    profile,
     async $executeRaw() {
       return 0;
     }
@@ -81,6 +98,17 @@ describe("AdminRolesService", () => {
       outcome: "SUCCESS",
       metadata: { reason: "Primary reviewer" }
     });
+  });
+
+  it("removes a phone linked before promotion so it cannot become the step-up factor", async () => {
+    const prisma = createPrismaMock([user("user-1", input.email, UserRole.USER), user("user-2", "other@example.com", UserRole.USER)]);
+    prisma.phoneIdentity.rows.push({ userId: "user-1", phoneNumber: "+12015550123" }, { userId: "user-2", phoneNumber: "+12015550124" });
+    const service = new AdminRolesService(prisma as never, new AuditService());
+
+    await service.grant(input);
+
+    expect(prisma.phoneIdentity.rows).toEqual([{ userId: "user-2", phoneNumber: "+12015550124" }]);
+    expect(prisma.profile.phoneVerified.get(input.email)).toBe(false);
   });
 
   it("treats a repeated grant as an audited no-op", async () => {

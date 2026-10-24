@@ -1,5 +1,6 @@
 "use client";
 
+import { signInViaPhrase } from "@/lib/auth-methods";
 import { ArrowLeft, CalendarDays, FileText, Search, Send, UsersRound } from "lucide-react";
 import { SmartImage } from "@/components/ui/smart-image";
 import Link from "next/link";
@@ -404,7 +405,7 @@ function InboxSessionExperience({ initialConversationId, initialListingId, initi
   if (!authenticated && !loading) {
     return <main className="min-h-[calc(100dvh-72px)] bg-background"><div className="page-container pb-16 pt-8 sm:pt-12">
       <h1 className="page-title">收件箱</h1>
-      <EmptyState className="mt-7" mood="sleepy" title="登录后查看你的消息" body={usesNeonAuth() ? "和转租人、室友的消息都在这里。使用 Google 账户登录后查看。" : "和转租人、室友的消息都在这里。用邮箱验证码登录，不需要密码。"} action={<Link href={authRoute({ returnTo: inboxReturnTo({ initialConversationId, initialListingId, initialApplicantId, initialRoommateId, initialTour }) })} className="primary-action">登录</Link>} />
+      <EmptyState className="mt-7" mood="sleepy" title="登录后查看你的消息" body={usesNeonAuth() ? `和转租人、室友的消息都在这里。${signInViaPhrase()}后查看。` : "和转租人、室友的消息都在这里。用邮箱验证码登录，不需要密码。"} action={<Link href={authRoute({ returnTo: inboxReturnTo({ initialConversationId, initialListingId, initialApplicantId, initialRoommateId, initialTour }) })} className="primary-action">登录</Link>} />
     </div></main>;
   }
 

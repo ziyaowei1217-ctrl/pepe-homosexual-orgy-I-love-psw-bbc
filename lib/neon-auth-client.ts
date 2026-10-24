@@ -17,7 +17,7 @@ export const PROVIDER_TOKEN_TIMEOUT_MS = 15_000;
 const signInErrors = {
   attempt: "登录请求已过期或无法读取。请返回账户页面，在同一浏览器标签页重新登录。",
   changed: "账户已在其他页面改变，请返回账户页面重新登录。",
-  provider: "Google 登录会话未能确认。请返回账户页面重新登录。",
+  provider: "登录会话未能确认。请返回账户页面重新登录。",
   network: "网络连接失败，请检查网络后返回账户页面重试。",
   service: "登录服务暂时无法连接，请稍后返回账户页面重试。"
 } as const;
@@ -88,14 +88,20 @@ function getClient(): Promise<VanillaBetterAuthClient> {
   return clientPromise;
 }
 
-export async function startGoogleSignIn(returnTo: string | null) {
+export type SocialProvider = "google" | "github";
+
+export function startGoogleSignIn(returnTo: string | null) {
+  return startSocialSignIn("google", returnTo);
+}
+
+export async function startSocialSignIn(provider: SocialProvider, returnTo: string | null) {
   if (!usesNeonAuth() || typeof window === "undefined") throw new Error("登录服务尚未配置。");
   const previousToken = readStoredAuthSession()?.accessToken ?? null;
   const sessionHash = await fingerprint(previousToken);
   if ((readStoredAuthSession()?.accessToken ?? null) !== previousToken) throw new Error("账户已改变，请重新登录。");
   const destination = returnTo ? getSafeAuthReturnTo(returnTo) : "/account";
   if (destination.length > 2048) throw new Error("登录目标无效，请返回原页面重新登录。");
-  const attempt: SignInAttempt = { version: 1, id: crypto.randomUUID(), createdAt: Date.now(), returnTo: destination, sessionHash };
+  const attempt: SignInAttempt = { version: 1, id: newAttemptId(), createdAt: Date.now(), returnTo: destination, sessionHash };
   // The tab retains only a one-time intent and a hash, never a duplicate bearer token.
   // Check storage before leaving the page so a blocked browser does not lose the flow.
   window.sessionStorage.removeItem("psw-sign-in-return");
@@ -104,7 +110,7 @@ export async function startGoogleSignIn(returnTo: string | null) {
     const client = await getClient();
     await assertSignInAttemptCurrent(attempt);
     if (JSON.parse(window.sessionStorage.getItem(attemptKey) ?? "null")?.id !== attempt.id) throw new Error("登录请求已改变，请重试。");
-    const result = await client.signIn.social({ provider: "google", callbackURL: `${window.location.origin}/api/auth/complete` });
+    const result = await client.signIn.social({ provider, callbackURL: `${window.location.origin}/api/auth/complete` });
     if (result.error) throw new Error("登录服务暂时无法连接，请稍后重试。");
   } catch (error) {
     try { if (JSON.parse(window.sessionStorage.getItem(attemptKey) ?? "null")?.id === attempt.id) window.sessionStorage.removeItem(attemptKey); } catch { /* Storage can become unavailable during navigation. */ }
@@ -112,7 +118,10 @@ export async function startGoogleSignIn(returnTo: string | null) {
   }
 }
 
-export async function exchangeGoogleSession(attempt: SignInAttempt) {
+// Works for every Neon sign-in method: the first-party cookies already hold the
+// provider session, and only a fresh JWT from our own proxy is exchanged.
+export const exchangeGoogleSession = exchangeProviderSession;
+export async function exchangeProviderSession(attempt: SignInAttempt) {
   await assertSignInAttemptCurrent(attempt);
   const token = await freshProviderToken();
   await assertSignInAttemptCurrent(attempt);
@@ -172,5 +181,78 @@ export async function endGoogleSession() {
   if (typeof window !== "undefined") discardSignInAttempt();
   if (!usesNeonAuth()) return;
   const result = await (await getClient()).signOut();
-  if (result.error) throw new Error("退出未完成，请检查网络后重试。");
+  // Phone sign-in has no provider session; "no session" means already signed out.
+  if (result.error && result.error.status !== 400 && result.error.status !== 401) throw new Error("退出未完成，请检查网络后重试。");
+}
+
+const emailCodeErrors: Record<string, string> = {
+  EMAIL_CODE_INVALID: "验证码不正确，请检查后重试。",
+  EMAIL_CODE_EXPIRED: "验证码已过期或尝试次数过多，请重新获取。",
+  AUTH_RATE_LIMITED: "请求太频繁，请稍后再试。",
+  EMAIL_SIGN_IN_UNAVAILABLE: "邮箱登录暂未开放，请使用其他方式登录。",
+  INVALID_AUTH_REQUEST: "请输入有效的邮箱地址和六位验证码。"
+};
+
+export class EmailCodeError extends Error {
+  constructor(readonly code: string) { super(emailCodeErrors[code] ?? "暂时无法完成邮箱登录，请稍后重试。"); }
+}
+
+export const EMAIL_CODE_REQUEST_TIMEOUT_MS = 20_000;
+
+async function postEmailCodeRoute(path: "email-otp/send-verification-otp" | "sign-in/email-otp", body: Record<string, string>) {
+  if (!usesNeonAuth() || typeof window === "undefined") throw new EmailCodeError("EMAIL_SIGN_IN_UNAVAILABLE");
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), EMAIL_CODE_REQUEST_TIMEOUT_MS);
+  try {
+    const response = await fetch(`${window.location.origin}/api/auth/${path}`, {
+      method: "POST", credentials: "same-origin", cache: "no-store", redirect: "error",
+      headers: { "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify(body), signal: controller.signal
+    });
+    if (response.ok) { void response.body?.cancel().catch(() => undefined); return; }
+    let code = "";
+    try {
+      const text = (await response.text()).slice(0, 512);
+      const parsed: unknown = JSON.parse(text);
+      if (parsed && typeof parsed === "object" && "code" in parsed && typeof parsed.code === "string") code = parsed.code;
+    } catch { /* A fixed message covers unreadable errors. */ }
+    throw new EmailCodeError(code);
+  } catch (error) {
+    if (error instanceof EmailCodeError) throw error;
+    throw new EmailCodeError(controller.signal.aborted ? "TIMEOUT" : "NETWORK");
+  } finally { clearTimeout(timer); }
+}
+
+export function sendEmailSignInCode(email: string) {
+  return postEmailCodeRoute("email-otp/send-verification-otp", { email, type: "sign-in" });
+}
+
+// Verifies the emailed code with Neon (which sets first-party cookies), then
+// exchanges a fresh provider JWT for a psw session. The same tab/account
+// checks as Google apply: a session change elsewhere aborts the sign-in.
+// Confirms the code with Neon, which sets the first-party session cookies. The
+// returned attempt is then exchanged for the application session; keep it to
+// retry only the exchange, because the code itself is single-use.
+export async function acceptEmailSignInCode(email: string, otp: string, returnTo: string | null) {
+  const previousToken = readStoredAuthSession()?.accessToken ?? null;
+  const destination = returnTo ? getSafeAuthReturnTo(returnTo) : "/account";
+  const attempt: SignInAttempt = { version: 1, id: newAttemptId(), createdAt: Date.now(), returnTo: destination, sessionHash: await fingerprint(previousToken) };
+  await assertSignInAttemptCurrent(attempt);
+  await postEmailCodeRoute("sign-in/email-otp", { email, otp });
+  return attempt;
+}
+
+export async function completeEmailCodeSignIn(email: string, otp: string, returnTo: string | null) {
+  const attempt = await acceptEmailSignInCode(email, otp, returnTo);
+  const response = await exchangeProviderSession(attempt);
+  return { attempt, response };
+}
+
+// crypto.randomUUID is missing on older iOS Safari; getRandomValues is not.
+function newAttemptId() {
+  if (typeof crypto.randomUUID === "function") return crypto.randomUUID();
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }

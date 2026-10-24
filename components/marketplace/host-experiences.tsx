@@ -1,5 +1,6 @@
 "use client";
 
+import { signInViaPhrase } from "@/lib/auth-methods";
 import { Building2, CalendarDays, ClipboardCheck, Eye, MapPin, MessageCircle, Pencil, Plus } from "lucide-react";
 import { SmartImage } from "@/components/ui/smart-image";
 import Link from "next/link";
@@ -311,7 +312,7 @@ function HostListingEditorSession({ listingId }: { listingId?: string }) {
 }
 
 function HostPage({ title, description, action, children }: { title: string; description: string; action?: React.ReactNode; children: React.ReactNode }) { return <main className="min-h-dvh bg-background px-4 pb-16 pt-8 sm:px-8 sm:pt-10"><div className="mx-auto max-w-[1200px]"><PageHeader title={title} description={description} action={action} />{children}</div></main>; }
-function LoginGate({ text, returnTo }: { text: string; returnTo: string }) { return <SharedEmptyState className="mt-6" mood="default" title={text} body={usesNeonAuth() ? "使用 Google 账户登录后，就能看到你发布的房源和收到的申请。" : "用邮箱验证码登录后，就能看到你发布的房源和收到的申请。"} action={<Link href={authRoute({ returnTo })} className="primary-action">登录</Link>} />; }
+function LoginGate({ text, returnTo }: { text: string; returnTo: string }) { return <SharedEmptyState className="mt-6" mood="default" title={text} body={usesNeonAuth() ? `${signInViaPhrase()}后，就能看到你发布的房源和收到的申请。` : "用邮箱验证码登录后，就能看到你发布的房源和收到的申请。"} action={<Link href={authRoute({ returnTo })} className="primary-action">登录</Link>} />; }
 function ErrorNotice({ text }: { text: string }) { return <p role="alert" className="mt-6 rounded-psw-md bg-danger-soft p-4 text-d-subhead font-semibold text-danger-text">{text}</p>; }
 function EmptyState({ text }: { text: string }) { return <SharedEmptyState className="mt-6" mood="sleepy" title={text} />; }
 function RoleGate() { return <section className="mt-6 rounded-psw-xl border border-dashed border-outline bg-surface p-8 text-center"><p className="text-sm font-bold text-ink-secondary">请先在账户资料中将身份设置为转租人或租客兼转租人。</p><Link href="/account/profile" className="primary-action mt-5">前往账户资料</Link></section>; }

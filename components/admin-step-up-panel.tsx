@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useState, type FormEvent } from "react";
+import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,6 +13,9 @@ import {
   type AdminStepUpSession
 } from "@/lib/admin-step-up";
 import { normalizeVerificationCode } from "@/lib/auth-flow";
+import { enabledAuthMethods } from "@/lib/auth-methods";
+import { usesNeonAuth } from "@/lib/neon-auth-client";
+import { requestAdminPhoneStepUpCode, verifyAdminPhoneStepUpCode } from "@/lib/phone-auth";
 import { toProductApiError } from "@/lib/product-errors";
 
 export function AdminStepUpPanel({
@@ -38,29 +41,50 @@ export function AdminStepUpPanel({
   const [expiresAt, setExpiresAt] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [maskedPhone, setMaskedPhone] = useState<string | null>(null);
+  // Neon sign-in has no email-code transport, so where SMS is configured
+  // administrators confirm with a text to their own linked phone instead.
+  const viaPhone = usesNeonAuth() && enabledAuthMethods().includes("phone");
+  // Results of a request started before the panel was closed or reset are ignored.
+  const generation = useRef(0);
 
   useEffect(() => {
+    generation.current += 1;
     setStep("request");
     setCode("");
     setExpiresAt(null);
     setPending(false);
     setError(null);
+    setMaskedPhone(null);
   }, [email, open, sessionToken]);
 
   if (!open) return null;
 
   async function sendCode() {
     if (pending) return;
+    const current = generation.current;
     setPending(true);
     setError(null);
     try {
       assertSessionCurrent?.();
+      if (viaPhone) {
+        const response = await requestAdminPhoneStepUpCode(sessionToken);
+        if (current !== generation.current) return;
+        assertSessionCurrent?.();
+        setMaskedPhone(response.phoneNumber);
+        setExpiresAt(new Date(Date.now() + response.expiresInSeconds * 1000).toISOString());
+        setCode(response.devCode ? normalizeVerificationCode(response.devCode) : "");
+        setStep("verify");
+        return;
+      }
       const response = await requestAdminStepUpCode(sessionToken);
+      if (current !== generation.current) return;
       assertSessionCurrent?.();
       setExpiresAt(response.expiresAt);
       setCode(response.devCode ? normalizeVerificationCode(response.devCode) : "");
       setStep("verify");
     } catch (requestError) {
+      if (current !== generation.current) return;
       const productError = toProductApiError(requestError);
       if (productError.status === 401 && onAuthenticationError?.(productError)) return;
       setError(productError.message);
@@ -82,11 +106,13 @@ export function AdminStepUpPanel({
       return;
     }
     if (pending) return;
+    const current = generation.current;
     setPending(true);
     setError(null);
     try {
       assertSessionCurrent?.();
-      const session = await verifyAdminStepUpCode(sessionToken, normalizedCode);
+      const session = viaPhone ? await verifyAdminPhoneStepUpCode(sessionToken, normalizedCode) : await verifyAdminStepUpCode(sessionToken, normalizedCode);
+      if (current !== generation.current) return;
       assertSessionCurrent?.();
       if (!getActiveAdminStepUpToken(session)) {
         setError("操作未完成，请稍后重试。");
@@ -94,6 +120,7 @@ export function AdminStepUpPanel({
       }
       onVerified(session);
     } catch (verifyError) {
+      if (current !== generation.current) return;
       const productError = toProductApiError(verifyError);
       if (productError.status === 401 && onAuthenticationError?.(productError)) return;
       setError(productError.message);
@@ -111,16 +138,16 @@ export function AdminStepUpPanel({
       <div className="editorial-panel mx-auto max-w-xl p-4 md:p-6">
         <div className="editorial-kicker">管理员安全验证</div>
         <h2 id={`${panelId}-title`} className="mt-2 font-rounded text-m-title sm:text-d-title font-bold text-foreground">
-          再次验证管理员邮箱
+          {viaPhone ? "用手机短信验证管理员身份" : "再次验证管理员邮箱"}
         </h2>
         <p className="mt-1 text-sm font-semibold text-muted-foreground">
-          {email} · 验证后 30 分钟内可执行审核或资料变更。
+          {viaPhone ? `${maskedPhone ?? "账户绑定的手机号"} · 验证后 30 分钟内可执行审核或资料变更。` : `${email} · 验证后 30 分钟内可执行审核或资料变更。`}
         </p>
 
         {step === "request" ? (
           <div className="mt-5 flex flex-wrap gap-2">
             <Button type="button" variant="trust" disabled={pending} onClick={() => void sendCode()}>
-              {pending ? "发送中…" : "发送管理员验证码"}
+              {pending ? "发送中…" : viaPhone ? "发送短信验证码" : "发送管理员验证码"}
             </Button>
             <Button type="button" variant="ghost" disabled={pending} onClick={onCancel}>
               取消

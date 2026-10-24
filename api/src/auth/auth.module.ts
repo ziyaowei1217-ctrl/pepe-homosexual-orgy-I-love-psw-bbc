@@ -7,6 +7,9 @@ import { getAuthSecurityConfig, type AuthSecurityConfig } from "../config/env";
 import { createEmailSender, EmailDeliveryUnavailableError, EMAIL_PROVIDER_TOTAL_TIMEOUT_MS } from "../email/email-sender";
 import { getAuthProvider, getNeonAuthConfig } from "./auth-provider";
 import { NeonAuthService } from "./neon-auth.service";
+import { PhoneAuthController } from "./phone-auth.controller";
+import { PhoneAuthService } from "./phone-auth.service";
+import { getPhoneAuthConfig } from "./phone-verification-provider";
 import { NeonTokenVerifier } from "./neon-token-verifier";
 import { AdminStepUpGuard } from "./admin-step-up.guard";
 import { AuthenticatedUserService } from "./authenticated-user.service";
@@ -17,10 +20,10 @@ import { AuthGuard } from "./auth.guard";
 import { AuthService, AuthServiceOptions } from "./auth.service";
 import { OptionalAuthGuard } from "./optional-auth.guard";
 import { createRateLimitStore } from "./valkey-rate-limit-store";
-import { ADMIN_STEP_UP_OPTIONS, AUTH_OPTIONS, AUTH_RATE_LIMIT_STORE, AUTH_SECURITY_CONFIG, EMAIL_SENDER, NEON_AUTH_CONFIG } from "./auth.tokens";
+import { ADMIN_STEP_UP_OPTIONS, AUTH_OPTIONS, AUTH_RATE_LIMIT_STORE, AUTH_SECURITY_CONFIG, EMAIL_SENDER, NEON_AUTH_CONFIG, PHONE_AUTH_CONFIG } from "./auth.tokens";
 import { VerificationCodeCleanupService } from "./verification-code-cleanup.service";
 
-export { ADMIN_STEP_UP_OPTIONS, AUTH_OPTIONS, AUTH_RATE_LIMIT_STORE, AUTH_SECURITY_CONFIG, EMAIL_SENDER, NEON_AUTH_CONFIG } from "./auth.tokens";
+export { ADMIN_STEP_UP_OPTIONS, AUTH_OPTIONS, AUTH_RATE_LIMIT_STORE, AUTH_SECURITY_CONFIG, EMAIL_SENDER, NEON_AUTH_CONFIG, PHONE_AUTH_CONFIG } from "./auth.tokens";
 
 export function createAuthServiceOptions(
   securityConfig: AuthSecurityConfig,
@@ -56,11 +59,13 @@ export function createAuthServiceOptions(
 
 @Module({
   imports: [AuditModule, HealthModule],
-  controllers: [AuthController],
+  controllers: [AuthController, PhoneAuthController],
   providers: [
     { provide: NEON_AUTH_CONFIG, useFactory: () => getNeonAuthConfig() },
     NeonTokenVerifier,
     NeonAuthService,
+    { provide: PHONE_AUTH_CONFIG, useFactory: () => getPhoneAuthConfig() },
+    PhoneAuthService,
     {
       provide: AUTH_SECURITY_CONFIG,
       useFactory: () => getAuthSecurityConfig()

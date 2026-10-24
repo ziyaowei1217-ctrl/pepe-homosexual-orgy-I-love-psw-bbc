@@ -1,3 +1,5 @@
+import { enabledAuthMethods } from "./auth-methods";
+
 // Use Neon's documented, framework-independent Fetch toolkit. Its bundled
 // /next adapter targets Next 16; this application deliberately stays on Next 15.
 // Configuration is read per request so the default email build needs no Neon secrets.
@@ -110,15 +112,85 @@ async function completeOAuth(request: Request, configuration: NonNullable<Return
   return secureResponse(response);
 }
 
+// Sign-in methods this deployment exposes. Social providers and email codes
+// must also be enabled in the Neon Auth project; this only narrows the proxy.
+function enabledMethods() {
+  const methods = enabledAuthMethods();
+  return { social: methods.filter(method => method === "google" || method === "github"), email: methods.includes("email") };
+}
+
+const EMAIL_OTP_ROUTES = ["email-otp/send-verification-otp", "sign-in/email-otp"];
+const MAX_EMAIL_LENGTH = 254;
+
+function normalizedEmail(value: unknown) {
+  if (typeof value !== "string") return null;
+  const email = value.trim().toLowerCase();
+  return email.length <= MAX_EMAIL_LENGTH && /^[^\s@\p{Cc}]+@[^\s@\p{Cc}]+\.[^\s@\p{Cc}]+$/u.test(email) ? email : null;
+}
+
+async function upstreamErrorCode(response: Response) {
+  const reader = response.body?.getReader();
+  if (!reader) return null;
+  let text = "";
+  let size = 0;
+  const decoder = new TextDecoder();
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > 16_384) { await reader.cancel(); return null; }
+      text += decoder.decode(value, { stream: true });
+    }
+    const parsed: unknown = JSON.parse(text + decoder.decode());
+    const code = parsed && typeof parsed === "object" && "code" in parsed ? parsed.code : null;
+    return typeof code === "string" && /^[A-Z0-9_]{1,64}$/.test(code) ? code : null;
+  } catch { return null; } finally { reader.releaseLock(); }
+}
+
+// Email codes are sent and checked by Neon. The browser receives only fixed
+// outcome codes plus the first-party session cookies: never the upstream JSON,
+// which contains a session token, nor its auth/JWT response headers.
+async function proxyEmailOtp(request: Request, path: string, body: Record<string, unknown>, configuration: NonNullable<ReturnType<typeof neonServerConfiguration>>) {
+  const email = normalizedEmail(body.email);
+  const keys = Object.keys(body).sort().join(",");
+  let forwarded: Record<string, string>;
+  if (path === "email-otp/send-verification-otp") {
+    if (!email || keys !== "email,type" || body.type !== "sign-in") return json("INVALID_AUTH_REQUEST", 400);
+    forwarded = { email, type: "sign-in" };
+  } else {
+    if (!email || keys !== "email,otp" || typeof body.otp !== "string" || !/^\d{6}$/.test(body.otp)) return json("INVALID_AUTH_REQUEST", 400);
+    forwarded = { email, otp: body.otp };
+  }
+  const { handleAuthProxyRequest } = await import("@neondatabase/auth/server");
+  const upstream = await handleAuthProxyRequest({ ...configuration, request: new Request(request.url, { method: "POST", headers: request.headers, body: JSON.stringify(forwarded) }), path });
+  if (upstream.ok) {
+    void upstream.body?.cancel().catch(() => undefined);
+    const response = Response.json({ ok: true }, { status: 200 });
+    if (path === "sign-in/email-otp") for (const cookie of upstream.headers.getSetCookie()) response.headers.append("Set-Cookie", cookie);
+    return secureResponse(response);
+  }
+  const code = await upstreamErrorCode(upstream);
+  if (upstream.status === 429 || code === "TOO_MANY_REQUESTS") return json("AUTH_RATE_LIMITED", 429);
+  if (upstream.status >= 500) return json("AUTH_PROVIDER_UNAVAILABLE", 502);
+  // A refused sign-up answers exactly like a wrong code for a known address, so
+  // the response never shows which email addresses have accounts.
+  if (code === "INVALID_OTP" || code === "SIGNUP_NOT_ALLOWED" || code === "SIGN_UP_DISABLED") return json("EMAIL_CODE_INVALID", 400);
+  if (code === "OTP_EXPIRED" || code === "TOO_MANY_ATTEMPTS") return json("EMAIL_CODE_EXPIRED", 400);
+  return json("EMAIL_CODE_REJECTED", 400);
+}
+
 export async function handleNeonAuthRequest(request: Request, segments: string[]) {
   const configuration = neonServerConfiguration();
   if (!configuration) return json("AUTH_PROVIDER_UNAVAILABLE", 503);
   if (!configuration.origins.includes(new URL(request.url).origin)) return json("AUTH_ORIGIN_REJECTED", 403);
   const path = segments.join("/");
+  const methods = enabledMethods();
   // Fixed route allowlist prevents this from becoming an arbitrary provider or
-  // account-administration proxy. Password/signup/email routes stay disabled.
+  // account-administration proxy. Password, sign-up and account-change routes
+  // stay disabled; email codes are available only when this build enables them.
   const allowed = request.method === "GET" ? ["get-session", "token", "complete"] :
-    request.method === "POST" ? ["sign-in/social", "sign-out"] : [];
+    request.method === "POST" ? [...(methods.social.length ? ["sign-in/social"] : []), "sign-out", ...(methods.email ? EMAIL_OTP_ROUTES : [])] : [];
   if (!segments.length || segments.some(segment => !/^[a-z-]+$/.test(segment)) || !allowed.includes(path)) {
     return json("AUTH_ROUTE_NOT_AVAILABLE", 404);
   }
@@ -133,11 +205,15 @@ export async function handleNeonAuthRequest(request: Request, segments: string[]
     if (!sameOriginPost(request)) return json("AUTH_ORIGIN_REJECTED", 403);
     const body = path === "sign-out" && !request.body ? {} : await smallJson(request);
     if (!body) return json("INVALID_AUTH_REQUEST", 400);
+    if (EMAIL_OTP_ROUTES.includes(path)) {
+      try { return await proxyEmailOtp(request, path, body, configuration); }
+      catch { return json("AUTH_PROVIDER_UNAVAILABLE", 502); }
+    }
     if (path === "sign-in/social") {
       const callbackURL = `${url.origin}/api/auth/complete`;
-      if (body.provider !== "google" || body.callbackURL !== callbackURL ||
+      if (typeof body.provider !== "string" || !(methods.social as string[]).includes(body.provider) || body.callbackURL !== callbackURL ||
           Object.keys(body).some(key => !["provider", "callbackURL"].includes(key))) return json("INVALID_AUTH_REQUEST", 400);
-      proxyRequest = new Request(request.url, { method: "POST", headers: request.headers, body: JSON.stringify({ provider: "google", callbackURL }) });
+      proxyRequest = new Request(request.url, { method: "POST", headers: request.headers, body: JSON.stringify({ provider: body.provider, callbackURL }) });
     } else {
       if (Object.keys(body).length) return json("INVALID_AUTH_REQUEST", 400);
       // JSON validation consumed the original body. Give the toolkit a fresh,

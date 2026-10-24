@@ -37,6 +37,9 @@ export function validateProductionConfig(environment) {
   errors.push(...validateAuthProviderConfig(environment));
   errors.push(...validateAuthProviderConfig(environment, true));
   if ((environment.AUTH_PROVIDER ?? "email") !== (environment.NEXT_PUBLIC_AUTH_PROVIDER ?? "email")) errors.push("AUTH_PROVIDER and NEXT_PUBLIC_AUTH_PROVIDER must select the same authentication provider");
+  if ((environment.NEXT_PUBLIC_AUTH_METHODS ?? "").split(",").map(entry => entry.trim()).includes("phone") && environment.PHONE_AUTH_PROVIDER !== "twilio-verify") {
+    errors.push("NEXT_PUBLIC_AUTH_METHODS lists phone, so PHONE_AUTH_PROVIDER must be twilio-verify");
+  }
   if (environment.NEXT_PUBLIC_WEBSITE_DEMO && environment.NEXT_PUBLIC_WEBSITE_DEMO !== "false") {
     errors.push("NEXT_PUBLIC_WEBSITE_DEMO must be unset or false for the full marketplace deployment");
   }
@@ -143,7 +146,7 @@ export function validateProductionConfig(environment) {
       errors.push(`${name} must not use a development default`);
     }
   }
-  for (const name of [...authenticationSecrets, "RESEND_API_KEY", "PAYMENT_SERVICE_API_KEY", "LISTING_MEDIA_STORAGE_ACCESS_KEY_ID", "LISTING_MEDIA_STORAGE_SECRET_ACCESS_KEY"]) {
+  for (const name of [...authenticationSecrets, "RESEND_API_KEY", "TWILIO_AUTH_TOKEN", "TWILIO_API_KEY_SECRET", "PAYMENT_SERVICE_API_KEY", "LISTING_MEDIA_STORAGE_ACCESS_KEY_ID", "LISTING_MEDIA_STORAGE_SECRET_ACCESS_KEY"]) {
     if (typeof environment[name] === "string" && isPlaceholder(environment[name])) {
       errors.push(`${name} must not use a placeholder`);
     }
@@ -193,6 +196,37 @@ export function validateAuthProviderConfig(environment, frontend = false) {
     for (const name of ["EMAIL_FROM", "RESEND_API_KEY"]) if (!environment[name]?.trim()) errors.push(`${name} is required`);
     if (environment.EMAIL_SENDER !== "resend") errors.push("EMAIL_SENDER must be resend");
   }
+  if (frontend) {
+    const raw = environment.NEXT_PUBLIC_AUTH_METHODS;
+    if (raw !== undefined && raw.trim() !== "") {
+      const methods = raw.split(",").map(entry => entry.trim());
+      if (provider !== "neon") errors.push("NEXT_PUBLIC_AUTH_METHODS applies only with NEXT_PUBLIC_AUTH_PROVIDER=neon");
+      if (methods.some(entry => !["google", "github", "email", "phone"].includes(entry)) || new Set(methods).size !== methods.length) {
+        errors.push("NEXT_PUBLIC_AUTH_METHODS must be a comma-separated subset of google,github,email,phone");
+      }
+      if (!methods.some(entry => ["google", "github", "email"].includes(entry))) errors.push("NEXT_PUBLIC_AUTH_METHODS needs a method that can create an account (google, github or email)");
+    }
+  } else errors.push(...validatePhoneAuthConfig(environment));
+  return errors;
+}
+
+/** Phone sign-in is off unless a real SMS verification provider is configured. */
+export function validatePhoneAuthConfig(environment) {
+  const errors = [];
+  const provider = environment.PHONE_AUTH_PROVIDER ?? "disabled";
+  if (!["disabled", "twilio-verify"].includes(provider)) errors.push("PHONE_AUTH_PROVIDER must be disabled or twilio-verify in production");
+  if (provider !== "twilio-verify") return errors;
+  const regions = (environment.PHONE_AUTH_REGIONS ?? "US_CA").split(",").map(entry => entry.trim());
+  if (regions.some(entry => !["US_CA", "CN"].includes(entry)) || new Set(regions).size !== regions.length) errors.push("PHONE_AUTH_REGIONS must be a comma-separated subset of US_CA,CN");
+  if (!/^AC[0-9a-f]{32}$/.test(environment.TWILIO_ACCOUNT_SID ?? "")) errors.push("TWILIO_ACCOUNT_SID must be a Twilio account SID");
+  if (!/^VA[0-9a-f]{32}$/.test(environment.TWILIO_VERIFY_SERVICE_SID ?? "")) errors.push("TWILIO_VERIFY_SERVICE_SID must be a Twilio Verify service SID");
+  const apiKey = Boolean(environment.TWILIO_API_KEY_SID || environment.TWILIO_API_KEY_SECRET);
+  if (apiKey && environment.TWILIO_AUTH_TOKEN) errors.push("Configure either a Twilio API key or TWILIO_AUTH_TOKEN, not both");
+  if (apiKey) {
+    if (!/^SK[0-9a-f]{32}$/.test(environment.TWILIO_API_KEY_SID ?? "")) errors.push("TWILIO_API_KEY_SID must be a Twilio API key SID");
+    if (!/^[A-Za-z0-9]{32}$/.test(environment.TWILIO_API_KEY_SECRET ?? "")) errors.push("TWILIO_API_KEY_SECRET must be a Twilio API key secret");
+  } else if (!/^[0-9a-f]{32}$/.test(environment.TWILIO_AUTH_TOKEN ?? "")) errors.push("Twilio Verify needs an API key or TWILIO_AUTH_TOKEN");
+  for (const name of Object.keys(environment)) if (/^NEXT_PUBLIC_.*TWILIO/.test(name)) errors.push(`${name} must not expose Twilio settings to the browser`);
   return errors;
 }
 

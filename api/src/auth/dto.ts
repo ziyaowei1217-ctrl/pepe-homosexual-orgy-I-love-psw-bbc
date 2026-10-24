@@ -41,3 +41,23 @@ export class NeonTokenExchangeDto {
   @MaxLength(8192)
   token!: string;
 }
+
+export class PhoneNumberDto {
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(32)
+  phoneNumber!: string;
+}
+
+export class PhoneCodeDto {
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(32)
+  phoneNumber!: string;
+
+  @Trim()
+  @IsString()
+  @Length(6, 6)
+  @Matches(/^\d{6}$/)
+  code!: string;
+}

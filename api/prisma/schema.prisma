@@ -108,6 +108,19 @@ model User {
   demoPaymentsAsPayee             DemoPayment[]                @relation("DemoPaymentPayee")
   demoPaymentAttempts             DemoPaymentAttempt[]         @relation("DemoPaymentAttemptActor")
   externalAuthIdentities           ExternalAuthIdentity[]
+  phoneIdentity                    PhoneIdentity?
+}
+
+// A verified mobile number used for SMS sign-in. Kept out of the User row so
+// that existing user includes and selects can never expose phone numbers.
+model PhoneIdentity {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  phoneNumber String   @unique
+  verifiedAt  DateTime
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model ExternalAuthIdentity {

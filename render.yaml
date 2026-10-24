@@ -57,6 +57,19 @@ services:
         sync: false
       - key: NEON_AUTH_BASE_URL
         sync: false
+      # SMS sign-in stays off until Twilio Verify is configured (see docs/neon-auth-bridge.md).
+      - key: PHONE_AUTH_PROVIDER
+        value: disabled
+      - key: PHONE_AUTH_REGIONS
+        value: US_CA
+      - key: TWILIO_ACCOUNT_SID
+        sync: false
+      - key: TWILIO_VERIFY_SERVICE_SID
+        sync: false
+      - key: TWILIO_API_KEY_SID
+        sync: false
+      - key: TWILIO_API_KEY_SECRET
+        sync: false
       - key: LISTING_MEDIA_STORAGE_ENDPOINT
         sync: false
       - key: LISTING_MEDIA_UPLOAD_ENDPOINT
