@@ -5,6 +5,16 @@
 type Bounds = [number, number, number, number];
 type Listener = (event: Record<string, unknown>) => void;
 
+// The listing map downloads its basemap with fetch; answer the default one here so tests never use the network.
+const realFetch = globalThis.fetch;
+const fakeStyle = { version: 8, sources: {}, layers: [] };
+if (realFetch && !(realFetch as { fakeBasemap?: boolean }).fakeBasemap) {
+  const fetchWithBasemap = (input: RequestInfo | URL, init?: RequestInit) => String(input instanceof Request ? input.url : input).startsWith("https://tiles.openfreemap.org/")
+    ? Promise.resolve(Response.json(fakeStyle))
+    : realFetch(input, init);
+  globalThis.fetch = Object.assign(fetchWithBasemap, { fakeBasemap: true }) as typeof fetch;
+}
+
 export const getVersion = () => "6.4.1";
 export function setWorkerUrl(_url: string) {}
 
@@ -49,6 +59,9 @@ export class Map {
     };
   }
   getZoom() { return this.zoom; }
+  getCenter() { const [west, south, east, north] = this.bounds; return { lng: (west + east) / 2, lat: (south + north) / 2 }; }
+  style: unknown = null;
+  setStyle(style: unknown) { this.style = style; this.fire("style.load"); return this; }
 
   /** A drag by the user: new bounds, then move and moveend without `fromCode`. */
   moveTo(bounds: Bounds) { this.bounds = bounds; this.fire("move"); this.fire("moveend"); }

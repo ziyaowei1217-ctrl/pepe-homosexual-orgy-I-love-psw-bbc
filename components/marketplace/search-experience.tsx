@@ -2,7 +2,7 @@
 
 import { ArrowLeft, ArrowRight, BedDouble, CalendarDays, Check, ChevronDown, Heart, LayoutGrid, List, Map, MapPin, Search, SlidersHorizontal, X } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { startTransition, useEffect, useMemo, useRef, useState } from "react";
 
 import { EmptyState } from "@/components/marketplace/empty-state";
 import { ListingCard } from "@/components/marketplace/listing-card";
@@ -252,8 +252,9 @@ export function SearchExperience({ listings, initialQuery, initialMoveIn, initia
         searchArea={{
           onSearch: (bounds, commit = true) => {
             if (commit || state.query || !state.bounds || formatMapBounds(state.bounds) !== formatMapBounds(bounds)) {
-              // Keep Safari's history rate limit out of continuous touch gestures.
-              update({ bounds, query: "", page: 1, selected: state.selected }, commit ? "replace" : "none");
+              // Keep Safari's history rate limit out of continuous touch gestures. The result list re-renders as a
+              // transition, so it never holds up the map while it is being dragged.
+              startTransition(() => update({ bounds, query: "", page: 1, selected: state.selected }, commit ? "replace" : "none"));
             }
           },
           onClear: () => update({ bounds: null, page: 1, selected: state.selected }, "replace")
