@@ -13,12 +13,13 @@ export class Map {
   container: HTMLElement;
   bounds: Bounds;
   zoom: number;
+  pixelRatio: number;
   touchZoomRotate = { disableRotation() {} };
   keyboard = { disableRotation() {} };
   private listeners = new globalThis.Map<string, Set<Listener>>();
   private resizeObserver?: ResizeObserver;
 
-  constructor(options: { container: HTMLElement; bounds?: Bounds; center?: [number, number]; zoom?: number; trackResize?: boolean }) {
+  constructor(options: { container: HTMLElement; bounds?: Bounds; center?: [number, number]; zoom?: number; trackResize?: boolean; pixelRatio?: number }) {
     this.container = options.container;
     const [lng, lat] = options.center ?? [0, 0];
     // A little room around fitted bounds, as MapLibre's fit padding gives.
@@ -26,6 +27,7 @@ export class Map {
     this.bounds = [west - 0.05, south - 0.05, east + 0.05, north + 0.05];
     // Past the clustering zoom, so every listing gets its own price pin.
     this.zoom = options.bounds ? 15 : options.zoom ?? 15;
+    this.pixelRatio = options.pixelRatio ?? window.devicePixelRatio;
     Map.last = this;
     // MapLibre's automatic resize has no application event tag.
     if (options.trackResize !== false && typeof ResizeObserver !== "undefined") {

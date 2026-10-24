@@ -46,6 +46,7 @@ export function useMapLibre(container: RefObject<HTMLElement | null>, options: P
       // Bundled v6 cannot infer its worker URL. Keep both worker modules on our
       // own origin, matched to the library version prepared by dev/build.
       maplibre.setWorkerUrl(`/vendor/maplibre/${maplibre.getVersion()}/maplibre-gl-worker.mjs`);
+      const phone = window.matchMedia?.("(max-width: 1023px)").matches;
       map = new maplibre.Map({
         container: container.current,
         style: getMapStyle(),
@@ -58,6 +59,8 @@ export function useMapLibre(container: RefObject<HTMLElement | null>, options: P
         touchPitch: false,
         // Our observer tags layout changes so they cannot become a new area search.
         trackResize: false,
+        // Avoid rendering nine device pixels per CSS pixel on high-DPI phones.
+        ...(phone ? { pixelRatio: Math.min(window.devicePixelRatio || 1, 2), fadeDuration: 100 } : {}),
         attributionControl: { compact: true },
         locale: mapLocale
       });
@@ -123,7 +126,7 @@ export function ListingMap({ listings, fitKey, bounds = null, center = { lat: 34
   moveIn?: string; moveOut?: string;
   highlightedId?: string | null; selectedId: string;
   onSelect: (id: string) => void; onOpen?: (id: string) => void; onToggleSave?: (listing: PreviewListing) => void;
-  searchArea?: { onSearch: (bounds: MapBounds) => void; onClear: () => void };
+  searchArea?: { onSearch: (bounds: MapBounds, commit?: boolean) => void; onClear: () => void };
   /** Shown at the bottom centre of the map on large screens (the search page's view switch). */
   controls?: ReactNode;
   className?: string; label: string;
@@ -223,7 +226,22 @@ export function ListingMap({ listings, fitKey, bounds = null, center = { lat: 34
   // Moves made by this file (fitting results, resizing, showing a card) carry `fromCode` and change nothing.
   useEffect(() => {
     if (!map) return;
+    let pending: ReturnType<typeof setTimeout> | undefined;
+    const phone = window.matchMedia?.("(max-width: 1023px)");
+    const publish = () => {
+      const area = latest.current.searchArea;
+      if (area && latest.current.followMap) area.onSearch(mapBounds(map), false);
+    };
+    // Phones update during a gesture, capped to avoid rendering a result list
+    // on every animation frame. The last position is always flushed immediately.
+    const onMove = (event: MapMovementEvent & { fromCode?: boolean }) => {
+      if (event.fromCode) { clearTimeout(pending); pending = undefined; return; }
+      if (!phone?.matches || !latest.current.followMap || pending) return;
+      pending = setTimeout(() => { pending = undefined; publish(); }, 120);
+    };
     const onMoveEnd = (event: MapMovementEvent & { fromCode?: boolean }) => {
+      clearTimeout(pending);
+      pending = undefined;
       const area = latest.current.searchArea;
       if (event.fromCode || !area) return;
       if (latest.current.followMap) area.onSearch(mapBounds(map));
@@ -233,9 +251,10 @@ export function ListingMap({ listings, fitKey, bounds = null, center = { lat: 34
     const onClick = (event: MapMouseEvent) => {
       if (!(event.originalEvent.target as Element).closest(".map-pin, .map-cluster, .maplibregl-popup")) latest.current.onSelect("");
     };
+    map.on("move", onMove);
     map.on("moveend", onMoveEnd);
     map.on("click", onClick);
-    return () => { map.off("moveend", onMoveEnd); map.off("click", onClick); };
+    return () => { clearTimeout(pending); map.off("move", onMove); map.off("moveend", onMoveEnd); map.off("click", onClick); };
   }, [map]);
 
   useEffect(() => {

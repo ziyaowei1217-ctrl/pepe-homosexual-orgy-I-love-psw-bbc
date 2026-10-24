@@ -16,9 +16,73 @@ vi.mock("maplibre-gl", () => import("./support/fake-maplibre"));
 const pinLabels = () => [...document.querySelectorAll(".map-pin")].map((pin) => pin.textContent);
 // MapLibre is imported after render; let that import settle.
 const loadMap = () => act(async () => { await new Promise((resolve) => setTimeout(resolve, 50)); });
+function phoneViewport() {
+  vi.stubGlobal("matchMedia", (media: string) => ({
+    media, matches: media === "(max-width: 1023px)", onchange: null,
+    addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {}, dispatchEvent: () => false
+  }));
+  return { mockRestore: () => vi.unstubAllGlobals() };
+}
 
 describe("marketplace search", () => {
   beforeEach(() => window.history.replaceState(null, "", "/"));
+  it.each(["split", "list"] as const)("keeps the phone map visible and reuses it when expanding from %s", async (view) => {
+    const media = phoneViewport();
+    try {
+      await act(async () => { TestRenderer.create(<SavedListingsProvider><SearchExperience listings={[]} initialState={{ ...defaultSearch, view }} initialQuery="" initialMoveIn="" initialMoveOut="" /></SavedListingsProvider>); });
+      await loadMap();
+      const map = FakeMap.last;
+      const region = document.querySelector('[aria-label="房源地图"]');
+      expect(region).toBeTruthy();
+      expect(region!.classList.contains("hidden")).toBe(false);
+      await act(async () => fireEvent.click([...document.querySelectorAll("button")].find(button => button.textContent === "展开地图")!));
+      expect(FakeMap.last).toBe(map);
+      await act(async () => fireEvent.click([...document.querySelectorAll("button")].find(button => button.textContent === "查看房源")!));
+      expect(document.querySelector('[aria-label="房源地图"]')).toBe(region);
+      expect(FakeMap.last).toBe(map);
+    } finally { media.mockRestore(); }
+  });
+
+  it("updates phone results during a gesture at a bounded rate and flushes the final area", async () => {
+    const media = phoneViewport();
+    try {
+      await act(async () => { TestRenderer.create(<SavedListingsProvider><SearchExperience listings={[]} initialQuery="Boston" initialMoveIn="" initialMoveOut="" /></SavedListingsProvider>); });
+      await loadMap();
+      const history = vi.spyOn(window.history, "replaceState");
+      try {
+        await act(async () => {
+          FakeMap.last!.bounds = [-71.2, 42.3, -71, 42.4];
+          for (let i = 0; i < 20; i++) FakeMap.last!.fire("move");
+          await new Promise(resolve => setTimeout(resolve, 160));
+        });
+        expect(document.querySelector("#result-heading")?.textContent).toBe("地图区域内的可租房源");
+        expect(history).not.toHaveBeenCalled();
+        await act(async () => {
+          FakeMap.last!.bounds = [-71.3, 42.2, -71.1, 42.5];
+          FakeMap.last!.fire("moveend");
+        });
+        expect(window.location.search).toContain("bbox=-71.3000%2C42.2000%2C-71.1000%2C42.5000");
+        expect(history).toHaveBeenCalledTimes(1);
+      } finally { history.mockRestore(); }
+    } finally { media.mockRestore(); }
+  });
+
+  it("caps phone rendering density and cancels pending area updates when code moves the map", async () => {
+    const media = phoneViewport();
+    vi.stubGlobal("devicePixelRatio", 3);
+    try {
+      await act(async () => { TestRenderer.create(<SavedListingsProvider><SearchExperience listings={[]} initialQuery="Boston" initialMoveIn="" initialMoveOut="" /></SavedListingsProvider>); });
+      await loadMap();
+      expect(FakeMap.last!.pixelRatio).toBe(2);
+      await act(async () => {
+        FakeMap.last!.fire("move");
+        FakeMap.last!.fire("move", { fromCode: true });
+        await new Promise(resolve => setTimeout(resolve, 160));
+      });
+      expect(document.querySelector<HTMLInputElement>('[aria-label="地点或学校"]')?.value).toBe("Boston");
+      expect(new URL(window.location.href).searchParams.has("bbox")).toBe(false);
+    } finally { media.mockRestore(); vi.unstubAllGlobals(); }
+  });
   it("preserves the searched city on layout resize while explicit zoom still searches the map area", async () => {
     const observers = new Set<() => void>();
     vi.stubGlobal("ResizeObserver", class {
