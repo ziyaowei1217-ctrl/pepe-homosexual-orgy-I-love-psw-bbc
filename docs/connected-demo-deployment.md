@@ -117,6 +117,22 @@ The current toolkit does not expose an abort signal or fetch-timeout setting for
 
 Netlify marked-secret values cannot be read back through its API for a local CLI build. An authorized operator must supply the required private environment for an offline build without putting values in command arguments, repository files or logs. Stored site settings are still needed for hosted function execution. An unpublished deploy is a `deploy-preview` runtime context even when its build uses `--context production`; production-only function values are not sufficient for that draft. Supply the required server-only proxy settings securely for that exact trusted deploy, and verify `/api/auth/get-session` and `/api/auth/token` before requesting consent. Do not expose the cookie secret to browser code or expand secret availability to untrusted preview branches to bypass this check.
 
+### What worked with Netlify CLI 27.10.2 (October 24, 2026)
+
+Observed while deploying commit 1a8d173 (draft 6adce135aadb25024b0e4726):
+
+- A local CLI build receives a masked placeholder for marked-secret variables and overrides values from the shell, so `tools/netlify-build-config.mjs` always rejects the cookie secret in a local `netlify build` or `netlify deploy --build`.
+- `netlify env:set` refuses to change an existing variable when both context and scope are given. `deploy --no-build` refuses `--context`.
+- A `deploy --no-build` upload with no env flags produced functions with no settings: auth returned 503 `AUTH_PROVIDER_UNAVAILABLE` and `/api/assistant` reported `enabled:true` through the AI Gateway because `ANTHROPIC_BASE_URL` was missing. Never publish such a deploy.
+- `deploy --env` and `--secret-env` apply to that deploy's functions only, not to the build.
+
+The working sequence:
+
+1. Run `netlify build --offline` at the reviewed commit. Export only the non-secret production values (`env:get --context production`) into the operator shell, and give the preflight a throwaway cookie value. Confirm the throwaway value appears in 0 output files and logs.
+2. Run `netlify deploy --no-build` without `--context` or `--prod`. Pass `--env NAME="$VAR"` for the six non-secret variables (`NEXT_PUBLIC_API_BASE_URL`, `NEXT_PUBLIC_AUTH_PROVIDER`, `NEXT_PUBLIC_MEDIA_UPLOAD_ORIGIN`, `ANTHROPIC_BASE_URL`, `NEON_AUTH_APP_ORIGIN`, `NEON_AUTH_BASE_URL`) and `--secret-env "NEON_AUTH_COOKIE_SECRET=$S"`. `$S` is a fresh random 48-character value held only in a shell variable and unset afterwards. Because stored secrets cannot be read back, this rotates the cookie secret for that deploy, which signs out existing sessions when it is published.
+3. On the draft, check that `GET /api/assistant` returns `{"enabled":false}` first, and that a POST to `/api/auth/email-otp/send-verification-otp` from the draft origin returns 403 `AUTH_ORIGIN_REJECTED`, which shows the proxy has its settings.
+4. Publish with `netlify api restoreSiteDeploy` (or "Publish deploy" in the dashboard). Record the previous published deploy ID first for rollback. Claude Code's auto-mode permission check on the operator Mac treats this step as a production deploy and blocks it, so the owner publishes.
+
 The immutable candidate has a different browser origin from the stable website. Production `WEB_ORIGIN` is a single exact HTTPS origin: a stable-only API will correctly reject candidate-origin authentication and sockets. Use a staging API configured for the exact candidate origin, or deliberately configure that API for the exact candidate during its review and restore the stable origin before publication. Recheck the stable site's authentication and WebSocket connection after this change. Do not use `*`, an unvalidated comma-separated value or a broadly permitted Netlify suffix to make preview tests pass.
 
 If the provider and function configuration deliberately authorize only the stable origin, a candidate's expected origin rejection does not establish working OAuth. After CI, artifact and anonymous HTTP checks pass, an operator may promote that exact artifact for controlled acceptance at the stable origin, with the previous deploy ID retained for immediate rollback. Perform actual login and the shared-account/core journeys there before declaring the release ready; restore the previous deploy if authentication or a required journey fails. Record these as live acceptance results, not as previously verified preview behavior. Do not weaken origin guards for this process.
