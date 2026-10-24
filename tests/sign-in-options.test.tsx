@@ -95,6 +95,22 @@ describe("account sign-in methods", () => {
     expect(calls("/auth/neon/exchange")).toHaveLength(0);
   });
 
+  it("says plainly that preview links cannot sign in, for email and Google", async () => {
+    routes["/api/auth/email-otp/send-verification-otp"] = () => Response.json({ code: "AUTH_ORIGIN_REJECTED" }, { status: 403 });
+    provider.social.mockResolvedValue({ data: null, error: { status: 403, statusText: "Forbidden", code: "AUTH_ORIGIN_REJECTED" } });
+    render(<AccountExperience mode="overview" />);
+    fireEvent.change(await screen.findByLabelText("邮箱地址", { selector: "input" }), { target: { value: "new@example.com" } });
+    fireEvent.click(screen.getByRole("button", { name: "发送验证码" }));
+    expect((await screen.findByRole("alert")).textContent).toBe("这个网址不能登录。请打开 psw 正式网址后再登录。");
+    cleanup();
+    render(<AccountExperience mode="overview" />);
+    fireEvent.click(await screen.findByRole("button", { name: "使用 Google 登录" }));
+    expect((await screen.findByRole("alert")).textContent).toBe("这个网址不能登录。请打开 psw 正式网址后再登录。");
+    provider.social.mockResolvedValue({ data: null, error: { status: 500, statusText: "Server Error" } });
+    fireEvent.click(screen.getByRole("button", { name: "使用 Google 登录" }));
+    await waitFor(() => expect(screen.getByRole("alert").textContent).toBe("登录服务暂时无法连接，请稍后重试。"));
+  });
+
   it("signs in with a linked phone number", async () => {
     render(<AccountExperience mode="overview" />);
     fireEvent.click(await screen.findByRole("tab", { name: "手机号" }));

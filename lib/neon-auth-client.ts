@@ -90,12 +90,18 @@ function getClient(): Promise<VanillaBetterAuthClient> {
 
 export type SocialProvider = "google" | "github";
 
+// Sign-in only works on the site's main address; preview links are refused by the server.
+export const WRONG_ORIGIN_MESSAGE = "这个网址不能登录。请打开 psw 正式网址后再登录。";
+
+// Messages we wrote ourselves and can show as-is; anything else gets a fixed text.
+export class SocialSignInError extends Error {}
+
 export function startGoogleSignIn(returnTo: string | null) {
   return startSocialSignIn("google", returnTo);
 }
 
 export async function startSocialSignIn(provider: SocialProvider, returnTo: string | null) {
-  if (!usesNeonAuth() || typeof window === "undefined") throw new Error("登录服务尚未配置。");
+  if (!usesNeonAuth() || typeof window === "undefined") throw new SocialSignInError("登录服务尚未配置。");
   const previousToken = readStoredAuthSession()?.accessToken ?? null;
   const sessionHash = await fingerprint(previousToken);
   if ((readStoredAuthSession()?.accessToken ?? null) !== previousToken) throw new Error("账户已改变，请重新登录。");
@@ -111,7 +117,10 @@ export async function startSocialSignIn(provider: SocialProvider, returnTo: stri
     await assertSignInAttemptCurrent(attempt);
     if (JSON.parse(window.sessionStorage.getItem(attemptKey) ?? "null")?.id !== attempt.id) throw new Error("登录请求已改变，请重试。");
     const result = await client.signIn.social({ provider, callbackURL: `${window.location.origin}/api/auth/complete` });
-    if (result.error) throw new Error("登录服务暂时无法连接，请稍后重试。");
+    if (result.error) {
+      const rejected = result.error.status === 403 && (result.error as { code?: unknown }).code === "AUTH_ORIGIN_REJECTED";
+      throw new SocialSignInError(rejected ? WRONG_ORIGIN_MESSAGE : "登录服务暂时无法连接，请稍后重试。");
+    }
   } catch (error) {
     try { if (JSON.parse(window.sessionStorage.getItem(attemptKey) ?? "null")?.id === attempt.id) window.sessionStorage.removeItem(attemptKey); } catch { /* Storage can become unavailable during navigation. */ }
     throw error;
@@ -190,7 +199,8 @@ const emailCodeErrors: Record<string, string> = {
   EMAIL_CODE_EXPIRED: "验证码已过期或尝试次数过多，请重新获取。",
   AUTH_RATE_LIMITED: "请求太频繁，请稍后再试。",
   EMAIL_SIGN_IN_UNAVAILABLE: "邮箱登录暂未开放，请使用其他方式登录。",
-  INVALID_AUTH_REQUEST: "请输入有效的邮箱地址和六位验证码。"
+  INVALID_AUTH_REQUEST: "请输入有效的邮箱地址和六位验证码。",
+  AUTH_ORIGIN_REJECTED: WRONG_ORIGIN_MESSAGE
 };
 
 export class EmailCodeError extends Error {

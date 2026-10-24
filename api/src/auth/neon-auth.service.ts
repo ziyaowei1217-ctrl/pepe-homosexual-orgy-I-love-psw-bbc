@@ -5,6 +5,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import type { NeonAuthConfig } from "./auth-provider";
 import { NEON_AUTH_CONFIG } from "./auth.tokens";
 import { AuthRateLimiter } from "./auth-rate-limit";
+import { isAcademicEmail } from "./academic-email";
 import { acquireNormalizedEmailAdvisoryLock } from "./email-advisory-lock";
 import { NeonTokenVerifier, type NeonVerifiedIdentity } from "./neon-token-verifier";
 
@@ -45,7 +46,7 @@ export class NeonAuthService {
           });
           if (binding) {
             if (binding.user.email !== identity.email) throw new UnauthorizedException("Verified identity does not match this account");
-            await transaction.profile.upsert({ where: { email: identity.email }, update: {}, create: { email: identity.email, ...(identity.name ? { displayName: identity.name } : {}) } });
+            await transaction.profile.upsert(profileUpsert(identity));
             return { user: binding.user, isNewUser: false };
           }
           let user = await transaction.user.findUnique({ where: { email: identity.email } });
@@ -60,7 +61,7 @@ export class NeonAuthService {
           const previousIdentity = await transaction.externalAuthIdentity.findUnique({ where: { provider_issuer_userId: { provider, issuer: identity.issuer, userId: user.id } } });
           if (previousIdentity) throw new UnauthorizedException("This account is already bound to another verified identity");
           await transaction.externalAuthIdentity.create({ data: { provider, issuer: identity.issuer, subject: identity.subject, userId: user.id } });
-          await transaction.profile.upsert({ where: { email: identity.email }, update: {}, create: { email: identity.email, ...(identity.name ? { displayName: identity.name } : {}) } });
+          await transaction.profile.upsert(profileUpsert(identity));
           return { user, isNewUser };
         });
       } catch (error) {
@@ -70,4 +71,16 @@ export class NeonAuthService {
       }
     }
   }
+}
+
+// Every exchanged identity has a provider-verified email (a code was delivered to it,
+// or the identity provider vouched for it), so a school address proves school email
+// ownership. The flag is only ever raised here; nothing user-editable sets it.
+function profileUpsert(identity: NeonVerifiedIdentity) {
+  const school = isAcademicEmail(identity.email) ? { eduEmailVerified: true } : {};
+  return {
+    where: { email: identity.email },
+    update: school,
+    create: { email: identity.email, ...(identity.name ? { displayName: identity.name } : {}), ...school }
+  };
 }

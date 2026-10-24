@@ -27,6 +27,18 @@ describe("verified provider identity binding", () => {
     expect(payload.exp - payload.iat).toBe(3600); expect(payload.role).toBe("USER"); expect(payload.adminReauthenticatedAt).toBeUndefined();
     expect(open.memory.state.profiles[0]).not.toHaveProperty("eduEmailVerified", true);
   });
+  it("marks the school email verified when the verified account email is a school address", async () => {
+    for (const email of ["student@g.ucla.edu", "s@mail.utoronto.ca", "x@ucl.ac.uk", "y@student.unimelb.edu.au"]) {
+      const current = setup(true);
+      current.verifier.verify.mockResolvedValue({ ...verified, email } as never);
+      await current.service.exchange("signed-token");
+      expect(current.memory.state.profiles[0]).toMatchObject({ email, eduEmailVerified: true });
+    }
+    const existing = setup(false, { users: [{ id: "u1", email: "old@nyu.edu", role: "USER" }], profiles: [{ email: "old@nyu.edu", eduEmailVerified: false, displayName: "Kept" }] });
+    existing.verifier.verify.mockResolvedValue({ ...verified, email: "old@nyu.edu" } as never);
+    await existing.service.exchange("signed-token");
+    expect(existing.memory.state.profiles[0]).toMatchObject({ eduEmailVerified: true, displayName: "Kept" });
+  });
   it("atomically consumes one invitation and rejects revoked invitations", async () => {
     const invited = setup(false, { invites: [{ normalizedEmail: verified.email, claimedAt: null, revokedAt: null }] });
     await expect(invited.service.exchange("signed-token")).resolves.toMatchObject({ isNewUser: true });

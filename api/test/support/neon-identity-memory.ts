@@ -32,7 +32,7 @@ export function identityMemory(initial: Partial<IdentityMemoryState> = {}) {
         const invite = candidate.invites.find(item => item.normalizedEmail === where.normalizedEmail && !item.claimedAt && !item.revokedAt);
         if (!invite) return { count: 0 }; invite.claimedAt = data.claimedAt; return { count: 1 };
       } },
-      profile: { upsert: async ({ create }: { create: Record<string, unknown> }) => { const existing = candidate.profiles.find(profile => profile.email === create.email); if (existing) return existing; const profile = { ...create }; candidate.profiles.push(profile); return profile; } }
+      profile: { upsert: async ({ create, update }: { create: Record<string, unknown>; update?: Record<string, unknown> }) => { const existing = candidate.profiles.find(profile => profile.email === create.email); if (existing) return Object.assign(existing, update ?? {}); const profile = { ...create }; candidate.profiles.push(profile); return profile; } }
     };
   }
   return { prisma, get state() { return state; } };

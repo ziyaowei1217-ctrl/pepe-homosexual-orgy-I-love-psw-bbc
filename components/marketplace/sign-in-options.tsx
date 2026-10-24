@@ -6,7 +6,7 @@ import { GoogleSignIn } from "@/components/marketplace/google-sign-in";
 import { getResendSeconds, normalizeVerificationCode } from "@/lib/auth-flow";
 import { enabledAuthMethods } from "@/lib/auth-methods";
 import { readStoredAuthSession } from "@/lib/auth-session";
-import { acceptEmailSignInCode, EmailCodeError, exchangeProviderSession, sendEmailSignInCode, signInFailureMessage, startSocialSignIn, type SignInAttempt, type SocialProvider } from "@/lib/neon-auth-client";
+import { acceptEmailSignInCode, EmailCodeError, exchangeProviderSession, sendEmailSignInCode, signInFailureMessage, SocialSignInError, startSocialSignIn, type SignInAttempt, type SocialProvider } from "@/lib/neon-auth-client";
 import { apiGet } from "@/lib/api";
 import { looksLikePhoneNumber, normalizePhoneInput, requestPhoneSignInCode, verifyPhoneSignInCode } from "@/lib/phone-auth";
 import { toProductApiError } from "@/lib/product-errors";
@@ -82,7 +82,7 @@ function SocialButton({ provider, primary, returnTo, disabled }: { provider: Soc
     if (busy.current || disabled) return;
     busy.current = true; setPending(true); setError(null);
     try { await startSocialSignIn(provider, returnTo); }
-    catch { setError("暂时无法登录。请检查网络并允许本站存储登录状态后重试。"); }
+    catch (caught) { setError(caught instanceof SocialSignInError ? caught.message : "暂时无法登录。请检查网络并允许本站存储登录状态后重试。"); }
     finally { busy.current = false; setPending(false); }
   }
   return <div>

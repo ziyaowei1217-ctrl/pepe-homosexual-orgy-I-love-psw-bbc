@@ -286,7 +286,7 @@ function VerificationPanel({ token, profile, onProfileChange }: { token: string;
     <p className="mt-2 text-sm leading-6 text-ink-secondary">{phoneEnabled ? "查看登录邮箱的认证状态，绑定手机号后可用短信验证码登录。" : "查看登录邮箱及其他认证的当前状态。"}</p>
     <div className="mt-7 divide-y divide-line">
       <VerificationRow icon={Mail} title="邮箱认证" detail="账户登录邮箱已验证" done />
-      <VerificationRow icon={IdCard} title="教育邮箱" detail={profile?.eduEmailVerified ? "教育邮箱已验证" : "教育邮箱认证暂未开放。"} done={Boolean(profile?.eduEmailVerified)} />
+      <VerificationRow icon={IdCard} title="教育邮箱" detail={profile?.eduEmailVerified ? "教育邮箱已验证" : "用学校邮箱（如 .edu、.ac.uk、.edu.cn）登录，验证后自动标记为学生。"} done={Boolean(profile?.eduEmailVerified)} />
       {phoneEnabled ? <PhoneVerificationRow token={token} onChanged={(linked) => { if (profile) onProfileChange({ ...profile, phoneVerified: linked }); }}
           fallback={<VerificationRow icon={ShieldCheck} title="手机认证" detail={profile?.phoneVerified ? "手机号已验证" : "手机号认证暂未开放。"} done={Boolean(profile?.phoneVerified)} />} />
         : <VerificationRow icon={ShieldCheck} title="手机认证" detail={profile?.phoneVerified ? "手机号已验证" : "手机号认证暂未开放。"} done={Boolean(profile?.phoneVerified)} />}
