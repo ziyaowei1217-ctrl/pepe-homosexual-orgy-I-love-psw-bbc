@@ -66,10 +66,18 @@ describe("shared account sign-in boundary", () => {
     vi.useFakeTimers();
     try {
       const cancel = vi.fn();
-      mocks.fetch.mockResolvedValueOnce(new Response(new ReadableStream({ cancel }), { headers: { "Content-Type": "application/json" } }));
+      let started!: () => void;
+      const fetching = new Promise<void>(resolve => { started = resolve; });
+      mocks.fetch.mockImplementationOnce(async () => {
+        started();
+        return new Response(new ReadableStream({ cancel }), { headers: { "Content-Type": "application/json" } });
+      });
       const auth = await import("../lib/neon-auth-client");
       await auth.startGoogleSignIn("/inbox");
       const result = auth.exchangeGoogleSession(auth.consumeSignInAttempt()).catch(error => error);
+      // WebCrypto is native async work, independent of the fake clock. Start
+      // the deadline only after the account fingerprint has finished.
+      await fetching;
       await vi.advanceTimersByTimeAsync(auth.PROVIDER_TOKEN_TIMEOUT_MS + 1);
       expect(auth.signInFailureMessage(await result)).toContain("登录服务暂时无法连接");
       expect(cancel).toHaveBeenCalledOnce();

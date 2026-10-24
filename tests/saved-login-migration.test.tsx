@@ -152,6 +152,10 @@ it('clears migrated legacy favorites without removing unrelated guest notificati
   render(provider());
   const merged = await hydratedState();
   expect(merged.collections[0].listingIds).toContain('legacy-home');
-  expect(JSON.parse(localStorage.getItem(accountKey)!).collections[0].listingIds).toContain('legacy-home');
-  expect(JSON.parse(localStorage.getItem(getGuestUiStorageKey())!)).toEqual({ version: 2, favoriteListingIds: [], notifications: [notification] });
+  // Hydration renders before the persistence effect. Verify its durable result
+  // separately instead of assuming both happen within one scheduler turn.
+  await waitFor(() => {
+    expect(JSON.parse(localStorage.getItem(accountKey)!).collections[0].listingIds).toContain('legacy-home');
+    expect(JSON.parse(localStorage.getItem(getGuestUiStorageKey())!)).toEqual({ version: 2, favoriteListingIds: [], notifications: [notification] });
+  });
 });
