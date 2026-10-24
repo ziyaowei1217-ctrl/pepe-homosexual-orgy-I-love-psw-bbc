@@ -103,6 +103,7 @@ export function useMapLibre(container: RefObject<HTMLElement | null>, options: P
     let cancelled = false;
     let map: MapLibreMap | undefined;
     let lostTimer: ReturnType<typeof setTimeout> | undefined;
+    let styleWatch: ReturnType<typeof setInterval> | undefined;
     const slowTimer = setTimeout(() => { if (!cancelled) setBasemap((current) => current === "loading" ? "slow" : current); }, 2500);
     setBasemap("loading");
     loadMapLibre().then((maplibre) => {
@@ -144,16 +145,33 @@ export function useMapLibre(container: RefObject<HTMLElement | null>, options: P
       });
       created.on("webglcontextrestored", () => clearTimeout(lostTimer));
       setState({ map: created, maplibre });
-      loadBasemap().then((style) => {
-        if (cancelled) return;
+      // A style that never finishes loading falls back to MapLibre fetching the plain style itself, then to the
+      // retry button. Time only counts while the page is visible: hidden tabs pause map work until they are shown.
+      const applyStyle = (style: StyleSpecification | string, fallback: boolean) => {
+        let loaded = false;
+        let waited = 0;
+        clearInterval(styleWatch);
+        created.once("style.load", () => { loaded = true; clearInterval(styleWatch); if (!cancelled) setBasemap("ready"); });
         created.setStyle(style, { diff: false });
-        setBasemap("ready");
+        styleWatch = setInterval(() => {
+          if (loaded || cancelled || document.visibilityState === "hidden") return;
+          waited += 1000;
+          if (waited < 8000) return;
+          clearInterval(styleWatch);
+          if (fallback) setBasemap("failed");
+          else applyStyle(getMapStyle(), true);
+        }, 1000);
+      };
+      loadBasemap().then((style) => {
+        // Each map gets its own copy: MapLibre may keep and change the object it is given.
+        if (!cancelled) applyStyle(structuredClone(style), false);
       }).catch(() => { if (!cancelled) setBasemap("failed"); });
     }).catch(() => { if (!cancelled) setBasemap("failed"); });
     return () => {
       cancelled = true;
       clearTimeout(slowTimer);
       clearTimeout(lostTimer);
+      clearInterval(styleWatch);
       setState(null);
       if (map) {
         try { const center = map.getCenter(); lastView.current = { center: [center.lng, center.lat], zoom: map.getZoom() }; } catch { /* Keep the previous view. */ }
