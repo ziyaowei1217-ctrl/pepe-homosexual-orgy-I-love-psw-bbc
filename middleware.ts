@@ -18,6 +18,16 @@ export function middleware(request: NextRequest) {
     if (demo && (path !== "/api/health" || request.nextUrl.pathname !== "/api/health")) {
       return denied("WEBSITE_DEMO_LOCAL_ONLY");
     }
+    if (path === "/api/auth" || path?.startsWith("/api/auth/")) {
+      // Preserve the actual URL through Netlify's Next adapter. A warm server
+      // otherwise keeps the hostname of its first request after preview promotion.
+      // The response headers also keep this same-URL rewrite from being elided.
+      // Netlify binds its public-URL metadata to the platform request ID; auth's
+      // exact origin allowlist and all callback/CSRF checks still run downstream.
+      return NextResponse.rewrite(request.nextUrl, { headers: {
+        ...demoHeaders, "Cache-Control": "private, no-store", "Referrer-Policy": "no-referrer"
+      } });
+    }
     return NextResponse.next({ headers: demoHeaders });
   }
   // Methods and API guards run before asset exclusions, including encoded paths.

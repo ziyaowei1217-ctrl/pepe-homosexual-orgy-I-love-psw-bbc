@@ -97,6 +97,18 @@ describe("functional website demo delivery boundary", () => {
     expect(middleware(new NextRequest("https://app.example/")).headers.get("Content-Security-Policy")).toContain("'strict-dynamic'");
   });
 
+  it.each(["https://app.example", "https://candidate--app.netlify.app"])("preserves the actual auth URL at %s without trusting forwarded host headers", (origin) => {
+    vi.stubEnv("NEXT_PUBLIC_WEBSITE_DEMO", "");
+    const url = `${origin}/api/auth/complete?neon_auth_session_verifier=opaque-test-value`;
+    const response = middleware(new NextRequest(url, { headers: {
+      host: "forged.example", "x-forwarded-host": "other.example", "x-forwarded-proto": "http"
+    } }));
+    expect(response.headers.get("x-middleware-rewrite")).toBe(url);
+    expect(response.headers.get("Cache-Control")).toBe("private, no-store");
+    expect(response.headers.get("Referrer-Policy")).toBe("no-referrer");
+    expect(response.headers.get("location")).toBeNull();
+  });
+
   it("requires connected Netlify endpoints and keeps the expected public basemap", () => {
     const config = readFileSync("netlify.toml", "utf8");
     expect(config).toContain('node tools/netlify-build-config.mjs');
