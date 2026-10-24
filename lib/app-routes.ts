@@ -55,7 +55,15 @@ export function getSafeAuthReturnTo(value?: string | null) {
   const localOrigin = "https://sublet.local";
   try {
     const parsed = new URL(value, localOrigin);
-    if (parsed.origin !== localOrigin || parsed.pathname.startsWith("/account")) return "/";
+    let decodedPath = parsed.pathname;
+    for (let depth = 0; depth < 4; depth++) {
+      const next = decodeURIComponent(decodedPath);
+      if (next === decodedPath) break;
+      decodedPath = next;
+    }
+    const canonical = new URL(decodedPath, localOrigin);
+    if (parsed.origin !== localOrigin || canonical.origin !== localOrigin || /%[a-f0-9]{2}/i.test(decodedPath) ||
+        canonical.pathname.startsWith("/account") || /^\/(?:auth|api)(?:\/|$)/i.test(canonical.pathname)) return "/";
     return `${parsed.pathname}${parsed.search}${parsed.hash}`;
   } catch {
     return "/";

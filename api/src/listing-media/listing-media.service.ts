@@ -29,7 +29,7 @@ import {
 } from "./listing-media-storage";
 import {
   ListingMediaSecurityError,
-  validateListingImage
+  prepareListingImage
 } from "./listing-media-validation";
 
 const editableListingStatuses = new Set(["DRAFT", "REJECTED"]);
@@ -37,6 +37,7 @@ const checksumPattern = /^[a-f0-9]{64}$/;
 
 @Injectable()
 export class ListingMediaService {
+  private static activeFinalizations = 0;
   constructor(
     private readonly prisma: PrismaService,
     private readonly storage: ListingMediaStorage,
@@ -116,6 +117,27 @@ export class ListingMediaService {
   async finalize(ownerId: string, listingId: string, mediaId: string, uploadAttemptId: string) {
     const media = await this.requireOwnedEditableMedia(ownerId, listingId, mediaId);
     requireUploadAttempt(media.originalKey, uploadAttemptId);
+    if (media.storageStatus !== "PENDING_UPLOAD") {
+      throw productConflict("LISTING_MEDIA_STATE_CONFLICT", "图片状态已变化，请刷新后重试。");
+    }
+    if (ListingMediaService.activeFinalizations >= 3) {
+      throw new ServiceUnavailableException({ code: "IMAGE_STORAGE_UNAVAILABLE", message: "图片处理繁忙，请稍后重试。" });
+    }
+    // Admit before buffering/decoding; reject excess work without a queue retaining image bytes.
+    ListingMediaService.activeFinalizations += 1;
+    try {
+      return await this.finalizeAdmitted(ownerId, listingId, mediaId, media);
+    } finally {
+      ListingMediaService.activeFinalizations -= 1;
+    }
+  }
+
+  private async finalizeAdmitted(
+    ownerId: string,
+    listingId: string,
+    mediaId: string,
+    media: { originalKey: string | null; mimeType: string | null; sizeBytes: number | null; checksum: string | null }
+  ) {
     const started = await this.withEditableListing(ownerId, listingId, (transaction) => transaction.listingMedia.updateMany({
       where: { id: mediaId, listingId, storageStatus: "PENDING_UPLOAD", originalKey: media.originalKey },
       data: {
@@ -134,15 +156,15 @@ export class ListingMediaService {
     let committed = false;
     try {
       const bytes = await this.storage.read(media.originalKey);
-      const validated = await validateListingImage(bytes, {
+      const validated = await prepareListingImage(bytes, {
         mimeType: asSupportedMimeType(media.mimeType),
         sizeBytes: media.sizeBytes,
         checksumSha256: media.checksum
       });
-      // Freeze the buffer we validated, never a second read/copy of the upload object.
+      // Freeze the sanitized derivative, never a second read/copy of the upload object.
       // This namespace is never used when signing client upload URLs.
       frozenKey = `listing-media-frozen/${listingId}/${randomUUID()}`;
-      await this.storage.write(frozenKey, bytes, validated.mimeType);
+      await this.storage.write(frozenKey, validated.bytes, validated.mimeType);
       const completed = await this.withEditableListing(ownerId, listingId, (transaction) => transaction.listingMedia.updateMany({
         where: {
           id: mediaId,
@@ -234,18 +256,33 @@ export class ListingMediaService {
     });
   }
 
-  async readPublished(mediaId: string) {
+  readPublished(mediaId: string): Promise<{ bytes: Buffer; mimeType: SupportedListingMediaMimeType; etag: string }>;
+  readPublished(mediaId: string, ifNoneMatch: string | undefined): Promise<
+    { bytes: Buffer; mimeType: SupportedListingMediaMimeType; etag: string } | { notModified: true; etag: string }
+  >;
+  async readPublished(mediaId: string, ifNoneMatch?: string) {
     const media = await this.prisma.listingMedia.findUnique({ where: { id: mediaId } });
+    const listing = media ? await this.prisma.listing.findUnique({ where: { id: media.listingId } }) : null;
     if (
       !media ||
+      listing?.status !== "APPROVED" ||
       media.storageStatus !== "PUBLISHED" ||
       !(media.processedKey || media.originalKey) ||
       !media.mimeType ||
       !media.sizeBytes ||
+      !media.checksum || !checksumPattern.test(media.checksum) ||
       !(SUPPORTED_LISTING_MEDIA_MIME_TYPES as readonly string[]).includes(media.mimeType)
     ) {
       throw productNotFound("LISTING_MEDIA_NOT_AVAILABLE", "Listing media not available");
     }
+
+    const etag = `"${media.checksum}"`;
+    // Visibility is rechecked above even on cache hits. Immutable validated bytes
+    // can then use the stored checksum without downloading them from S3 again.
+    if (ifNoneMatch && ifNoneMatch.split(",").some((value) => {
+      const tag = value.trim().replace(/^W\//, "");
+      return tag === "*" || tag === etag;
+    })) return { notModified: true as const, etag };
 
     try {
       const bytes = await this.storage.read((media.processedKey || media.originalKey)!);
@@ -253,7 +290,7 @@ export class ListingMediaService {
           createHash("sha256").update(bytes).digest("hex") !== media.checksum) {
         throw productNotFound("LISTING_MEDIA_NOT_AVAILABLE", "Listing media not available");
       }
-      return { bytes, mimeType: media.mimeType as SupportedListingMediaMimeType };
+      return { bytes, mimeType: media.mimeType as SupportedListingMediaMimeType, etag };
     } catch (error) {
       if (error instanceof NotFoundException) throw error;
       if (error instanceof ListingMediaStorageError && error.code === "IMAGE_STORAGE_UNAVAILABLE") {

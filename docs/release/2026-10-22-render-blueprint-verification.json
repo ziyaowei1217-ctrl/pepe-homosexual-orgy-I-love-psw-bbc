@@ -1,0 +1,12 @@
+{
+  "checkedAt": "2026-10-23T03:59:08.628Z",
+  "schemaUrl": "https://render.com/schema/render.yaml.json",
+  "schemaSha256": "8a3fb8da6b4f55fe686fbefa790e011d3dd7895f013f355953c572a21ab6494a",
+  "blueprintSha256": "9f4097ab8bef5248a094e3ed4fcf4a6a7fc4b971398ae475bb252446e7524cc9",
+  "valid": true,
+  "region": "ohio",
+  "plan": "free",
+  "autoDeployTrigger": "off",
+  "preDeployCommandPresent": false,
+  "errors": []
+}

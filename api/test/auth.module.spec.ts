@@ -10,6 +10,7 @@ import { AUTH_OPTIONS, EMAIL_SENDER } from "../src/auth/auth.tokens";
 import { EMAIL_PROVIDER_TOTAL_TIMEOUT_MS, type EmailSender } from "../src/email/email-sender";
 import { ListingsModule } from "../src/listings/listings.module";
 import { PrismaModule } from "../src/prisma/prisma.module";
+import { PrismaService } from "../src/prisma/prisma.service";
 
 describe("AuthModule dependency injection", () => {
   it("rejects local administrator allowlists in production", () => {
@@ -68,6 +69,8 @@ describe("AuthModule dependency injection", () => {
     const moduleRef = await Test.createTestingModule({
       imports: [JwtModule.register({ global: true, secret: "test-secret" }), PrismaModule, AuthModule]
     })
+      .overrideProvider(PrismaService)
+      .useValue({})
       .overrideProvider(EMAIL_SENDER)
       .useValue(emailSender)
       .overrideProvider(AUTH_OPTIONS)
@@ -84,7 +87,10 @@ describe("AuthModule dependency injection", () => {
   it("exposes administrator guard dependencies to importing controller modules", async () => {
     const moduleRef = await Test.createTestingModule({
       imports: [JwtModule.register({ global: true, secret: "test-secret" }), PrismaModule, ListingsModule]
-    }).compile();
+    })
+      .overrideProvider(PrismaService)
+      .useValue({})
+      .compile();
 
     await moduleRef.close();
   });

@@ -1,5 +1,6 @@
 "use client";
 
+import { signInViaPhrase } from "@/lib/auth-methods";
 import {
   ArrowLeft,
   ArrowRight,
@@ -23,6 +24,7 @@ import { PaymentPanel } from "@/components/payment-panel";
 import { getSessionUser } from "@/lib/api";
 import { authRoute } from "@/lib/app-routes";
 import { assertCurrentAuthSession, readStoredAuthSession } from "@/lib/auth-session";
+import { usesNeonAuth } from "@/lib/neon-auth-client";
 import type { PreviewListing } from "@/lib/preview-data";
 import { formatRangeLong } from "@/lib/date-format";
 import { earliestListingDate, initialListingStay, listingHref, listingStayError, type ListingStay } from "@/lib/listing-stay";
@@ -212,7 +214,7 @@ function ApplicationFormSession({ listing, initialStay, selectionId }: Applicati
             <header className="border-b border-line-strong px-5 py-5 sm:px-8 sm:py-8">
               <h1 className="page-title">申请租住</h1>
               <p className="mt-2 hidden text-d-subhead text-ink-secondary lg:block">{listing.title}</p>
-              {draftReady && !token ? <p className="mt-3 rounded-psw-md bg-primary-soft px-3 py-2 text-m-footnote text-ink">提交前需要登录，目前仅支持受邀邮箱或已有账户。</p> : null}
+              {draftReady && !token ? <p className="mt-3 rounded-psw-md bg-primary-soft px-3 py-2 text-m-footnote text-ink">{usesNeonAuth() ? `提交前需要${signInViaPhrase()}。` : "提交前需要登录，目前仅支持受邀邮箱或已有账户。"}</p> : null}
               <ol className="mt-4 grid grid-cols-4 gap-2 sm:mt-7" aria-label="申请进度">
                 {applicationSteps.map((label, index) => <li key={label} aria-current={index === step ? "step" : undefined} className="min-w-0"><div className={cn("h-1.5 rounded-full transition-colors duration-200", index <= step ? "bg-primary" : "bg-line-strong")} /><p className={cn("mt-2 text-m-footnote font-bold", index === step ? "text-primary-text" : "text-ink-secondary")}>{label}</p></li>)}
               </ol>
@@ -375,7 +377,7 @@ function ApplicationDetailSession({ applicationId }: { applicationId: string }) 
   const hasPayment = Boolean(application && ["ACCEPTED", "COMPLETED", "CANCELLATION_PENDING", "CANCELLED"].includes(application.status));
   return <main className="min-h-[calc(100dvh-72px)] bg-background"><div className="page-container max-w-[880px] pb-16 pt-4 sm:pt-8">
     <Link href="/applications" className="-ml-3 inline-flex min-h-11 items-center gap-2 rounded-full px-3 text-[15px] font-bold text-ink-secondary hover:bg-surface sm:text-sm"><ArrowLeft className="size-4" aria-hidden="true" />返回我的申请</Link>
-    {!authenticated ? <EmptyApplications title="登录后查看这份申请" detail="用邮箱验证码登录，不需要密码。" actionHref={authRoute({ returnTo: `/applications/${applicationId}` })} action="登录" /> : null}
+    {!authenticated ? <EmptyApplications title="登录后查看这份申请" detail={usesNeonAuth() ? `${signInViaPhrase()}后查看这份申请。` : "用邮箱验证码登录，不需要密码。"} actionHref={authRoute({ returnTo: `/applications/${applicationId}` })} action="登录" /> : null}
     {loading ? <p role="status" className="mt-6 text-center text-d-subhead text-ink-secondary">正在加载申请…</p> : null}
     {error && !application ? <div role="alert" className="mt-6"><EmptyState mood="sorry" title="申请没加载出来" body={error} action={<button type="button" onClick={() => { setError(null); setAttempt((value) => value + 1); }} className="primary-action">重试</button>} /></div> : null}
     {error && application ? <p role="alert" className="mt-6 rounded-psw-md bg-danger-soft p-4 text-d-subhead font-semibold text-danger-text">{error}</p> : null}

@@ -57,7 +57,7 @@ describe("product API errors", () => {
     expect(error).toMatchObject({
       category: "permission",
       code: "ADMIN_REAUTH_REQUIRED",
-      message: "需要再次验证管理员邮箱。",
+      message: "需要再次完成管理员验证。",
       retryable: false,
       status: 403
     });

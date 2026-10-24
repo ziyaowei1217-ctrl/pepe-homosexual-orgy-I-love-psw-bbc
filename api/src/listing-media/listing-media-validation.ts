@@ -6,6 +6,7 @@ import sharp from "sharp";
 import {
   MAX_LISTING_MEDIA_BYTES,
   MAX_LISTING_MEDIA_PIXELS,
+  MAX_PUBLISHED_LISTING_MEDIA_EDGE,
   SUPPORTED_LISTING_MEDIA_MIME_TYPES,
   type ListingMediaSecurityCode,
   type SupportedListingMediaMimeType
@@ -64,6 +65,37 @@ export async function validateListingImage(
     height: dimensions.height,
     checksumSha256
   };
+}
+
+export async function prepareListingImage(bytes: Buffer, expected: ListingImageExpectation) {
+  const validated = await validateListingImage(bytes, expected);
+  try {
+    // Decode the entire image before publishing, correct phone orientation and
+    // omit all EXIF/IPTC/XMP metadata (including GPS). Bound direct downloads
+    // without cropping or enlarging smaller photos, and keep the accepted format.
+    const pipeline = sharp(bytes, { limitInputPixels: MAX_LISTING_MEDIA_PIXELS, failOn: "warning" })
+      .rotate()
+      .resize(MAX_PUBLISHED_LISTING_MEDIA_EDGE, MAX_PUBLISHED_LISTING_MEDIA_EDGE, {
+        fit: "inside",
+        withoutEnlargement: true
+      });
+    if (validated.mimeType === "image/jpeg") pipeline.jpeg({ quality: 90 });
+    else if (validated.mimeType === "image/webp") pipeline.webp({ quality: 90 });
+    else pipeline.png();
+    const { data, info } = await pipeline.toBuffer({ resolveWithObject: true });
+    if (data.length > MAX_LISTING_MEDIA_BYTES) throw new ListingMediaSecurityError("IMAGE_TOO_LARGE");
+    return {
+      bytes: data,
+      mimeType: validated.mimeType,
+      sizeBytes: data.length,
+      width: info.width,
+      height: info.height,
+      checksumSha256: createHash("sha256").update(data).digest("hex")
+    };
+  } catch (error) {
+    if (error instanceof ListingMediaSecurityError) throw error;
+    throw new ListingMediaSecurityError("IMAGE_VALIDATION_FAILED");
+  }
 }
 
 async function detectType(bytes: Buffer) {

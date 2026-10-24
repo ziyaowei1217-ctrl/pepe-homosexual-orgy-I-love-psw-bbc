@@ -100,7 +100,10 @@ services:
       - sublet_pipeline
 
   minio:
-    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
+    build:
+      context: ./tools/ci
+      dockerfile: storage.Dockerfile
+      target: minio
     container_name: sublet-pipeline-minio
     restart: unless-stopped
     command: server /data --console-address ":9001"
@@ -114,7 +117,7 @@ services:
     volumes:
       - sublet_pipeline_minio:/data
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:9000/minio/health/ready"]
       interval: 5s
       timeout: 3s
       retries: 12
@@ -122,7 +125,10 @@ services:
       - sublet_pipeline
 
   minio-init:
-    image: minio/mc:RELEASE.2025-08-13T08-35-41Z
+    build:
+      context: ./tools/ci
+      dockerfile: storage.Dockerfile
+      target: mc
     container_name: sublet-pipeline-minio-init
     restart: "no"
     entrypoint: ["/bin/sh", "-c"]

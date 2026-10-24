@@ -28,9 +28,16 @@ describeBuildSmoke("compiled operations CLI entrypoints", () => {
   ])("starts %s from its built artifact without CLI development dependencies", (script, argv, artifact, fallback) => {
     expect(existsSync(join(apiDirectory, artifact))).toBe(true);
 
-    const result = spawnSync("pnpm", ["--silent", "run", script, ...argv], {
+    // pnpm's Windows command shim cannot be spawned as a native executable.
+    const pnpmCli = process.env.npm_execpath;
+    const useNode = Boolean(pnpmCli && /(?:^|[\\/])pnpm\.(?:c?js)$/i.test(pnpmCli));
+    const args = ["--silent", "run", script, ...argv];
+    const result = spawnSync(useNode ? process.execPath : "pnpm", useNode ? [pnpmCli!, ...args] : args, {
       cwd: apiDirectory,
       encoding: "utf8",
+      shell: !useNode && process.platform === "win32",
+      timeout: 10_000,
+      killSignal: "SIGKILL",
       env: {
         ...process.env,
         DATABASE_URL: "postgresql://cli:cli@127.0.0.1:1/cli?connect_timeout=1",

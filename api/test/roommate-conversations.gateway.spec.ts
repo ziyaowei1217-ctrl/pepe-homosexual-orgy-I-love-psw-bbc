@@ -1,12 +1,13 @@
 import "reflect-metadata";
 import { JwtService } from "@nestjs/jwt";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AuthenticatedUserService } from "../src/auth/authenticated-user.service";
 import { RoommateConversationGateway } from "../src/roommate-conversations/roommate-conversations.gateway";
 import { RoommateConversationsService } from "../src/roommate-conversations/roommate-conversations.service";
 
 describe("RoommateConversationGateway", () => {
+  afterEach(() => vi.useRealTimers());
   it("rejects a socket without a valid JWT", async () => {
     const gateway = new RoommateConversationGateway(
       new AuthenticatedUserService(new JwtService({ secret: "test-secret" }), userStore([]) as never)
@@ -77,6 +78,46 @@ describe("RoommateConversationGateway", () => {
     expect(client.joinedRooms).toEqual(["user:user-a"]);
   });
 
+  it("disconnects a joined socket when its signed session expires", async () => {
+    vi.useFakeTimers();
+    const jwt = new JwtService({ secret: "test-secret" });
+    const gateway = new RoommateConversationGateway(
+      new AuthenticatedUserService(jwt, userStore([{ id: "user-a", email: "a@example.test", role: "USER" }]) as never)
+    );
+    const client = socket({ token: await jwt.signAsync({ sub: "user-a" }, { expiresIn: 2 }) });
+    await gateway.handleConnection(client as never);
+    expect(client.disconnected).toBe(false);
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(client.disconnected).toBe(true);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("cleans the expiry timer when the client disconnects early", async () => {
+    vi.useFakeTimers();
+    const jwt = new JwtService({ secret: "test-secret" });
+    const gateway = new RoommateConversationGateway(
+      new AuthenticatedUserService(jwt, userStore([{ id: "user-a", email: "a@example.test", role: "USER" }]) as never)
+    );
+    const client = socket({ token: await jwt.signAsync({ sub: "user-a" }, { expiresIn: "7d" }) });
+    await gateway.handleConnection(client as never);
+    expect(vi.getTimerCount()).toBe(1);
+    client.disconnect();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("disconnects if expiry occurs while joining the private room", async () => {
+    vi.useFakeTimers();
+    const jwt = new JwtService({ secret: "test-secret" });
+    const gateway = new RoommateConversationGateway(
+      new AuthenticatedUserService(jwt, userStore([{ id: "user-a", email: "a@example.test", role: "USER" }]) as never)
+    );
+    const client = socket({ token: await jwt.signAsync({ sub: "user-a" }, { expiresIn: 2 }) });
+    client.join = async () => { await vi.advanceTimersByTimeAsync(3_000); };
+    await gateway.handleConnection(client as never);
+    expect(client.disconnected).toBe(true);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   it("keeps HTTP send successful when socket publication throws", async () => {
     const createdAt = new Date("2026-08-09T12:00:00.000Z");
     const membership = {
@@ -145,6 +186,7 @@ function userStore(users: Array<{ id: string; email: string; role: string }>) {
 }
 
 function socket(auth: Record<string, unknown>) {
+  let onDisconnect: (() => void) | undefined;
   return {
     handshake: { auth },
     joinedRooms: [] as string[],
@@ -154,6 +196,11 @@ function socket(auth: Record<string, unknown>) {
     },
     disconnect() {
       this.disconnected = true;
+      onDisconnect?.();
+      onDisconnect = undefined;
+    },
+    once(_event: string, listener: () => void) {
+      onDisconnect = listener;
     }
   };
 }

@@ -63,6 +63,8 @@ export function productErrorForStatus(status: number, code?: unknown): ProductAp
   const safeCode = safeErrorCode(code);
   const productMessage = safeCode ? productCodeMessages[safeCode] : undefined;
 
+  if (status === 408) return new ProductApiError({ category: "service", message: "服务响应时间较长，请稍后重试。", retryable: true, status });
+
   if (productMessage) {
     return new ProductApiError({
       category: status >= 500 ? "service" : "validation",
@@ -87,7 +89,7 @@ export function productErrorForStatus(status: number, code?: unknown): ProductAp
       return new ProductApiError({
         category: "permission",
         code: safeCode,
-        message: "需要再次验证管理员邮箱。",
+        message: "需要再次完成管理员验证。",
         retryable: false,
         status
       });
@@ -134,7 +136,18 @@ const productCodeMessages: Record<string, string> = {
   DEMO_MOVE_IN_NOT_STARTED: "约定入住日期前不能确认入住。",
   ASSISTANT_UNAVAILABLE: "AI 助手暂时不可用，请稍后再试。",
   ASSISTANT_RATE_LIMITED: "提问太频繁，请过几分钟再试。",
-  ASSISTANT_DECLINED: "这个问题 AI 助手无法回答，请换个问法。"
+  ASSISTANT_DECLINED: "这个问题 AI 助手无法回答，请换个问法。",
+  AUTH_RATE_LIMITED: "请求太频繁，请稍后再试。",
+  INVALID_PHONE_NUMBER: "请输入受支持地区的有效手机号。",
+  INVALID_PHONE_CODE: "验证码无效或已过期，请重新获取。",
+  PHONE_NUMBER_UNAVAILABLE: "这个号码已绑定其他 psw 账户。请先用该号码登录原账户并解除绑定。",
+  PHONE_NOT_LINKED: "请先在 账户 → 身份与认证 中绑定手机号。",
+  PHONE_AUTH_UNAVAILABLE: "短信验证暂时不可用，请稍后再试或改用其他方式。",
+  PHONE_RATE_LIMITED: "这个号码收到的验证码太多，请稍后再试。",
+  PHONE_NUMBER_REJECTED: "这个号码无法接收验证短信，请换一个手机号。",
+  PHONE_TOO_NEW: "新绑定的手机号需满 24 小时后才能用于管理员验证。",
+  ADMIN_PHONE_LOCKED: "管理员账户已绑定的手机号不能在网站上更换或解除，请联系运营人员。",
+  RECENT_SIGN_IN_REQUIRED: "为保护账户，修改手机号前请退出并重新登录（15 分钟内登录过即可）。"
 };
 
 function safeErrorCode(code: unknown) {

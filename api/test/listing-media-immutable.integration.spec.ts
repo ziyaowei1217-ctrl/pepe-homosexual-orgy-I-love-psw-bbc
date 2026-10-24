@@ -5,6 +5,7 @@ import { createDisposablePostgres } from './support/disposable-postgres';
 import { getListingMediaStorageConfig } from '../src/config/env';
 import { S3CompatibleListingMediaStorage } from '../src/listing-media/listing-media-storage';
 import { ListingMediaService } from '../src/listing-media/listing-media.service';
+import { prepareListingImage } from '../src/listing-media/listing-media-validation';
 import { ListingsService } from '../src/listings/listings.service';
 import { AuditService } from '../src/audit/audit.service';
 import { PrismaClient } from '@prisma/client';
@@ -45,6 +46,7 @@ it.skipIf(!enabled)('keeps reviewed bytes after replaying the original signed up
   const pad = (input: Buffer) => Buffer.concat([input, Buffer.alloc(byteLength - input.length)]);
   const original = pad(red), replacement = pad(blue);
   const sha = (input: Buffer) => createHash('sha256').update(input).digest('hex');
+  const prepared = await prepareListingImage(original, { mimeType: 'image/png', sizeBytes: original.length, checksumSha256: sha(original) });
   expect(sha(original)).not.toBe(sha(replacement));
   const listing = await listings.create('owner', { title: 'Reviewed room', area: 'Westwood', availableFrom: '2099-01-01', availableTo: '2099-12-31', price: 1800, originalPrice: 1800, beds: 1, baths: 1, commute: 'Walk', transit: 'Bus', trust: 'Pending', tags: [] });
   const upload = await media.initializeUpload('owner', listing.id, { commandId: randomUUID(), kind: 'bedroom', mimeType: 'image/png', sizeBytes: byteLength, checksumSha256: sha(original) });
@@ -53,7 +55,7 @@ it.skipIf(!enabled)('keeps reviewed bytes after replaying the original signed up
   expect((await media.finalize('owner', listing.id, upload.media.id, upload.uploadAttemptId)).storageStatus).toBe('READY');
   const submitted = await listings.submit('owner', listing.id);
   const reviewed = await media.readForReview(listing.id, upload.media.id);
-  expect(sha(reviewed.bytes)).toBe(sha(original));
+  expect(sha(reviewed.bytes)).toBe(sha(prepared.bytes));
   const approved = await listings.approve(listing.id, { actorUserId: 'admin', actorEmail: 'admin@audit3.test', actorType: 'USER' }, submitted.revision);
   const put2 = await fetch(upload.uploadUrl!, { method: 'PUT', headers: { 'Content-Type': 'image/png' }, body: new Uint8Array(replacement) });
   expect(put2.status, await put2.text()).toBe(200);
@@ -61,7 +63,7 @@ it.skipIf(!enabled)('keeps reviewed bytes after replaying the original signed up
   const afterListing = await prisma.listing.findUniqueOrThrow({ where: { id: listing.id } });
   const afterMedia = await prisma.listingMedia.findUniqueOrThrow({ where: { id: upload.media.id } });
   expect(sha(published.bytes)).toBe(sha(reviewed.bytes));
-  expect(afterMedia.checksum).toBe(sha(original));
+  expect(afterMedia.checksum).toBe(sha(prepared.bytes));
   expect(afterListing.revision).toBe(approved.revision);
   expect(afterListing.status).toBe('APPROVED');
 });

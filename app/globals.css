@@ -211,9 +211,11 @@
     transition-duration: 160ms;
     transition-timing-function: cubic-bezier(0.2, 0.7, 0.2, 1);
   }
-  /* Maps (components/marketplace/listing-map.tsx). The basemap is toned down so prices and pins carry the colour. */
-  .listing-map .maplibregl-canvas {
-    filter: saturate(0.55) contrast(0.96) brightness(1.03);
+  /* Maps (components/marketplace/listing-map.tsx). The basemap colours are toned down in lib/map-basemap.ts so prices
+     and pins carry the colour; a CSS filter on the canvas would be applied again on every frame of a drag. */
+  /* Each pin on its own compositor layer: moving the map then moves pins without repainting their shadows. */
+  .listing-map .maplibregl-marker {
+    will-change: transform;
   }
   .listing-map .maplibregl-ctrl-attrib {
     @apply text-m-footnote;

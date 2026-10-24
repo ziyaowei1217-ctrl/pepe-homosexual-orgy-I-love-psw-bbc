@@ -3,9 +3,12 @@ import { HttpException, ServiceUnavailableException } from "@nestjs/common";
 
 import { hashSecurityIdentifier, normalizeEmail } from "./code-security";
 
-export type AuthRateLimitAction = "send" | "verify";
-export type AuthRateLimitPurpose = "LOGIN" | "ADMIN_STEP_UP";
-export type AuthRateLimitIdentity = { email: string; ip: string; deviceId?: string };
+export type AuthRateLimitAction = "send" | "verify" | "exchange" | "identity" | "deliver";
+export type AuthRateLimitPurpose = "LOGIN" | "ADMIN_STEP_UP" | "PHONE_LOGIN" | "PHONE_LINK" | "PHONE_STEP_UP";
+// Phone purposes key their per-destination limit on `subject` (a normalized
+// phone number, or the account for administrator step-up) rather than an email
+// address. Texts cost money, so their limits are lower.
+export type AuthRateLimitIdentity = { email: string; ip: string; deviceId?: string; actorId?: string; subject?: string };
 export type RateLimitRule = {
   key: string;
   dimension: string;
@@ -70,10 +73,23 @@ export class AuthRateLimiter {
     identity: AuthRateLimitIdentity
   ): RateLimitRule[] {
     const hash = (value: string) => hashSecurityIdentifier(value, this.options.identifierHashSecret);
+    if (purpose.startsWith("PHONE_")) return this.phoneRules(action, purpose, identity, hash);
     const emailHash = hash(normalizeEmail(identity.email));
     const purposeEmailHash = `${purpose.toLowerCase()}:${emailHash}`;
     const ipHash = hash(identity.ip);
     const deviceHash = hash(identity.deviceId ?? `ip-fallback:${identity.ip}`);
+
+    if (action === "identity") {
+      return [rule("identity", "actor-15m", hash(identity.actorId ?? "unknown"), 30, 900)];
+    }
+
+    if (action === "exchange") {
+      return [
+        rule("exchange", "device-15m", deviceHash, 30, 900),
+        rule("exchange", "ip-15m", ipHash, 100, 900),
+        rule("exchange", "global-minute", "all", 300, 60)
+      ];
+    }
 
     if (action === "send") {
       return [
@@ -90,6 +106,50 @@ export class AuthRateLimiter {
       rule("verify", "device-15m", deviceHash, 30, 900),
       rule("verify", "ip-15m", ipHash, 100, 900),
       rule("verify", "global-minute", "all", 300, 60)
+    ];
+  }
+
+  private phoneRules(
+    action: AuthRateLimitAction,
+    purpose: AuthRateLimitPurpose,
+    identity: AuthRateLimitIdentity,
+    hash: (value: string) => string
+  ): RateLimitRule[] {
+    if (!identity.subject) throw new Error("Phone rate limits require a subject");
+    const scope = purpose.toLowerCase();
+    // "deliver" is charged only when a text is actually sent, so anonymous
+    // requests for unlinked numbers cannot use up the paid budget. Each purpose
+    // has its own budget: a flood of sign-in requests never blocks
+    // administrator step-up.
+    if (action === "deliver") {
+      const [minute, day] = purpose === "PHONE_STEP_UP" ? [10, 50] : [20, 200];
+      return [
+        rule("phone-deliver", "global-minute", scope, minute, 60),
+        rule("phone-deliver", "global-day", scope, day, 86_400)
+      ];
+    }
+    const phoneHash = `${scope}:${hash(identity.subject)}`;
+    // IPv6 clients usually control a whole /64, so it counts as one address.
+    const ipHash = hash(addressPrefix(identity.ip));
+    const deviceHash = hash(identity.deviceId ?? `ip-fallback:${addressPrefix(identity.ip)}`);
+    const actorRules = identity.actorId ? [rule(`phone-${action}`, "actor-day", `${scope}:${hash(identity.actorId)}`, action === "send" ? 10 : 40, 86_400)] : [];
+    if (action === "send") {
+      return [
+        rule("phone-send", "phone-hour", phoneHash, 3, 3_600),
+        rule("phone-send", "phone-day", phoneHash, 6, 86_400),
+        rule("phone-send", "device-hour", deviceHash, 5, 3_600),
+        rule("phone-send", "ip-hour", ipHash, 15, 3_600),
+        ...actorRules,
+        rule("phone-send", "global-minute", scope, 120, 60)
+      ];
+    }
+    if (action !== "verify") throw new Error("Unsupported phone rate-limit action");
+    return [
+      rule("phone-verify", "phone-15m", phoneHash, 10, 900),
+      rule("phone-verify", "device-15m", deviceHash, 20, 900),
+      rule("phone-verify", "ip-15m", ipHash, 60, 900),
+      ...actorRules,
+      rule("phone-verify", "global-minute", scope, 300, 60)
     ];
   }
 }
@@ -143,6 +203,18 @@ function rule(action: string, dimension: string, identifier: string, limit: numb
     limit,
     windowSeconds
   } satisfies RateLimitRule;
+}
+
+// The /64 network for IPv6, the address itself for IPv4 and unknown values.
+export function addressPrefix(ip: string) {
+  if (isIP(ip) !== 6) return ip;
+  const [head, tail = ""] = ip.split("::");
+  const headGroups = head ? head.split(":") : [];
+  const tailGroups = tail ? tail.split(":") : [];
+  const groups = ip.includes("::")
+    ? [...headGroups, ...Array(8 - headGroups.length - tailGroups.length).fill("0"), ...tailGroups]
+    : headGroups;
+  return `${groups.slice(0, 4).map((group) => group.replace(/^0+(?=.)/, "")).join(":")}::/64`;
 }
 
 function isUuid(value: string) {

@@ -18,7 +18,7 @@ describe.skipIf(process.env.RUN_DB_SMOKE !== "1")("viewing revisions and repeat 
     prisma = new PrismaClient({ datasources: { db: { url: database.databaseUrl } } });
     threads = new DealThreadsService(prisma as never);
     teams = new RoommateTeamsService(prisma as never, new DealRoomsService(prisma as never));
-    await prisma.user.createMany({ data: ["a", "b", "host"].map(id => ({ id, email: `${id}@revision.example` })) });
+    await prisma.user.createMany({ data: ["a", "b", "host", "rollback-renter", "deadlock-renter", "replay-renter"].map(id => ({ id, email: `${id}@revision.example` })) });
     for (const id of ["a", "b"]) await prisma.roommateProfile.create({ data: {
       id: `profile-${id}`, ownerId: id, name: id, age: 25, role: "Student", image: "https://example.test/photo.png",
       match: 0, budget: "$1000", commute: "Westwood", tags: []
@@ -92,8 +92,8 @@ describe.skipIf(process.env.RUN_DB_SMOKE !== "1")("viewing revisions and repeat 
   });
 
   it("commits only one simultaneous host decision and rolls status back if its message fails", async () => {
-    const thread = await threads.createOrFindThread("b", { listingId: "listing" });
-    const snapshot = (await threads.createViewingRequest("b", thread.id, initial)).viewingRequests[0];
+    const thread = await threads.createOrFindThread("rollback-renter", { listingId: "listing" });
+    const snapshot = (await threads.createViewingRequest("rollback-renter", thread.id, initial)).viewingRequests[0];
     const outcomes = await Promise.allSettled([
       threads.confirmViewingRequest("host", thread.id, snapshot.id, snapshot.revision),
       threads.declineViewingRequest("host", thread.id, snapshot.id, snapshot.revision)
@@ -102,7 +102,12 @@ describe.skipIf(process.env.RUN_DB_SMOKE !== "1")("viewing revisions and repeat 
     expect(outcomes.filter(result => result.status === "rejected")).toHaveLength(1);
     expect(await prisma.dealMessage.count({ where: { threadId: thread.id, senderId: "host" } })).toBe(1);
 
-    const next = (await threads.createViewingRequest("b", thread.id, initial)).viewingRequests.find((item: any) => item.status === "REQUESTED")!;
+    // A genuinely changed slot starts a new decision. Replaying a confirmed
+    // request intentionally preserves its confirmation instead of reopening it.
+    const next = (await threads.createViewingRequest("rollback-renter", thread.id, {
+      ...initial, timeLabel: "2099-06-02 09:00", iso: "2099-06-02T09:00:00Z"
+    })).viewingRequests.find((item: any) => item.status === "REQUESTED")!;
+    expect(next).toBeDefined();
     // A database trigger simulates a failed notification insert inside the real transaction.
     await prisma.$executeRawUnsafe(`CREATE FUNCTION fail_host_message() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW."senderId" = 'host' THEN RAISE EXCEPTION 'notification unavailable'; END IF; RETURN NEW; END $$`);
     await prisma.$executeRawUnsafe(`CREATE TRIGGER fail_host_message BEFORE INSERT ON "DealMessage" FOR EACH ROW EXECUTE FUNCTION fail_host_message()`);
@@ -113,8 +118,9 @@ describe.skipIf(process.env.RUN_DB_SMOKE !== "1")("viewing revisions and repeat 
   });
 
   it("does not deadlock a reschedule against a host decision inserting its notification", async () => {
-    const thread = await threads.createOrFindThread("b", { listingId: "listing" });
-    const snapshot = (await threads.createViewingRequest("b", thread.id, initial)).viewingRequests.find((item: any) => item.status === "REQUESTED")!;
+    const thread = await threads.createOrFindThread("deadlock-renter", { listingId: "listing" });
+    const snapshot = (await threads.createViewingRequest("deadlock-renter", thread.id, initial)).viewingRequests.find((item: any) => item.status === "REQUESTED")!;
+    expect(snapshot).toBeDefined();
     let hostUpdated!: () => void;
     let releaseHost!: () => void;
     let renterLocked!: () => void;
@@ -149,13 +155,27 @@ describe.skipIf(process.env.RUN_DB_SMOKE !== "1")("viewing revisions and repeat 
     const renter = new DealThreadsService(gatedClient("renter") as never);
     const confirming = host.confirmViewingRequest("host", thread.id, snapshot.id, snapshot.revision);
     await updated;
-    const rescheduling = renter.createViewingRequest("b", thread.id, { ...initial, mode: "video" });
+    const rescheduling = renter.createViewingRequest("deadlock-renter", thread.id, { ...initial, mode: "video" });
     const outcomesPromise = Promise.allSettled([confirming, rescheduling]);
     await locked;
     releaseHost();
     const outcomes = await outcomesPromise;
     expect(outcomes.map(result => result.status), outcomes.filter(result => result.status === "rejected").map(result => String(result.reason)).join("\n")).toEqual(["fulfilled", "fulfilled"]);
     expect(await prisma.viewingRequest.findUnique({ where: { id: snapshot.id } })).toMatchObject({ status: "REQUESTED", mode: "VIDEO", revision: snapshot.revision + 2 });
+  });
+
+  it("preserves a confirmed viewing and its message count when its request is replayed", async () => {
+    const thread = await threads.createOrFindThread("replay-renter", { listingId: "listing" });
+    const requested = (await threads.createViewingRequest("replay-renter", thread.id, initial)).viewingRequests[0];
+    const confirmed = await threads.confirmViewingRequest("host", thread.id, requested.id, requested.revision);
+    expect(confirmed.viewingRequests).toMatchObject([{ id: requested.id, status: "CONFIRMED", revision: requested.revision + 1 }]);
+    const messageCount = await prisma.dealMessage.count({ where: { threadId: thread.id } });
+
+    const replay = await threads.createViewingRequest("replay-renter", thread.id, initial);
+    expect(replay.viewingRequests).toMatchObject([{ id: requested.id, status: "CONFIRMED", revision: requested.revision + 1 }]);
+    expect(await prisma.viewingRequest.count({ where: { threadId: thread.id } })).toBe(1);
+    expect(await prisma.viewingRequest.findUnique({ where: { id: requested.id } })).toMatchObject({ status: "CONFIRMED", revision: requested.revision + 1 });
+    expect(await prisma.dealMessage.count({ where: { threadId: thread.id } })).toBe(messageCount);
   });
 
   it("allows the same invitation direction again while retaining the archived room and team", async () => {

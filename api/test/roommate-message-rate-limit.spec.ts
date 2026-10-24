@@ -85,7 +85,7 @@ describe("roommate message rate limiter selection", () => {
     });
   });
 
-  it("uses one atomic Valkey sliding-window evaluation with the 20 per 60 second policy", async () => {
+  it("atomically checks the 20 conversation and 100 actor per minute windows in one hash slot", async () => {
     const client = {
       isOpen: true,
       connect: vi.fn(),
@@ -105,9 +105,10 @@ describe("roommate message rate limiter selection", () => {
     expect(client.connect).not.toHaveBeenCalled();
     expect(client.eval).toHaveBeenCalledTimes(1);
     const [, options] = client.eval.mock.calls[0] as [string, { keys: string[]; arguments: string[] }];
-    expect(options.keys).toEqual(["roommate-message-rate-limit:user-a:conversation-a-b"]);
-    expect(options.arguments.slice(0, 2)).toEqual(["20", "60000"]);
-    expect(options.arguments[2]).toMatch(/^[0-9a-f-]{36}$/);
+    expect(options.keys).toEqual(["roommate-message-rate-limit:{user-a}:conversation:conversation-a-b",
+      "roommate-message-rate-limit:{user-a}:actor"]);
+    expect(options.arguments.slice(0, 3)).toEqual(["20", "100", "60000"]);
+    expect(options.arguments[3]).toMatch(/^[0-9a-f-]{36}$/);
     expect(health.snapshot().messageRateLimit).toEqual({ status: "ok", mode: "distributed" });
   });
 
@@ -125,7 +126,7 @@ describe("roommate message rate limiter selection", () => {
     expect(rejection).toBeInstanceOf(HttpException);
     expect((rejection as HttpException).getStatus()).toBe(429);
     expect((rejection as HttpException).getResponse()).toMatchObject({
-      message: "Roommate message rate limit exceeded",
+      message: "Message rate limit exceeded",
       retryAfterSeconds: 41
     });
   });
@@ -410,6 +411,29 @@ describe("roommate message rate limiter selection", () => {
   });
 });
 
+describe("shared local actor message quota", () => {
+  it("bounds one actor across deal and roommate conversations and preserves other actors", async () => {
+    let now = 1_000;
+    const limiter = new LocalRoommateMessageRateLimiter({ now: () => now });
+    for (let index = 0; index < 100; index += 1) {
+      await limiter.consume({ userId: "actor", conversationId: index % 2 ? `deal:${index}` : `roommate-${index}` });
+    }
+    await expect(limiter.consume({ userId: "actor", conversationId: "deal:fresh" })).rejects.toMatchObject({ status: 429 });
+    await expect(limiter.consume({ userId: "other", conversationId: "deal:fresh" })).resolves.toBeUndefined();
+    now += 60_000;
+    await expect(limiter.consume({ userId: "actor", conversationId: "deal:fresh" })).resolves.toBeUndefined();
+  });
+
+  it("checks both quotas before adding any timestamps", async () => {
+    const limiter = new LocalRoommateMessageRateLimiter({ now: () => 1_000, limit: 1, actorLimit: 2 });
+    await limiter.consume({ userId: "actor", conversationId: "full" });
+    await expect(limiter.consume({ userId: "actor", conversationId: "full" })).rejects.toMatchObject({ status: 429 });
+    await expect(limiter.consume({ userId: "actor", conversationId: "available" })).resolves.toBeUndefined();
+    await expect(limiter.consume({ userId: "actor", conversationId: "other" })).rejects.toMatchObject({ status: 429 });
+    await expect(limiter.consume({ userId: "other", conversationId: "other" })).resolves.toBeUndefined();
+  });
+});
+
 describe("resilient roommate message rate limiter", () => {
   it("falls back to the bounded local limiter when Valkey connect fails", async () => {
     let now = 1_000;
@@ -643,12 +667,15 @@ describe("resilient roommate message rate limiter", () => {
     const client = {
       isOpen: true,
       connect: vi.fn(),
-      eval: vi.fn().mockRejectedValueOnce(new Error("socket closed")).mockResolvedValueOnce([1, 0])
+      eval: vi.fn().mockRejectedValue(new Error("socket closed")),
+      destroy: vi.fn()
     };
+    const replacement = { isOpen: true, connect: vi.fn(), eval: vi.fn().mockResolvedValue([1, 0]) };
+    const clientFactory = vi.fn().mockReturnValue(replacement);
     const health = new MessagingInfrastructureHealth();
     health.markDistributed("messageRateLimit");
     const limiter = new ResilientRoommateMessageRateLimiter({
-      distributed: new ValkeyRoommateMessageRateLimiter(client),
+      distributed: new ValkeyRoommateMessageRateLimiter(client, { clientFactory }),
       local: new LocalRoommateMessageRateLimiter({ now: () => now }),
       health,
       now: () => now,
@@ -662,6 +689,9 @@ describe("resilient roommate message rate limiter", () => {
     await limiter.consume({ userId: "user-a", conversationId: "conversation-a-b" });
 
     expect(health.snapshot().messageRateLimit).toEqual({ status: "ok", mode: "distributed" });
+    expect(client.destroy).toHaveBeenCalledTimes(1);
+    expect(clientFactory).toHaveBeenCalledTimes(1);
+    expect(replacement.eval).toHaveBeenCalledTimes(1);
   });
 
   it("logs only component, mode, and sanitized reason when Valkey fails", async () => {

@@ -6,17 +6,12 @@ import { parseEnv } from "node:util";
 const required = [
   "NODE_ENV",
   "NEXT_PUBLIC_API_BASE_URL",
-  "NEXT_PUBLIC_MAP_TILE_URL_TEMPLATE",
-  "NEXT_PUBLIC_MAP_ATTRIBUTION",
+  "NEXT_PUBLIC_MEDIA_UPLOAD_ORIGIN",
   "DATABASE_URL",
   "WEB_ORIGIN",
   "JWT_SECRET",
   "OTP_HASH_SECRET",
   "SECURITY_IDENTIFIER_HASH_SECRET",
-  "EMAIL_FROM",
-  "RESEND_API_KEY",
-  "PAYMENT_SERVICE_URL",
-  "PAYMENT_SERVICE_API_KEY",
   "VALKEY_URL",
   "LISTING_MEDIA_STORAGE_ENDPOINT",
   "LISTING_MEDIA_UPLOAD_ENDPOINT",
@@ -39,6 +34,21 @@ export function validateProductionConfig(environment) {
     .map((name) => `${name} is required`);
 
   if (environment.NODE_ENV && environment.NODE_ENV !== "production") errors.push("NODE_ENV must be production");
+  errors.push(...validateAuthProviderConfig(environment));
+  errors.push(...validateAuthProviderConfig(environment, true));
+  if ((environment.AUTH_PROVIDER ?? "email") !== (environment.NEXT_PUBLIC_AUTH_PROVIDER ?? "email")) errors.push("AUTH_PROVIDER and NEXT_PUBLIC_AUTH_PROVIDER must select the same authentication provider");
+  if ((environment.NEXT_PUBLIC_AUTH_METHODS ?? "").split(",").map(entry => entry.trim()).includes("phone") && environment.PHONE_AUTH_PROVIDER !== "twilio-verify") {
+    errors.push("NEXT_PUBLIC_AUTH_METHODS lists phone, so PHONE_AUTH_PROVIDER must be twilio-verify");
+  }
+  if (environment.NEXT_PUBLIC_WEBSITE_DEMO && environment.NEXT_PUBLIC_WEBSITE_DEMO !== "false") {
+    errors.push("NEXT_PUBLIC_WEBSITE_DEMO must be unset or false for the full marketplace deployment");
+  }
+  if (environment.NEXT_PUBLIC_ENABLE_PREVIEW_DATA && environment.NEXT_PUBLIC_ENABLE_PREVIEW_DATA !== "false") {
+    errors.push("NEXT_PUBLIC_ENABLE_PREVIEW_DATA must be unset or false for the connected deployment");
+  }
+  if (environment.NODE_TLS_REJECT_UNAUTHORIZED === "0") {
+    errors.push("NODE_TLS_REJECT_UNAUTHORIZED must not disable TLS verification");
+  }
 
   const publicApiUrl = requireUrl(environment, "NEXT_PUBLIC_API_BASE_URL", ["https:"], errors);
   rejectPublicUrlComponents(publicApiUrl, "NEXT_PUBLIC_API_BASE_URL", errors);
@@ -47,11 +57,7 @@ export function validateProductionConfig(environment) {
     errors.push("NEXT_PUBLIC_API_BASE_URL must end with /api/v1");
   }
 
-  const mapTileUrl = requireUrl(environment, "NEXT_PUBLIC_MAP_TILE_URL_TEMPLATE", ["https:"], errors);
-  rejectPublicUrlComponents(mapTileUrl, "NEXT_PUBLIC_MAP_TILE_URL_TEMPLATE", errors);
-  if (environment.NEXT_PUBLIC_MAP_TILE_URL_TEMPLATE && !["{z}", "{x}", "{y}"].every((token) => environment.NEXT_PUBLIC_MAP_TILE_URL_TEMPLATE.includes(token))) {
-    errors.push("NEXT_PUBLIC_MAP_TILE_URL_TEMPLATE must include {z}, {x}, and {y}");
-  }
+  errors.push(...validateMapConfig(environment));
 
   const webOrigin = requireUrl(environment, "WEB_ORIGIN", ["https:"], errors);
   rejectPublicUrlComponents(webOrigin, "WEB_ORIGIN", errors);
@@ -60,23 +66,74 @@ export function validateProductionConfig(environment) {
   }
 
   requireUrl(environment, "DATABASE_URL", ["postgresql:", "postgres:"], errors, (url) => {
-    if (url.searchParams.get("sslmode") !== "require" && url.searchParams.get("sslmode") !== "verify-full") {
-      errors.push("DATABASE_URL must require TLS");
+    if (url.searchParams.get("sslmode") !== "require" || url.searchParams.getAll("sslmode").length !== 1) {
+      errors.push("DATABASE_URL must use one sslmode=require setting supported by Prisma 6");
+    }
+    if (url.searchParams.get("sslaccept") !== "strict" || url.searchParams.getAll("sslaccept").length !== 1) {
+      errors.push("DATABASE_URL must use one sslaccept=strict setting for certificate verification");
+    }
+    for (const [name, seconds] of Object.entries({ connect_timeout: 2, pool_timeout: 2, socket_timeout: 3 })) {
+      if (url.searchParams.getAll(name).length !== 1 || url.searchParams.get(name) !== String(seconds)) {
+        errors.push(`DATABASE_URL must use one ${name}=${seconds} setting`);
+      }
+    }
+    const supported = new Set(["schema", "connection_limit", "sslmode", "sslaccept", "connect_timeout", "pool_timeout", "socket_timeout"]);
+    for (const name of url.searchParams.keys()) {
+      if (!supported.has(name)) errors.push("DATABASE_URL contains an unsupported driver setting");
+      if (url.searchParams.getAll(name).length !== 1) errors.push("DATABASE_URL contains an ambiguous driver setting");
+    }
+    const maximum = url.searchParams.get("connection_limit");
+    if (maximum !== null && (!/^[1-9]\d*$/.test(maximum) || Number(maximum) > 10)) {
+      errors.push("DATABASE_URL connection_limit must be an integer from 1 to 10");
+    }
+    const schema = url.searchParams.get("schema") ?? "public";
+    if (!schema || ["$user", "pg_temp"].includes(schema) || schema.includes("\0") || Buffer.byteLength(schema) > 63) {
+      errors.push("DATABASE_URL schema must be a non-empty literal PostgreSQL identifier of at most 63 bytes");
+    }
+    if (url.hash) errors.push("DATABASE_URL must not include a fragment");
+  });
+
+  const paymentMode = environment.PAYMENT_MODE ?? "production";
+  if (!["production", "demo"].includes(paymentMode)) errors.push("PAYMENT_MODE must be production or demo");
+  if (paymentMode !== "demo") {
+    for (const name of ["PAYMENT_SERVICE_URL", "PAYMENT_SERVICE_API_KEY"]) {
+      if (typeof environment[name] !== "string" || !environment[name].trim()) errors.push(`${name} is required`);
+    }
+    const paymentServiceUrl = requireUrl(environment, "PAYMENT_SERVICE_URL", ["https:"], errors);
+    rejectPublicUrlComponents(paymentServiceUrl, "PAYMENT_SERVICE_URL", errors);
+    rejectBaseUrlQuery(paymentServiceUrl, "PAYMENT_SERVICE_URL", errors);
+  }
+
+  requireUrl(environment, "VALKEY_URL", ["rediss:"], errors, (url) => {
+    const database = url.pathname.slice(1);
+    if ((url.port && Number(url.port) < 1) || url.search || url.hash ||
+        (url.pathname && url.pathname !== "/" && (!/^\d+$/.test(database) || !Number.isSafeInteger(Number(database))))) {
+      errors.push("VALKEY_URL must use an optional non-negative database number without a query or fragment");
+    }
+    try {
+      decodeURIComponent(url.username);
+      decodeURIComponent(url.password);
+    } catch {
+      errors.push("VALKEY_URL must use valid encoded credentials");
     }
   });
 
-  const paymentServiceUrl = requireUrl(environment, "PAYMENT_SERVICE_URL", ["https:"], errors);
-  rejectPublicUrlComponents(paymentServiceUrl, "PAYMENT_SERVICE_URL", errors);
-  rejectBaseUrlQuery(paymentServiceUrl, "PAYMENT_SERVICE_URL", errors);
-
-  requireUrl(environment, "VALKEY_URL", ["rediss:"], errors);
-
-  requireUrl(environment, "LISTING_MEDIA_STORAGE_ENDPOINT", ["http:", "https:"], errors);
+  const storageUrl = requireUrl(environment, "LISTING_MEDIA_STORAGE_ENDPOINT", ["https:"], errors);
+  rejectPublicUrlComponents(storageUrl, "LISTING_MEDIA_STORAGE_ENDPOINT", errors);
+  rejectBaseUrlQuery(storageUrl, "LISTING_MEDIA_STORAGE_ENDPOINT", errors);
   const uploadUrl = requireUrl(environment, "LISTING_MEDIA_UPLOAD_ENDPOINT", ["https:"], errors);
   rejectPublicUrlComponents(uploadUrl, "LISTING_MEDIA_UPLOAD_ENDPOINT", errors);
+  rejectBaseUrlQuery(uploadUrl, "LISTING_MEDIA_UPLOAD_ENDPOINT", errors);
+  const publicUploadOrigin = requireUrl(environment, "NEXT_PUBLIC_MEDIA_UPLOAD_ORIGIN", ["https:"], errors);
+  rejectPublicUrlComponents(publicUploadOrigin, "NEXT_PUBLIC_MEDIA_UPLOAD_ORIGIN", errors);
+  if (publicUploadOrigin && (publicUploadOrigin.pathname !== "/" || publicUploadOrigin.search || publicUploadOrigin.hash)) {
+    errors.push("NEXT_PUBLIC_MEDIA_UPLOAD_ORIGIN must be an HTTPS origin without a path, query, or fragment");
+  }
+  if (publicUploadOrigin && uploadUrl && publicUploadOrigin.origin !== uploadUrl.origin) {
+    errors.push("NEXT_PUBLIC_MEDIA_UPLOAD_ORIGIN must match the LISTING_MEDIA_UPLOAD_ENDPOINT origin");
+  }
 
-  if (environment.EMAIL_SENDER !== "resend") errors.push("EMAIL_SENDER must be resend");
-  if (environment.EMAIL_FROM?.trim() === "Sublet Pipeline <no-reply@example.com>") {
+  if ((environment.AUTH_PROVIDER ?? "email") === "email" && environment.EMAIL_FROM?.trim() === "Sublet Pipeline <no-reply@example.com>") {
     errors.push("EMAIL_FROM must not use the development default");
   }
   if (environment.LOCAL_ADMIN_EMAILS?.trim()) {
@@ -87,6 +144,11 @@ export function validateProductionConfig(environment) {
     if (environment[name] && Buffer.byteLength(environment[name], "utf8") < 32) errors.push(`${name} must be at least 32 bytes`);
     if (environment[name] === developmentAuthenticationSecrets.get(name)) {
       errors.push(`${name} must not use a development default`);
+    }
+  }
+  for (const name of [...authenticationSecrets, "RESEND_API_KEY", "TWILIO_AUTH_TOKEN", "TWILIO_API_KEY_SECRET", "PAYMENT_SERVICE_API_KEY", "LISTING_MEDIA_STORAGE_ACCESS_KEY_ID", "LISTING_MEDIA_STORAGE_SECRET_ACCESS_KEY"]) {
+    if (typeof environment[name] === "string" && isPlaceholder(environment[name])) {
+      errors.push(`${name} must not use a placeholder`);
     }
   }
   const configuredAuthenticationSecrets = authenticationSecrets.map((name) => environment[name]).filter(Boolean);
@@ -101,6 +163,93 @@ export function validateProductionConfig(environment) {
   requireFixedPositiveInteger(environment, "LISTING_MEDIA_UPLOAD_TTL_SECONDS", 600, errors);
 
   return errors;
+}
+
+/** Shared provider gate; Neon uses real Google identity instead of email transport. */
+export function validateAuthProviderConfig(environment, frontend = false) {
+  const errors = [];
+  const field = frontend ? "NEXT_PUBLIC_AUTH_PROVIDER" : "AUTH_PROVIDER";
+  const provider = environment[field] ?? "email";
+  if (!["email", "neon"].includes(provider)) errors.push(`${field} must be email or neon`);
+  if (!frontend && environment.PUBLIC_BETA_SIGNUP !== undefined && !["true", "false"].includes(environment.PUBLIC_BETA_SIGNUP)) errors.push("PUBLIC_BETA_SIGNUP must be true or false");
+  if (!frontend && environment.PUBLIC_BETA_SIGNUP === "true" && provider !== "neon") errors.push("PUBLIC_BETA_SIGNUP requires AUTH_PROVIDER=neon");
+  if (provider === "neon") {
+    const raw = environment.NEON_AUTH_BASE_URL;
+    let url;
+    try { url = new URL(raw); } catch { /* Report only the field name below. */ }
+    if (!raw || raw.length > 2048 || !url || url.protocol !== "https:" || url.port || url.username || url.password || url.search || url.hash ||
+        !/^ep-[a-z0-9-]+\.neonauth\.(?:c-[0-9]{1,3}\.)?[a-z0-9-]+\.aws\.neon\.tech$/.test(url.hostname) || !/^\/[a-zA-Z0-9_-]+\/auth\/?$/.test(url.pathname)) {
+      errors.push("NEON_AUTH_BASE_URL must be a configured HTTPS managed Neon Auth project endpoint");
+    } else if (!frontend && environment.NEON_AUTH_JWKS_URL !== undefined && environment.NEON_AUTH_JWKS_URL !== `${url.href.replace(/\/$/, "")}/.well-known/jwks.json`) {
+      errors.push("NEON_AUTH_JWKS_URL must match the configured Neon Auth project");
+    }
+    if (frontend) {
+      const secret = environment.NEON_AUTH_COOKIE_SECRET;
+      if (!secret || secret.length < 32 || isPlaceholder(secret)) errors.push("NEON_AUTH_COOKIE_SECRET must be a strong server-only secret of at least 32 characters");
+      const app = requireUrl(environment, "NEON_AUTH_APP_ORIGIN", ["https:"], errors);
+      if (!environment.NEON_AUTH_APP_ORIGIN?.trim()) errors.push("NEON_AUTH_APP_ORIGIN is required");
+      rejectPublicUrlComponents(app, "NEON_AUTH_APP_ORIGIN", errors);
+      if (app && (app.port || app.pathname !== "/" || app.search || !app.hostname.includes(".") || /^[\d.]+$/.test(app.hostname) || app.hostname.includes(":") ||
+          /(?:^|\.)(?:localhost|local|internal|invalid|test|example|example\.com|example\.org|example\.net)$/.test(app.hostname))) errors.push("NEON_AUTH_APP_ORIGIN must be the configured public HTTPS website origin");
+    }
+  } else if (!frontend) {
+    for (const name of ["EMAIL_FROM", "RESEND_API_KEY"]) if (!environment[name]?.trim()) errors.push(`${name} is required`);
+    if (environment.EMAIL_SENDER !== "resend") errors.push("EMAIL_SENDER must be resend");
+  }
+  if (frontend) {
+    const raw = environment.NEXT_PUBLIC_AUTH_METHODS;
+    if (raw !== undefined && raw.trim() !== "") {
+      const methods = raw.split(",").map(entry => entry.trim());
+      if (provider !== "neon") errors.push("NEXT_PUBLIC_AUTH_METHODS applies only with NEXT_PUBLIC_AUTH_PROVIDER=neon");
+      if (methods.some(entry => !["google", "github", "email", "phone"].includes(entry)) || new Set(methods).size !== methods.length) {
+        errors.push("NEXT_PUBLIC_AUTH_METHODS must be a comma-separated subset of google,github,email,phone");
+      }
+      if (!methods.some(entry => ["google", "github", "email"].includes(entry))) errors.push("NEXT_PUBLIC_AUTH_METHODS needs a method that can create an account (google, github or email)");
+    }
+  } else errors.push(...validatePhoneAuthConfig(environment));
+  return errors;
+}
+
+/** Phone sign-in is off unless a real SMS verification provider is configured. */
+export function validatePhoneAuthConfig(environment) {
+  const errors = [];
+  const provider = environment.PHONE_AUTH_PROVIDER ?? "disabled";
+  if (!["disabled", "twilio-verify"].includes(provider)) errors.push("PHONE_AUTH_PROVIDER must be disabled or twilio-verify in production");
+  if (provider !== "twilio-verify") return errors;
+  const regions = (environment.PHONE_AUTH_REGIONS ?? "US_CA").split(",").map(entry => entry.trim());
+  if (regions.some(entry => !["US_CA", "CN"].includes(entry)) || new Set(regions).size !== regions.length) errors.push("PHONE_AUTH_REGIONS must be a comma-separated subset of US_CA,CN");
+  if (!/^AC[0-9a-f]{32}$/.test(environment.TWILIO_ACCOUNT_SID ?? "")) errors.push("TWILIO_ACCOUNT_SID must be a Twilio account SID");
+  if (!/^VA[0-9a-f]{32}$/.test(environment.TWILIO_VERIFY_SERVICE_SID ?? "")) errors.push("TWILIO_VERIFY_SERVICE_SID must be a Twilio Verify service SID");
+  const apiKey = Boolean(environment.TWILIO_API_KEY_SID || environment.TWILIO_API_KEY_SECRET);
+  if (apiKey && environment.TWILIO_AUTH_TOKEN) errors.push("Configure either a Twilio API key or TWILIO_AUTH_TOKEN, not both");
+  if (apiKey) {
+    if (!/^SK[0-9a-f]{32}$/.test(environment.TWILIO_API_KEY_SID ?? "")) errors.push("TWILIO_API_KEY_SID must be a Twilio API key SID");
+    if (!/^[A-Za-z0-9]{32}$/.test(environment.TWILIO_API_KEY_SECRET ?? "")) errors.push("TWILIO_API_KEY_SECRET must be a Twilio API key secret");
+  } else if (!/^[0-9a-f]{32}$/.test(environment.TWILIO_AUTH_TOKEN ?? "")) errors.push("Twilio Verify needs an API key or TWILIO_AUTH_TOKEN");
+  for (const name of Object.keys(environment)) if (/^NEXT_PUBLIC_.*TWILIO/.test(name)) errors.push(`${name} must not expose Twilio settings to the browser`);
+  return errors;
+}
+
+// MapLibre uses the public OpenFreeMap vector style by default. A custom vector
+// style does not need a legacy raster template or an invented public key.
+export function validateMapConfig(environment) {
+  const errors = [];
+  const style = requireUrl(environment, "NEXT_PUBLIC_MAP_STYLE_URL", ["https:"], errors);
+  rejectPublicUrlComponents(style, "NEXT_PUBLIC_MAP_STYLE_URL", errors);
+  const tiles = requireUrl(environment, "NEXT_PUBLIC_MAP_TILE_URL_TEMPLATE", ["https:"], errors);
+  rejectPublicUrlComponents(tiles, "NEXT_PUBLIC_MAP_TILE_URL_TEMPLATE", errors);
+  if (environment.NEXT_PUBLIC_MAP_TILE_URL_TEMPLATE && !["{z}", "{x}", "{y}"].every(token => environment.NEXT_PUBLIC_MAP_TILE_URL_TEMPLATE.includes(token))) {
+    errors.push("NEXT_PUBLIC_MAP_TILE_URL_TEMPLATE must include {z}, {x}, and {y}");
+  }
+  if (tiles && !environment.NEXT_PUBLIC_MAP_ATTRIBUTION?.trim()) errors.push("NEXT_PUBLIC_MAP_ATTRIBUTION is required for a custom raster basemap");
+  for (const [name, url] of [["NEXT_PUBLIC_MAP_STYLE_URL", style], ["NEXT_PUBLIC_MAP_TILE_URL_TEMPLATE", tiles]]) {
+    if (url && [...url.searchParams.values()].some(isPlaceholder)) errors.push(`${name} must not contain placeholder credentials`);
+  }
+  return errors;
+}
+
+function isPlaceholder(value) {
+  return /^(?:replace[-_ ]?me|change[-_ ]?me|your[-_ ](?:.*)|todo|example)$/i.test(value.trim());
 }
 
 function requireUrl(environment, name, protocols, errors, validate) {
@@ -225,7 +374,12 @@ function environmentFromCompose(environmentFiles, processEnvironment) {
   try {
     const apiEnvironment = stringEnvironment(configuration.services.api.environment);
     const webBuildArguments = stringEnvironment(configuration.services.web.build.args);
-    return { ...apiEnvironment, ...webBuildArguments };
+    const webEnvironment = configuration.services.web.environment ? stringEnvironment(configuration.services.web.environment) : {};
+    const webAuth = Object.fromEntries(Object.entries(webEnvironment).filter(([name]) => ["NEON_AUTH_BASE_URL", "NEON_AUTH_APP_ORIGIN", "NEON_AUTH_COOKIE_SECRET"].includes(name)));
+    if (apiEnvironment.AUTH_PROVIDER === "neon" && webAuth.NEON_AUTH_BASE_URL && webAuth.NEON_AUTH_BASE_URL !== apiEnvironment.NEON_AUTH_BASE_URL) {
+      throw new Error("Neon authentication must use the same managed project on web and API services.");
+    }
+    return { ...apiEnvironment, ...webBuildArguments, ...webAuth };
   } catch {
     throw new Error("Unable to read production Compose configuration.");
   }

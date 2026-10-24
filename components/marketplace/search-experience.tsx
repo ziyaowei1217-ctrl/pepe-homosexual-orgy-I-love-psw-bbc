@@ -2,7 +2,7 @@
 
 import { ArrowLeft, ArrowRight, BedDouble, CalendarDays, Check, ChevronDown, Heart, LayoutGrid, List, Map, MapPin, Search, SlidersHorizontal, X } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { startTransition, useEffect, useMemo, useRef, useState } from "react";
 
 import { EmptyState } from "@/components/marketplace/empty-state";
 import { ListingCard } from "@/components/marketplace/listing-card";
@@ -15,11 +15,13 @@ import { useListingMatches } from "@/components/marketplace/use-listing-matches"
 import { formatRangeLong } from "@/lib/date-format";
 import { rememberLastSearch } from "@/lib/feed-signals";
 import type { CatalogSort } from "@/lib/listing-catalog";
+import { formatMapBounds, getListingCoordinates } from "@/lib/listing-map";
 import type { PreviewListing } from "@/lib/preview-data";
 import { listingHref } from "@/lib/listing-stay";
 import { describeRenterPreferences, hasRenterPreferences } from "@/lib/renter-preferences";
 import { defaultSearch, emptyFilters, parseSearchState, rememberOpenedSearch, searchCatalog, searchDateError, searchHref, type SearchState } from "@/lib/search-state";
 import { cn } from "@/lib/utils";
+import { findUSMarketByArea } from "@/lib/us-market-catalog";
 
 export function SearchExperience({ listings, initialQuery, initialMoveIn, initialMoveOut, initialState }: {
   listings: PreviewListing[]; initialQuery: string; initialMoveIn: string; initialMoveOut: string; initialState?: SearchState;
@@ -29,6 +31,9 @@ export function SearchExperience({ listings, initialQuery, initialMoveIn, initia
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
   const [preferencesOpen, setPreferencesOpen] = useState(false);
+  const [phoneLayout, setPhoneLayout] = useState(false);
+  const toolbar = useRef<HTMLElement>(null);
+  const workspace = useRef<HTMLElement>(null);
   const cards = useRef(new globalThis.Map<string, HTMLElement>());
   const { savedIds, toggleSaved } = useSavedListings();
   const { savedPreferences, savePreferences, preferences, matches } = useListingMatches(listings, state);
@@ -60,9 +65,6 @@ export function SearchExperience({ listings, initialQuery, initialMoveIn, initia
       const fromUrl = parseSearchState(new URLSearchParams(window.location.search));
       setState((current) => searchHref(fromUrl) === searchHref(current) ? current : fromUrl);
     }
-    if (window.matchMedia?.("(max-width: 1023px)").matches) {
-      setState((current) => current.view === "split" ? { ...current, view: "list" } : current);
-    }
     const selected = initialState?.selected;
     if (selected) cards.current.get(selected)?.scrollIntoView?.({ block: "nearest", behavior: "instant" });
   }, [initialState?.selected]);
@@ -74,12 +76,30 @@ export function SearchExperience({ listings, initialQuery, initialMoveIn, initia
     if (mountedInitialState.current === initialState) return;
     mountedInitialState.current = initialState;
     if (initialState) {
-      const compact = window.matchMedia?.("(max-width: 1023px)").matches && initialState.view === "split";
-      setState(compact ? { ...initialState, view: "list" } : initialState);
+      setState(initialState);
       setHoveredId(null);
       setFilterOpen(null);
     }
   }, [initialState]);
+
+  useEffect(() => {
+    const media = window.matchMedia?.("(max-width: 1023px)");
+    if (!media) return;
+    const sync = () => setPhoneLayout(media.matches);
+    sync();
+    media.addEventListener("change", sync);
+    return () => media.removeEventListener("change", sync);
+  }, []);
+
+  useEffect(() => {
+    if (!toolbar.current || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => {
+      const height = toolbar.current?.getBoundingClientRect().height;
+      if (height) workspace.current?.style.setProperty("--search-toolbar-height", `${height}px`);
+    });
+    observer.observe(toolbar.current);
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     const onBack = () => { setState(parseSearchState(new URLSearchParams(window.location.search))); setHoveredId(null); setFilterOpen(null); };
@@ -93,13 +113,13 @@ export function SearchExperience({ listings, initialQuery, initialMoveIn, initia
     return () => window.clearTimeout(timer);
   }, [notice]);
 
-  function update(patch: Partial<SearchState>, history: "push" | "replace" = "push") {
+  function update(patch: Partial<SearchState>, history: "push" | "replace" | "none" = "push") {
     const next = { ...state, page: 1, selected: "", ...patch };
     changedHere.current = true;
     setState(next);
     setHoveredId(null);
     const href = searchHref(next);
-    if (href !== window.location.pathname + window.location.search) {
+    if (history !== "none" && href !== window.location.pathname + window.location.search) {
       if (history === "replace") window.history.replaceState(null, "", href);
       else window.history.pushState(null, "", href);
     }
@@ -151,9 +171,9 @@ export function SearchExperience({ listings, initialQuery, initialMoveIn, initia
     {([["split", "分屏", LayoutGrid], ["list", "列表", List], ["map", "地图", Map]] as const).map(([view, label, Icon]) => <button key={view} type="button" onClick={() => update({ view, page: state.page, selected: state.selected })} aria-pressed={state.view === view} className={cn("flex min-h-11 items-center gap-2 rounded-full px-4 text-d-subhead font-semibold", state.view === view ? "bg-surface text-ink" : "text-on-dark-secondary hover:bg-on-dark/10", view === "split" && "hidden lg:flex")}><Icon className="size-4" aria-hidden="true" />{label}</button>)}
   </div>;
 
-  return <main className="search-workspace min-h-[calc(100dvh-72px)] bg-background">
+  return <main ref={workspace} className="search-workspace min-h-[calc(100dvh-72px)] bg-background">
     {/* On phones the site header scrolls away and only this toolbar stays, so results keep most of the screen. */}
-    <section className="search-toolbar sticky top-0 z-40 border-b border-line-strong bg-surface md:top-[72px]">
+    <section ref={toolbar} className="search-toolbar sticky top-0 z-40 border-b border-line-strong bg-surface md:top-[72px]">
       <div className="mx-auto flex max-w-[1920px] flex-col gap-2 px-4 py-2 sm:px-6 lg:flex-row lg:items-center lg:gap-4 lg:px-8 lg:py-4">
         <form action="/search" aria-label="修改搜索" onSubmit={(event) => { event.preventDefault(); update({}, "replace"); }} className="field-shell flex min-w-0 items-center gap-3 rounded-full border-[1.5px] border-ink bg-surface p-1 pl-4 lg:w-[380px] lg:shrink-0 lg:p-1.5 lg:pl-4">
           <MapPin className="size-4 shrink-0 text-primary-text" aria-hidden="true" />
@@ -173,7 +193,7 @@ export function SearchExperience({ listings, initialQuery, initialMoveIn, initia
 
     {/* The map view hides the list and its heading; the page still needs its title. */}
     {state.view === "map" ? <h1 id="result-heading" className="sr-only">{catalog.heading}</h1> : null}
-    <div className={cn("mx-auto grid max-w-[1920px]", state.view === "split" && "lg:grid-cols-[minmax(480px,0.95fr)_minmax(0,1.05fr)]")}>
+    <div className={cn("mx-auto flex max-w-[1920px] flex-col lg:grid lg:items-start", state.view === "split" && "lg:grid-cols-[minmax(480px,0.95fr)_minmax(0,1.05fr)]")}>
       <section className={cn("min-w-0 px-4 pb-28 pt-1 sm:px-6 sm:pt-6 lg:px-8", state.view === "map" && "hidden")} aria-labelledby="result-heading">
         {/* Phones get a title-size heading so the first price is on the first screen. */}
         {/* The results are the page; the heading names them without out-shouting the prices. */}
@@ -213,12 +233,15 @@ export function SearchExperience({ listings, initialQuery, initialMoveIn, initia
         </div> : <EmptyState className="mt-7" mood="curious" title="没有找到符合条件的房源" body="试试调整预算、换一段日期，或者扩大找房区域。" action={<button type="button" onClick={() => update({ ...defaultSearch, view: state.view })} className="min-h-12 rounded-full bg-primary px-6 font-rounded text-base font-bold text-on-primary hover:bg-primary-hover active:scale-[0.97]">清除筛选</button>} />}
         {catalog.pageCount > 1 ? <nav aria-label="房源分页" className="mt-10 flex items-center justify-center gap-5"><button type="button" disabled={catalog.page <= 1} onClick={() => { update({ page: catalog.page - 1 }); window.scrollTo({ top: 0 }); }} aria-label="上一页" className="grid size-11 place-items-center rounded-full border-[1.5px] border-outline bg-surface disabled:opacity-30"><ArrowLeft className="size-4" /></button><span className="text-d-subhead text-ink-secondary">第 {catalog.page} / {catalog.pageCount} 页</span><button type="button" disabled={catalog.page >= catalog.pageCount} onClick={() => { update({ page: catalog.page + 1 }); window.scrollTo({ top: 0 }); }} aria-label="下一页" className="grid size-11 place-items-center rounded-full border-[1.5px] border-outline bg-surface disabled:opacity-30"><ArrowRight className="size-4" /></button></nav> : null}
       </section>
-      {state.view !== "list" ? <ListingMap
+      {state.view !== "list" || phoneLayout ? <ListingMap
         label="房源地图"
-        className={cn("min-h-[calc(100dvh-112px)] border-l border-line-strong lg:sticky lg:top-[153px] lg:h-[calc(100dvh-153px)] lg:min-h-0", state.view === "split" && "hidden lg:block")}
+        className={cn("sticky top-[var(--search-toolbar-height,126px)] z-20 order-first shrink-0 border-b border-line-strong md:top-[calc(72px+var(--search-toolbar-height,126px))] lg:order-none lg:top-[153px] lg:h-[calc(100dvh-153px)] lg:min-h-0 lg:max-h-none lg:border-b-0 lg:border-l",
+          state.view === "map" ? "h-[calc(100svh-var(--search-toolbar-height,126px)-152px)] min-h-[280px]" : "h-[36svh] min-h-[220px] max-h-[300px]",
+          state.view === "list" && "lg:hidden")}
         listings={catalog.mapItems}
         fitKey={searchHref({ ...state, bounds: null, page: 1, selected: "", view: "split", sort: "recommended" })}
         bounds={state.bounds}
+        center={findUSMarketByArea(state.query)?.center ?? getListingCoordinates(state.query)}
         moveIn={stayIn}
         moveOut={stayOut}
         highlightedId={hoveredId}
@@ -227,14 +250,20 @@ export function SearchExperience({ listings, initialQuery, initialMoveIn, initia
         onOpen={rememberSearch}
         onToggleSave={saveListing}
         searchArea={{
-          onSearch: (bounds) => update({ bounds, query: "", page: 1, selected: state.selected }, "replace"),
+          onSearch: (bounds, commit = true) => {
+            if (commit || state.query || !state.bounds || formatMapBounds(state.bounds) !== formatMapBounds(bounds)) {
+              // Keep Safari's history rate limit out of continuous touch gestures. The result list re-renders as a
+              // transition, so it never holds up the map while it is being dragged.
+              startTransition(() => update({ bounds, query: "", page: 1, selected: state.selected }, commit ? "replace" : "none"));
+            }
+          },
           onClear: () => update({ bounds: null, page: 1, selected: state.selected }, "replace")
         }}
         controls={viewSwitch}
       /> : null}
     </div>
-    {/* Phones and tablets have two views, so one button to the other view, on the right where it does not cover a card's price. */}
-    <button type="button" onClick={() => update({ view: state.view === "map" ? "list" : "map", page: state.page, selected: state.selected })} className="fixed bottom-[82px] right-4 z-40 flex min-h-12 items-center gap-2 rounded-full bg-ink-block px-5 text-d-subhead font-semibold text-white shadow-menu active:scale-[0.97] md:bottom-6 lg:hidden">{state.view === "map" ? <><List className="size-4" aria-hidden="true" />列表</> : <><Map className="size-4" aria-hidden="true" />地图</>}</button>
+    {/* Expanding changes the layout; the phone map stays mounted in both views. */}
+    <button type="button" onClick={() => update({ view: state.view === "map" ? "split" : "map", page: state.page, selected: state.selected })} className="fixed bottom-[82px] right-4 z-40 flex min-h-12 items-center gap-2 rounded-full bg-ink-block px-5 text-d-subhead font-semibold text-white shadow-menu active:scale-[0.97] md:bottom-6 lg:hidden">{state.view === "map" ? <><List className="size-4" aria-hidden="true" />查看房源</> : <><Map className="size-4" aria-hidden="true" />展开地图</>}</button>
     {/* Desktop: in list view the three-way switch floats over the list; with a map on screen it sits at the bottom of
         the map, so in split view it does not straddle the list and cover its cards. */}
     {state.view === "list" ? <div className="fixed bottom-6 left-1/2 z-40 hidden -translate-x-1/2 lg:block">{viewSwitch}</div> : null}

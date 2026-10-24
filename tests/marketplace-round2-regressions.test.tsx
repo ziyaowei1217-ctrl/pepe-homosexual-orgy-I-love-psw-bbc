@@ -28,9 +28,10 @@ function installBackend(initial: ApiRentalApplication, userId = 'renter-a') {
     if (url.endsWith('/auth/me')) return Response.json({ id: otherAccount ? 'renter-b' : userId, email: `${userId}@example.com`, role: 'USER' });
     if (url.endsWith('/profiles/me')) return Response.json({ id: 'profile-a', displayName: otherAccount ? 'Account B' : 'Account A', role: 'lister' });
     if (url.endsWith('/applications/mine') || url.endsWith('/applications/host-inbox')) return Response.json(otherAccount ? [] : [current]);
-    if (url.endsWith('/applications/application-a') && options?.method !== 'POST') return otherAccount ? Response.json({}, { status: 404 }) : Response.json(current);
+    // Payment URLs share the application suffix; match the specific resource first.
     if (url.endsWith('/payments/configuration')) return Response.json({ mode: 'production' });
     if (url.endsWith('/payments/applications/application-a')) return Response.json({ status: payment });
+    if (url.endsWith('/applications/application-a') && options?.method !== 'POST') return otherAccount ? Response.json({}, { status: 404 }) : Response.json(current);
     if (options?.method === 'POST' && url.endsWith('/submit')) { current = { ...current, status: 'SUBMITTED' }; return Response.json(current); }
     if (options?.method === 'POST' && url.endsWith('/accept')) { current = { ...current, status: 'ACCEPTED' }; return Response.json(current); }
     if (options?.method === 'POST' && url.endsWith('/cancel')) {
@@ -105,19 +106,30 @@ it('keeps the same cancellation request after an uncertain failure and remount',
   const backend = installBackend(application('ACCEPTED'));
   backend.failCancellation(true);
   const view = render(<ApplicationDetailExperience applicationId="application-a" />);
+  // The detail and payment panels load independently. Finish the initial
+  // accepted-application refresh before testing the cancellation command.
+  await screen.findByRole('button', { name: '继续付款' });
   fireEvent.click(await screen.findByRole('button', { name: '取消申请' }));
   fireEvent.change(screen.getByLabelText('取消原因'), { target: { value: '计划改变' } });
   fireEvent.click(screen.getByRole('button', { name: '确认取消申请' }));
-  await screen.findByRole('alert');
+  expect((await screen.findByText('网络连接失败，请检查网络后重试。')).getAttribute('role')).toBe('alert');
+  await waitFor(() => {
+    expect(screen.getByRole('button', { name: '确认取消申请' })).toHaveProperty('disabled', false);
+    expect(backend.fetch.mock.calls.filter(([url]) => String(url).endsWith('/cancel'))).toHaveLength(1);
+  });
   view.unmount(); backend.failCancellation(false);
   render(<ApplicationDetailExperience applicationId="application-a" />);
+  await screen.findByRole('button', { name: '继续付款' });
   fireEvent.click(await screen.findByRole('button', { name: '取消申请' }));
   expect(screen.getByLabelText('取消原因')).toHaveProperty('value', '计划改变');
+  expect(screen.getByLabelText('取消原因')).toHaveProperty('readOnly', true);
   fireEvent.click(screen.getByRole('button', { name: '确认取消申请' }));
   await screen.findByText('取消处理中');
   const calls = backend.fetch.mock.calls.filter(([url]) => String(url).endsWith('/cancel'));
   expect(calls).toHaveLength(2);
+  expect(new Headers(calls[0][1]?.headers).get('Idempotency-Key')).toMatch(/^application-cancel-/);
   expect(new Headers(calls[0][1]?.headers).get('Idempotency-Key')).toBe(new Headers(calls[1][1]?.headers).get('Idempotency-Key'));
+  expect(JSON.parse(String(calls[0][1]?.body))).toEqual({ reason: '计划改变' });
   expect(JSON.parse(String(calls[1][1]?.body))).toEqual({ reason: '计划改变' });
 });
 it.each(['renter', 'host'])('does not offer cancellation starting on the move-in day to %s', async (role) => {

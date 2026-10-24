@@ -55,6 +55,11 @@ export class AdminRolesService {
         return { status: "ok" as const, user, outcome: "NOOP" as const };
       }
       const updated = await transaction.user.update({ where: { id: user.id }, data: { role: UserRole.ADMIN } });
+      // A phone linked while this was an ordinary account must not become the
+      // administrator step-up factor. The new administrator links one again,
+      // and it becomes usable for step-up after the waiting period.
+      const removedPhones = await transaction.phoneIdentity.deleteMany({ where: { userId: user.id } });
+      if (removedPhones.count) await transaction.profile.updateMany({ where: { email: user.email }, data: { phoneVerified: false } });
       await this.audit.append(transaction, roleAudit(normalizedInput, updated, "ADMIN_ROLE_GRANTED", "SUCCESS"));
       return { status: "ok" as const, user: updated, outcome: "SUCCESS" as const };
     });

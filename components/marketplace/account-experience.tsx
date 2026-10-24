@@ -17,6 +17,10 @@ import Link from "next/link";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 
 import { PageHeader } from "@/components/marketplace/page-header";
+import { SignInOptions } from "@/components/marketplace/sign-in-options";
+import { PhoneVerificationRow } from "@/components/marketplace/phone-verification";
+import { enabledAuthMethods, signInViaPhrase } from "@/lib/auth-methods";
+import { endGoogleSession, usesNeonAuth } from "@/lib/neon-auth-client";
 import {
   getMyProfile,
   getSessionUser,
@@ -48,10 +52,39 @@ type AccountExperienceProps = { mode: AccountMode; returnTo?: string | null; aut
 
 export function AccountExperience(props: AccountExperienceProps) {
   const token = useAuthSessionToken();
-  return <AccountSessionExperience key={token ?? "guest"} {...props} token={token} />;
+  // Keep provider-logout feedback outside the keyed private account view.
+  const [logoutError, setLogoutError] = useState<string | null>(null);
+  const [logoutPending, setLogoutPending] = useState(false);
+  const logoutBusy = useRef(false);
+
+  async function finishProviderLogout() {
+    if (logoutBusy.current) return;
+    logoutBusy.current = true;
+    setLogoutPending(true);
+    setLogoutError(null);
+    try { await endGoogleSession(); }
+    catch {
+      if (!readStoredAuthSession()?.accessToken) setLogoutError("已退出此设备，但登录服务尚未完成退出。请重试结束登录会话。");
+    } finally { logoutBusy.current = false; setLogoutPending(false); }
+  }
+
+  function logout() {
+    if (!token || logoutBusy.current || readStoredAuthSession()?.accessToken !== token) return;
+    // Removing this device's private session must never depend on an upstream service.
+    clearStoredAuthSession();
+    void finishProviderLogout();
+  }
+
+  function retryProviderLogout() {
+    if (!readStoredAuthSession()?.accessToken) void finishProviderLogout();
+  }
+
+  return <AccountSessionExperience key={token ?? "guest"} {...props} token={token} logoutError={token ? null : logoutError} logoutPending={logoutPending} onLogout={logout} onRetryProviderLogout={retryProviderLogout} />;
 }
 
-function AccountSessionExperience({ mode, returnTo = null, authIntent = "account", token }: AccountExperienceProps & { token: string | null }) {
+function AccountSessionExperience({ mode, returnTo = null, authIntent = "account", token, logoutError, logoutPending, onLogout, onRetryProviderLogout }: AccountExperienceProps & {
+  token: string | null; logoutError: string | null; logoutPending: boolean; onLogout: () => void; onRetryProviderLogout: () => void;
+}) {
   const [user, setUser] = useState<SessionUser | null>(null);
   const [profile, setProfile] = useState<ApiProfile | null>(null);
   const [applications, setApplications] = useState<ApiRentalApplication[] | null>(null);
@@ -91,17 +124,16 @@ function AccountSessionExperience({ mode, returnTo = null, authIntent = "account
     if ((readStoredAuthSession()?.accessToken ?? null) !== token) return;
     writeStoredAuthSession(accessToken);
     if (returnTo && typeof window !== "undefined") window.location.assign(returnTo);
-  }
-
-  function logout() {
-    if (readStoredAuthSession()?.accessToken !== token) return;
-    clearStoredAuthSession();
+    // In-page sign-in keeps the scroll position of the form; show the account from the top.
+    else if (typeof window !== "undefined") window.scrollTo?.({ top: 0 });
   }
 
   const authenticated = Boolean(token && user);
   return (
     <main className="page-container pb-16 pt-8 sm:pt-12">
       <PageHeader title="我的账户" description="更新个人资料，查看认证状态、申请和消息。" />
+      {logoutError ? <div role="alert" className="mt-4 text-danger-text"><p>{logoutError}</p><button type="button" disabled={logoutPending} onClick={onRetryProviderLogout} className="secondary-action mt-3">重试结束登录会话</button></div> : null}
+      {logoutPending && !token ? <p role="status" className="mt-4 text-ink-secondary">已退出此设备，正在结束登录会话…</p> : null}
       {notice ? <div role="status" className="mt-5 rounded-psw-md bg-success-soft px-4 py-3 text-d-subhead font-semibold text-success-text">{notice}</div> : null}
       <div className="mt-5 grid items-start gap-4 lg:mt-8 lg:grid-cols-[250px_minmax(0,1fr)] lg:gap-6">
         <aside className="flex min-w-0 items-center overflow-hidden rounded-psw-lg bg-surface p-1 lg:block lg:rounded-psw-xl lg:p-2">
@@ -114,18 +146,18 @@ function AccountSessionExperience({ mode, returnTo = null, authIntent = "account
               </Link>;
             })}
           </nav>
-          {authenticated ? <button onClick={logout} aria-label="退出登录" className="ml-1 flex size-11 shrink-0 items-center justify-center rounded-psw-md text-sm font-bold text-ink-secondary hover:bg-surface-subtle lg:ml-0 lg:mt-2 lg:h-auto lg:w-full lg:justify-start lg:gap-3 lg:px-3 lg:py-3"><LogOut className="size-4" aria-hidden="true" /><span className="hidden lg:inline">退出登录</span></button> : null}
+          {token ? <button onClick={onLogout} disabled={logoutPending} aria-label="退出登录" className="ml-1 flex size-11 shrink-0 items-center justify-center rounded-psw-md text-sm font-bold text-ink-secondary hover:bg-surface-subtle lg:ml-0 lg:mt-2 lg:h-auto lg:w-full lg:justify-start lg:gap-3 lg:px-3 lg:py-3"><LogOut className="size-4" aria-hidden="true" /><span className="hidden lg:inline">退出登录</span></button> : null}
         </aside>
 
         {authenticated && token && user ? <AuthenticatedAccount mode={mode} token={token} user={user} profile={profile} applications={applications} onProfileChange={setProfile} onNotice={setNotice} />
           : token ? <section className="rounded-psw-xl bg-surface p-6 sm:p-8">{loading ? <p role="status" className="text-d-subhead text-ink-secondary">正在加载账户资料…</p> : <><p role="alert" className="text-d-subhead font-semibold text-danger-text">{loadError}</p><button type="button" onClick={() => setLoadAttempt((attempt) => attempt + 1)} className="primary-action mt-4">重新加载账户</button></>}</section>
-          : <GuestAccount mode={mode} returnTo={returnTo} authIntent={authIntent} onAuthenticated={handleAuthenticated} />}
+          : <GuestAccount mode={mode} returnTo={returnTo} authIntent={authIntent} onAuthenticated={handleAuthenticated} signInDisabled={logoutPending} />}
       </div>
     </main>
   );
 }
 
-function GuestAccount({ mode, returnTo, authIntent, onAuthenticated }: { mode: AccountMode; returnTo: string | null; authIntent: AuthIntent; onAuthenticated: (token: string, user: SessionUser) => void }) {
+function GuestAccount({ mode, returnTo, authIntent, onAuthenticated, signInDisabled }: { mode: AccountMode; returnTo: string | null; authIntent: AuthIntent; onAuthenticated: (token: string, user?: SessionUser) => void; signInDisabled: boolean }) {
   const [step, setStep] = useState<"email" | "code">("email");
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
@@ -174,6 +206,19 @@ function GuestAccount({ mode, returnTo, authIntent, onAuthenticated }: { mode: A
 
   const sectionLabel = mode === "profile" ? "个人资料" : mode === "verification" ? "身份与认证" : mode === "settings" ? "通知与隐私" : "账户首页";
   const resumingApplication = authIntent === "application" && returnTo?.startsWith("/applications/new");
+  const methods = enabledAuthMethods();
+  const passwordNote = methods.join(",") === "google" ? "psw 不会接收你的 Google 密码"
+    : methods.some((method) => method === "google" || method === "github") ? "psw 不会接收你的第三方账户密码"
+    : "psw 不使用密码，每次登录都用验证码";
+  if (usesNeonAuth()) return <section className="grid overflow-hidden rounded-psw-xl bg-surface xl:grid-cols-[minmax(0,1fr)_320px]">
+    <div className="p-5 sm:p-9"><span className="inline-flex items-center gap-1.5 rounded-psw-sm bg-primary-soft px-2.5 py-1 text-m-footnote font-bold text-primary-text"><LockKeyhole className="size-3.5" aria-hidden="true" />{sectionLabel}</span>
+      <h2 className="mt-4 font-rounded text-m-title sm:mt-6 sm:text-d-title">{resumingApplication ? "登录后继续申请" : "登录 psw"}</h2>
+      <p className="mt-3 max-w-lg text-sm leading-6 text-ink-secondary">{resumingApplication ? "申请尚未提交。登录后会返回申请页面，继续确认和提交。" : `${signInViaPhrase()}，查看申请、消息和租住进度。`}</p>
+      <SignInOptions returnTo={returnTo} disabled={signInDisabled} onAuthenticated={(accessToken) => onAuthenticated(accessToken)} />
+      <div className="mt-6 flex items-center gap-2 text-m-footnote font-bold text-ink-secondary"><ShieldCheck className="size-4 text-primary-text" aria-hidden="true" />{passwordNote}</div>
+    </div>
+    <div className="border-t border-line-strong bg-primary-soft p-6 sm:p-8 xl:border-l xl:border-t-0"><h3 className="text-d-label text-primary-text">登录后可以</h3><div className="mt-6 space-y-5"><Benefit icon={Heart} title="查看找房进度" detail="申请状态与已接受租住" /><Benefit icon={Mail} title="集中处理消息" detail="转租人、预约与室友对话" /><Benefit icon={FileCheck2} title="提高信任度" detail="完善资料与身份认证" /></div></div>
+  </section>;
   return <section className="grid overflow-hidden rounded-psw-xl bg-surface xl:grid-cols-[minmax(0,1fr)_320px]">
     <div className="p-5 sm:p-9"><span className="inline-flex items-center gap-1.5 rounded-psw-sm bg-primary-soft px-2.5 py-1 text-m-footnote font-bold text-primary-text"><LockKeyhole className="size-3.5" aria-hidden="true" />{sectionLabel}</span><h2 className="mt-4 font-rounded text-m-title text-ink sm:mt-6 sm:text-d-title">{resumingApplication ? "登录后继续申请" : "登录 psw"}</h2><p className="mt-2 max-w-lg text-sm leading-6 text-ink-secondary sm:mt-3">{resumingApplication ? "申请尚未提交。登录后会返回申请页面，继续确认和提交。" : "使用邮箱验证码登录，查看申请、消息和租住进度。"}</p><p className="mt-3 rounded-psw-md bg-surface-subtle px-3 py-2 text-m-footnote leading-5 text-ink">目前仅支持受邀邮箱或已有账户。请使用收到邀请的邮箱登录。</p>{resumingApplication && returnTo ? <Link href={returnTo} className="mt-3 inline-flex min-h-10 items-center text-sm font-bold text-primary-text underline underline-offset-4">返回申请</Link> : null}{step === "email" ? <form className="mt-5 max-w-md sm:mt-8" onSubmit={submitEmail}><label className="text-sm font-bold" htmlFor="account-email">邮箱地址</label><div className="mt-2 flex flex-col gap-3 sm:flex-row"><input id="account-email" type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="name@example.com" className="application-input flex-none sm:flex-1" /><button disabled={pending} className="h-12 shrink-0 rounded-full bg-primary px-5 font-rounded text-sm font-bold text-white hover:bg-primary-hover disabled:opacity-60">{pending ? "发送中…" : "发送验证码"}</button></div></form> : <form className="mt-5 max-w-md sm:mt-8" onSubmit={submitCode}><label className="text-sm font-bold" htmlFor="account-code">验证码</label><p className="mt-2 text-m-footnote leading-5 text-ink-secondary">若 {email} 已获邀或已有账户，验证码会发送至该邮箱。未收到时请检查垃圾邮件或修改邮箱后重试。</p><input id="account-code" inputMode="numeric" value={code} maxLength={6} onChange={(event) => setCode(normalizeVerificationCode(event.target.value))} placeholder="六位验证码" className="application-input mt-2" />{developmentHint ? <p className="mt-2 text-m-footnote font-bold text-primary-text">{developmentHint}</p> : null}<div className="mt-3 flex gap-3"><button disabled={pending} className="h-12 rounded-full bg-primary px-5 font-rounded text-sm font-bold text-white hover:bg-primary-hover">{pending ? "验证中…" : "验证并登录"}</button><button type="button" disabled={pending} onClick={() => { if (!busy.current) setStep("email"); }} className="px-3 text-sm font-bold text-ink-secondary">修改邮箱</button></div></form>}{error ? <p role="alert" className="mt-3 text-sm font-bold text-danger-text">{error}</p> : null}<div className="mt-5 flex items-center gap-2 text-m-footnote font-bold text-ink-secondary sm:mt-8"><ShieldCheck className="size-4 text-primary-text" />无需密码，验证码短时有效</div></div>
     <div className="border-t border-line-strong bg-primary-soft p-6 sm:p-8 xl:border-l xl:border-t-0"><h3 className="text-d-label text-primary-text">登录后可以</h3><div className="mt-6 space-y-5"><Benefit icon={Heart} title="查看找房进度" detail="申请状态与已接受租住" /><Benefit icon={Mail} title="集中处理消息" detail="转租人、预约与室友对话" /><Benefit icon={FileCheck2} title="提高信任度" detail="完善资料与身份认证" /></div></div>
@@ -182,7 +227,7 @@ function GuestAccount({ mode, returnTo, authIntent, onAuthenticated }: { mode: A
 
 function AuthenticatedAccount({ mode, token, user, profile, applications, onProfileChange, onNotice }: { mode: AccountMode; token: string; user: SessionUser; profile: ApiProfile | null; applications: ApiRentalApplication[] | null; onProfileChange: (profile: ApiProfile) => void; onNotice: (message: string) => void }) {
   if (mode === "profile") return <ProfileEditor token={token} profile={profile} onProfileChange={onProfileChange} onNotice={onNotice} />;
-  if (mode === "verification") return <VerificationPanel profile={profile} />;
+  if (mode === "verification") return <VerificationPanel token={token} profile={profile} onProfileChange={onProfileChange} />;
   if (mode === "settings") return <SettingsPanel />;
   const activeApplications = applications?.filter((application) => application.status === "DRAFT" || application.status === "SUBMITTED").length;
   const acceptedApplications = applications?.filter((application) => application.status === "ACCEPTED" || application.status === "COMPLETED").length;
@@ -234,14 +279,17 @@ function ProfileEditor({ token, profile, onProfileChange, onNotice }: { token: s
   return <section className="rounded-psw-2xl border border-line-strong bg-surface p-6 sm:p-8"><h2 className="font-rounded text-m-title sm:text-d-title font-bold">个人资料</h2><p className="mt-2 text-sm text-ink-secondary">更新账户名称、所在地和个人简介。租房申请的联系人信息请在提交时核对。</p><form className="mt-7 grid gap-5 sm:grid-cols-2" onSubmit={save}><Field label="显示名称" value={draft.displayName ?? ""} onChange={(value) => { setDraft({ ...draft, displayName: value }); setError(null); }} /><Field label="学校或公司" value={draft.school ?? ""} onChange={(value) => { setDraft({ ...draft, school: value }); setError(null); }} /><Field label="城市" value={draft.city ?? ""} onChange={(value) => { setDraft({ ...draft, city: value }); setError(null); }} /><label className="grid gap-2 text-sm font-bold">身份<select className="application-input" value={draft.role} onChange={(event) => { setDraft({ ...draft, role: event.target.value as UpdateProfileInput["role"] }); setError(null); }}><option value="renter">租客</option><option value="lister">转租人</option><option value="both">租客兼转租人</option></select></label><label className="grid gap-2 text-sm font-bold sm:col-span-2">个人简介<textarea className="min-h-28 rounded-psw-lg border border-line-strong p-4 text-sm outline-none focus:border-primary" value={draft.bio ?? ""} onChange={(event) => { setDraft({ ...draft, bio: event.target.value }); setError(null); }} /></label>{error ? <p role="alert" className="rounded-psw-lg bg-danger-soft px-4 py-3 text-sm font-bold text-danger-text sm:col-span-2">{error}</p> : null}<button disabled={saving} className="w-fit rounded-full bg-primary px-6 py-3 text-sm font-bold text-white">{saving ? "保存中…" : "保存资料"}</button></form></section>;
 }
 
-function VerificationPanel({ profile }: { profile: ApiProfile | null }) {
+function VerificationPanel({ token, profile, onProfileChange }: { token: string; profile: ApiProfile | null; onProfileChange: (profile: ApiProfile) => void }) {
+  const phoneEnabled = usesNeonAuth() && enabledAuthMethods().includes("phone");
   return <section className="rounded-psw-2xl border border-line-strong bg-surface p-6 sm:p-8">
     <h2 className="font-rounded text-m-title sm:text-d-title font-bold">身份与认证</h2>
-    <p className="mt-2 text-sm leading-6 text-ink-secondary">查看登录邮箱及其他认证的当前状态。</p>
+    <p className="mt-2 text-sm leading-6 text-ink-secondary">{phoneEnabled ? "查看登录邮箱的认证状态，绑定手机号后可用短信验证码登录。" : "查看登录邮箱及其他认证的当前状态。"}</p>
     <div className="mt-7 divide-y divide-line">
       <VerificationRow icon={Mail} title="邮箱认证" detail="账户登录邮箱已验证" done />
-      <VerificationRow icon={IdCard} title="教育邮箱" detail={profile?.eduEmailVerified ? "教育邮箱已验证" : "教育邮箱认证暂未开放。"} done={Boolean(profile?.eduEmailVerified)} />
-      <VerificationRow icon={ShieldCheck} title="手机认证" detail={profile?.phoneVerified ? "手机号已验证" : "手机号认证暂未开放。"} done={Boolean(profile?.phoneVerified)} />
+      <VerificationRow icon={IdCard} title="教育邮箱" detail={profile?.eduEmailVerified ? "教育邮箱已验证" : "用学校邮箱（如 .edu、.ac.uk、.edu.cn）登录，验证后自动标记为学生。"} done={Boolean(profile?.eduEmailVerified)} />
+      {phoneEnabled ? <PhoneVerificationRow token={token} onChanged={(linked) => { if (profile) onProfileChange({ ...profile, phoneVerified: linked }); }}
+          fallback={<VerificationRow icon={ShieldCheck} title="手机认证" detail={profile?.phoneVerified ? "手机号已验证" : "手机号认证暂未开放。"} done={Boolean(profile?.phoneVerified)} />} />
+        : <VerificationRow icon={ShieldCheck} title="手机认证" detail={profile?.phoneVerified ? "手机号已验证" : "手机号认证暂未开放。"} done={Boolean(profile?.phoneVerified)} />}
     </div>
   </section>;
 }

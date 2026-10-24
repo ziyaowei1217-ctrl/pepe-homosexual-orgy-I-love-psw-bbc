@@ -1,10 +1,14 @@
-import { Body, Controller, Get, Inject, Post, Req, Res, UseGuards, ValidationPipe } from "@nestjs/common";
+import { Body, Controller, Get, Inject, Optional, Post, Req, Res, UseGuards, ValidationPipe, ServiceUnavailableException } from "@nestjs/common";
 
 import { AuthRateLimitException, AuthRateLimiter, getRequestIdentity } from "./auth-rate-limit";
 import { AdminGuard } from "./admin.guard";
 import { AuthGuard, AuthenticatedRequest } from "./auth.guard";
+import { getAuthProvider } from "./auth-provider";
+import { NeonAuthService } from "./neon-auth.service";
 import { AuthService } from "./auth.service";
-import { AdminStepUpCodeDto, EmailCodeDto, VerifyEmailDto } from "./dto";
+import { AdminStepUpCodeDto, EmailCodeDto, VerifyEmailDto, NeonTokenExchangeDto } from "./dto";
+
+const neonTokenBodyPipe = new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true, expectedType: NeonTokenExchangeDto });
 
 const emailCodeBodyPipe = new ValidationPipe({
   whitelist: true,
@@ -31,7 +35,8 @@ const adminStepUpBodyPipe = new ValidationPipe({
 export class AuthController {
   constructor(
     @Inject(AuthService) private readonly auth: AuthService,
-    @Inject(AuthRateLimiter) private readonly rateLimiter: AuthRateLimiter
+    @Inject(AuthRateLimiter) private readonly rateLimiter: AuthRateLimiter,
+    @Optional() @Inject(NeonAuthService) private readonly neon?: NeonAuthService
   ) {}
 
   @Post("email-code")
@@ -40,6 +45,7 @@ export class AuthController {
     @Req() request: RequestWithIdentity,
     @Res({ passthrough: true }) response: HeaderResponse
   ) {
+    this.requireEmailProvider();
     await this.enforceRateLimit("send", "LOGIN", dto.email, request, response);
     return this.auth.requestEmailCode(dto.email);
   }
@@ -50,6 +56,7 @@ export class AuthController {
     @Req() request: RequestWithIdentity,
     @Res({ passthrough: true }) response: HeaderResponse
   ) {
+    this.requireEmailProvider();
     await this.enforceRateLimit("verify", "LOGIN", dto.email, request, response);
     return this.auth.verifyEmailCode(dto);
   }
@@ -60,6 +67,7 @@ export class AuthController {
     @Req() request: AuthenticatedRequest,
     @Res({ passthrough: true }) response: HeaderResponse
   ) {
+    this.requireEmailProvider();
     await this.enforceRateLimit("send", "ADMIN_STEP_UP", request.user.email, request, response);
     return this.auth.requestAdminStepUpCode(request.user.email);
   }
@@ -71,12 +79,28 @@ export class AuthController {
     @Body(adminStepUpBodyPipe) dto: AdminStepUpCodeDto,
     @Res({ passthrough: true }) response: HeaderResponse
   ) {
+    this.requireEmailProvider();
     await this.enforceRateLimit("verify", "ADMIN_STEP_UP", request.user.email, request, response);
     return this.auth.verifyAdminStepUpCode({
       userId: request.user.id,
       email: request.user.email,
       code: dto.code
     });
+  }
+
+  @Post("neon/exchange")
+  async exchangeNeonToken(
+    @Body(neonTokenBodyPipe) dto: NeonTokenExchangeDto,
+    @Req() request: RequestWithIdentity,
+    @Res({ passthrough: true }) response: HeaderResponse
+  ) {
+    if (getAuthProvider() !== "neon" || !this.neon) throw new ServiceUnavailableException({ code: "IDENTITY_PROVIDER_UNAVAILABLE", message: "External sign-in is not enabled" });
+    await this.enforceRateLimit("exchange", "LOGIN", "external-sign-in@psw.invalid", request, response);
+    return this.neon.exchange(dto.token);
+  }
+
+  private requireEmailProvider() {
+    if (getAuthProvider() !== "email") throw new ServiceUnavailableException({ code: "AUTH_DELIVERY_UNAVAILABLE", message: "Email codes are not available with this sign-in provider" });
   }
 
   @UseGuards(AuthGuard)
@@ -86,7 +110,7 @@ export class AuthController {
   }
 
   private async enforceRateLimit(
-    action: "send" | "verify",
+    action: "send" | "verify" | "exchange",
     purpose: "LOGIN" | "ADMIN_STEP_UP",
     email: string,
     request: RequestWithIdentity,

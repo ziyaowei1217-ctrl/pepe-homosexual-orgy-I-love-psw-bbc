@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { renderToStaticMarkup } from "react-dom/server";
-import { fireEvent } from "@testing-library/react";
+import { fireEvent, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import TestRenderer, { act } from "./support/dom-test-renderer";
 import { Map as FakeMap } from "./support/fake-maplibre";
@@ -16,9 +16,117 @@ vi.mock("maplibre-gl", () => import("./support/fake-maplibre"));
 const pinLabels = () => [...document.querySelectorAll(".map-pin")].map((pin) => pin.textContent);
 // MapLibre is imported after render; let that import settle.
 const loadMap = () => act(async () => { await new Promise((resolve) => setTimeout(resolve, 50)); });
+function phoneViewport() {
+  vi.stubGlobal("matchMedia", (media: string) => ({
+    media, matches: media === "(max-width: 1023px)", onchange: null,
+    addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {}, dispatchEvent: () => false
+  }));
+  return { mockRestore: () => vi.unstubAllGlobals() };
+}
 
 describe("marketplace search", () => {
   beforeEach(() => window.history.replaceState(null, "", "/"));
+  it.each(["split", "list"] as const)("keeps the phone map visible and reuses it when expanding from %s", async (view) => {
+    const media = phoneViewport();
+    try {
+      await act(async () => { TestRenderer.create(<SavedListingsProvider><SearchExperience listings={[]} initialState={{ ...defaultSearch, view }} initialQuery="" initialMoveIn="" initialMoveOut="" /></SavedListingsProvider>); });
+      await loadMap();
+      const map = FakeMap.last;
+      const region = document.querySelector('[aria-label="房源地图"]');
+      expect(region).toBeTruthy();
+      expect(region!.classList.contains("hidden")).toBe(false);
+      await act(async () => fireEvent.click([...document.querySelectorAll("button")].find(button => button.textContent === "展开地图")!));
+      expect(FakeMap.last).toBe(map);
+      await act(async () => fireEvent.click([...document.querySelectorAll("button")].find(button => button.textContent === "查看房源")!));
+      expect(document.querySelector('[aria-label="房源地图"]')).toBe(region);
+      expect(FakeMap.last).toBe(map);
+    } finally { media.mockRestore(); }
+  });
+
+  it("updates phone results during a gesture at a bounded rate and flushes the final area", async () => {
+    const media = phoneViewport();
+    try {
+      await act(async () => { TestRenderer.create(<SavedListingsProvider><SearchExperience listings={[]} initialQuery="Boston" initialMoveIn="" initialMoveOut="" /></SavedListingsProvider>); });
+      await loadMap();
+      const history = vi.spyOn(window.history, "replaceState");
+      try {
+        await act(async () => {
+          FakeMap.last!.bounds = [-71.2, 42.3, -71, 42.4];
+          for (let i = 0; i < 20; i++) FakeMap.last!.fire("move");
+          await new Promise(resolve => setTimeout(resolve, 160));
+        });
+        expect(document.querySelector("#result-heading")?.textContent).toBe("地图区域内的可租房源");
+        expect(history).not.toHaveBeenCalled();
+        await act(async () => {
+          FakeMap.last!.bounds = [-71.3, 42.2, -71.1, 42.5];
+          FakeMap.last!.fire("moveend");
+        });
+        expect(window.location.search).toContain("bbox=-71.3000%2C42.2000%2C-71.1000%2C42.5000");
+        expect(history).toHaveBeenCalledTimes(1);
+      } finally { history.mockRestore(); }
+    } finally { media.mockRestore(); }
+  });
+
+  it("caps phone rendering density and cancels pending area updates when code moves the map", async () => {
+    const media = phoneViewport();
+    vi.stubGlobal("devicePixelRatio", 3);
+    try {
+      await act(async () => { TestRenderer.create(<SavedListingsProvider><SearchExperience listings={[]} initialQuery="Boston" initialMoveIn="" initialMoveOut="" /></SavedListingsProvider>); });
+      await loadMap();
+      expect(FakeMap.last!.pixelRatio).toBe(2);
+      await act(async () => {
+        FakeMap.last!.fire("move");
+        FakeMap.last!.fire("move", { fromCode: true });
+        await new Promise(resolve => setTimeout(resolve, 160));
+      });
+      expect(document.querySelector<HTMLInputElement>('[aria-label="地点或学校"]')?.value).toBe("Boston");
+      expect(new URL(window.location.href).searchParams.has("bbox")).toBe(false);
+    } finally { media.mockRestore(); vi.unstubAllGlobals(); }
+  });
+  it("preserves the searched city on layout resize while explicit zoom still searches the map area", async () => {
+    const observers = new Set<() => void>();
+    vi.stubGlobal("ResizeObserver", class {
+      private notify: () => void;
+      constructor(callback: (entries: { contentRect: { width: number } }[]) => void) {
+        this.notify = () => callback([{ contentRect: { width: 900 } }]);
+        observers.add(this.notify);
+      }
+      observe() {}
+      disconnect() { observers.delete(this.notify); }
+    });
+    let renderer!: TestRenderer.ReactTestRenderer;
+    try {
+      await act(async () => {
+        renderer = TestRenderer.create(
+          <SavedListingsProvider>
+            <SearchExperience listings={[]} initialQuery="Boston" initialMoveIn="" initialMoveOut="" />
+          </SavedListingsProvider>
+        );
+      });
+      await loadMap();
+      await act(async () => { for (const resize of observers) resize(); });
+      expect(document.querySelector<HTMLInputElement>('[aria-label="地点或学校"]')?.value).toBe("Boston");
+      expect(new URL(window.location.href).searchParams.has("bbox")).toBe(false);
+      await act(async () => FakeMap.last!.zoomIn());
+      expect(new URL(window.location.href).searchParams.has("bbox")).toBe(true);
+    } finally {
+      await act(async () => renderer?.unmount());
+      vi.unstubAllGlobals();
+    }
+  });
+  it("keeps the basemap on the searched city even when there are no listings", async () => {
+    await act(async () => {
+      TestRenderer.create(
+        <SavedListingsProvider>
+          <SearchExperience listings={[]} initialQuery="Boston" initialMoveIn="" initialMoveOut="" />
+        </SavedListingsProvider>
+      );
+    });
+    await loadMap();
+    expect(FakeMap.last!.getBounds().contains([-71.0589, 42.3601])).toBe(true);
+    expect(FakeMap.last!.getBounds().contains([-118.2437, 34.0522])).toBe(false);
+    expect(pinLabels()).toHaveLength(0);
+  });
   it("keeps results and map together without exposing unrelated workflows", () => {
     const html = renderToStaticMarkup(
       <SavedListingsProvider>
@@ -203,8 +311,8 @@ describe("marketplace search", () => {
     expect(document.querySelector("#result-heading")?.textContent).toBe("地图区域内的可租房源");
     expect(document.querySelector("[role=status]")?.textContent).toContain(`${boston.length} 套符合条件`);
     expect(window.location.search).toContain("bbox=-71.2000%2C42.3000%2C-71.0000%2C42.4000");
-    // Only pins in view stay in the page.
-    expect(pinLabels()).toHaveLength(boston.length);
+    // Marker repaint runs on the next animation frame after the viewport changes.
+    await waitFor(() => expect(pinLabels()).toHaveLength(boston.length));
 
     const pin = [...document.querySelectorAll<HTMLButtonElement>(".map-pin")].find((item) => item.getAttribute("aria-label")?.startsWith(boston[0].title));
     await act(async () => pin!.click());

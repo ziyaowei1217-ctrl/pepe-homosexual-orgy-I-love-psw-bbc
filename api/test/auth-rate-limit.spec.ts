@@ -4,11 +4,36 @@ import { describe, expect, it } from "vitest";
 import {
   AuthRateLimiter,
   AuthRateLimitException,
+  addressPrefix,
   getRequestIdentity,
   InMemoryRateLimitStore,
   type RateLimitRule,
   type RateLimitStore
 } from "../src/auth/auth-rate-limit";
+
+describe("phone text budgets", () => {
+  const phone = (subject: string, ip: string) => ({ email: "phone-sign-in@psw.invalid", ip, subject });
+
+  it("keeps each purpose's paid delivery budget separate, so sign-in floods cannot block step-up", async () => {
+    const limiter = createLimiter();
+    for (let index = 0; index < 20; index += 1) await limiter.enforce("deliver", "PHONE_LOGIN", phone(`+1415555${String(index).padStart(4, "0")}`, "service"));
+    await expectLimited(limiter.enforce("deliver", "PHONE_LOGIN", phone("+14155559999", "service")));
+    await limiter.enforce("deliver", "PHONE_STEP_UP", phone("+14155550001", "service"));
+    await limiter.enforce("deliver", "PHONE_LINK", phone("+14155550002", "service"));
+  });
+
+  it("counts an IPv6 /64 as one address for phone requests", async () => {
+    expect(addressPrefix("2001:db8:1:2:aaaa::1")).toBe("2001:db8:1:2::/64");
+    expect(addressPrefix("2001:db8::5")).toBe("2001:db8:0:0::/64");
+    expect(addressPrefix("2001:0db8:0001:0002:0:0:0:9")).toBe("2001:db8:1:2::/64");
+    expect(addressPrefix("203.0.113.9")).toBe("203.0.113.9");
+    const limiter = createLimiter();
+    for (let index = 0; index < 15; index += 1) {
+      await limiter.enforce("send", "PHONE_LOGIN", { ...phone(`+1415555${String(index).padStart(4, "0")}`, `2001:db8:1:2::${index + 1}`), deviceId: `device-${index}` });
+    }
+    await expectLimited(limiter.enforce("send", "PHONE_LOGIN", { ...phone("+14155559999", "2001:db8:1:2:ffff::1"), deviceId: "device-x" }));
+  });
+});
 
 describe("authentication abuse controls", () => {
   it("enforces send email 5/hour and 10/day", async () => {

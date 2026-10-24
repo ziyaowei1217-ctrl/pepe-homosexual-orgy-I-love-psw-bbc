@@ -1,0 +1,57 @@
+{
+  "checkedAt": "2026-10-23T05:28:30.358729+00:00",
+  "status": "pending hosted authentication and browser acceptance",
+  "candidateId": "6adaefe6a146599ef166b80e",
+  "candidateUrl": "https://6adaefe6a146599ef166b80e--sublet-pipeline-demo-zihao.netlify.app",
+  "sourceArtifactCommit": "db015afab17da9e3ed9c0d97348dce3f2051f82a",
+  "nextRuntimeVersion": "5.16.3",
+  "buildMethod": "One offline production-context build with private operator environment; prepared .netlify/static uploaded without a rebuild. Seven trusted-deploy function settings include a secret-marked cookie secret and an explicit official Anthropic base URL without an API key.",
+  "artifact": {
+    "valid": true,
+    "buildId": "mkSaKCTJ_wUeIIIiPgQmJ",
+    "publishDirectory": ".netlify/static",
+    "staticAssetCount": 74,
+    "publicFontCount": 18,
+    "bundledFontCount": 1,
+    "functionArchiveCount": 1,
+    "edgeFunctionCount": 1,
+    "edgeBundleCount": 1,
+    "errors": []
+  },
+  "http": {
+    "ssrRoutesPassed": 5,
+    "referencedAssetsPassed": 34,
+    "referencedAssetsChecked": 34,
+    "uniqueNoncePerResponse": true,
+    "scriptsMatchResponseNonce": true,
+    "privateNoStoreHtml": true,
+    "authStatus": 403,
+    "authCode": "AUTH_ORIGIN_REJECTED",
+    "apiCors": "Stable origin accepted; candidate and unrelated origins excluded."
+  },
+  "credentialScan": {
+    "filesChecked": 29505,
+    "archiveEntriesChecked": 3346,
+    "actualCredentialMatches": 0
+  },
+  "discardedCandidates": [
+    "6adae35e7a092d96d6326369",
+    "6adae28a654086234a86f4a8"
+  ],
+  "rollbackDeployId": "6ac5e7265c754b7319abd326",
+  "publicDeploymentChanged": false,
+  "limitations": [
+    "Runtime authentication is configured for the exact stable origin. This draft correctly rejects authentication until a deliberate origin configuration is made; no OAuth/cookie acceptance is claimed.",
+    "No actual account or shared-customer journey is established by anonymous HTTP checks.",
+    "The artifact remains unpublished and unaccepted until the release owner performs the documented controlled acceptance."
+  ],
+  "optionalAI": {
+    "enabled": false,
+    "verifiedEndpoint": "/api/assistant",
+    "httpStatus": 200,
+    "modelRequestsMade": 0,
+    "scope": "PSW Functions only; other team projects unchanged",
+    "configuration": "ANTHROPIC_BASE_URL=https://api.anthropic.com with no configured API key",
+    "reference": "https://docs.netlify.com/build/ai-gateway/overview/#managing-environment-variables"
+  }
+}

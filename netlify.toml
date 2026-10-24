@@ -1,0 +1,28 @@
+# Connected website: shared accounts and messages use the authenticated Nest API.
+# Configure its public HTTPS URL and media origin in the existing site's settings.
+# Missing or simulated configuration fails before Next.js builds.
+[build]
+  command = "node tools/netlify-build-config.mjs && npx --yes pnpm@9.15.4 build"
+  publish = ".next"
+
+[build.environment]
+  NODE_VERSION = "22"
+  PNPM_VERSION = "9.15.4"
+  NEXT_TELEMETRY_DISABLED = "1"
+  NEXT_PUBLIC_MAP_STYLE_URL = "https://tiles.openfreemap.org/styles/liberty"
+  NEXT_PUBLIC_MAP_ATTRIBUTION = "© OpenStreetMap contributors"
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Robots-Tag = "noindex, nofollow, noarchive"
+    X-Content-Type-Options = "nosniff"
+
+# Netlify serves these public files directly, bypassing Next's headers(). Keep
+# the approved map origin in sync with the basemap above when changing providers.
+[[headers]]
+  for = "/vendor/maplibre/*"
+  [headers.values]
+    Content-Security-Policy = "default-src 'none'; script-src 'self'; connect-src 'self' https://tiles.openfreemap.org; worker-src 'none'; object-src 'none'"
+    Cache-Control = "public, max-age=31536000, immutable"
+    Referrer-Policy = "no-referrer"

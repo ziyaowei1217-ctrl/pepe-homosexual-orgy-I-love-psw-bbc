@@ -7,6 +7,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { MAX_LISTING_MEDIA_BYTES } from "../src/listing-media/listing-media.constants";
 import { ListingMediaService } from "../src/listing-media/listing-media.service";
+import { prepareListingImage } from "../src/listing-media/listing-media-validation";
 import { ListingMediaStorageError, type ListingMediaStorage } from "../src/listing-media/listing-media-storage";
 
 type ListingStatus = "DRAFT" | "REJECTED" | "SUBMITTED" | "APPROVED";
@@ -51,6 +52,52 @@ type MediaRow = {
 };
 
 describe("ListingMediaService", () => {
+  it("admits only three image finalizations across services and releases capacity after success and failure", async () => {
+    const bytes = await pngBytes();
+    const database = createDatabase({ media: Array.from({ length: 5 }, (_, index) => mediaRow({ id: `media-${index}`, mimeType: "image/png", sizeBytes: bytes.length, checksum: sha256(bytes) })) });
+    const storage = createStorage(bytes);
+    const gates: Array<(bytes: Buffer) => void> = [];
+    storage.read = vi.fn(async () => new Promise<Buffer>((resolve) => { gates.push(resolve); }));
+    const services = [createService(database, storage), createService(database, storage)];
+    const attempt = listingMediaUploadAttemptId(database.media[0]!.originalKey)!;
+    const running = [0, 1, 2].map(index => services[index % 2]!.finalize("owner-1", "listing-1", `media-${index}`, attempt));
+    await vi.waitFor(() => expect(gates).toHaveLength(3), { timeout: 1_000, interval: 1 });
+    try {
+      await expect(services[0]!.finalize("owner-1", "listing-1", "media-3", attempt))
+        .rejects.toMatchObject({ status: 503, response: { code: "IMAGE_STORAGE_UNAVAILABLE" } });
+      expect(storage.read).toHaveBeenCalledTimes(3);
+      expect(database.media[3]!.storageStatus).toBe("PENDING_UPLOAD");
+    } finally {
+      gates[0]!(Buffer.from("invalid image"));
+      gates[1]!(bytes);
+      gates[2]!(bytes);
+      await Promise.all(running);
+    }
+    expect(database.media[0]!.storageStatus).toBe("FAILED");
+    storage.read = vi.fn(async () => bytes);
+    await expect(services[0]!.finalize("owner-1", "listing-1", "media-3", attempt)).resolves.toMatchObject({ storageStatus: "READY" });
+    await expect(services[1]!.finalize("owner-1", "listing-1", "media-4", attempt)).resolves.toMatchObject({ storageStatus: "READY" });
+  });
+  it("freezes and serves sanitized images using their published checksum while leaving the upload private", async () => {
+    const bytes = await sharp({ create: { width: 2, height: 3, channels: 3, background: "red" } })
+      .withMetadata({ orientation: 6 }).withExifMerge({ IFD0: { Artist: "private photographer" } }).jpeg().toBuffer();
+    const prepared = await prepareListingImage(bytes, { mimeType: "image/jpeg", sizeBytes: bytes.length, checksumSha256: sha256(bytes) });
+    const database = createDatabase({ media: [mediaRow({ mimeType: "image/jpeg", sizeBytes: bytes.length, checksum: sha256(bytes) })] });
+    const objects = new Map<string, Buffer>();
+    const storage = createStorage(bytes);
+    storage.write = vi.fn(async (key: string, value: Buffer) => { objects.set(key, value); });
+    storage.read = vi.fn(async (key?: string) => objects.get(key!) ?? bytes);
+    const service = createService(database, storage);
+    const ready = await service.finalize("owner-1", "listing-1", "media-1", listingMediaUploadAttemptId(database.media[0]!.originalKey)!);
+    expect(ready).toMatchObject({ width: 3, height: 2, sizeBytes: prepared.bytes.length, checksum: sha256(prepared.bytes) });
+    expect(ready.processedKey).not.toBe(ready.originalKey);
+    expect(objects.get(ready.processedKey!)).toEqual(prepared.bytes);
+    database.prisma.listing.findUnique = async () => listingRow({ status: "APPROVED" });
+    database.media[0]!.storageStatus = "PUBLISHED";
+    const published = await service.readPublished("media-1");
+    expect((await sharp(published.bytes).metadata()).exif).toBeUndefined();
+    expect(published.etag).toBe(`"${sha256(prepared.bytes)}"`);
+  });
   it("initializes an owner upload with a server key and the next sort position", async () => {
     const database = createDatabase({ media: [mediaRow({ id: "existing", sortOrder: 0 })] });
     const storage = createStorage();
@@ -155,12 +202,13 @@ describe("ListingMediaService", () => {
     database.prisma.listing.findUnique = async () => listingRow({ status: "SUBMITTED" });
     expect((await service.readForReview("listing-1", "media-1")).bytes).toEqual(bytes);
     database.media[0]!.storageStatus = "PUBLISHED";
+    database.prisma.listing.findUnique = async () => listingRow({ status: "APPROVED" });
     expect((await service.readPublished("media-1")).bytes).toEqual(bytes);
   });
 
   it.each(["review", "public"])("rejects same-size legacy tampering on %s reads", async (target) => {
     const bytes = Buffer.from("original");
-    const database = createDatabase({ listings: [listingRow({ status: "SUBMITTED" })], media: [mediaRow({ storageStatus: "PUBLISHED", sizeBytes: bytes.length, checksum: sha256(bytes) })] });
+    const database = createDatabase({ listings: [listingRow({ status: target === "review" ? "SUBMITTED" : "APPROVED" })], media: [mediaRow({ storageStatus: "PUBLISHED", sizeBytes: bytes.length, checksum: sha256(bytes) })] });
     const service = createService(database, createStorage(Buffer.from("tampered")));
     await expect(target === "review" ? service.readForReview("listing-1", "media-1") : service.readPublished("media-1"))
       .rejects.toMatchObject({ response: { code: "LISTING_MEDIA_NOT_AVAILABLE" } });
@@ -382,6 +430,7 @@ describe("ListingMediaService", () => {
   it("delivers exact bytes only for published media", async () => {
     const bytes = Buffer.from([1, 2, 3, 4]);
     const database = createDatabase({
+      listings: [listingRow({ status: "APPROVED" })],
       media: [
         mediaRow({
           storageStatus: "PUBLISHED",
@@ -397,9 +446,33 @@ describe("ListingMediaService", () => {
 
     await expect(service.readPublished("media-1")).resolves.toEqual({
       bytes,
-      mimeType: "image/png"
+      mimeType: "image/png",
+      etag: `"${sha256(bytes)}"`
     });
     expect(storage.read).toHaveBeenCalledWith("listing-media/listing-1/published");
+  });
+
+  it("revalidates public visibility before accepting a checksum cache hit without reading storage", async () => {
+    const bytes = Buffer.from([1, 2, 3, 4]);
+    const database = createDatabase({ listings: [listingRow({ status: "APPROVED" })], media: [mediaRow({ storageStatus: "PUBLISHED", checksum: sha256(bytes), sizeBytes: bytes.length })] });
+    const storage = createStorage(bytes);
+    const service = createService(database, storage);
+    const etag = `"${sha256(bytes)}"`;
+    await expect(service.readPublished("media-1", `W/${etag}`)).resolves.toEqual({ notModified: true, etag });
+    expect(storage.read).not.toHaveBeenCalled();
+    database.prisma.listing.findUnique = async () => listingRow({ status: "SUBMITTED" });
+    await expect(service.readPublished("media-1", etag)).rejects.toBeInstanceOf(NotFoundException);
+    expect(storage.read).not.toHaveBeenCalled();
+  });
+
+  it.each(["DRAFT", "REJECTED", "SUBMITTED", "SUSPENDED", "LEASED"])("hides previously published images when a listing is %s", async (status) => {
+    const bytes = Buffer.from([1, 2, 3, 4]);
+    const database = createDatabase({ media: [mediaRow({ storageStatus: "PUBLISHED", checksum: sha256(bytes), sizeBytes: bytes.length })] });
+    database.prisma.listing.findUnique = async () => ({ ...listingRow(), status } as ListingRow);
+    const storage = createStorage(bytes);
+    await expect(createService(database, storage).readPublished("media-1"))
+      .rejects.toMatchObject({ response: { code: "LISTING_MEDIA_NOT_AVAILABLE" } });
+    expect(storage.read).not.toHaveBeenCalled();
   });
 
   it("delivers ready bytes to review only while the listing is submitted", async () => {

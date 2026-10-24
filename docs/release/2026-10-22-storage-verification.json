@@ -1,0 +1,120 @@
+{
+  "scope": "Live provider compatibility and private bucket controls; not full application acceptance",
+  "provider": "Neon Object Storage",
+  "startedAt": "2026-10-23T03:56:13.580Z",
+  "finishedAt": "2026-10-23T03:56:17.573Z",
+  "sdkVersions": {
+    "@aws-sdk/client-s3": "3.1110.0",
+    "@aws-sdk/s3-request-presigner": "3.1110.0"
+  },
+  "probeSourceSha256": "d27712b734bc84f9ffd7cafe315e6007c69ace17e108940c23809d55b6e5070c",
+  "checks": [
+    {
+      "name": "private-disposable-bucket-created",
+      "passed": true
+    },
+    {
+      "name": "cors-config-exact-origin",
+      "passed": true
+    },
+    {
+      "name": "conditional-put-rejects-overwrite",
+      "passed": true,
+      "duplicateStatus": 412,
+      "originalRetained": true
+    },
+    {
+      "name": "head-and-get-content-length",
+      "passed": true,
+      "bytes": 24
+    },
+    {
+      "name": "unsigned-private-read-denied",
+      "passed": true,
+      "status": 403
+    },
+    {
+      "name": "unsigned-write-denied",
+      "passed": true,
+      "status": 403
+    },
+    {
+      "name": "browser-upload-preflight",
+      "passed": true,
+      "status": 200
+    },
+    {
+      "name": "untrusted-origin-preflight-denied",
+      "passed": true,
+      "status": 403
+    },
+    {
+      "name": "app-presigned-put-content-type",
+      "passed": true,
+      "status": 200
+    },
+    {
+      "name": "presigned-upload-integrity",
+      "passed": true,
+      "bytes": 70,
+      "sha256": "2640059609118b695c139804676372eca75c30d30e5906775902d13e44f5356c"
+    },
+    {
+      "name": "bounded-stream-consumer-cancels",
+      "passed": true
+    },
+    {
+      "name": "expired-presigned-put-denied",
+      "passed": true,
+      "status": 403
+    }
+  ],
+  "compatible": true,
+  "cleanup": {
+    "onlyOwnVerificationObjectsTargeted": true,
+    "verificationObjectsDeleted": 5,
+    "disposableBucketDeleted": true
+  },
+  "productionBucket": {
+    "name": "psw-listing-media",
+    "created": true,
+    "privateVerified": true,
+    "temporaryVerificationRemoved": true
+  },
+  "cors": {
+    "AllowedOrigins": [
+      "https://sublet-pipeline-demo-zihao.netlify.app"
+    ],
+    "AllowedMethods": [
+      "PUT",
+      "GET",
+      "HEAD"
+    ],
+    "AllowedHeaders": [
+      "content-type"
+    ],
+    "ExposeHeaders": [
+      "ETag"
+    ],
+    "MaxAgeSeconds": 300
+  },
+  "publicDeploymentEnvironment": {
+    "LISTING_MEDIA_STORAGE_ENDPOINT": "https://br-icy-thunder-b4dzpi9q.storage.c-6.us-east-2.aws.neon.tech",
+    "LISTING_MEDIA_UPLOAD_ENDPOINT": "https://br-icy-thunder-b4dzpi9q.storage.c-6.us-east-2.aws.neon.tech",
+    "LISTING_MEDIA_STORAGE_REGION": "us-east-2",
+    "LISTING_MEDIA_STORAGE_BUCKET": "psw-listing-media",
+    "LISTING_MEDIA_STORAGE_FORCE_PATH_STYLE": "true",
+    "NEXT_PUBLIC_MEDIA_UPLOAD_ORIGIN": "https://br-icy-thunder-b4dzpi9q.storage.c-6.us-east-2.aws.neon.tech"
+  },
+  "credentialRequirements": {
+    "serverOnly": true,
+    "accessKeyAndSecretRequired": true,
+    "sessionTokenRequired": false
+  },
+  "limitations": [
+    "Presigned URLs are scoped bearer capabilities; CORS does not replace signature verification.",
+    "Private object access through the application still requires live authorization and cross-account acceptance tests.",
+    "Candidate origins require a separate deliberate exact-origin CORS rule.",
+    "Provider versioning and lifecycle settings are not enforced."
+  ]
+}

@@ -1,4 +1,7 @@
 FROM node:22-alpine AS build
+# Prisma 6 detects its native musl/OpenSSL engine during generation. Install the
+# same TLS/system libraries in both stages, rather than falling back to libssl1.1.
+RUN apk add --no-cache openssl ca-certificates zlib
 WORKDIR /app
 RUN corepack enable
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
@@ -8,6 +11,7 @@ COPY api ./api
 RUN pnpm -C api build
 
 FROM node:22-alpine AS runtime
+RUN apk add --no-cache openssl ca-certificates zlib
 WORKDIR /app
 ENV NODE_ENV=production
 COPY --from=build /app/node_modules ./node_modules

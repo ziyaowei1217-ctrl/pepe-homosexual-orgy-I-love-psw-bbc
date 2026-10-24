@@ -21,6 +21,7 @@ import {
 import { AUTH_OPTIONS, EMAIL_SENDER } from "./auth.tokens";
 import { VerifyEmailDto } from "./dto";
 import { acquireNormalizedEmailAdvisoryLock } from "./email-advisory-lock";
+import { isAcademicEmail } from "./academic-email";
 
 export type AuthServiceOptions = {
   nodeEnv: string;
@@ -250,7 +251,9 @@ export class AuthService {
           update: isLocalAdmin ? { role: "ADMIN" } : {},
           create: { email, role: isLocalAdmin ? "ADMIN" : "USER" }
         });
-        await transaction.profile.upsert({ where: { email }, update: {}, create: { email } });
+        // The code was delivered to this address, so a school address proves school email ownership.
+        const school = isAcademicEmail(email) ? { eduEmailVerified: true } : {};
+        await transaction.profile.upsert({ where: { email }, update: school, create: { email, ...school } });
         return { user, isNewUser };
       }
     });
