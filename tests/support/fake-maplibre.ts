@@ -16,8 +16,9 @@ export class Map {
   touchZoomRotate = { disableRotation() {} };
   keyboard = { disableRotation() {} };
   private listeners = new globalThis.Map<string, Set<Listener>>();
+  private resizeObserver?: ResizeObserver;
 
-  constructor(options: { container: HTMLElement; bounds?: Bounds; center?: [number, number]; zoom?: number }) {
+  constructor(options: { container: HTMLElement; bounds?: Bounds; center?: [number, number]; zoom?: number; trackResize?: boolean }) {
     this.container = options.container;
     const [lng, lat] = options.center ?? [0, 0];
     // A little room around fitted bounds, as MapLibre's fit padding gives.
@@ -26,6 +27,11 @@ export class Map {
     // Past the clustering zoom, so every listing gets its own price pin.
     this.zoom = options.bounds ? 15 : options.zoom ?? 15;
     Map.last = this;
+    // MapLibre's automatic resize has no application event tag.
+    if (options.trackResize !== false && typeof ResizeObserver !== "undefined") {
+      this.resizeObserver = new ResizeObserver(() => this.resize());
+      this.resizeObserver.observe(this.container);
+    }
   }
 
   on(type: string, listener: Listener) { this.listeners.set(type, (this.listeners.get(type) ?? new Set()).add(listener)); return this; }
@@ -52,8 +58,8 @@ export class Map {
   easeTo(_options: unknown, data?: Record<string, unknown>) { this.fire("move", data); this.fire("moveend", data); }
   zoomIn() { this.zoom += 1; this.fire("moveend"); }
   zoomOut() { this.zoom -= 1; this.fire("moveend"); }
-  resize() {}
-  remove() { this.listeners.clear(); }
+  resize(data: Record<string, unknown> = {}) { this.fire("moveend", data); }
+  remove() { this.resizeObserver?.disconnect(); this.listeners.clear(); }
 }
 
 export class Marker {

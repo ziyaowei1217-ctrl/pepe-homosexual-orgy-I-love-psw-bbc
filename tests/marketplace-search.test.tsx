@@ -19,6 +19,37 @@ const loadMap = () => act(async () => { await new Promise((resolve) => setTimeou
 
 describe("marketplace search", () => {
   beforeEach(() => window.history.replaceState(null, "", "/"));
+  it("preserves the searched city on layout resize while explicit zoom still searches the map area", async () => {
+    const observers = new Set<() => void>();
+    vi.stubGlobal("ResizeObserver", class {
+      private notify: () => void;
+      constructor(callback: (entries: { contentRect: { width: number } }[]) => void) {
+        this.notify = () => callback([{ contentRect: { width: 900 } }]);
+        observers.add(this.notify);
+      }
+      observe() {}
+      disconnect() { observers.delete(this.notify); }
+    });
+    let renderer!: TestRenderer.ReactTestRenderer;
+    try {
+      await act(async () => {
+        renderer = TestRenderer.create(
+          <SavedListingsProvider>
+            <SearchExperience listings={[]} initialQuery="Boston" initialMoveIn="" initialMoveOut="" />
+          </SavedListingsProvider>
+        );
+      });
+      await loadMap();
+      await act(async () => { for (const resize of observers) resize(); });
+      expect(document.querySelector<HTMLInputElement>('[aria-label="地点或学校"]')?.value).toBe("Boston");
+      expect(new URL(window.location.href).searchParams.has("bbox")).toBe(false);
+      await act(async () => FakeMap.last!.zoomIn());
+      expect(new URL(window.location.href).searchParams.has("bbox")).toBe(true);
+    } finally {
+      await act(async () => renderer?.unmount());
+      vi.unstubAllGlobals();
+    }
+  });
   it("keeps the basemap on the searched city even when there are no listings", async () => {
     await act(async () => {
       TestRenderer.create(

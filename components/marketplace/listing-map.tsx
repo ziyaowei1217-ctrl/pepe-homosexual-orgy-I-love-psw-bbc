@@ -56,6 +56,8 @@ export function useMapLibre(container: RefObject<HTMLElement | null>, options: P
         dragRotate: false,
         pitchWithRotate: false,
         touchPitch: false,
+        // Our observer tags layout changes so they cannot become a new area search.
+        trackResize: false,
         attributionControl: { compact: true },
         locale: mapLocale
       });
