@@ -23,6 +23,7 @@ import { RoommateTeamsModule } from "./roommate-teams/roommate-teams.module";
 import { RoommatesModule } from "./roommates/roommates.module";
 import { TripsModule } from "./trips/trips.module";
 import { TrustModule } from "./trust/trust.module";
+import { UserDocumentsModule } from "./user-documents/user-documents.module";
 import { UsersModule } from "./users/users.module";
 import { getPaymentMode } from "./payments/payment-mode";
 
@@ -46,6 +47,7 @@ import { getPaymentMode } from "./payments/payment-mode";
     DealThreadsModule,
     DealRoomsModule,
     UsersModule,
+    UserDocumentsModule,
     MarketplaceModule,
     ListingsModule,
     ListingMediaModule,

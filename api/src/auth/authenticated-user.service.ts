@@ -2,6 +2,7 @@ import { Inject, Injectable, UnauthorizedException } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 
 import { PrismaService } from "../prisma/prisma.service";
+import { applicationSessionSeconds } from "./application-session";
 
 export type AuthenticatedUser = {
   id: string;
@@ -41,6 +42,9 @@ export class AuthenticatedUserService {
 
     const user = await this.prisma.user.findUnique({ where: { id: payload.sub } });
     if (!user) throw new UnauthorizedException("Invalid bearer token");
+    // A week-long renter session stops working within an hour of its account becoming an administrator.
+    const sessionEndsAt = payload.iat! + Math.min(MAX_SESSION_AGE_SECONDS, applicationSessionSeconds(user.role));
+    if (sessionEndsAt <= Math.floor(Date.now() / 1000)) throw new UnauthorizedException("Invalid bearer token");
 
     const authenticatedUser: AuthenticatedUser = {
       id: user.id,
@@ -52,7 +56,7 @@ export class AuthenticatedUserService {
     };
     return {
       user: authenticatedUser,
-      expiresAt: Math.min(payload.exp ?? Infinity, payload.iat! + MAX_SESSION_AGE_SECONDS) * 1000
+      expiresAt: Math.min(payload.exp ?? Infinity, sessionEndsAt) * 1000
     };
   }
 }

@@ -33,7 +33,7 @@ export class PhoneAuthController {
   async requestSignInCode(@Body(phoneNumberPipe) dto: PhoneNumberDto, @Req() request: RequestWithIdentity, @Res({ passthrough: true }) response: HeaderResponse) {
     const phoneNumber = this.phone.normalize(dto.phoneNumber);
     await this.limit("send", "PHONE_LOGIN", phoneNumber, request, response);
-    return this.phone.requestSignInCode(phoneNumber);
+    return this.phone.requestSignInCode(phoneNumber, getRequestIdentity(request).ip);
   }
 
   @Post("phone/sign-in/verify")
@@ -47,7 +47,7 @@ export class PhoneAuthController {
   @UseGuards(AuthGuard)
   @Get("phone")
   status(@Req() request: AuthenticatedRequest) {
-    return this.phone.status(request.user.id);
+    return this.phone.status(request.user);
   }
 
   @UseGuards(AuthGuard)

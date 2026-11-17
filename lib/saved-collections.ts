@@ -1,4 +1,14 @@
 export const DEFAULT_SAVED_COLLECTION_ID = "all";
+/** The account keeps at most this many lists, 全部收藏 included (api/src/user-documents/user-document-values.ts). */
+export const MAX_SAVED_COLLECTIONS = 50;
+/** The account keeps notes up to this length (api/src/user-documents/user-document-values.ts) and refuses longer ones. */
+export const MAX_SAVED_NOTE_LENGTH = 2000;
+
+/** Cuts a note to the account's limit without splitting an emoji (half of one cannot be stored). */
+function cutNote(note: string) {
+  if (note.length <= MAX_SAVED_NOTE_LENGTH) return note;
+  return note.slice(0, /[\uD800-\uDBFF]/.test(note.charAt(MAX_SAVED_NOTE_LENGTH - 1)) ? MAX_SAVED_NOTE_LENGTH - 1 : MAX_SAVED_NOTE_LENGTH);
+}
 
 export type SavedCollection = {
   id: string;
@@ -38,10 +48,12 @@ export function normalizeSavedCollectionsState(
     ],
     notes: isRecord(value) && isRecord(value.notes)
       ? Object.fromEntries(
-          Object.entries(value.notes).filter(
-            (entry): entry is [string, string] =>
-              entry[0].trim().length > 0 && typeof entry[1] === "string"
-          )
+          Object.entries(value.notes)
+            .filter(
+              (entry): entry is [string, string] =>
+                entry[0].trim().length > 0 && typeof entry[1] === "string"
+            )
+            .map(([listingId, note]) => [listingId, cutNote(note)])
         )
       : {}
   };
@@ -72,12 +84,16 @@ export function mergeSavedCollectionsState(account: SavedCollectionsState, guest
     const existing = notes.get(listingId);
     if (!existing) notes.set(listingId, note);
     else if (note && existing !== note && !existing.endsWith(`\n\n${note}`)) {
-      notes.set(listingId, `${existing}\n\n${note}`);
+      notes.set(listingId, cutNote(`${existing}\n\n${note}`));
     }
   }
   return { version: 1, collections, notes: Object.fromEntries(notes) };
 }
 
+/**
+ * Adds an empty list. Without an `id`, the id comes from the name, and a name whose id another list already has is
+ * refused; conflictingSavedCollection says which list that is.
+ */
 export function addSavedCollection(
   state: SavedCollectionsState,
   name: string,
@@ -85,13 +101,36 @@ export function addSavedCollection(
 ) {
   const normalizedName = name.trim();
   const normalizedId = id.trim();
-  if (!normalizedName || !normalizedId || state.collections.some((collection) => collection.id === normalizedId)) {
+  if (
+    !normalizedName ||
+    !normalizedId ||
+    state.collections.length >= MAX_SAVED_COLLECTIONS ||
+    state.collections.some((collection) => collection.id === normalizedId)
+  ) {
     return state;
   }
 
   return {
     ...state,
     collections: [...state.collections, { id: normalizedId, name: normalizedName, listingIds: [] }]
+  };
+}
+
+/**
+ * Deletes one of the renter's own lists. Its homes stay saved: any that are in no other list move to 全部收藏.
+ * 全部收藏 itself cannot be deleted.
+ */
+export function removeSavedCollection(state: SavedCollectionsState, collectionId: string): SavedCollectionsState {
+  const removed = state.collections.find((collection) => collection.id === collectionId);
+  if (!removed || removed.id === DEFAULT_SAVED_COLLECTION_ID) return state;
+  const remaining = state.collections.filter((collection) => collection.id !== collectionId);
+  const stillSaved = new Set(remaining.flatMap((collection) => collection.listingIds));
+  const keep = removed.listingIds.filter((listingId) => !stillSaved.has(listingId));
+  return {
+    ...state,
+    collections: remaining.map((collection) => collection.id === DEFAULT_SAVED_COLLECTION_ID && keep.length > 0
+      ? { ...collection, listingIds: [...collection.listingIds, ...keep] }
+      : collection)
   };
 }
 
@@ -128,7 +167,7 @@ export function setSavedListingNote(
   const normalizedListingId = listingId.trim();
   if (!normalizedListingId) return state;
   const notes = { ...state.notes };
-  const normalizedNote = note.trim();
+  const normalizedNote = cutNote(note.trim());
   if (normalizedNote) notes[normalizedListingId] = normalizedNote;
   else delete notes[normalizedListingId];
   return { ...state, notes };
@@ -162,9 +201,37 @@ function uniqueStrings(value: unknown) {
   return Array.from(new Set(value.filter((item): item is string => typeof item === "string" && item.trim().length > 0)));
 }
 
+/**
+ * The list a new list with this name would clash with: one with the same name, or one whose name gives the same id
+ * (it differs only in case, spacing, punctuation or emoji, or only in letters and digits the id leaves out; see
+ * createCollectionId). Null when the name can be used.
+ */
+export function conflictingSavedCollection(state: SavedCollectionsState, name: string) {
+  const normalizedName = name.trim();
+  const id = createCollectionId(normalizedName);
+  return state.collections.find((collection) => collection.name === normalizedName || collection.id === id) ?? null;
+}
+
+/**
+ * A list's id depends only on its name, so the same name made on two devices before they sync becomes one list.
+ * Names that had an id before keep the same one:
+ * - A name with any a-z, 0-9 or basic Chinese character keeps only those. Its other letters and digits (full-width
+ *   digits, Roman or circled numerals, kana, Cyrillic, accented letters) are left out, so 「３号楼」 and 「５号楼」 both
+ *   give collection-号楼, and "Café" and "Cafè" both give collection-caf; a device refuses the second such name.
+ * - A name with none of those uses its other letters and digits (kana, Cyrillic, accented letters).
+ * - A name with no letters or digits at all (only emoji or symbols) uses "u+" and its code points, which no other
+ *   kind of name can give: 「🏠」 is collection-u+1f3e0, while "1f3e0" is collection-1f3e0.
+ */
 function createCollectionId(name: string) {
-  const slug = name.trim().toLowerCase().replace(/[^a-z0-9\u4e00-\u9fff]+/g, "-").replace(/^-|-$/g, "");
-  return slug ? `collection-${slug}` : "";
+  const lower = name.trim().toLowerCase();
+  const slug = toSlug(lower.replace(/[^a-z0-9\u4e00-\u9fff]+/g, "-"))
+    || toSlug(lower.replace(/[^\p{L}\p{N}]+/gu, "-"))
+    || `u+${Array.from(lower, (character) => character.codePointAt(0)!.toString(16)).join("-")}`;
+  return slug ? `collection-${slug.slice(0, 120)}` : "";
+}
+
+function toSlug(value: string) {
+  return value.replace(/^-+|-+$/g, "");
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

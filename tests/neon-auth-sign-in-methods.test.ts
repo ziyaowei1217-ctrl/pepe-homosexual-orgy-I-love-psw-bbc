@@ -27,6 +27,8 @@ describe("configured sign-in methods", () => {
     expect(enabledAuthMethods("")).toEqual(["google"]);
     expect(signInViaPhrase(["google"])).toBe("使用 Google 账户登录");
     expect(signInViaPhrase(["google", "email", "phone"])).toBe("使用 Google、邮箱验证码或手机号登录");
+    expect(enabledAuthMethods("google,apple,email,phone")).toEqual(["google", "apple", "email", "phone"]);
+    expect(signInViaPhrase(["google", "apple", "email", "phone"])).toBe("使用 Google、Apple、邮箱验证码或手机号登录");
   });
 });
 
@@ -110,5 +112,17 @@ describe("social providers", () => {
     vi.stubEnv("NEXT_PUBLIC_AUTH_METHODS", "email");
     expect((await handleNeonAuthRequest(social("google"), ["sign-in", "social"])).status).toBe(404);
     expect((await handleNeonAuthRequest(social("vercel"), ["sign-in", "social"])).status).toBe(404);
+  });
+
+  it("forwards Apple through the same fixed callback only when the build enables it", async () => {
+    toolkit.proxy.mockResolvedValue(new Response("{}"));
+    vi.stubEnv("NEXT_PUBLIC_AUTH_METHODS", "google,apple,email");
+    expect((await handleNeonAuthRequest(social("apple"), ["sign-in", "social"])).status).toBe(200);
+    expect(await toolkit.proxy.mock.calls[0][0].request.json()).toEqual({ provider: "apple", callbackURL: `${origin}/api/auth/complete` });
+    const elsewhere = post("sign-in/social", { provider: "apple", callbackURL: "https://evil.com/api/auth/complete" });
+    expect((await handleNeonAuthRequest(elsewhere, ["sign-in", "social"])).status).toBe(400);
+    vi.stubEnv("NEXT_PUBLIC_AUTH_METHODS", "google,email");
+    expect((await handleNeonAuthRequest(social("apple"), ["sign-in", "social"])).status).toBe(400);
+    expect(toolkit.proxy).toHaveBeenCalledTimes(1);
   });
 });

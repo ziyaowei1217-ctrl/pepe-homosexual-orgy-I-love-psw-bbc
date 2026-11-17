@@ -306,6 +306,17 @@ export async function apiPatch<T>(path: string, body: unknown, token?: string) {
   );
 }
 
+export async function apiPut<T>(path: string, body: unknown, token?: string) {
+  return apiRequest<T>(
+    path,
+    {
+      method: "PUT",
+      body: JSON.stringify(body)
+    },
+    token
+  );
+}
+
 export async function apiDelete<T>(path: string, token?: string) {
   return apiRequest<T>(path, { method: "DELETE" }, token);
 }

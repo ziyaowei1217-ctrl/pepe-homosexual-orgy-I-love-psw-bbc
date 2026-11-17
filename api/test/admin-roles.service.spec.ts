@@ -57,11 +57,18 @@ function createPrismaMock(initialUsers: User[]) {
       return { count: 1 };
     }
   };
+  const externalAuthIdentity = {
+    rows: [] as Array<{ userId: string }>,
+    async count({ where }: { where: { userId: string } }) {
+      return externalAuthIdentity.rows.filter((row) => row.userId === where.userId).length;
+    }
+  };
   const transaction = {
     user: userStore,
     auditEvent,
     phoneIdentity,
     profile,
+    externalAuthIdentity,
     async $executeRaw() {
       return 0;
     }
@@ -109,6 +116,21 @@ describe("AdminRolesService", () => {
 
     expect(prisma.phoneIdentity.rows).toEqual([{ userId: "user-2", phoneNumber: "+12015550124" }]);
     expect(prisma.profile.phoneVerified.get(input.email)).toBe(false);
+  });
+
+  it("refuses to promote an account that signs in only by phone, which would lock it out", async () => {
+    const phoneEmail = "phone-0123456789abcdef0123@phone.psw.invalid";
+    const prisma = createPrismaMock([user("user-1", phoneEmail, UserRole.USER)]);
+    prisma.phoneIdentity.rows.push({ userId: "user-1", phoneNumber: "+12015550123" });
+    const service = new AdminRolesService(prisma as never, new AuditService());
+
+    await expect(service.grant({ ...input, email: phoneEmail })).rejects.toMatchObject({ response: { code: "PHONE_ONLY_ACCOUNT" } });
+    expect(prisma.phoneIdentity.rows).toEqual([{ userId: "user-1", phoneNumber: "+12015550123" }]);
+    expect(prisma.user.rows[0].role).toBe(UserRole.USER);
+    expect(prisma.auditEvent.rows.at(-1)).toMatchObject({ action: "ADMIN_ROLE_GRANT_BLOCKED", outcome: "BLOCKED", metadata: { code: "PHONE_ONLY_ACCOUNT" } });
+
+    prisma.externalAuthIdentity.rows.push({ userId: "user-1" });
+    await expect(service.grant({ ...input, email: phoneEmail })).resolves.toMatchObject({ outcome: "SUCCESS" });
   });
 
   it("treats a repeated grant as an audited no-op", async () => {

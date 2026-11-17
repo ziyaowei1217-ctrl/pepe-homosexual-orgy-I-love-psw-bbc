@@ -81,6 +81,9 @@ export function formatCliFailure(error: unknown, fallbackMessage: string) {
     if (code === "LAST_ADMIN_REQUIRED") {
       return "LAST_ADMIN_REQUIRED: At least one administrator is required";
     }
+    if (code === "PHONE_ONLY_ACCOUNT") {
+      return "PHONE_ONLY_ACCOUNT: Accounts that sign in only by phone cannot become administrators";
+    }
     if (code === "BETA_INVITE_ALREADY_CLAIMED") {
       return "BETA_INVITE_ALREADY_CLAIMED: Claimed beta invites cannot be revoked";
     }

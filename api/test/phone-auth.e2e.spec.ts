@@ -8,11 +8,11 @@ import { AuditService } from "../src/audit/audit.service";
 import { AdminGuard } from "../src/auth/admin.guard";
 import { AdminStepUpGuard } from "../src/auth/admin-step-up.guard";
 import { AuthGuard } from "../src/auth/auth.guard";
-import { AuthRateLimiter, InMemoryRateLimitStore } from "../src/auth/auth-rate-limit";
-import { PHONE_AUTH_CONFIG } from "../src/auth/auth.tokens";
+import { AuthRateLimiter, AuthRateLimitException, InMemoryRateLimitStore } from "../src/auth/auth-rate-limit";
+import { NEON_AUTH_CONFIG, PHONE_AUTH_CONFIG } from "../src/auth/auth.tokens";
 import { AuthenticatedUserService } from "../src/auth/authenticated-user.service";
 import { PhoneAuthController } from "../src/auth/phone-auth.controller";
-import { PhoneAuthService } from "../src/auth/phone-auth.service";
+import { isPhoneAccountEmail, PhoneAuthService } from "../src/auth/phone-auth.service";
 import { maskPhoneNumber, normalizePhoneNumber } from "../src/auth/phone-number";
 import { DevelopmentPhoneVerificationProvider, type PhoneAuthConfig, type PhoneVerificationProvider } from "../src/auth/phone-verification-provider";
 import { PrismaService } from "../src/prisma/prisma.service";
@@ -29,6 +29,8 @@ function memoryDatabase() {
       { id: "admin-1", email: "admin@example.test", role: "ADMIN" }
     ],
     identities: [] as Identity[],
+    // Google or email sign-in bound to an account (Neon Auth identities).
+    externalIdentities: [] as Array<{ userId: string }>,
     profiles: new Map<string, { phoneVerified: boolean }>(),
     audits: [] as Array<{ action: string; actorUserId?: string; metadata: unknown }>
   };
@@ -40,6 +42,11 @@ function memoryDatabase() {
         const user = state.users.find((entry) => entry.id === where.id);
         if (!user) return null;
         return select?.phoneIdentity ? { ...user, phoneIdentity: state.identities.find((entry) => entry.userId === user.id) ?? null } : { ...user };
+      },
+      create: async ({ data }: { data: { email: string; role: string } }) => {
+        const created = { id: `user-${state.users.length + 1}`, ...data };
+        state.users.push(created);
+        return { ...created };
       }
     },
     phoneIdentity: {
@@ -84,6 +91,9 @@ function memoryDatabase() {
         return { count: 1 };
       }
     },
+    externalAuthIdentity: {
+      count: async ({ where }: { where: { userId: string } }) => state.externalIdentities.filter((entry) => entry.userId === where.userId).length
+    },
     auditEvent: { create: async ({ data }: { data: { action: string; actorUserId?: string; metadata: unknown } }) => { state.audits.push(data); return data; } },
     $executeRaw: async () => 0,
     $transaction: async <T>(operation: (transaction: unknown) => Promise<T>) => operation(prisma)
@@ -113,19 +123,21 @@ describe("phone sign-in and linking HTTP boundary", () => {
   let memory: ReturnType<typeof memoryDatabase>;
   let provider: RecordingProvider;
   let jwt: JwtService;
+  let limiter: AuthRateLimiter;
   let enabled = true;
 
-  async function build(config: PhoneAuthConfig) {
+  async function build(config: PhoneAuthConfig, publicSignup = false) {
     memory = memoryDatabase();
     jwt = new JwtService({ secret });
-    const limiter = new AuthRateLimiter({ store: new InMemoryRateLimitStore(), nodeEnv: "production", identifierHashSecret: "test-identifier-secret" });
+    limiter = new AuthRateLimiter({ store: new InMemoryRateLimitStore(), nodeEnv: "production", identifierHashSecret: "test-identifier-secret" });
     const moduleRef = await Test.createTestingModule({
       imports: [JwtModule.register({ secret })],
       controllers: [PhoneAuthController],
       providers: [AuthGuard, AdminGuard, AuthenticatedUserService, AuditService, PhoneAuthService,
         { provide: PrismaService, useValue: memory.prisma },
         { provide: AuthRateLimiter, useValue: limiter },
-        { provide: PHONE_AUTH_CONFIG, useValue: config }]
+        { provide: PHONE_AUTH_CONFIG, useValue: config },
+        ...(publicSignup ? [{ provide: NEON_AUTH_CONFIG, useValue: { publicSignup: true } }] : [])]
     }).compile();
     app = moduleRef.createNestApplication(); app.useLogger(false); app.setGlobalPrefix("api/v1");
     app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }));
@@ -164,7 +176,7 @@ describe("phone sign-in and linking HTTP boundary", () => {
     const signedIn = await http.post("/api/v1/auth/phone/sign-in/verify").send({ phoneNumber: "4155552671", code: provider.codeFor("+14155552671") }).expect(200);
     expect(signedIn.body.user).toEqual({ id: "user-a", email: "a@example.test", role: "USER" });
     const claims = jwt.decode(signedIn.body.accessToken) as Record<string, number | string>;
-    expect(claims.exp! as number - (claims.iat as number)).toBe(3600);
+    expect(claims.exp! as number - (claims.iat as number)).toBe(7 * 24 * 3600);
     expect(claims.adminReauthenticatedAt).toBeUndefined();
     expect(memory.state.audits.map((entry) => entry.action)).toEqual(["PHONE_LINKED", "PHONE_SIGN_IN"]);
   });
@@ -233,6 +245,17 @@ describe("phone sign-in and linking HTTP boundary", () => {
     await http.post("/api/v1/auth/phone/sign-in/code").send({ phoneNumber: "+14155552671" }).expect(200);
     await flush();
     expect(provider.sent).toEqual([]);
+  });
+
+  it("says whether the account is an administrator as stored now, not as the session says", async () => {
+    const http = request(app.getHttpServer());
+    const tokenB = await session("user-b", "b@example.test");
+    expect((await http.get("/api/v1/auth/phone").auth(tokenB, { type: "bearer" }).expect(200)).body.admin).toBe(false);
+    // An operator grants the role while this session is open.
+    memory.state.users.find((entry) => entry.id === "user-b")!.role = "ADMIN";
+    expect((await http.get("/api/v1/auth/phone").auth(tokenB, { type: "bearer" }).expect(200)).body.admin).toBe(true);
+    expect((await link("admin-1", "admin@example.test", "+14155552672")).body).toMatchObject({ linked: true, phoneNumber: "+1 ••• ••• 2672", admin: true });
+    expect((await link("user-a", "a@example.test", "+14155552671")).body).toMatchObject({ linked: true, admin: false });
   });
 
   it("limits texts per number before contacting the provider", async () => {
@@ -330,9 +353,107 @@ describe("phone sign-in and linking HTTP boundary", () => {
     enabled = false;
     await build({ enabled: false });
     const http = request(app.getHttpServer());
-    expect((await http.get("/api/v1/auth/phone/availability").expect(200)).body).toEqual({ enabled: false, regions: [] });
+    expect((await http.get("/api/v1/auth/phone/availability").expect(200)).body).toEqual({ enabled: false, regions: [], signUp: false });
     const response = await http.post("/api/v1/auth/phone/sign-in/code").send({ phoneNumber: "+14155552671" }).expect(503);
     expect(response.body.code).toBe("PHONE_AUTH_UNAVAILABLE");
     expect(enabled).toBe(false);
+  });
+  it("creates an account for a new number only when public sign-up is on", async () => {
+    await app.close();
+    await build({ enabled: true, regions: ["US_CA", "CN"], provider }, true);
+    const http = request(app.getHttpServer());
+    expect((await http.get("/api/v1/auth/phone/availability").expect(200)).body).toEqual({ enabled: true, regions: ["US_CA", "CN"], signUp: true });
+    const sent = await http.post("/api/v1/auth/phone/sign-in/code").send({ phoneNumber: "(415) 555-0142" }).expect(200);
+    expect(sent.body).toEqual({ phoneNumber: "+1 ••• ••• 0142", expiresInSeconds: 600 });
+    await flush();
+    expect(provider.sent).toEqual(["+14155550142"]);
+    const code = provider.codeFor("+14155550142");
+    const wrong = code === "000000" ? "111111" : "000000";
+    await http.post("/api/v1/auth/phone/sign-in/verify").send({ phoneNumber: "+14155550142", code: wrong }).expect(401);
+    expect(memory.state.users).toHaveLength(3);
+    const created = await http.post("/api/v1/auth/phone/sign-in/verify").send({ phoneNumber: "+14155550142", code }).expect(200);
+    expect(created.body.isNewUser).toBe(true);
+    expect(created.body.user.role).toBe("USER");
+    expect(isPhoneAccountEmail(created.body.user.email)).toBe(true);
+    expect(JSON.stringify(created.body)).not.toContain("4155550142");
+    expect(memory.state.identities).toEqual([expect.objectContaining({ userId: created.body.user.id, phoneNumber: "+14155550142" })]);
+    expect(memory.state.profiles.get(created.body.user.email)).toEqual({ phoneVerified: true });
+    expect(memory.state.audits.map((entry) => entry.action)).toEqual(["PHONE_SIGN_UP"]);
+
+    // The same number signs back in to the same account; it never creates a second one.
+    await http.post("/api/v1/auth/phone/sign-in/code").send({ phoneNumber: "4155550142" }).expect(200);
+    await flush();
+    const again = await http.post("/api/v1/auth/phone/sign-in/verify").send({ phoneNumber: "4155550142", code: provider.codeFor("+14155550142") }).expect(200);
+    expect(again.body).toMatchObject({ isNewUser: false, user: { id: created.body.user.id } });
+    expect(memory.state.users).toHaveLength(4);
+    // Sign-up never applies to an administrator's number.
+    await link("admin-1", "admin@example.test", "+14155552672");
+    provider.sent.length = 0;
+    await http.post("/api/v1/auth/phone/sign-in/code").send({ phoneNumber: "+14155552672" }).expect(200);
+    await flush();
+    expect(provider.sent).toEqual([]);
+  });
+
+  it("keeps the number of an account created by phone, which has no other way to sign in", async () => {
+    await app.close();
+    await build({ enabled: true, regions: ["US_CA", "CN"], provider }, true);
+    const http = request(app.getHttpServer());
+    await http.post("/api/v1/auth/phone/sign-in/code").send({ phoneNumber: "+14155550142" }).expect(200);
+    await flush();
+    const created = await http.post("/api/v1/auth/phone/sign-in/verify").send({ phoneNumber: "+14155550142", code: provider.codeFor("+14155550142") }).expect(200);
+    const token = created.body.accessToken as string;
+    const refused = await http.post("/api/v1/auth/phone/unlink").auth(token, { type: "bearer" }).expect(409);
+    expect(refused.body.code).toBe("PHONE_REQUIRED_FOR_ACCOUNT");
+    expect(memory.state.identities).toEqual([expect.objectContaining({ userId: created.body.user.id, phoneNumber: "+14155550142" })]);
+    expect(memory.state.profiles.get(created.body.user.email)).toEqual({ phoneVerified: true });
+    expect(memory.state.audits.map((entry) => entry.action)).toEqual(["PHONE_SIGN_UP"]);
+
+    // Moving to another number is still allowed.
+    await http.post("/api/v1/auth/phone/link/code").auth(token, { type: "bearer" }).send({ phoneNumber: "+14155550143" }).expect(200);
+    await flush();
+    await http.post("/api/v1/auth/phone/link/verify").auth(token, { type: "bearer" }).send({ phoneNumber: "+14155550143", code: provider.codeFor("+14155550143") }).expect(200);
+    expect(memory.state.identities.map((entry) => entry.phoneNumber)).toEqual(["+14155550143"]);
+
+    // Once Google or email sign-in is bound to the account, the number can be removed.
+    memory.state.externalIdentities.push({ userId: created.body.user.id });
+    await http.post("/api/v1/auth/phone/unlink").auth(token, { type: "bearer" }).expect(200);
+    expect(memory.state.identities).toEqual([]);
+  });
+
+  it("charges sign-up texts to the requester's network, out of sight of the requester", async () => {
+    await app.close();
+    await build({ enabled: true, regions: ["US_CA", "CN"], provider }, true);
+    const original = limiter.enforce.bind(limiter);
+    const enforce = vi.spyOn(limiter, "enforce");
+    const http = request(app.getHttpServer());
+    const sent = await http.post("/api/v1/auth/phone/sign-in/code").set("X-Forwarded-For", "198.51.100.7").send({ phoneNumber: "+14155550142" }).expect(200);
+    await flush();
+    const deliver = enforce.mock.calls.find(([action]) => action === "deliver");
+    expect(deliver?.[1]).toBe("PHONE_SIGNUP");
+    // The test server trusts no proxy, so the address is the socket's, never a forwarded header.
+    expect(deliver?.[2]).toMatchObject({ ip: "127.0.0.1", subject: "+14155550142" });
+    expect(provider.sent).toEqual(["+14155550142"]);
+
+    // Past the limit the answer is unchanged and no text goes out.
+    enforce.mockImplementation(async (action, purpose, identity) => {
+      if (action === "deliver") throw new AuthRateLimitException(60);
+      return original(action, purpose, identity);
+    });
+    provider.sent.length = 0;
+    const limited = await http.post("/api/v1/auth/phone/sign-in/code").send({ phoneNumber: "+14155550143" }).expect(200);
+    await flush();
+    expect(Object.keys(limited.body)).toEqual(Object.keys(sent.body));
+    expect(provider.sent).toEqual([]);
+  });
+
+  it("keeps invite-only deployments closed to new numbers", async () => {
+    const http = request(app.getHttpServer());
+    expect((await http.get("/api/v1/auth/phone/availability").expect(200)).body).toEqual({ enabled: true, regions: ["US_CA", "CN"], signUp: false });
+    await http.post("/api/v1/auth/phone/sign-in/code").send({ phoneNumber: "+14155550142" }).expect(200);
+    await flush();
+    expect(provider.sent).toEqual([]);
+    await http.post("/api/v1/auth/phone/sign-in/verify").send({ phoneNumber: "+14155550142", code: "123456" }).expect(401);
+    expect(provider.checked).toEqual([]);
+    expect(memory.state.users).toHaveLength(3);
   });
 });

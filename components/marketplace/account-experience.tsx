@@ -19,7 +19,8 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { PageHeader } from "@/components/marketplace/page-header";
 import { SignInOptions } from "@/components/marketplace/sign-in-options";
 import { PhoneVerificationRow } from "@/components/marketplace/phone-verification";
-import { enabledAuthMethods, signInViaPhrase } from "@/lib/auth-methods";
+import { accountEmailLabel, accountGreetingName, isPhoneAccountEmail } from "@/lib/account-label";
+import { enabledAuthMethods, isSocialAuthMethod, signInViaPhrase } from "@/lib/auth-methods";
 import { endGoogleSession, usesNeonAuth } from "@/lib/neon-auth-client";
 import {
   getMyProfile,
@@ -137,7 +138,7 @@ function AccountSessionExperience({ mode, returnTo = null, authIntent = "account
       {notice ? <div role="status" className="mt-5 rounded-psw-md bg-success-soft px-4 py-3 text-d-subhead font-semibold text-success-text">{notice}</div> : null}
       <div className="mt-5 grid items-start gap-4 lg:mt-8 lg:grid-cols-[250px_minmax(0,1fr)] lg:gap-6">
         <aside className="flex min-w-0 items-center overflow-hidden rounded-psw-lg bg-surface p-1 lg:block lg:rounded-psw-xl lg:p-2">
-          <div className="hidden items-center gap-3 p-3 lg:flex"><span className="grid size-11 place-items-center rounded-full bg-surface-subtle text-primary-text"><UserRound className="size-5" /></span><span className="min-w-0"><span className="block truncate text-sm font-bold">{user?.email ?? "访客账户"}</span><span className="mt-0.5 block text-m-footnote text-ink-secondary">{authenticated ? "账户已连接" : loading ? "正在检查登录状态" : "登录后同步进度"}</span></span></div>
+          <div className="hidden items-center gap-3 p-3 lg:flex"><span className="grid size-11 place-items-center rounded-full bg-surface-subtle text-primary-text"><UserRound className="size-5" /></span><span className="min-w-0"><span className="block truncate text-sm font-bold">{user ? accountEmailLabel(user.email) : "访客账户"}</span><span className="mt-0.5 block text-m-footnote text-ink-secondary">{authenticated ? "账户已连接" : loading ? "正在检查登录状态" : "登录后同步进度"}</span></span></div>
           <nav className="grid min-w-0 flex-1 grid-cols-4 lg:mt-2 lg:block lg:space-y-1" aria-label="账户导航">
             {accountNav.map((item) => {
               const Icon = item.icon;
@@ -208,7 +209,7 @@ function GuestAccount({ mode, returnTo, authIntent, onAuthenticated, signInDisab
   const resumingApplication = authIntent === "application" && returnTo?.startsWith("/applications/new");
   const methods = enabledAuthMethods();
   const passwordNote = methods.join(",") === "google" ? "psw 不会接收你的 Google 密码"
-    : methods.some((method) => method === "google" || method === "github") ? "psw 不会接收你的第三方账户密码"
+    : methods.some(isSocialAuthMethod) ? "psw 不会接收你的第三方账户密码"
     : "psw 不使用密码，每次登录都用验证码";
   if (usesNeonAuth()) return <section className="grid overflow-hidden rounded-psw-xl bg-surface xl:grid-cols-[minmax(0,1fr)_320px]">
     <div className="p-5 sm:p-9"><span className="inline-flex items-center gap-1.5 rounded-psw-sm bg-primary-soft px-2.5 py-1 text-m-footnote font-bold text-primary-text"><LockKeyhole className="size-3.5" aria-hidden="true" />{sectionLabel}</span>
@@ -227,7 +228,7 @@ function GuestAccount({ mode, returnTo, authIntent, onAuthenticated, signInDisab
 
 function AuthenticatedAccount({ mode, token, user, profile, applications, onProfileChange, onNotice }: { mode: AccountMode; token: string; user: SessionUser; profile: ApiProfile | null; applications: ApiRentalApplication[] | null; onProfileChange: (profile: ApiProfile) => void; onNotice: (message: string) => void }) {
   if (mode === "profile") return <ProfileEditor token={token} profile={profile} onProfileChange={onProfileChange} onNotice={onNotice} />;
-  if (mode === "verification") return <VerificationPanel token={token} profile={profile} onProfileChange={onProfileChange} />;
+  if (mode === "verification") return <VerificationPanel token={token} phoneOnly={isPhoneAccountEmail(user.email)} admin={user.role === "ADMIN"} profile={profile} onProfileChange={onProfileChange} />;
   if (mode === "settings") return <SettingsPanel />;
   const activeApplications = applications?.filter((application) => application.status === "DRAFT" || application.status === "SUBMITTED").length;
   const acceptedApplications = applications?.filter((application) => application.status === "ACCEPTED" || application.status === "COMPLETED").length;
@@ -239,9 +240,10 @@ function AuthenticatedAccount({ mode, token, user, profile, applications, onProf
   ];
   const missingFields = profileFields.filter((field) => !field.value?.trim());
   const completion = Math.round((profileFields.length - missingFields.length) / profileFields.length * 100);
+  const greetingName = accountGreetingName(user.email, profile?.displayName);
   return <section className="min-w-0 space-y-6">
     <div className="rounded-psw-xl bg-surface p-7 sm:p-9">
-      <h2 className="break-words text-m-title sm:text-d-title">你好，{profile?.displayName || user.email.split("@")[0]}</h2>
+      <h2 className="break-words text-m-title sm:text-d-title">{greetingName ? `你好，${greetingName}` : "你好"}</h2>
       <p className="mt-2 text-m-subhead text-ink-secondary sm:text-d-subhead">{missingFields.length ? `还可以补充：${missingFields.map((field) => field.label).join("、")}。` : "个人资料已完善，你可以随时更新。"}</p>
       {/* A progress bar only while something is missing; a full bar says nothing. */}
       {completion < 100 ? <div role="progressbar" aria-label="资料完成度" aria-valuenow={completion} aria-valuemin={0} aria-valuemax={100} className="mt-6 h-2 overflow-hidden rounded-full bg-primary-soft">
@@ -252,7 +254,7 @@ function AuthenticatedAccount({ mode, token, user, profile, applications, onProf
         <Link href="/account/profile" className="secondary-action">{completion === 100 ? "编辑资料" : "完善资料"}<ChevronRight className="size-4" aria-hidden="true" /></Link>
       </div>
     </div>
-    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"><QuickLink href="/applications" title="我的申请" detail={activeApplications === undefined ? "暂时无法读取" : `${activeApplications} 个进行中`} /><QuickLink href="/trips" title="租住进度" detail={acceptedApplications === undefined ? "暂时无法读取" : `${acceptedApplications} 个已接受`} /><QuickLink href="/saved" title="收藏清单" detail="保存在这台设备上" />{profile && ["lister", "both"].includes(profile.role) ? <QuickLink href="/host" title="我发布的房间" detail="申请、看房和房源状态" /> : null}</div>
+    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"><QuickLink href="/applications" title="我的申请" detail={activeApplications === undefined ? "暂时无法读取" : `${activeApplications} 个进行中`} /><QuickLink href="/trips" title="租住进度" detail={acceptedApplications === undefined ? "暂时无法读取" : `${acceptedApplications} 个已接受`} /><QuickLink href="/saved" title="收藏清单" detail="随账户保存" />{profile && ["lister", "both"].includes(profile.role) ? <QuickLink href="/host" title="我发布的房间" detail="申请、看房和房源状态" /> : null}</div>
   </section>;
 }
 
@@ -279,15 +281,23 @@ function ProfileEditor({ token, profile, onProfileChange, onNotice }: { token: s
   return <section className="rounded-psw-2xl border border-line-strong bg-surface p-6 sm:p-8"><h2 className="font-rounded text-m-title sm:text-d-title font-bold">个人资料</h2><p className="mt-2 text-sm text-ink-secondary">更新账户名称、所在地和个人简介。租房申请的联系人信息请在提交时核对。</p><form className="mt-7 grid gap-5 sm:grid-cols-2" onSubmit={save}><Field label="显示名称" value={draft.displayName ?? ""} onChange={(value) => { setDraft({ ...draft, displayName: value }); setError(null); }} /><Field label="学校或公司" value={draft.school ?? ""} onChange={(value) => { setDraft({ ...draft, school: value }); setError(null); }} /><Field label="城市" value={draft.city ?? ""} onChange={(value) => { setDraft({ ...draft, city: value }); setError(null); }} /><label className="grid gap-2 text-sm font-bold">身份<select className="application-input" value={draft.role} onChange={(event) => { setDraft({ ...draft, role: event.target.value as UpdateProfileInput["role"] }); setError(null); }}><option value="renter">租客</option><option value="lister">转租人</option><option value="both">租客兼转租人</option></select></label><label className="grid gap-2 text-sm font-bold sm:col-span-2">个人简介<textarea className="min-h-28 rounded-psw-lg border border-line-strong p-4 text-sm outline-none focus:border-primary" value={draft.bio ?? ""} onChange={(event) => { setDraft({ ...draft, bio: event.target.value }); setError(null); }} /></label>{error ? <p role="alert" className="rounded-psw-lg bg-danger-soft px-4 py-3 text-sm font-bold text-danger-text sm:col-span-2">{error}</p> : null}<button disabled={saving} className="w-fit rounded-full bg-primary px-6 py-3 text-sm font-bold text-white">{saving ? "保存中…" : "保存资料"}</button></form></section>;
 }
 
-function VerificationPanel({ token, profile, onProfileChange }: { token: string; profile: ApiProfile | null; onProfileChange: (profile: ApiProfile) => void }) {
+// `phoneOnly` is an account created by phone sign-up: it has no sign-in email (only a placeholder address).
+function VerificationPanel({ token, phoneOnly, admin, profile, onProfileChange }: { token: string; phoneOnly: boolean; admin: boolean; profile: ApiProfile | null; onProfileChange: (profile: ApiProfile) => void }) {
   const phoneEnabled = usesNeonAuth() && enabledAuthMethods().includes("phone");
+  // The phone status reports the role as stored now, which can differ from the one read when this page loaded.
+  const [serverAdmin, setServerAdmin] = useState<boolean | null>(null);
+  const isAdmin = serverAdmin ?? admin;
   return <section className="rounded-psw-2xl border border-line-strong bg-surface p-6 sm:p-8">
     <h2 className="font-rounded text-m-title sm:text-d-title font-bold">身份与认证</h2>
-    <p className="mt-2 text-sm leading-6 text-ink-secondary">{phoneEnabled ? "查看登录邮箱的认证状态，绑定手机号后可用短信验证码登录。" : "查看登录邮箱及其他认证的当前状态。"}</p>
+    <p className="mt-2 text-sm leading-6 text-ink-secondary">{phoneOnly ? "这个账户用手机号登录，没有登录邮箱。" : phoneEnabled && isAdmin ? "查看登录邮箱的认证状态。管理员账户的手机号只用于二次验证，不能用来登录。" : phoneEnabled ? "查看登录邮箱的认证状态，绑定手机号后可用短信验证码登录。" : "查看登录邮箱及其他认证的当前状态。"}</p>
     <div className="mt-7 divide-y divide-line">
-      <VerificationRow icon={Mail} title="邮箱认证" detail="账户登录邮箱已验证" done />
-      <VerificationRow icon={IdCard} title="教育邮箱" detail={profile?.eduEmailVerified ? "教育邮箱已验证" : "用学校邮箱（如 .edu、.ac.uk、.edu.cn）登录，验证后自动标记为学生。"} done={Boolean(profile?.eduEmailVerified)} />
-      {phoneEnabled ? <PhoneVerificationRow token={token} onChanged={(linked) => { if (profile) onProfileChange({ ...profile, phoneVerified: linked }); }}
+      {phoneOnly
+        ? <VerificationRow icon={Mail} title="邮箱认证" detail="这个账户用手机号登录，没有登录邮箱。" done={false} badge="无邮箱" />
+        : <VerificationRow icon={Mail} title="邮箱认证" detail="账户登录邮箱已验证" done />}
+      <VerificationRow icon={IdCard} title="教育邮箱" detail={profile?.eduEmailVerified ? "教育邮箱已验证"
+        : phoneOnly ? "学生标记只适用于用学校邮箱（如 .edu、.ac.uk、.edu.cn）登录的账户，手机号账户暂不支持。"
+        : "用学校邮箱（如 .edu、.ac.uk、.edu.cn）登录，验证后自动标记为学生。"} done={Boolean(profile?.eduEmailVerified)} />
+      {phoneEnabled ? <PhoneVerificationRow token={token} phoneOnly={phoneOnly} admin={admin} onAdminChange={setServerAdmin} onChanged={(linked) => { if (profile) onProfileChange({ ...profile, phoneVerified: linked }); }}
           fallback={<VerificationRow icon={ShieldCheck} title="手机认证" detail={profile?.phoneVerified ? "手机号已验证" : "手机号认证暂未开放。"} done={Boolean(profile?.phoneVerified)} />} />
         : <VerificationRow icon={ShieldCheck} title="手机认证" detail={profile?.phoneVerified ? "手机号已验证" : "手机号认证暂未开放。"} done={Boolean(profile?.phoneVerified)} />}
     </div>
@@ -307,11 +317,11 @@ function SettingsPanel() {
 function Benefit({ icon: Icon, title, detail }: { icon: typeof Heart; title: string; detail: string }) { return <div className="flex gap-3"><span className="grid size-10 shrink-0 place-items-center rounded-full bg-surface text-primary-text"><Icon className="size-[18px]" aria-hidden="true" /></span><span><span className="block text-d-label text-ink">{title}</span><span className="mt-0.5 block text-m-footnote text-ink-secondary">{detail}</span></span></div>; }
 function QuickLink({ href, title, detail }: { href: string; title: string; detail: string }) { return <Link href={href} className="flex items-center gap-3 rounded-psw-xl bg-surface p-5 transition-[box-shadow,transform] hover:-translate-y-1 hover:shadow-card-hover"><span className="min-w-0 flex-1"><span className="block font-rounded text-d-label text-ink">{title}</span><span className="mt-1 block text-m-footnote text-ink-secondary">{detail}</span></span><ChevronRight className="size-4 shrink-0 text-primary-text" aria-hidden="true" /></Link>; }
 function Field({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) { return <label className="grid gap-2 text-sm font-bold">{label}<input className="application-input" value={value} onChange={(event) => onChange(event.target.value)} /></label>; }
-function VerificationRow({ icon: Icon, title, detail, done }: { icon: typeof Mail; title: string; detail: string; done: boolean }) {
+function VerificationRow({ icon: Icon, title, detail, done, badge = "暂未开放" }: { icon: typeof Mail; title: string; detail: string; done: boolean; badge?: string }) {
   return <div className="flex items-center gap-3 py-5 sm:gap-4">
     <span className="grid size-11 shrink-0 place-items-center rounded-psw-md bg-tag-neutral"><Icon className="size-5" aria-hidden="true" /></span>
     <span className="min-w-0 flex-1"><span className="block text-sm font-bold">{title}</span><span className="mt-1 block text-m-footnote leading-5 text-ink-secondary">{detail}</span></span>
-    <span className={cn("shrink-0 rounded-psw-sm px-2.5 py-1 text-m-footnote font-bold", done ? "bg-surface-subtle text-primary-text" : "bg-tag-neutral text-ink-secondary")}>{done ? "已完成" : "暂未开放"}</span>
+    <span className={cn("shrink-0 rounded-psw-sm px-2.5 py-1 text-m-footnote font-bold", done ? "bg-surface-subtle text-primary-text" : "bg-tag-neutral text-ink-secondary")}>{done ? "已完成" : badge}</span>
   </div>;
 }
 function SettingsRow({ icon: Icon, title, detail, href }: { icon: typeof Bell; title: string; detail: string; href?: string }) {

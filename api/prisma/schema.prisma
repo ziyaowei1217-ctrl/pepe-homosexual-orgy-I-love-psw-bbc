@@ -109,6 +109,30 @@ model User {
   demoPaymentAttempts             DemoPaymentAttempt[]         @relation("DemoPaymentAttemptActor")
   externalAuthIdentities           ExternalAuthIdentity[]
   phoneIdentity                    PhoneIdentity?
+  documents                        UserDocument[]
+}
+
+enum UserDocumentKind {
+  SAVED_COLLECTIONS
+  RENTER_PREFERENCES
+  FEED_SIGNALS
+}
+
+// Per-account app data the website used to keep only in one browser: saved
+// homes and lists with notes, match preferences, and recently viewed homes and
+// the last search for the home feeds. One JSON document per kind; revision is
+// an optimistic-concurrency counter so two devices cannot silently overwrite
+// each other.
+model UserDocument {
+  userId    String
+  kind      UserDocumentKind
+  revision  Int
+  value     Json
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, kind])
 }
 
 // A verified mobile number used for SMS sign-in. Kept out of the User row so

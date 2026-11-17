@@ -1,4 +1,4 @@
-import { enabledAuthMethods } from "./auth-methods";
+import { enabledAuthMethods, isSocialAuthMethod } from "./auth-methods";
 
 // Use Neon's documented, framework-independent Fetch toolkit. Its bundled
 // /next adapter targets Next 16; this application deliberately stays on Next 15.
@@ -116,7 +116,7 @@ async function completeOAuth(request: Request, configuration: NonNullable<Return
 // must also be enabled in the Neon Auth project; this only narrows the proxy.
 function enabledMethods() {
   const methods = enabledAuthMethods();
-  return { social: methods.filter(method => method === "google" || method === "github"), email: methods.includes("email") };
+  return { social: methods.filter(isSocialAuthMethod), email: methods.includes("email") };
 }
 
 const EMAIL_OTP_ROUTES = ["email-otp/send-verification-otp", "sign-in/email-otp"];

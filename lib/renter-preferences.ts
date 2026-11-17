@@ -3,13 +3,14 @@
 import { formatDateLong, formatRangeLong } from "./date-format";
 import { destinationMarket } from "./listing-match";
 import { dateOnly, localDate } from "./listing-stay";
-import { useLocalStore, writeLocalStore } from "./local-store";
+import { readLocalStore, removeLocalStore, useLocalStore, writeLocalStore } from "./local-store";
 import { searchAmenities, type SearchState } from "./search-state";
 import { formatUsd } from "./stay-price";
 
 /**
  * What a renter wants from a home, used to rank listings by match (lib/listing-match.ts).
- * Saved on this device. While a search is open, what its filters already guarantee is left out (withSearchState).
+ * Saved on this device, and in the account while signed in (lib/account-documents.ts). While a search is open,
+ * what its filters already guarantee is left out (withSearchState).
  */
 export type RenterPreferences = {
   /** School, company or neighborhood the renter goes to, e.g. "UCLA". */
@@ -89,6 +90,14 @@ export function describeRenterPreferences(preferences: RenterPreferences) {
 
 export function writeRenterPreferences(preferences: RenterPreferences) {
   writeLocalStore(storageKey, normalizeRenterPreferences(preferences));
+}
+
+export function readRenterPreferences() {
+  return readLocalStore(storageKey, normalizeRenterPreferences);
+}
+
+export function clearRenterPreferences() {
+  removeLocalStore(storageKey);
 }
 
 export function useRenterPreferences(): [RenterPreferences, (preferences: RenterPreferences) => void] {

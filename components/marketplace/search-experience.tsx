@@ -131,7 +131,7 @@ export function SearchExperience({ listings, initialQuery, initialMoveIn, initia
 
   function saveListing(listing: PreviewListing) {
     toggleSaved(listing.id);
-    setNotice(savedIds.has(listing.id) ? "已从收藏移除" : "已加入此设备上的收藏");
+    setNotice(savedIds.has(listing.id) ? "已从收藏移除" : "已加入收藏");
   }
 
   function rememberSearch(id: string) {

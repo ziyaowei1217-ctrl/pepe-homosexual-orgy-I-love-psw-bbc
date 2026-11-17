@@ -2,12 +2,13 @@ import { ConflictException, Injectable } from "@nestjs/common";
 import { Prisma, UserRole, type User } from "@prisma/client";
 
 import { AuditService, type AuditInput } from "../audit/audit.service";
+import { isPhoneAccountEmail } from "../auth/phone-account";
 import { PrismaService } from "../prisma/prisma.service";
 import { maskEmail, requireOperationsEmail, requireOperationsReason } from "./operations-input";
 
 export type RoleMutationInput = { email: string; actorEmail: string; reason: string };
 type RoleOutcome = "SUCCESS" | "NOOP";
-type BlockCode = "USER_NOT_FOUND" | "LAST_ADMIN_REQUIRED";
+type BlockCode = "USER_NOT_FOUND" | "LAST_ADMIN_REQUIRED" | "PHONE_ONLY_ACCOUNT";
 
 function roleAudit(input: RoleMutationInput, user: User, action: string, outcome: RoleOutcome): AuditInput {
   return {
@@ -26,7 +27,9 @@ function toMaskedRoleResult(user: User, outcome: RoleOutcome) {
 }
 
 function blockMessage(code: BlockCode) {
-  return code === "USER_NOT_FOUND" ? "User not found" : "At least one administrator is required";
+  if (code === "USER_NOT_FOUND") return "User not found";
+  if (code === "PHONE_ONLY_ACCOUNT") return "This account signs in only by phone, which administrators cannot use; grant the role to an account with Google or email sign-in";
+  return "At least one administrator is required";
 }
 
 @Injectable()
@@ -53,6 +56,20 @@ export class AdminRolesService {
       if (user.role === UserRole.ADMIN) {
         await this.audit.append(transaction, roleAudit(normalizedInput, user, "ADMIN_ROLE_GRANTED", "NOOP"));
         return { status: "ok" as const, user, outcome: "NOOP" as const };
+      }
+      // Administrators cannot sign in by phone, and granting removes the account's phone below. An account created
+      // by phone sign-up has no other way in, so it would be locked out.
+      if (isPhoneAccountEmail(user.email) && await transaction.externalAuthIdentity.count({ where: { userId: user.id } }) === 0) {
+        await this.audit.append(transaction, {
+          actorType: "OPERATOR",
+          actorEmail,
+          action: "ADMIN_ROLE_GRANT_BLOCKED",
+          targetType: "User",
+          targetId: user.id,
+          outcome: "BLOCKED",
+          metadata: { reason, code: "PHONE_ONLY_ACCOUNT" }
+        });
+        return { status: "blocked" as const, code: "PHONE_ONLY_ACCOUNT" as const, message: blockMessage("PHONE_ONLY_ACCOUNT") };
       }
       const updated = await transaction.user.update({ where: { id: user.id }, data: { role: UserRole.ADMIN } });
       // A phone linked while this was an ordinary account must not become the

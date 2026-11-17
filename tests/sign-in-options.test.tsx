@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { webcrypto } from "node:crypto";
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 
 import { AccountExperience } from "../components/marketplace/account-experience";
@@ -124,6 +124,26 @@ describe("account sign-in methods", () => {
     expect(JSON.parse(String(calls("/auth/phone/sign-in/verify")[0][1]?.body))).toEqual({ phoneNumber: "(415) 555-2671", code: "654321" });
   });
 
+  it("takes a code texted earlier when a new one is refused for coming too often", async () => {
+    routes["/auth/phone/sign-in/code"] = () => Response.json({ code: "SERVICE_UNAVAILABLE" }, { status: 503 });
+    render(<AccountExperience mode="overview" />);
+    fireEvent.click(await screen.findByRole("tab", { name: "手机号" }));
+    fireEvent.change(await screen.findByLabelText("手机号", { selector: "input" }), { target: { value: "(415) 555-2671" } });
+    fireEvent.click(screen.getByRole("button", { name: "发送短信验证码" }));
+    await screen.findByRole("alert");
+    // Only a refusal for asking too often means codes may already be on their way.
+    expect(screen.queryByRole("button", { name: "已经收到验证码？直接输入" })).toBeNull();
+
+    routes["/auth/phone/sign-in/code"] = () => Response.json({ code: "AUTH_RATE_LIMITED" }, { status: 429, headers: { "Retry-After": "3600" } });
+    fireEvent.click(screen.getByRole("button", { name: "发送短信验证码" }));
+    fireEvent.click(await screen.findByRole("button", { name: "已经收到验证码？直接输入" }));
+    expect(screen.getByText("输入这个号码 10 分钟内收到的短信验证码。")).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("短信验证码", { selector: "input" }), { target: { value: "654321" } });
+    fireEvent.click(screen.getByRole("button", { name: "验证并登录" }));
+    await waitFor(() => expect(readStoredAuthSession()?.accessToken).toBe("phone-app-session"));
+    expect(JSON.parse(String(calls("/auth/phone/sign-in/verify")[0][1]?.body))).toEqual({ phoneNumber: "(415) 555-2671", code: "654321" });
+  });
+
   it("hides the phone tab when the API has phone sign-in switched off or lacks it", async () => {
     for (const handler of [() => Response.json({ enabled: false, regions: [] }), () => Response.json({ code: "NOT_FOUND" }, { status: 404 })]) {
       routes["/auth/phone/availability"] = handler;
@@ -150,7 +170,10 @@ describe("account sign-in methods", () => {
     render(<AccountExperience mode="overview" />);
     fireEvent.change(await screen.findByLabelText("邮箱地址", { selector: "input" }), { target: { value: "new@example.com" } });
     fireEvent.click(screen.getByRole("button", { name: "发送验证码" }));
-    await screen.findByLabelText("邮箱验证码", { selector: "input" });
+    const codeInput = await screen.findByLabelText("邮箱验证码", { selector: "input" });
+    // The code field takes focus in an effect after the step changes. Wait for it, or that effect can run during the
+    // key press below and move focus off the tab the test just selected.
+    await waitFor(() => expect(document.activeElement).toBe(codeInput));
     const emailTab = screen.getByRole("tab", { name: "邮箱验证码" });
     emailTab.focus();
     fireEvent.keyDown(emailTab, { key: "ArrowRight" });
@@ -244,5 +267,135 @@ describe("linking a phone number", () => {
     expect(await screen.findByText(/已绑定 \+86 ••• •••• 8000/)).toBeTruthy();
     expect(screen.getByRole("button", { name: "解除绑定" })).toBeTruthy();
     expect(document.body.textContent).not.toContain("13800138000");
+  });
+
+  it("lets an account created by phone change its number but not remove it", async () => {
+    writeStoredAuthSession("member");
+    routes["/auth/me"] = () => Response.json({ id: "member", email: "phone-0a1b2c3d4e5f60718293@phone.psw.invalid", role: "USER" });
+    routes["/auth/phone"] = () => Response.json({ enabled: true, regions: ["US_CA"], linked: true, phoneNumber: "+1 ••• ••• 0142", verifiedAt: "2026-11-17T00:00:00.000Z" });
+    routes["/auth/phone/link/code"] = () => Response.json({ phoneNumber: "+1 ••• ••• 0143", expiresInSeconds: 600 });
+    routes["/auth/phone/link/verify"] = () => Response.json({ linked: true, phoneNumber: "+1 ••• ••• 0143", verifiedAt: "2026-11-17T01:00:00.000Z" });
+    render(<AccountExperience mode="verification" />);
+    expect(await screen.findByText(/已绑定 \+1 ••• ••• 0142。这个账户用手机号登录，可以更换号码，不能解除绑定。/)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "解除绑定" })).toBeNull();
+    // The placeholder address is not a sign-in email, so the email row does not claim one was verified.
+    expect(screen.getByText("这个账户用手机号登录，没有登录邮箱。", { selector: "span" })).toBeTruthy();
+    expect(document.body.textContent).not.toContain("账户登录邮箱已验证");
+    expect(document.body.textContent).not.toContain("phone.psw.invalid");
+
+    fireEvent.click(screen.getByRole("button", { name: "更换号码" }));
+    fireEvent.change(screen.getByLabelText("新手机号", { selector: "input" }), { target: { value: "415 555 0143" } });
+    fireEvent.click(screen.getByRole("button", { name: "发送短信验证码" }));
+    fireEvent.change(await screen.findByLabelText("短信验证码", { selector: "input" }), { target: { value: "222222" } });
+    fireEvent.click(screen.getByRole("button", { name: "验证并绑定" }));
+    expect(await screen.findByText("已绑定 +1 ••• ••• 0143，之后用这个号码登录。")).toBeTruthy();
+    expect(screen.getByText(/已绑定 \+1 ••• ••• 0143。/)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "解除绑定" })).toBeNull();
+  });
+
+  const hour = 60 * 60 * 1000;
+  // The row rounds the time up to the minute: the API accepts the number only once the full day has passed.
+  const stepUpFrom = (verifiedAt: string) => `${new Intl.DateTimeFormat("zh-CN", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }).format(Math.ceil((Date.parse(verifiedAt) + 24 * hour) / 60_000) * 60_000)} 起`;
+
+  it("keeps an administrator's linked number fixed and says only an operator changes it", async () => {
+    writeStoredAuthSession("member");
+    routes["/auth/me"] = () => Response.json({ id: "member", email: "admin@example.com", role: "ADMIN" });
+    routes["/auth/phone"] = () => Response.json({ enabled: true, regions: ["US_CA"], linked: true, phoneNumber: "+1 ••• ••• 0142", verifiedAt: new Date(Date.now() - 48 * hour).toISOString(), admin: true });
+    render(<AccountExperience mode="verification" />);
+    expect(await screen.findByText("已绑定 +1 ••• ••• 0142，用于管理员二次验证。只能由运营人员更改或解除。")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "解除绑定" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "更换号码" })).toBeNull();
+    expect(document.body.textContent).not.toContain("短信验证码登录");
+  });
+
+  it("says from when an administrator's number linked in the last day can be used for step-up", async () => {
+    writeStoredAuthSession("member");
+    // Linked an hour ago at 42.5 seconds past a minute: the row names the next minute.
+    const linkedAt = Math.floor((Date.now() - hour) / 60_000) * 60_000 + 42_500;
+    const verifiedAt = new Date(linkedAt).toISOString();
+    expect(stepUpFrom(verifiedAt)).toBe(`${new Intl.DateTimeFormat("zh-CN", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }).format(linkedAt + 24 * hour + 17_500)} 起`);
+    // An older API leaves out `admin`; the role read when the page loaded is used then.
+    routes["/auth/me"] = () => Response.json({ id: "member", email: "admin@example.com", role: "ADMIN" });
+    routes["/auth/phone"] = () => Response.json({ enabled: true, regions: ["US_CA"], linked: true, phoneNumber: "+1 ••• ••• 0142", verifiedAt });
+    render(<AccountExperience mode="verification" />);
+    expect(await screen.findByText(`已绑定 +1 ••• ••• 0142，${stepUpFrom(verifiedAt)}用于管理员二次验证。只能由运营人员更改或解除。`)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "解除绑定" })).toBeNull();
+  });
+
+  it("tells an administrator a new number is for step-up after a day, then offers no removal", async () => {
+    writeStoredAuthSession("member");
+    const verifiedAt = new Date().toISOString();
+    routes["/auth/me"] = () => Response.json({ id: "member", email: "admin@example.com", role: "ADMIN" });
+    routes["/auth/phone/link/verify"] = () => Response.json({ linked: true, phoneNumber: "+86 ••• •••• 8000", verifiedAt, admin: true });
+    render(<AccountExperience mode="verification" />);
+    expect(await screen.findByText("绑定后用于管理员二次验证，24 小时后可用，之后只能由运营人员更改或解除。支持美国/加拿大（+1）、中国大陆（+86）手机号。")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "绑定手机号" }));
+    fireEvent.change(screen.getByLabelText("手机号", { selector: "input" }), { target: { value: "138 0013 8000" } });
+    fireEvent.click(screen.getByRole("button", { name: "发送短信验证码" }));
+    fireEvent.change(await screen.findByLabelText("短信验证码", { selector: "input" }), { target: { value: "222222" } });
+    fireEvent.click(screen.getByRole("button", { name: "验证并绑定" }));
+    expect(await screen.findByText("手机号已绑定，24 小时后可用于管理员二次验证。")).toBeTruthy();
+    expect(screen.getByText(`已绑定 +86 ••• •••• 8000，${stepUpFrom(verifiedAt)}用于管理员二次验证。只能由运营人员更改或解除。`)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "解除绑定" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "更换号码" })).toBeNull();
+  });
+
+  it("follows the account becoming an administrator while the page is open", async () => {
+    writeStoredAuthSession("member");
+    const verifiedAt = new Date().toISOString();
+    // Loaded as an ordinary account; an operator then grants the administrator role.
+    routes["/auth/phone/link/verify"] = () => Response.json({ linked: true, phoneNumber: "+86 ••• •••• 8000", verifiedAt, admin: true });
+    render(<AccountExperience mode="verification" />);
+    expect(await screen.findByText(/绑定手机号后可用短信验证码登录/)).toBeTruthy();
+    fireEvent.click(await screen.findByRole("button", { name: "绑定手机号" }));
+    fireEvent.change(screen.getByLabelText("手机号", { selector: "input" }), { target: { value: "138 0013 8000" } });
+    fireEvent.click(screen.getByRole("button", { name: "发送短信验证码" }));
+    fireEvent.change(await screen.findByLabelText("短信验证码", { selector: "input" }), { target: { value: "222222" } });
+    fireEvent.click(screen.getByRole("button", { name: "验证并绑定" }));
+    expect(await screen.findByText("手机号已绑定，24 小时后可用于管理员二次验证。")).toBeTruthy();
+    expect(screen.getByText(`已绑定 +86 ••• •••• 8000，${stepUpFrom(verifiedAt)}用于管理员二次验证。只能由运营人员更改或解除。`)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "解除绑定" })).toBeNull();
+    // The page intro follows once the row passes the new role up.
+    expect(await screen.findByText("查看登录邮箱的认证状态。管理员账户的手机号只用于二次验证，不能用来登录。")).toBeTruthy();
+    expect(document.body.textContent).not.toContain("短信验证码登录");
+  });
+
+  it("shows an administrator's number as locked once the API refuses to remove it", async () => {
+    writeStoredAuthSession("member");
+    const verifiedAt = new Date(Date.now() - 48 * hour).toISOString();
+    let admin = false;
+    routes["/auth/phone"] = () => Response.json({ enabled: true, regions: ["US_CA"], linked: true, phoneNumber: "+1 ••• ••• 0142", verifiedAt, admin });
+    routes["/auth/phone/unlink"] = () => Response.json({ code: "ADMIN_PHONE_LOCKED" }, { status: 403 });
+    render(<AccountExperience mode="verification" />);
+    fireEvent.click(await screen.findByRole("button", { name: "解除绑定" }));
+    admin = true;
+    fireEvent.click(within(await screen.findByRole("alertdialog", { name: "解除绑定手机号？" })).getByRole("button", { name: "解除绑定" }));
+    expect((await screen.findByRole("alert")).textContent).toBe("管理员账户已绑定的手机号不能在网站上更换或解除，请联系运营人员。");
+    expect(await screen.findByText("已绑定 +1 ••• ••• 0142，用于管理员二次验证。只能由运营人员更改或解除。")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "解除绑定" })).toBeNull();
+    expect(readStoredAuthSession()?.accessToken).toBe("member");
+  });
+
+  it("shows no linked or unlinked badge until the number's status has loaded", async () => {
+    writeStoredAuthSession("member");
+    routes["/auth/me"] = () => Response.json({ id: "member", email: "phone-0a1b2c3d4e5f60718293@phone.psw.invalid", role: "USER" });
+    routes["/auth/phone"] = () => Response.json({ code: "SERVICE_UNAVAILABLE" }, { status: 503 });
+    render(<AccountExperience mode="verification" />);
+    const row = (await screen.findByText("手机号状态暂时无法读取，请刷新页面重试。")).closest("div")!;
+    expect(row.textContent).toContain("手机认证");
+    expect(within(row).queryByText("未绑定")).toBeNull();
+    expect(within(row).queryByText("暂未开放")).toBeNull();
+  });
+
+  it("explains the refusal if the API will not remove an account's only sign-in", async () => {
+    writeStoredAuthSession("member");
+    routes["/auth/phone"] = () => Response.json({ enabled: true, regions: ["US_CA"], linked: true, phoneNumber: "+1 ••• ••• 0142", verifiedAt: "2026-11-17T00:00:00.000Z" });
+    routes["/auth/phone/unlink"] = () => Response.json({ code: "PHONE_REQUIRED_FOR_ACCOUNT" }, { status: 409 });
+    render(<AccountExperience mode="verification" />);
+    fireEvent.click(await screen.findByRole("button", { name: "解除绑定" }));
+    fireEvent.click(within(await screen.findByRole("alertdialog", { name: "解除绑定手机号？" })).getByRole("button", { name: "解除绑定" }));
+    expect((await screen.findByRole("alert")).textContent).toBe("这个账户用手机号登录，号码不能解除绑定。可以绑定新号码来更换。");
+    expect(screen.getByText(/已绑定 \+1 ••• ••• 0142/)).toBeTruthy();
+    expect(readStoredAuthSession()?.accessToken).toBe("member");
   });
 });

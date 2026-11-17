@@ -4,6 +4,9 @@
 # Run migrations from an authorized operator environment before each release;
 # Render's paid-only preDeployCommand is intentionally absent.
 # PostgreSQL, TLS Valkey, managed Google authentication and private storage are separate inputs.
+# The health check uses /api/v1/health, which does not query the database: Render checks it every few seconds
+# while the service runs, and /api/v1/ready would keep the scale-to-zero Neon database awake around the clock.
+# .github/workflows/keep-api-awake.yml pings the same path so test users rarely wait for a cold start.
 previews:
   generation: off
 
@@ -11,14 +14,14 @@ services:
   - type: web
     name: psw-connected-api
     runtime: docker
-    branch: connected-demo-2026-10-22
+    branch: main
     region: ohio
     plan: free
     dockerfilePath: ./Dockerfile.api
     dockerContext: .
     numInstances: 1
     autoDeployTrigger: 'off'
-    healthCheckPath: /api/v1/ready
+    healthCheckPath: /api/v1/health
     maxShutdownDelaySeconds: 30
     envVars:
       - key: NODE_ENV

@@ -51,6 +51,24 @@ export function clearStoredAuthSession() {
   window.dispatchEvent?.(new Event(authSessionChangedEvent));
 }
 
+/**
+ * The account id in an application session token (its `sub` claim), read without checking the signature. It only
+ * chooses which of this browser's stores to open; the API checks the token on every request.
+ */
+export function sessionUserId(token: string): string | null {
+  const parts = token.split(".");
+  if (parts.length !== 3 || !parts[1]) return null;
+  try {
+    const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/").padEnd(Math.ceil(parts[1].length / 4) * 4, "=");
+    const bytes = Uint8Array.from(atob(base64), (character) => character.charCodeAt(0));
+    const claims = JSON.parse(new TextDecoder().decode(bytes)) as unknown;
+    const subject = typeof claims === "object" && claims !== null ? (claims as { sub?: unknown }).sub : undefined;
+    return typeof subject === "string" && subject.trim() ? subject : null;
+  } catch {
+    return null;
+  }
+}
+
 export function assertCurrentAuthSession(token: string | null): asserts token is string {
   if (!token || readStoredAuthSession()?.accessToken !== token) {
     throw new Error("登录状态已改变，请重新登录后继续。");

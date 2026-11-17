@@ -88,7 +88,7 @@ function getClient(): Promise<VanillaBetterAuthClient> {
   return clientPromise;
 }
 
-export type SocialProvider = "google" | "github";
+export type SocialProvider = "google" | "apple" | "github";
 
 // Sign-in only works on the site's main address; preview links are refused by the server.
 export const WRONG_ORIGIN_MESSAGE = "这个网址不能登录。请打开 psw 正式网址后再登录。";
