@@ -28,6 +28,7 @@ import {
   getSavedListingIds,
   mergeSavedCollectionsState,
   normalizeSavedCollectionsState,
+  removeSavedCollection,
   setSavedListingNote,
   toggleListingInCollection,
   type SavedCollectionsState
@@ -46,7 +47,7 @@ const syncLabels: Record<AccountSyncStatus, string> = {
   syncing: "收藏会保存到账户，换设备登录也能看到",
   synced: "收藏已保存到账户，换设备登录也能看到",
   offline: "收藏先保存在这台设备上，联网后同步到账户",
-  "too-large": "收藏和备注超过账户的保存上限，新的改动只保存在这台设备上。删掉一些备注或收藏后会重新同步"
+  "too-large": "清单、收藏或备注超过了账户的保存上限，新的改动只保存在这台设备上。删掉一些后会重新同步"
 };
 
 type SavedListingsContextValue = {
@@ -58,6 +59,8 @@ type SavedListingsContextValue = {
   toggleSaved: (listingId: string) => void;
   toggleInCollection: (listingId: string, collectionId: string) => void;
   createCollection: (name: string) => void;
+  /** Deletes one of the renter's own lists; its homes stay saved. */
+  removeCollection: (collectionId: string) => void;
   setNote: (listingId: string, note: string) => void;
 };
 
@@ -214,6 +217,11 @@ function SessionSavedListingsProvider({ children, token }: { children: ReactNode
     setState((current) => addSavedCollection(current, name));
   }, [token]);
 
+  const removeCollection = useCallback((collectionId: string) => {
+    if ((readStoredAuthSession()?.accessToken ?? null) !== token) return;
+    setState((current) => removeSavedCollection(current, collectionId));
+  }, [token]);
+
   const setNote = useCallback((listingId: string, note: string) => {
     if ((readStoredAuthSession()?.accessToken ?? null) !== token) return;
     setState((current) => setSavedListingNote(current, listingId, note));
@@ -229,8 +237,9 @@ function SessionSavedListingsProvider({ children, token }: { children: ReactNode
     toggleSaved,
     toggleInCollection,
     createCollection,
+    removeCollection,
     setNote
-  }), [accountLabel, accountUserId, createCollection, savedIds, setNote, state, storageKey, syncStatus, toggleInCollection, toggleSaved]);
+  }), [accountLabel, accountUserId, createCollection, removeCollection, savedIds, setNote, state, storageKey, syncStatus, toggleInCollection, toggleSaved]);
 
   return <SavedListingsContext.Provider value={value}>{children}</SavedListingsContext.Provider>;
 }

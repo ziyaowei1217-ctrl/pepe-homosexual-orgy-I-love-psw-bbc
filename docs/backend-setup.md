@@ -56,9 +56,9 @@ Rebuild and publish with `NEXT_PUBLIC_AUTH_METHODS` listing only the methods tha
 4. Render → psw-connected-api → Environment: set `PHONE_AUTH_PROVIDER` to `twilio-verify`, add `TWILIO_ACCOUNT_SID`, `TWILIO_VERIFY_SERVICE_SID`, `TWILIO_API_KEY_SID` and `TWILIO_API_KEY_SECRET`, keep `PHONE_AUTH_REGIONS` as `US_CA` (add `,CN` for mainland China mobile numbers), save, and deploy.
 5. Add `phone` to `NEXT_PUBLIC_AUTH_METHODS` and republish the website.
 
-New numbers create an account while `PUBLIC_BETA_SIGNUP` is `true` on Render. Sign-up texts are capped at 100 a day for the whole site (`api/src/auth/auth-rate-limit.ts`), which caps the cost at about $6 a day, and one network (for example one campus Wi-Fi address) can use 30 of them. Past either cap a new number gets no text and no error message, and the Render log shows `Phone sign-up code not sent`. If many people will sign up from one place on the same day, ask some of them to use Google or email.
+New numbers create an account while `PUBLIC_BETA_SIGNUP` is `true` on Render. Sign-up texts are capped at 100 a day for the whole site (`api/src/auth/auth-rate-limit.ts`), which caps the cost at about $6 a day, and one network (for example one campus Wi-Fi address) can use 30 of them. Past either cap a new number gets no text and no error message, and the Render log shows `Phone sign-up code not sent`. If many people will sign up from one place on the same day, ask some of them to use Google or email. Someone sending requests from four or more networks can use up the whole day's 100; the same log line shows it, and phone sign-up recovers as those texts become a day old.
 
-A phone account cannot remove its number (it is the only way to sign in), but it can change to another number in 账户 → 身份与认证. Phone accounts cannot be made administrators.
+A phone account cannot remove its number (it is the only way to sign in), but it can change to another number in 账户 → 身份与认证 within 15 minutes of signing in. If someone else changes it, only an operator can give the account back, by editing its `PhoneIdentity` row in the database. Phone accounts cannot be made administrators.
 
 ## 6. Email codes and Google (optional before recruiting)
 
@@ -67,5 +67,6 @@ A phone account cannot remove its number (it is the only way to sign in), but it
 
 ## What is stored for each account
 
-- Saved homes and lists, match preferences, and recently opened homes with the last search are saved to the account (`/api/v1/me/documents`) and follow the user to another device. Guests keep them in the browser; signing in adds a guest's saves to the account. Signing out removes the copied preferences and history from that browser.
+- Saved homes and lists, match preferences, and recently opened homes with the last search are saved to the account (`/api/v1/me/documents`) and follow the user to another device. Guests keep them in the browser; signing in adds a guest's saves to the account. Signing out first sends any change that has not reached the account yet, then removes the copied preferences and history from that browser.
+- An account keeps up to 50 lists (全部收藏 included), 500 homes in one list and 500 notes of up to 2,000 characters, in at most 64 KB. Past a limit, new changes stay on that device and the saved page says so until the renter deletes some lists, homes or notes.
 - Applications, messages, roommate profiles and matches, listings and trips were already stored in the database.

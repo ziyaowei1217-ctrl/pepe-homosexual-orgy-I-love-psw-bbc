@@ -227,6 +227,9 @@ function PhoneCodeSignIn({ availability, onRetry, disabled = false, onAuthentica
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  // Set when a new code was refused for coming too often. A code texted to this number earlier still works for 10
+  // minutes, so the form offers to take one instead of leaving its owner with no way to enter it.
+  const [limited, setLimited] = useState(false);
   const busy = useRef(false);
   const mounted = useMounted();
   const cooldown = useResendCooldown();
@@ -239,14 +242,22 @@ function PhoneCodeSignIn({ availability, onRetry, disabled = false, onAuthentica
     const resend = step === "code";
     if (resend && cooldown.seconds > 0) return;
     if (!looksLikePhoneNumber(phone)) { setError("请输入完整的手机号。"); return; }
-    busy.current = true; setPending(true); setError(null); setNotice(null);
+    busy.current = true; setPending(true); setError(null); setNotice(null); setLimited(false);
     try {
       const response = await requestPhoneSignInCode(phone.trim());
       if (!mounted.current) return;
       setMasked(response.phoneNumber); setCode(response.devCode ? normalizeVerificationCode(response.devCode) : ""); setStep("code"); cooldown.start();
       if (resend) setNotice("已重新发送。");
-    } catch (caught) { if (mounted.current) setError(phoneErrorMessage(caught, "暂时无法发送验证码，请稍后再试。")); }
-    finally { busy.current = false; if (mounted.current) setPending(false); }
+    } catch (caught) {
+      if (!mounted.current) return;
+      setError(phoneErrorMessage(caught, "暂时无法发送验证码，请稍后再试。"));
+      if (!resend && toProductApiError(caught).status === 429) setLimited(true);
+    } finally { busy.current = false; if (mounted.current) setPending(false); }
+  }
+
+  function enterEarlierCode() {
+    if (busy.current) return;
+    setMasked(""); setCode(""); setError(null); setNotice(null); setLimited(false); setStep("code");
   }
 
   async function verify(event: FormEvent) {
@@ -277,14 +288,15 @@ function PhoneCodeSignIn({ availability, onRetry, disabled = false, onAuthentica
   if (availability.state !== "on") return null;
   if (step === "phone") return <form onSubmit={send} noValidate>
     <label className="text-sm font-bold" htmlFor={`${id}-phone`}>手机号</label>
-    <input id={`${id}-phone`} type="tel" autoComplete="tel" inputMode="tel" value={phone} maxLength={24} onChange={(event) => { setPhone(normalizePhoneInput(event.target.value)); setError(null); }} placeholder="+1 415 555 0123" className="application-input mt-2" />
+    <input id={`${id}-phone`} type="tel" autoComplete="tel" inputMode="tel" value={phone} maxLength={24} onChange={(event) => { setPhone(normalizePhoneInput(event.target.value)); setError(null); setLimited(false); }} placeholder="+1 415 555 0123" className="application-input mt-2" />
     <p className="mt-2 text-m-footnote leading-5 text-ink-secondary">{phoneRegionText(availability.regions)}{availability.signUp ? "还没有账户时，验证后会自动创建。" : `手机号需要先在 账户 → 身份与认证 中绑定。${accountCreators.length ? `新用户请先用${joinChoices(accountCreators)}注册。` : ""}`}</p>
     <button disabled={pending || disabled} className="primary-action mt-3 w-full disabled:opacity-60">{pending ? "发送中…" : "发送短信验证码"}</button>
     {error ? <p role="alert" className="mt-3 text-sm font-bold text-danger-text">{error}</p> : null}
+    {limited ? <button type="button" disabled={pending || disabled} onClick={enterEarlierCode} className="mt-1 min-h-11 px-0 text-sm font-bold text-primary-text">已经收到验证码？直接输入</button> : null}
   </form>;
   return <form onSubmit={verify} noValidate>
     <label className="text-sm font-bold" htmlFor={`${id}-sms`}>短信验证码</label>
-    <p role="status" className="mt-1 text-m-footnote leading-5 text-ink-secondary">{availability.state === "on" && availability.signUp ? `验证码短信已发送至 ${masked}，一分钟内送达，10 分钟内有效。` : `如果 ${masked} 已绑定 psw 账户，验证码短信会在一分钟内送达，10 分钟内有效。`}</p>
+    <p role="status" className="mt-1 text-m-footnote leading-5 text-ink-secondary">{!masked ? "输入这个号码 10 分钟内收到的短信验证码。" : availability.state === "on" && availability.signUp ? `验证码短信已发送至 ${masked}，一分钟内送达，10 分钟内有效。` : `如果 ${masked} 已绑定 psw 账户，验证码短信会在一分钟内送达，10 分钟内有效。`}</p>
     <input ref={codeInput} id={`${id}-sms`} inputMode="numeric" autoComplete="one-time-code" value={code} onChange={(event) => { setCode(normalizeVerificationCode(event.target.value)); setError(null); }} placeholder="六位验证码" className="application-input mt-2" />
     <button disabled={pending || disabled} className="primary-action mt-3 w-full disabled:opacity-60">{pending ? "验证中…" : "验证并登录"}</button>
     <div className="mt-2 flex flex-wrap gap-2">

@@ -23,7 +23,8 @@ import {
 /**
  * Copies what the renter keeps in this browser (saved lists, match preferences, feed signals) to their account
  * (api/src/user-documents), so it survives a new device or a cleared browser. This browser stays the working copy:
- * pages read and write it as before, and changes go to the server a couple of seconds later.
+ * pages read and write it as before. Saves and preferences go to the server two seconds after the last edit, feed
+ * signals at most every 30 seconds; hiding the page or signing out sends whatever is still waiting.
  *
  * Each document has a revision. A write names the revision it started from; if another device wrote in between,
  * the server answers 409 and this side reloads and merges three ways: the copy last synced from this browser
@@ -158,8 +159,9 @@ const ownerKey = "sublet_account_documents_owner_v1";
 const baseKey = (userId: string) => `sublet_account_documents_v1:${userId}`;
 const deviceWideKinds: AccountDocumentKind[] = ["renter-preferences", "feed-signals"];
 const pushDelayMs = 2_000;
-// Every opened home changes the feed signals; sending them at most twice a minute keeps the account's write
-// budget for saves and preferences. Leaving the page still sends what is waiting.
+// Every opened home and every search changes the feed signals. Sending them at most every 30 seconds keeps them well
+// inside their own write limit on the account (120 writes per 10 minutes for each kind, see the API's
+// user-documents.controller.ts). Fast browsing could otherwise reach it, and a refused write marks the sync offline.
 const feedSignalsPushDelayMs = 30_000;
 const pullIntervalMs = 60_000;
 const retryDelayMs = 30_000;
@@ -221,6 +223,19 @@ function safelyParseJson(value: string): unknown {
 
 type Api = { get: typeof getAccountDocuments; put: typeof putAccountDocument };
 type Snapshot = { revision: number; value: unknown };
+/** A change the account does not have yet, read when the session ended; `base` is the normalized last synced copy. */
+type UnsentDocument = { adapter: AccountDocumentAdapter<unknown>; local: unknown; base: Snapshot | null };
+
+/**
+ * The value both copies should hold. A side that still matches the last synced copy takes the other side's value;
+ * when both changed, the adapter merges them three ways.
+ */
+function mergeDocument(adapter: AccountDocumentAdapter<unknown>, local: unknown, baseValue: unknown, remoteValue: unknown) {
+  if (remoteValue === null) return local;
+  if (baseValue !== null && sameValue(local, baseValue)) return remoteValue;
+  if (baseValue !== null && sameValue(remoteValue, baseValue)) return local;
+  return adapter.merge(baseValue, local, remoteValue);
+}
 
 export class AccountDocumentSync {
   private readonly adapters: AccountDocumentAdapter<unknown>[];
@@ -253,7 +268,15 @@ export class AccountDocumentSync {
     return this.pull();
   }
 
+  /**
+   * Ends this session's syncing. Changes the account does not have yet (waiting for their push, or for a retry after a
+   * failed one) are sent one last time with this session's token. They are read here, before anything else runs:
+   * after a sign-out or an account switch, the next screen removes this browser's copies of the preferences and feed
+   * signals straight away.
+   */
   stop() {
+    if (this.stopped) return;
+    const unsent = this.unsentDocuments();
     this.stopped = true;
     for (const timer of this.timers.values()) clearTimeout(timer);
     this.timers.clear();
@@ -261,6 +284,8 @@ export class AccountDocumentSync {
     window.removeEventListener(localStoreChangedEvent, this.onLocalStore);
     window.removeEventListener("focus", this.onFocus);
     document.removeEventListener("visibilitychange", this.onVisibility);
+    // After any request still running, so the two do not race for the same revision.
+    if (unsent.length > 0) void this.queue.catch(() => undefined).then(() => this.sendUnsent(unsent)).catch(() => undefined);
   }
 
   /** Call after this browser's copy of `kind` changed; it is written to the account shortly after. */
@@ -354,10 +379,7 @@ export class AccountDocumentSync {
     const base = this.readSnapshot(adapter.kind);
     const baseValue = base ? adapter.normalize(base.value) : null;
     const remoteValue = remote ? adapter.normalize(remote.value) : null;
-    const merged = remoteValue === null ? local
-      : baseValue !== null && sameValue(local, baseValue) ? remoteValue
-        : baseValue !== null && sameValue(remoteValue, baseValue) ? local
-          : adapter.merge(baseValue, local, remoteValue);
+    const merged = mergeDocument(adapter, local, baseValue, remoteValue);
 
     if (!sameValue(merged, local)) this.writeLocal(adapter, merged);
     if (remote && remoteValue !== null && sameValue(merged, remoteValue)) {
@@ -393,6 +415,43 @@ export class AccountDocumentSync {
     this.writeSnapshot(adapter.kind, { revision: saved.revision, value: savedValue });
     // The server stores its normalized copy (for example trimmed text); adopt it unless the page changed meanwhile.
     if (!sameValue(savedValue, merged) && sameValue(adapter.read(), merged)) this.writeLocal(adapter, savedValue);
+  }
+
+  /** Documents whose copy here differs from what the account last confirmed, except copies it refused as too large. */
+  private unsentDocuments(): UnsentDocument[] {
+    return this.adapters.flatMap((adapter) => {
+      const local = adapter.read();
+      const snapshot = this.readSnapshot(adapter.kind);
+      const base = snapshot ? { revision: snapshot.revision, value: adapter.normalize(snapshot.value) } : null;
+      const unchanged = base ? sameValue(local, base.value) : adapter.isEmpty(local);
+      return unchanged || this.tooLarge.get(adapter.kind) === stableJson(local) ? [] : [{ adapter, local, base }];
+    });
+  }
+
+  /**
+   * The last push of a session that has ended: the same merge as sync(), with the copies read when it ended. It never
+   * writes this browser's copies or snapshots, which now belong to whoever is signed in next. A failure is dropped,
+   * because nobody is signed in here to retry it for.
+   */
+  private async sendUnsent(unsent: UnsentDocument[]) {
+    for (const { adapter, local, base } of unsent) {
+      let remote = base;
+      for (let attempt = 0; attempt <= 3; attempt += 1) {
+        const merged = mergeDocument(adapter, local, base?.value ?? null, remote?.value ?? null);
+        if (remote ? sameValue(merged, remote.value) : adapter.isEmpty(merged)) break;
+        if (this.tooLarge.get(adapter.kind) === stableJson(merged)) break;
+        try {
+          await this.api.put(this.token, adapter.kind, merged, remote?.revision ?? 0);
+          break;
+        } catch (error) {
+          if (!(error instanceof ProductApiError && error.status === 409) || attempt === 3) break;
+        }
+        // Another device wrote first: merge with its copy and try again.
+        const latest = await this.api.get(this.token).then((documents) => documents[adapter.kind], () => undefined);
+        if (latest === undefined) break;
+        remote = latest ? { revision: latest.revision, value: adapter.normalize(latest.value) } : null;
+      }
+    }
   }
 
   /** What this browser last synced, used as the server's copy when only local changes need sending. */

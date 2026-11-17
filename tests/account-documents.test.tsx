@@ -247,6 +247,56 @@ describe("account document sync", () => {
     sync.stop();
   });
 
+  it("sends changes still waiting when the session ends, before the next screen clears this browser's copies", async () => {
+    const server = memoryServer();
+    server.documents.set("feed-signals", { revision: 1, value: { viewedIds: ["home-9"], lastSearch: "" } });
+    releaseDeviceDocuments("user-a");
+    const sync = engine(server);
+    await sync.start();
+    rememberListingView("home-1");
+    writeRenterPreferences({ ...emptyRenterPreferences, destination: "UCLA" });
+    // Another device opened a home meanwhile, so the last push has to merge with it.
+    server.documents.set("feed-signals", { revision: 2, value: { viewedIds: ["home-8", "home-9"], lastSearch: "" } });
+    expect(server.puts).toEqual([]);
+
+    // Signing out: the session goes, the engine stops, then the guest screen clears the device copies at once.
+    clearStoredAuthSession();
+    sync.stop();
+    releaseDeviceDocuments(null);
+    await vi.waitFor(() => expect(server.documents.get("feed-signals")).toMatchObject({
+      revision: 3,
+      value: { viewedIds: ["home-1", "home-9", "home-8"] }
+    }));
+    expect(server.documents.get("renter-preferences")).toMatchObject({ revision: 1, value: { destination: "UCLA" } });
+    // The last push leaves this browser alone: no copies come back and no snapshot is written for the next sign-in.
+    expect(readFeedSignals().viewedIds).toEqual([]);
+    expect(readRenterPreferences()).toEqual(emptyRenterPreferences);
+    expect(JSON.parse(localStorage.getItem("sublet_account_documents_v1:user-a") ?? "{}")).toEqual({});
+  });
+
+  it("sends a change whose push failed one last time when the session ends, and nothing that is already synced", async () => {
+    const server = memoryServer();
+    server.documents.set("feed-signals", { revision: 4, value: { viewedIds: ["home-1"], lastSearch: "" } });
+    let down = true;
+    const sync = new AccountDocumentSync("token-a", "user-a", [renterPreferencesAdapter, feedSignalsAdapter], vi.fn(), {
+      get: async () => server.list(),
+      put: async (_token, kind, value, baseRevision) => {
+        if (down) throw new ProductApiError({ category: "service", message: "waking up", retryable: true, status: 503 });
+        return server.put(kind, value, baseRevision)!;
+      }
+    });
+    writeRenterPreferences({ ...emptyRenterPreferences, destination: "UCLA" });
+    await sync.start();
+    expect(server.documents.has("renter-preferences")).toBe(false);
+
+    down = false;
+    sync.stop();
+    sync.stop();
+    await vi.waitFor(() => expect(server.documents.get("renter-preferences")).toMatchObject({ revision: 1, value: { destination: "UCLA" } }));
+    expect(server.puts.map((entry) => entry.kind)).toEqual(["renter-preferences"]);
+    expect(server.documents.get("feed-signals")).toMatchObject({ revision: 4 });
+  });
+
   it("never replaces local values with an unexpected answer, and reports being offline", async () => {
     writeRenterPreferences({ ...emptyRenterPreferences, destination: "UCLA" });
     const status = vi.fn();
@@ -326,6 +376,19 @@ describe("signed-in saves", () => {
     expect(localStorage.getItem("sublet-saved-collections-v1:guest")).toBe(guestRaw);
     await waitFor(() => expect(screen.getByTestId("ids").textContent).toBe("from-phone,from-guest"), { timeout: 6_000 });
     expect(meCalls).toBe(2);
+  });
+
+  it("sends homes opened just before signing out to the account, then clears them from the browser", async () => {
+    const server = memoryServer();
+    stubApi(server, () => "renter");
+    writeStoredAuthSession("renter-token");
+    render(<SavedListingsProvider><Probe /></SavedListingsProvider>);
+    await screen.findByText(/^收藏已保存到账户/);
+
+    act(() => rememberListingView("home-x"));
+    await act(async () => clearStoredAuthSession());
+    await waitFor(() => expect(server.documents.get("feed-signals")?.value).toMatchObject({ viewedIds: ["home-x"] }));
+    expect(readFeedSignals().viewedIds).toEqual([]);
   });
 
   it("removes an account's preferences from the browser on sign-out and never gives them to the next account", async () => {

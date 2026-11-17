@@ -1,8 +1,9 @@
 import { Injectable } from "@nestjs/common";
 
 /**
- * Caps document writes per key (the controller uses account and kind) on this instance. The web app batches
- * changes a couple of seconds apart, so normal use stays far below the limit; this only stops a runaway client.
+ * Caps document writes per key (the controller uses account and kind) on this instance. The web app sends saves and
+ * preferences two seconds after the last edit and feed signals at most every 30 seconds, so normal use stays far
+ * below the limit; this only stops a runaway client.
  * It is in memory on purpose: counting every write in Redis would spend the free Upstash command quota.
  */
 @Injectable()

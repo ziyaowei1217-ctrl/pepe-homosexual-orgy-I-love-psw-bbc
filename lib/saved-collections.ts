@@ -1,4 +1,6 @@
 export const DEFAULT_SAVED_COLLECTION_ID = "all";
+/** The account keeps at most this many lists, 全部收藏 included (api/src/user-documents/user-document-values.ts). */
+export const MAX_SAVED_COLLECTIONS = 50;
 /** The account keeps notes up to this length (api/src/user-documents/user-document-values.ts) and refuses longer ones. */
 export const MAX_SAVED_NOTE_LENGTH = 2000;
 
@@ -95,13 +97,36 @@ export function addSavedCollection(
 ) {
   const normalizedName = name.trim();
   const normalizedId = id.trim();
-  if (!normalizedName || !normalizedId || state.collections.some((collection) => collection.id === normalizedId)) {
+  if (
+    !normalizedName ||
+    !normalizedId ||
+    state.collections.length >= MAX_SAVED_COLLECTIONS ||
+    state.collections.some((collection) => collection.id === normalizedId)
+  ) {
     return state;
   }
 
   return {
     ...state,
     collections: [...state.collections, { id: normalizedId, name: normalizedName, listingIds: [] }]
+  };
+}
+
+/**
+ * Deletes one of the renter's own lists. Its homes stay saved: any that are in no other list move to 全部收藏.
+ * 全部收藏 itself cannot be deleted.
+ */
+export function removeSavedCollection(state: SavedCollectionsState, collectionId: string): SavedCollectionsState {
+  const removed = state.collections.find((collection) => collection.id === collectionId);
+  if (!removed || removed.id === DEFAULT_SAVED_COLLECTION_ID) return state;
+  const remaining = state.collections.filter((collection) => collection.id !== collectionId);
+  const stillSaved = new Set(remaining.flatMap((collection) => collection.listingIds));
+  const keep = removed.listingIds.filter((listingId) => !stillSaved.has(listingId));
+  return {
+    ...state,
+    collections: remaining.map((collection) => collection.id === DEFAULT_SAVED_COLLECTION_ID && keep.length > 0
+      ? { ...collection, listingIds: [...collection.listingIds, ...keep] }
+      : collection)
   };
 }
 

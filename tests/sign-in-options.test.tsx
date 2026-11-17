@@ -124,6 +124,26 @@ describe("account sign-in methods", () => {
     expect(JSON.parse(String(calls("/auth/phone/sign-in/verify")[0][1]?.body))).toEqual({ phoneNumber: "(415) 555-2671", code: "654321" });
   });
 
+  it("takes a code texted earlier when a new one is refused for coming too often", async () => {
+    routes["/auth/phone/sign-in/code"] = () => Response.json({ code: "SERVICE_UNAVAILABLE" }, { status: 503 });
+    render(<AccountExperience mode="overview" />);
+    fireEvent.click(await screen.findByRole("tab", { name: "手机号" }));
+    fireEvent.change(await screen.findByLabelText("手机号", { selector: "input" }), { target: { value: "(415) 555-2671" } });
+    fireEvent.click(screen.getByRole("button", { name: "发送短信验证码" }));
+    await screen.findByRole("alert");
+    // Only a refusal for asking too often means codes may already be on their way.
+    expect(screen.queryByRole("button", { name: "已经收到验证码？直接输入" })).toBeNull();
+
+    routes["/auth/phone/sign-in/code"] = () => Response.json({ code: "AUTH_RATE_LIMITED" }, { status: 429, headers: { "Retry-After": "3600" } });
+    fireEvent.click(screen.getByRole("button", { name: "发送短信验证码" }));
+    fireEvent.click(await screen.findByRole("button", { name: "已经收到验证码？直接输入" }));
+    expect(screen.getByText("输入这个号码 10 分钟内收到的短信验证码。")).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("短信验证码", { selector: "input" }), { target: { value: "654321" } });
+    fireEvent.click(screen.getByRole("button", { name: "验证并登录" }));
+    await waitFor(() => expect(readStoredAuthSession()?.accessToken).toBe("phone-app-session"));
+    expect(JSON.parse(String(calls("/auth/phone/sign-in/verify")[0][1]?.body))).toEqual({ phoneNumber: "(415) 555-2671", code: "654321" });
+  });
+
   it("hides the phone tab when the API has phone sign-in switched off or lacks it", async () => {
     for (const handler of [() => Response.json({ enabled: false, regions: [] }), () => Response.json({ code: "NOT_FOUND" }, { status: 404 })]) {
       routes["/auth/phone/availability"] = handler;
@@ -268,9 +288,20 @@ describe("linking a phone number", () => {
     fireEvent.click(screen.getByRole("button", { name: "发送短信验证码" }));
     fireEvent.change(await screen.findByLabelText("短信验证码", { selector: "input" }), { target: { value: "222222" } });
     fireEvent.click(screen.getByRole("button", { name: "验证并绑定" }));
-    expect(await screen.findByText("手机号已更换，之后用新号码登录。")).toBeTruthy();
-    expect(screen.getByText(/已绑定 \+1 ••• ••• 0143/)).toBeTruthy();
+    expect(await screen.findByText("已绑定 +1 ••• ••• 0143，之后用这个号码登录。")).toBeTruthy();
+    expect(screen.getByText(/已绑定 \+1 ••• ••• 0143。/)).toBeTruthy();
     expect(screen.queryByRole("button", { name: "解除绑定" })).toBeNull();
+  });
+
+  it("shows no linked or unlinked badge until the number's status has loaded", async () => {
+    writeStoredAuthSession("member");
+    routes["/auth/me"] = () => Response.json({ id: "member", email: "phone-0a1b2c3d4e5f60718293@phone.psw.invalid", role: "USER" });
+    routes["/auth/phone"] = () => Response.json({ code: "SERVICE_UNAVAILABLE" }, { status: 503 });
+    render(<AccountExperience mode="verification" />);
+    const row = (await screen.findByText("手机号状态暂时无法读取，请刷新页面重试。")).closest("div")!;
+    expect(row.textContent).toContain("手机认证");
+    expect(within(row).queryByText("未绑定")).toBeNull();
+    expect(within(row).queryByText("暂未开放")).toBeNull();
   });
 
   it("explains the refusal if the API will not remove an account's only sign-in", async () => {
