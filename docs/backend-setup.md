@@ -62,19 +62,22 @@ A phone account cannot remove its number (it is the only way to sign in), but it
 
 ### If someone takes over a phone account
 
-Someone who has the account open within 15 minutes of its sign-in, for example on a phone the owner lent them, can change its number. The owner's number then no longer reaches the account (signing in with it creates a new, empty account). The website has no way back, so you fix it in the Neon SQL Editor. Find the account's id (`User.id`) from what the owner can tell you, such as the display name or applications; `AuditEvent` rows with action `PHONE_LINKED` show when an account's number changed. Then, with the owner's number in E.164 form (`+1` and ten digits for the US and Canada, `+86` for mainland China):
+Someone who has the account open within 15 minutes of its sign-in, for example on a phone the owner lent them, can change its number. The owner's number then no longer reaches the account (signing in with it creates a new, empty account), and the website has no way back. Find the account's id (`User.id`) from what the owner can tell you, such as the display name or applications; `AuditEvent` rows with action `PHONE_LINKED` show when an account's number changed. Then:
 
-```sql
--- 1. Free the owner's number. It may belong to the new, empty account now.
-DELETE FROM "PhoneIdentity" WHERE "phoneNumber" = '+14155550142';
--- 2. Put it back on the taken account. This also removes the other person's number.
-UPDATE "PhoneIdentity" SET "phoneNumber" = '+14155550142', "verifiedAt" = now() WHERE "userId" = 'the account id';
-```
+1. Render → psw-connected-api → Environment: set `PHONE_AUTH_PROVIDER` to `disabled` and `JWT_SECRET` to a new random value of at least 32 characters (for example the output of `openssl rand -base64 48`; the API does not start with a shorter one), save, and deploy. Wait until the deploy shows Live, then one more minute (the old instance can finish requests for up to 30 seconds). If the deploy fails, the Render log says why, and the old secret and phone sign-in stay in force until a deploy is live. This signs everyone out and pauses phone sign-in and administrator verification by text, so the other person can neither keep using their session nor sign in again with their number. Google and email sign-in keep working. Sessions cannot be ended one at a time, and doing the next step first would leave a window in which the other person can put their number back.
+2. In the Neon SQL Editor, with the owner's number in E.164 form (`+1` and ten digits for the US and Canada, `+86` for mainland China):
 
-Step 2 fails while another account still holds the number, so run step 1 first. Then:
+   ```sql
+   -- Free the owner's number. It may belong to the new, empty account now.
+   DELETE FROM "PhoneIdentity" WHERE "phoneNumber" = '+14155550142';
+   -- Put it back on the taken account. This also removes the other person's number.
+   UPDATE "PhoneIdentity" SET "phoneNumber" = '+14155550142', "verifiedAt" = now() WHERE "userId" = 'the account id';
+   -- This should now show the owner's number.
+   SELECT "phoneNumber" FROM "PhoneIdentity" WHERE "userId" = 'the account id';
+   ```
 
-3. Change `JWT_SECRET` on Render (any new long random value) and deploy, right after step 2. Sessions cannot be ended one at a time: the other person's session otherwise keeps working for up to 7 days, and if it is less than 15 minutes old it can change the number again. This signs everyone out. Do not change it before step 2, because until then the other number still signs in to the account and gets a new session.
-4. When the deploy is live, check that the account has the owner's number: `SELECT "phoneNumber" FROM "PhoneIdentity" WHERE "userId" = 'the account id';`. If it does not, run steps 1 and 2 again.
+   The UPDATE fails while another account still holds the number, so run the DELETE first.
+3. Set `PHONE_AUTH_PROVIDER` back to `twilio-verify`, save, and deploy. The owner can then sign in with their number again.
 
 ### Reset an administrator's phone
 

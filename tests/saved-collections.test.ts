@@ -5,6 +5,7 @@ import {
   MAX_SAVED_COLLECTIONS,
   MAX_SAVED_NOTE_LENGTH,
   addSavedCollection,
+  conflictingSavedCollection,
   getSavedListingIds,
   mergeSavedCollectionsState,
   normalizeSavedCollectionsState,
@@ -42,6 +43,21 @@ describe("saved listing collections", () => {
 
     expect(getSavedListingIds(removedFromDefault)).toEqual(["listing-a"]);
     expect(removedFromDefault.collections.find((item) => item.id === "september")?.listingIds).toEqual(["listing-a"]);
+  });
+
+  it("gives a list an id from its name alone and refuses a name whose id another list has", () => {
+    const empty = normalizeSavedCollectionsState(null);
+    const withParis = addSavedCollection(empty, "Paris");
+    // A device that already has other lists gives the same name the same id, so the two become one list when they sync.
+    const elsewhere = addSavedCollection(addSavedCollection(empty, "九月入住"), "Paris");
+    expect(withParis.collections.at(-1)!.id).toBe("collection-paris");
+    expect(elsewhere.collections.at(-1)!.id).toBe("collection-paris");
+    // "Paris 🏠" would get Paris's id: it is refused, and the clash names the existing list.
+    expect(addSavedCollection(withParis, "Paris 🏠")).toBe(withParis);
+    expect(conflictingSavedCollection(withParis, "Paris 🏠")?.name).toBe("Paris");
+    expect(conflictingSavedCollection(withParis, " Paris ")?.name).toBe("Paris");
+    expect(conflictingSavedCollection(withParis, "全部收藏")?.id).toBe(DEFAULT_SAVED_COLLECTION_ID);
+    expect(conflictingSavedCollection(withParis, "Lyon")).toBeNull();
   });
 
   it("keeps notes within what the account stores, without cutting an emoji in half", () => {

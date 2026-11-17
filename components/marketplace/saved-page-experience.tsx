@@ -11,7 +11,7 @@ import { ListingMap } from "@/components/marketplace/listing-map";
 import { PageHeader } from "@/components/marketplace/page-header";
 import { useSavedListings } from "@/components/marketplace/saved-listings-provider";
 import { useModalFocus } from "@/components/marketplace/use-modal-focus";
-import { DEFAULT_SAVED_COLLECTION_ID, MAX_SAVED_COLLECTIONS, type SavedCollection } from "@/lib/saved-collections";
+import { DEFAULT_SAVED_COLLECTION_ID, MAX_SAVED_COLLECTIONS, conflictingSavedCollection, type SavedCollection } from "@/lib/saved-collections";
 import type { PreviewListing } from "@/lib/preview-data";
 import { cn } from "@/lib/utils";
 
@@ -42,8 +42,9 @@ export function SavedPageExperience({ listings }: { listings: PreviewListing[] }
     event.preventDefault();
     const name = newCollectionName.trim();
     if (!name || atListLimit) return;
-    if (state.collections.some((collection) => collection.name === name)) {
-      setCreateError(`已经有叫「${name}」的清单了，换个名字再新建。`);
+    const clash = conflictingSavedCollection(state, name);
+    if (clash) {
+      setCreateError(clash.name === name ? `已经有叫「${name}」的清单了，换个名字再新建。` : `「${name}」和已有的清单「${clash.name}」太像了，换个名字再新建。`);
       return;
     }
     createCollection(name);

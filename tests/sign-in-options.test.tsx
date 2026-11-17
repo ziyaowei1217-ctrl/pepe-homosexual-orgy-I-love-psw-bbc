@@ -294,7 +294,8 @@ describe("linking a phone number", () => {
   });
 
   const hour = 60 * 60 * 1000;
-  const stepUpFrom = (verifiedAt: string) => `${new Intl.DateTimeFormat("zh-CN", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }).format(Date.parse(verifiedAt) + 24 * hour)} 起`;
+  // The row rounds the time up to the minute: the API accepts the number only once the full day has passed.
+  const stepUpFrom = (verifiedAt: string) => `${new Intl.DateTimeFormat("zh-CN", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }).format(Math.ceil((Date.parse(verifiedAt) + 24 * hour) / 60_000) * 60_000)} 起`;
 
   it("keeps an administrator's linked number fixed and says only an operator changes it", async () => {
     writeStoredAuthSession("member");
@@ -309,7 +310,10 @@ describe("linking a phone number", () => {
 
   it("says from when an administrator's number linked in the last day can be used for step-up", async () => {
     writeStoredAuthSession("member");
-    const verifiedAt = new Date(Date.now() - hour).toISOString();
+    // Linked an hour ago at 42.5 seconds past a minute: the row names the next minute.
+    const linkedAt = Math.floor((Date.now() - hour) / 60_000) * 60_000 + 42_500;
+    const verifiedAt = new Date(linkedAt).toISOString();
+    expect(stepUpFrom(verifiedAt)).toBe(`${new Intl.DateTimeFormat("zh-CN", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }).format(linkedAt + 24 * hour + 17_500)} 起`);
     // An older API leaves out `admin`; the role read when the page loaded is used then.
     routes["/auth/me"] = () => Response.json({ id: "member", email: "admin@example.com", role: "ADMIN" });
     routes["/auth/phone"] = () => Response.json({ enabled: true, regions: ["US_CA"], linked: true, phoneNumber: "+1 ••• ••• 0142", verifiedAt });

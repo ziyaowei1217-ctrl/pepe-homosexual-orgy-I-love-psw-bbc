@@ -178,9 +178,9 @@ describe("saved page", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
-  it("makes lists named in other scripts, with only emoji, or with a name that gives the same id as another list", async () => {
+  it("makes lists named in other scripts or with only emoji, and explains a name too close to an existing list", async () => {
     renderSavedPage();
-    const names = ["すみか", "Квартира", "🏠", "A B", "a-b", "Café"];
+    const names = ["すみか", "Квартира", "🏠", "A B", "Café"];
     for (const name of names) {
       fireEvent.click(screen.getByRole("button", { name: "新建清单" }));
       fireEvent.change(within(screen.getByRole("dialog", { name: "新建清单" })).getByRole("textbox"), { target: { value: name } });
@@ -188,10 +188,20 @@ describe("saved page", () => {
       expect(await screen.findByRole("button", { name: (accessibleName) => accessibleName.startsWith(`${name} `) })).toBeTruthy();
       expect(screen.queryByRole("dialog")).toBeNull();
     }
-    const stored = JSON.parse(localStorage.getItem(getSavedCollectionsStorageKey(null))!).collections as { id: string; name: string }[];
-    expect(stored.map((collection) => collection.name)).toEqual(["全部收藏", ...names]);
-    // Names that already worked keep the ids they had ("Café" was always collection-caf).
-    expect(stored.map((collection) => collection.id)).toEqual(["all", "collection-すみか", "collection-квартира", "collection-1f3e0", "collection-a-b", "collection-a-b-2", "collection-caf"]);
+    const stored = () => JSON.parse(localStorage.getItem(getSavedCollectionsStorageKey(null))!).collections as { id: string; name: string }[];
+    expect(stored().map((collection) => collection.name)).toEqual(["全部收藏", ...names]);
+    // Ids depend only on the name, and names that already worked keep the ids they had ("Café" was always collection-caf).
+    expect(stored().map((collection) => collection.id)).toEqual(["all", "collection-すみか", "collection-квартира", "collection-1f3e0", "collection-a-b", "collection-caf"]);
+
+    fireEvent.click(screen.getByRole("button", { name: "新建清单" }));
+    const dialog = screen.getByRole("dialog", { name: "新建清单" });
+    fireEvent.change(within(dialog).getByRole("textbox"), { target: { value: "a-b" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "创建清单" }));
+    expect(within(dialog).getByRole("alert").textContent).toBe("「a-b」和已有的清单「A B」太像了，换个名字再新建。");
+    fireEvent.change(within(dialog).getByRole("textbox"), { target: { value: "全部收藏" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "创建清单" }));
+    expect(within(dialog).getByRole("alert").textContent).toBe("已经有叫「全部收藏」的清单了，换个名字再新建。");
+    expect(stored()).toHaveLength(names.length + 1);
   });
 
   it("says how many lists to delete when a merge left more than the limit", async () => {

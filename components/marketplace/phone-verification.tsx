@@ -159,10 +159,13 @@ export function PhoneVerificationRow({ token, onChanged, fallback, phoneOnly = f
 const ADMIN_STEP_UP_PHONE_WAIT_MS = 24 * 60 * 60 * 1000;
 let stepUpTimeFormat: Intl.DateTimeFormat | undefined;
 
-/** "11月18日 08:05 起" while a newly linked administrator number is not yet trusted for step-up, otherwise nothing. */
+/**
+ * "11月18日 08:05 起" while a newly linked administrator number is not yet trusted for step-up, otherwise nothing.
+ * The time is rounded up to the minute, since the API compares to the millisecond.
+ */
 function adminStepUpFrom(verifiedAt: string | null, now: number) {
   const usableAt = verifiedAt ? Date.parse(verifiedAt) + ADMIN_STEP_UP_PHONE_WAIT_MS : Number.NaN;
   if (!(usableAt > now)) return "";
   stepUpTimeFormat ??= new Intl.DateTimeFormat("zh-CN", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
-  return `${stepUpTimeFormat.format(usableAt)} 起`;
+  return `${stepUpTimeFormat.format(Math.ceil(usableAt / 60_000) * 60_000)} 起`;
 }

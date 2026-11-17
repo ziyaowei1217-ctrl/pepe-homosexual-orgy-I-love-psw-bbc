@@ -90,16 +90,25 @@ export function mergeSavedCollectionsState(account: SavedCollectionsState, guest
   return { version: 1, collections, notes: Object.fromEntries(notes) };
 }
 
-/** Adds an empty list. Without an `id`, one is made from the name that no other list uses. */
+/**
+ * Adds an empty list. Without an `id`, the id comes from the name, and a name whose id another list already has is
+ * refused; conflictingSavedCollection says which list that is.
+ */
 export function addSavedCollection(
   state: SavedCollectionsState,
   name: string,
-  id?: string
+  id = createCollectionId(name)
 ) {
   const normalizedName = name.trim();
-  if (!normalizedName || state.collections.length >= MAX_SAVED_COLLECTIONS) return state;
-  const normalizedId = (id ?? createCollectionId(normalizedName, state.collections)).trim();
-  if (!normalizedId || state.collections.some((collection) => collection.id === normalizedId)) return state;
+  const normalizedId = id.trim();
+  if (
+    !normalizedName ||
+    !normalizedId ||
+    state.collections.length >= MAX_SAVED_COLLECTIONS ||
+    state.collections.some((collection) => collection.id === normalizedId)
+  ) {
+    return state;
+  }
 
   return {
     ...state,
@@ -193,19 +202,28 @@ function uniqueStrings(value: unknown) {
 }
 
 /**
- * A list's id comes from its name, so the same name made on two devices before they sync becomes one list. A name
- * with no Latin letters, digits or Chinese characters uses its other letters and digits (kana, Cyrillic, accented
- * letters), and one with none of those (only emoji or symbols) its code points. A taken id gets a number added.
+ * The list a new list with this name would clash with: one with the same name, or one whose name gives the same id
+ * (it differs only in case, spacing, punctuation or emoji). Null when the name can be used.
  */
-function createCollectionId(name: string, taken: readonly SavedCollection[]) {
+export function conflictingSavedCollection(state: SavedCollectionsState, name: string) {
+  const normalizedName = name.trim();
+  const id = createCollectionId(normalizedName);
+  return state.collections.find((collection) => collection.name === normalizedName || collection.id === id) ?? null;
+}
+
+/**
+ * A list's id depends only on its name, so the same name made on two devices before they sync becomes one list
+ * (as do two names that differ only in case, spacing, punctuation or emoji; one device refuses the second of those).
+ * A name with no Latin letters, digits or Chinese characters uses its other letters and digits (kana, Cyrillic,
+ * accented letters), and one with none of those (only emoji or symbols) its code points. Names that had an id before
+ * keep the same one.
+ */
+function createCollectionId(name: string) {
   const lower = name.trim().toLowerCase();
   const slug = toSlug(lower.replace(/[^a-z0-9\u4e00-\u9fff]+/g, "-"))
     || toSlug(lower.replace(/[^\p{L}\p{N}]+/gu, "-"))
-    || Array.from(lower, (character) => character.codePointAt(0)!.toString(16)).join("-").slice(0, 120);
-  const base = `collection-${slug.slice(0, 120)}`;
-  let id = base;
-  for (let suffix = 2; taken.some((collection) => collection.id === id); suffix += 1) id = `${base}-${suffix}`;
-  return id;
+    || Array.from(lower, (character) => character.codePointAt(0)!.toString(16)).join("-");
+  return slug ? `collection-${slug.slice(0, 120)}` : "";
 }
 
 function toSlug(value: string) {
