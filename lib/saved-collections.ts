@@ -203,7 +203,8 @@ function uniqueStrings(value: unknown) {
 
 /**
  * The list a new list with this name would clash with: one with the same name, or one whose name gives the same id
- * (it differs only in case, spacing, punctuation or emoji). Null when the name can be used.
+ * (it differs only in case, spacing, punctuation or emoji, or only in letters and digits the id leaves out; see
+ * createCollectionId). Null when the name can be used.
  */
 export function conflictingSavedCollection(state: SavedCollectionsState, name: string) {
   const normalizedName = name.trim();
@@ -212,17 +213,20 @@ export function conflictingSavedCollection(state: SavedCollectionsState, name: s
 }
 
 /**
- * A list's id depends only on its name, so the same name made on two devices before they sync becomes one list
- * (as do two names that differ only in case, spacing, punctuation or emoji; one device refuses the second of those).
- * A name with no Latin letters, digits or Chinese characters uses its other letters and digits (kana, Cyrillic,
- * accented letters), and one with none of those (only emoji or symbols) its code points. Names that had an id before
- * keep the same one.
+ * A list's id depends only on its name, so the same name made on two devices before they sync becomes one list.
+ * Names that had an id before keep the same one:
+ * - A name with any a-z, 0-9 or basic Chinese character keeps only those. Its other letters and digits (full-width
+ *   digits, Roman or circled numerals, kana, Cyrillic, accented letters) are left out, so \u300c\uff13\u53f7\u697c\u300d and \u300c\uff15\u53f7\u697c\u300d both
+ *   give collection-\u53f7\u697c, and "Caf\u00e9" and "Caf\u00e8" both give collection-caf; a device refuses the second such name.
+ * - A name with none of those uses its other letters and digits (kana, Cyrillic, accented letters).
+ * - A name with no letters or digits at all (only emoji or symbols) uses "u+" and its code points, which no other
+ *   kind of name can give: \u300c\ud83c\udfe0\u300d is collection-u+1f3e0, while "1f3e0" is collection-1f3e0.
  */
 function createCollectionId(name: string) {
   const lower = name.trim().toLowerCase();
   const slug = toSlug(lower.replace(/[^a-z0-9\u4e00-\u9fff]+/g, "-"))
     || toSlug(lower.replace(/[^\p{L}\p{N}]+/gu, "-"))
-    || Array.from(lower, (character) => character.codePointAt(0)!.toString(16)).join("-");
+    || `u+${Array.from(lower, (character) => character.codePointAt(0)!.toString(16)).join("-")}`;
   return slug ? `collection-${slug.slice(0, 120)}` : "";
 }
 

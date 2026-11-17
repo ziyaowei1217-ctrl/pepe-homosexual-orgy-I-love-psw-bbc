@@ -68,15 +68,15 @@ Someone who has the account open within 15 minutes of its sign-in, for example o
 2. In the Neon SQL Editor, with the owner's number in E.164 form (`+1` and ten digits for the US and Canada, `+86` for mainland China):
 
    ```sql
-   -- Free the owner's number. It may belong to the new, empty account now.
-   DELETE FROM "PhoneIdentity" WHERE "phoneNumber" = '+14155550142';
+   -- Free the owner's number if another account holds it, usually the new, empty one.
+   DELETE FROM "PhoneIdentity" WHERE "phoneNumber" = '+14155550142' AND "userId" <> 'the account id';
    -- Put it back on the taken account. This also removes the other person's number.
    UPDATE "PhoneIdentity" SET "phoneNumber" = '+14155550142', "verifiedAt" = now() WHERE "userId" = 'the account id';
    -- This should now show the owner's number.
    SELECT "phoneNumber" FROM "PhoneIdentity" WHERE "userId" = 'the account id';
    ```
 
-   The UPDATE fails while another account still holds the number, so run the DELETE first.
+   The UPDATE fails while another account still holds the number, so run the DELETE first. Running the whole block a second time is safe.
 3. Set `PHONE_AUTH_PROVIDER` back to `twilio-verify`, save, and deploy. The owner can then sign in with their number again.
 
 ### Reset an administrator's phone

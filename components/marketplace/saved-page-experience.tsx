@@ -44,7 +44,7 @@ export function SavedPageExperience({ listings }: { listings: PreviewListing[] }
     if (!name || atListLimit) return;
     const clash = conflictingSavedCollection(state, name);
     if (clash) {
-      setCreateError(clash.name === name ? `已经有叫「${name}」的清单了，换个名字再新建。` : `「${name}」和已有的清单「${clash.name}」太像了，换个名字再新建。`);
+      setCreateError(clash.name === name ? `已经有叫「${name}」的清单了，换个名字再新建。` : `「${name}」会和已有的清单「${clash.name}」存成同一个清单，换个名字再新建。`);
       return;
     }
     createCollection(name);

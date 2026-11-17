@@ -60,6 +60,28 @@ describe("saved listing collections", () => {
     expect(conflictingSavedCollection(withParis, "Lyon")).toBeNull();
   });
 
+  it("never gives an emoji-only name the id of a name made of digits and letters", () => {
+    const empty = normalizeSavedCollectionsState(null);
+    // ★ is U+2605 and 🏠 is U+1F3E0: their ids carry "u+", which no name with letters or digits produces.
+    const lists = ["★", "2605", "🏠", "1f3e0", "u 1f3e0"].reduce((state, name) => addSavedCollection(state, name), empty);
+    expect(lists.collections.map((collection) => collection.id)).toEqual([
+      DEFAULT_SAVED_COLLECTION_ID,
+      "collection-u+2605",
+      "collection-2605",
+      "collection-u+1f3e0",
+      "collection-1f3e0",
+      "collection-u-1f3e0"
+    ]);
+  });
+
+  it("refuses a name that differs from another list only in letters or digits the id leaves out", () => {
+    const withBuilding = addSavedCollection(normalizeSavedCollectionsState(null), "３号楼");
+    expect(withBuilding.collections.at(-1)!.id).toBe("collection-号楼");
+    expect(addSavedCollection(withBuilding, "５号楼")).toBe(withBuilding);
+    expect(conflictingSavedCollection(withBuilding, "５号楼")?.name).toBe("３号楼");
+    expect(conflictingSavedCollection(withBuilding, "5号楼")).toBeNull();
+  });
+
   it("keeps notes within what the account stores, without cutting an emoji in half", () => {
     const empty = normalizeSavedCollectionsState(null);
     const long = setSavedListingNote(empty, "home-1", "备".repeat(MAX_SAVED_NOTE_LENGTH + 10));

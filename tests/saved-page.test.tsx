@@ -191,13 +191,13 @@ describe("saved page", () => {
     const stored = () => JSON.parse(localStorage.getItem(getSavedCollectionsStorageKey(null))!).collections as { id: string; name: string }[];
     expect(stored().map((collection) => collection.name)).toEqual(["全部收藏", ...names]);
     // Ids depend only on the name, and names that already worked keep the ids they had ("Café" was always collection-caf).
-    expect(stored().map((collection) => collection.id)).toEqual(["all", "collection-すみか", "collection-квартира", "collection-1f3e0", "collection-a-b", "collection-caf"]);
+    expect(stored().map((collection) => collection.id)).toEqual(["all", "collection-すみか", "collection-квартира", "collection-u+1f3e0", "collection-a-b", "collection-caf"]);
 
     fireEvent.click(screen.getByRole("button", { name: "新建清单" }));
     const dialog = screen.getByRole("dialog", { name: "新建清单" });
     fireEvent.change(within(dialog).getByRole("textbox"), { target: { value: "a-b" } });
     fireEvent.click(within(dialog).getByRole("button", { name: "创建清单" }));
-    expect(within(dialog).getByRole("alert").textContent).toBe("「a-b」和已有的清单「A B」太像了，换个名字再新建。");
+    expect(within(dialog).getByRole("alert").textContent).toBe("「a-b」会和已有的清单「A B」存成同一个清单，换个名字再新建。");
     fireEvent.change(within(dialog).getByRole("textbox"), { target: { value: "全部收藏" } });
     fireEvent.click(within(dialog).getByRole("button", { name: "创建清单" }));
     expect(within(dialog).getByRole("alert").textContent).toBe("已经有叫「全部收藏」的清单了，换个名字再新建。");
