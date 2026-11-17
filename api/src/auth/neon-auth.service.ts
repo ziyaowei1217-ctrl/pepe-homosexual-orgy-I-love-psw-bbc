@@ -8,6 +8,7 @@ import { AuthRateLimiter } from "./auth-rate-limit";
 import { isAcademicEmail } from "./academic-email";
 import { acquireNormalizedEmailAdvisoryLock } from "./email-advisory-lock";
 import { NeonTokenVerifier, type NeonVerifiedIdentity } from "./neon-token-verifier";
+import { applicationSessionSeconds } from "./application-session";
 
 @Injectable()
 export class NeonAuthService {
@@ -27,9 +28,9 @@ export class NeonAuthService {
     const result = await this.bindIdentity(identity);
     if (identity.expiresAt <= Date.now()) throw new UnauthorizedException("Identity token expired");
     const user = { id: result.user.id, email: result.user.email, role: result.user.role };
-    // A separately issued one-hour app session uses only current application database roles.
+    // A separately issued app session (application-session.ts) uses only current application database roles.
     // It never carries an upstream bearer token or administrator step-up assertion.
-    const accessToken = await this.jwt.signAsync({ sub: user.id, email: user.email, role: user.role }, { algorithm: "HS256", expiresIn: "1h" });
+    const accessToken = await this.jwt.signAsync({ sub: user.id, email: user.email, role: user.role }, { algorithm: "HS256", expiresIn: applicationSessionSeconds(user.role) });
     return { accessToken, user, isNewUser: result.isNewUser };
   }
 

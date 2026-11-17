@@ -170,7 +170,7 @@ describe("phone sign-in and linking HTTP boundary", () => {
     const signedIn = await http.post("/api/v1/auth/phone/sign-in/verify").send({ phoneNumber: "4155552671", code: provider.codeFor("+14155552671") }).expect(200);
     expect(signedIn.body.user).toEqual({ id: "user-a", email: "a@example.test", role: "USER" });
     const claims = jwt.decode(signedIn.body.accessToken) as Record<string, number | string>;
-    expect(claims.exp! as number - (claims.iat as number)).toBe(3600);
+    expect(claims.exp! as number - (claims.iat as number)).toBe(7 * 24 * 3600);
     expect(claims.adminReauthenticatedAt).toBeUndefined();
     expect(memory.state.audits.map((entry) => entry.action)).toEqual(["PHONE_LINKED", "PHONE_SIGN_IN"]);
   });

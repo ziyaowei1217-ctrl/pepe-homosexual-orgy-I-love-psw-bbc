@@ -5,6 +5,23 @@ import { describe, expect, it, vi } from "vitest";
 import { AuthenticatedUserService, MAX_BEARER_TOKEN_LENGTH } from "../src/auth/authenticated-user.service";
 
 describe("AuthenticatedUserService", () => {
+  it("keeps a renter signed in for a week but an administrator for an hour, even on an older renter token", async () => {
+    const jwt = new JwtService({ secret: "test-secret" });
+    const twoHoursAgo = Math.floor(Date.now() / 1000) - 2 * 3600;
+    const token = await jwt.signAsync({ sub: "user-1", role: "USER", iat: twoHoursAgo }, { expiresIn: 7 * 24 * 3600 });
+    const asRole = (role: string) => new AuthenticatedUserService(jwt, {
+      user: { findUnique: async () => ({ id: "user-1", email: "user@example.test", role }) }
+    } as never);
+
+    const renter = await asRole("USER").fromBearerTokenWithExpiry(token);
+    expect(renter.expiresAt).toBe((twoHoursAgo + 7 * 24 * 3600) * 1000);
+    // The same token stops working once the account is an administrator: their sessions last one hour.
+    expect(await rejectionOf(asRole("ADMIN").fromBearerToken(token))).toBeInstanceOf(UnauthorizedException);
+    const fresh = await jwt.signAsync({ sub: "user-1", role: "ADMIN" }, { expiresIn: 7 * 24 * 3600 });
+    const administrator = await asRole("ADMIN").fromBearerTokenWithExpiry(fresh);
+    expect(administrator.expiresAt).toBeLessThanOrEqual(Date.now() + 3600 * 1000 + 1000);
+  });
+
   it("reloads the current database user from a valid bearer token", async () => {
     const jwt = new JwtService({ secret: "test-secret" });
     const token = await jwt.signAsync({ sub: "user-1", email: "stale@example.test", role: "ADMIN" });

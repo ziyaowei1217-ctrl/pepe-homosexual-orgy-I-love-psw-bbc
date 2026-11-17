@@ -24,7 +24,7 @@ describe("verified provider identity binding", () => {
     expect(response.user.role).toBe("USER"); expect(response.isNewUser).toBe(true);
     expect(open.memory.state.bindings[0]).toMatchObject({ issuer: configuration.issuer, subject: verified.subject, userId: response.user.id });
     const payload = await open.jwt.verifyAsync(response.accessToken, { algorithms: ["HS256"] });
-    expect(payload.exp - payload.iat).toBe(3600); expect(payload.role).toBe("USER"); expect(payload.adminReauthenticatedAt).toBeUndefined();
+    expect(payload.exp - payload.iat).toBe(7 * 24 * 3600); expect(payload.role).toBe("USER"); expect(payload.adminReauthenticatedAt).toBeUndefined();
     expect(open.memory.state.profiles[0]).not.toHaveProperty("eduEmailVerified", true);
   });
   it("marks the school email verified when the verified account email is a school address", async () => {

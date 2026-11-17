@@ -20,6 +20,7 @@ import { PhoneVerificationUnavailableError, type PhoneAuthConfig, type PhoneVeri
 import { NEON_AUTH_CONFIG, PHONE_AUTH_CONFIG } from "./auth.tokens";
 import { AuthRateLimiter, type AuthRateLimitPurpose } from "./auth-rate-limit";
 import type { NeonAuthConfig } from "./auth-provider";
+import { applicationSessionSeconds } from "./application-session";
 
 export const PHONE_CODE_TTL_SECONDS = 600;
 // Linking, replacing or removing a sign-in phone needs a session at most this old.
@@ -28,7 +29,8 @@ export const RECENT_SIGN_IN_MS = 15 * 60 * 1000;
 // a fixed placeholder; per-number limits use the normalized number.
 export const PHONE_LIMIT_EMAIL = "phone-sign-in@psw.invalid";
 // A phone used for administrator step-up must have been linked at least this
-// long ago, so a stolen one-hour session cannot add its own step-up phone.
+// long ago, so a stolen administrator session (one hour, application-session.ts)
+// expires before a phone it adds could be used for step-up.
 export const ADMIN_STEP_UP_PHONE_MIN_AGE_MS = 24 * 60 * 60 * 1000;
 // Accounts created by phone have no email. User.email stays required and
 // unique, so they get a random address under a reserved domain (RFC 2606
@@ -124,9 +126,9 @@ export class PhoneAuthService {
         actorType: "USER", actorUserId: sessionUser.id, action: "PHONE_SIGN_IN", targetType: "USER", targetId: sessionUser.id, outcome: "SUCCESS"
       });
     }
-    // Same one-hour application session as other sign-in methods. It never
-    // carries an administrator step-up assertion.
-    const accessToken = await this.jwt.signAsync({ sub: sessionUser.id, email: sessionUser.email, role: sessionUser.role }, { algorithm: "HS256", expiresIn: "1h" });
+    // Same application session as other sign-in methods (application-session.ts).
+    // It never carries an administrator step-up assertion.
+    const accessToken = await this.jwt.signAsync({ sub: sessionUser.id, email: sessionUser.email, role: sessionUser.role }, { algorithm: "HS256", expiresIn: applicationSessionSeconds(sessionUser.role) });
     return { accessToken, user: sessionUser, isNewUser };
   }
 
