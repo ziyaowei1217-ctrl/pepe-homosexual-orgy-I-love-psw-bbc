@@ -247,6 +247,17 @@ describe("phone sign-in and linking HTTP boundary", () => {
     expect(provider.sent).toEqual([]);
   });
 
+  it("says whether the account is an administrator as stored now, not as the session says", async () => {
+    const http = request(app.getHttpServer());
+    const tokenB = await session("user-b", "b@example.test");
+    expect((await http.get("/api/v1/auth/phone").auth(tokenB, { type: "bearer" }).expect(200)).body.admin).toBe(false);
+    // An operator grants the role while this session is open.
+    memory.state.users.find((entry) => entry.id === "user-b")!.role = "ADMIN";
+    expect((await http.get("/api/v1/auth/phone").auth(tokenB, { type: "bearer" }).expect(200)).body.admin).toBe(true);
+    expect((await link("admin-1", "admin@example.test", "+14155552672")).body).toMatchObject({ linked: true, phoneNumber: "+1 ••• ••• 2672", admin: true });
+    expect((await link("user-a", "a@example.test", "+14155552671")).body).toMatchObject({ linked: true, admin: false });
+  });
+
   it("limits texts per number before contacting the provider", async () => {
     const http = request(app.getHttpServer());
     await link("user-a", "a@example.test", "+14155552671");

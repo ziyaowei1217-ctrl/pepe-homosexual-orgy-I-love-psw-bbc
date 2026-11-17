@@ -78,6 +78,9 @@ function SessionSavedListingsProvider({ children, token }: { children: ReactNode
   const [syncStatus, setSyncStatus] = useState<SavedListingsSyncStatus>("device");
   const [storageProblem, setStorageProblem] = useState<string | null>(null);
   const guestMigration = useRef<{ raw: string | null; legacyRaw: string | null } | null>(null);
+  // Favorites in the pre-collections format are copied in once; after that copy is stored they are cleared, so a home
+  // removed later (here or on another device) is not added back at the next page load.
+  const legacyFavorites = useRef<{ key: string; raw: string } | null>(null);
   const stateRef = useRef(state);
   stateRef.current = state;
   const sync = useRef<AccountDocumentSync | null>(null);
@@ -95,6 +98,7 @@ function SessionSavedListingsProvider({ children, token }: { children: ReactNode
       const legacy = normalizeUserUiState(legacyRaw ? safelyParse(legacyRaw) : null);
       const raw = window.localStorage.getItem(key);
       let next = normalizeSavedCollectionsState(raw ? safelyParse(raw) : null, legacy.favoriteListingIds);
+      legacyFavorites.current = legacyRaw !== null && legacy.favoriteListingIds.length > 0 ? { key: legacyKey, raw: legacyRaw } : null;
 
       if (userId) {
         const guestKey = getSavedCollectionsStorageKey(null);
@@ -149,6 +153,18 @@ function SessionSavedListingsProvider({ children, token }: { children: ReactNode
         guestMigration.current = null;
       } catch {
         // The account copy is durable; retain the source for an idempotent retry.
+      }
+    }
+    const legacySource = legacyFavorites.current;
+    if (legacySource) {
+      try {
+        if (window.localStorage.getItem(legacySource.key) === legacySource.raw) {
+          const legacy = normalizeUserUiState(safelyParse(legacySource.raw));
+          window.localStorage.setItem(legacySource.key, JSON.stringify({ ...legacy, favoriteListingIds: [] }));
+        }
+        legacyFavorites.current = null;
+      } catch {
+        // Kept for the next change: copying the same favorites in again changes nothing.
       }
     }
     setStorageProblem(null);

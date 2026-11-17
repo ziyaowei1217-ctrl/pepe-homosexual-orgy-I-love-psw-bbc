@@ -90,21 +90,16 @@ export function mergeSavedCollectionsState(account: SavedCollectionsState, guest
   return { version: 1, collections, notes: Object.fromEntries(notes) };
 }
 
+/** Adds an empty list. Without an `id`, one is made from the name that no other list uses. */
 export function addSavedCollection(
   state: SavedCollectionsState,
   name: string,
-  id = createCollectionId(name)
+  id?: string
 ) {
   const normalizedName = name.trim();
-  const normalizedId = id.trim();
-  if (
-    !normalizedName ||
-    !normalizedId ||
-    state.collections.length >= MAX_SAVED_COLLECTIONS ||
-    state.collections.some((collection) => collection.id === normalizedId)
-  ) {
-    return state;
-  }
+  if (!normalizedName || state.collections.length >= MAX_SAVED_COLLECTIONS) return state;
+  const normalizedId = (id ?? createCollectionId(normalizedName, state.collections)).trim();
+  if (!normalizedId || state.collections.some((collection) => collection.id === normalizedId)) return state;
 
   return {
     ...state,
@@ -197,9 +192,24 @@ function uniqueStrings(value: unknown) {
   return Array.from(new Set(value.filter((item): item is string => typeof item === "string" && item.trim().length > 0)));
 }
 
-function createCollectionId(name: string) {
-  const slug = name.trim().toLowerCase().replace(/[^a-z0-9\u4e00-\u9fff]+/g, "-").replace(/^-|-$/g, "");
-  return slug ? `collection-${slug}` : "";
+/**
+ * A list's id comes from its name, so the same name made on two devices before they sync becomes one list. A name
+ * with no Latin letters, digits or Chinese characters uses its other letters and digits (kana, Cyrillic, accented
+ * letters), and one with none of those (only emoji or symbols) its code points. A taken id gets a number added.
+ */
+function createCollectionId(name: string, taken: readonly SavedCollection[]) {
+  const lower = name.trim().toLowerCase();
+  const slug = toSlug(lower.replace(/[^a-z0-9\u4e00-\u9fff]+/g, "-"))
+    || toSlug(lower.replace(/[^\p{L}\p{N}]+/gu, "-"))
+    || Array.from(lower, (character) => character.codePointAt(0)!.toString(16)).join("-").slice(0, 120);
+  const base = `collection-${slug.slice(0, 120)}`;
+  let id = base;
+  for (let suffix = 2; taken.some((collection) => collection.id === id); suffix += 1) id = `${base}-${suffix}`;
+  return id;
+}
+
+function toSlug(value: string) {
+  return value.replace(/^-+|-+$/g, "");
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

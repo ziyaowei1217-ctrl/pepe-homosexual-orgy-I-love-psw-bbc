@@ -17,7 +17,10 @@ import { getPhoneStatus, looksLikePhoneNumber, normalizePhoneInput, requestPhone
 // sign-in, so the row offers to change the number instead of removing it (the
 // API refuses the removal too). `admin` marks an administrator: the number is
 // for step-up verification only, and once linked only an operator changes it.
-export function PhoneVerificationRow({ token, onChanged, fallback, phoneOnly = false, admin = false }: { token: string; onChanged: (linked: boolean) => void; fallback: ReactNode; phoneOnly?: boolean; admin?: boolean }) {
+// The API's phone status says whether the account is an administrator now, which
+// replaces `admin` (the role read when the page loaded) once it arrives;
+// `onAdminChange` passes that on.
+export function PhoneVerificationRow({ token, onChanged, fallback, phoneOnly = false, admin = false, onAdminChange }: { token: string; onChanged: (linked: boolean) => void; fallback: ReactNode; phoneOnly?: boolean; admin?: boolean; onAdminChange?: (admin: boolean) => void }) {
   const [status, setStatus] = useState<PhoneStatus | null>(null);
   const [loadError, setLoadError] = useState<"missing" | "failed" | null>(null);
   const [resendAt, setResendAt] = useState(0);
@@ -50,11 +53,23 @@ export function PhoneVerificationRow({ token, onChanged, fallback, phoneOnly = f
 
   useEffect(() => { if (step === "code") codeInput.current?.focus(); }, [step]);
 
+  const isAdmin = status?.admin ?? admin;
+  const serverAdmin = status?.admin;
+  useEffect(() => { if (serverAdmin !== undefined) onAdminChange?.(serverAdmin); }, [serverAdmin, onAdminChange]);
+
   async function run(action: () => Promise<void>) {
     if (busy.current) return;
     busy.current = true; setPending(true); setError(null); setNotice(null);
     try { assertCurrentAuthSession(token); await action(); }
-    catch (caught) { setError(phoneErrorMessage(caught, "操作未完成，请稍后重试。")); }
+    catch (caught) {
+      setError(phoneErrorMessage(caught, "操作未完成，请稍后重试。"));
+      // The account became an administrator after this page loaded: reload the status so the row shows the number as
+      // the operator-only one it now is, without the buttons the API refuses.
+      if (toProductApiError(caught).code === "ADMIN_PHONE_LOCKED") {
+        setStep("idle");
+        void getPhoneStatus(token).then((value) => { assertCurrentAuthSession(token); setStatus(value); }).catch(() => undefined);
+      }
+    }
     finally { busy.current = false; setPending(false); }
   }
 
@@ -80,10 +95,11 @@ export function PhoneVerificationRow({ token, onChanged, fallback, phoneOnly = f
     void run(async () => {
       const response = await verifyPhoneLinkCode(token, phone.trim(), normalized);
       assertCurrentAuthSession(token);
-      setStatus((current) => current ? { ...current, linked: true, phoneNumber: response.phoneNumber, verifiedAt: response.verifiedAt } : current);
+      const linkedAsAdmin = response.admin ?? isAdmin;
+      setStatus((current) => current ? { ...current, linked: true, phoneNumber: response.phoneNumber, verifiedAt: response.verifiedAt, ...(response.admin === undefined ? {} : { admin: response.admin }) } : current);
       setStep("idle"); setPhone(""); setCode("");
       // The masked numbers cannot tell a new number from the same one entered again, so the notice names the result.
-      setNotice(admin ? "手机号已绑定，24 小时后可用于管理员二次验证。" : replacing ? `已绑定 ${response.phoneNumber}，之后用这个号码登录。` : "手机号已绑定，之后可以用短信验证码登录。");
+      setNotice(linkedAsAdmin ? "手机号已绑定，24 小时后可用于管理员二次验证。" : replacing ? `已绑定 ${response.phoneNumber}，之后用这个号码登录。` : "手机号已绑定，之后可以用短信验证码登录。");
       onChanged(true);
     });
   };
@@ -105,11 +121,11 @@ export function PhoneVerificationRow({ token, onChanged, fallback, phoneOnly = f
   // created by phone can only change its number, which needs SMS; an administrator's number is changed by an operator.
   const detail = loadError ? "手机号状态暂时无法读取，请刷新页面重试。"
     : !status ? "正在读取手机号状态…"
-    : status.linked && admin ? `已绑定 ${status.phoneNumber}，用于管理员二次验证${status.enabled ? "" : "（短信暂时关闭）"}。只能由运营人员更改或解除。`
+    : status.linked && isAdmin ? `已绑定 ${status.phoneNumber}，${adminStepUpFrom(status.verifiedAt, now)}用于管理员二次验证${status.enabled ? "" : "（短信暂时关闭）"}。只能由运营人员更改或解除。`
     : status.linked && phoneOnly ? `已绑定 ${status.phoneNumber}。这个账户用手机号登录，${status.enabled ? "可以更换号码，不能解除绑定。" : "短信登录暂时关闭。"}`
     : status.linked ? (status.enabled ? `已绑定 ${status.phoneNumber}，可用于短信验证码登录。` : `已绑定 ${status.phoneNumber}。短信登录暂时关闭。`)
     : !status.enabled ? "短信验证暂未开放。"
-    : admin ? `绑定后用于管理员二次验证，24 小时后可用，之后只能由运营人员更改或解除。${phoneRegionText(status.regions)}`
+    : isAdmin ? `绑定后用于管理员二次验证，24 小时后可用，之后只能由运营人员更改或解除。${phoneRegionText(status.regions)}`
     : `绑定后可用短信验证码登录。${phoneRegionText(status.regions)}`;
 
   return <div className="py-5">
@@ -117,7 +133,7 @@ export function PhoneVerificationRow({ token, onChanged, fallback, phoneOnly = f
     <div className="flex items-center gap-3 sm:gap-4">
       <span className="grid size-11 shrink-0 place-items-center rounded-psw-md bg-tag-neutral"><Smartphone className="size-5" aria-hidden="true" /></span>
       <span className="min-w-0 flex-1"><span className="block text-sm font-bold">手机认证</span><span className="mt-1 block text-m-footnote leading-5 text-ink-secondary">{detail}</span></span>
-      {!status ? null : (status.enabled || status.linked) && step === "idle" ? (status.linked && admin ? null : status.linked && phoneOnly
+      {!status ? null : (status.enabled || status.linked) && step === "idle" ? (status.linked && isAdmin ? null : status.linked && phoneOnly
         ? (status.enabled ? <button type="button" disabled={pending} onClick={() => { setStep("phone"); setNotice(null); }} className="secondary-action shrink-0">更换号码</button> : null)
         : status.linked
         ? <button type="button" disabled={pending} onClick={() => void remove()} className="inline-flex min-h-11 shrink-0 items-center rounded-full px-3 text-m-footnote font-bold text-danger-text hover:bg-surface-subtle">解除绑定</button>
@@ -137,4 +153,16 @@ export function PhoneVerificationRow({ token, onChanged, fallback, phoneOnly = f
     {notice ? <p role="status" className="mt-3 text-m-footnote font-bold text-success-text sm:ml-[60px]">{notice}</p> : null}
     {error ? <p role="alert" className="mt-3 text-sm font-bold text-danger-text sm:ml-[60px]">{error}</p> : null}
   </div>;
+}
+
+/** The API trusts a newly linked administrator number for step-up a day after it was linked (ADMIN_STEP_UP_PHONE_MIN_AGE_MS). */
+const ADMIN_STEP_UP_PHONE_WAIT_MS = 24 * 60 * 60 * 1000;
+let stepUpTimeFormat: Intl.DateTimeFormat | undefined;
+
+/** "11月18日 08:05 起" while a newly linked administrator number is not yet trusted for step-up, otherwise nothing. */
+function adminStepUpFrom(verifiedAt: string | null, now: number) {
+  const usableAt = verifiedAt ? Date.parse(verifiedAt) + ADMIN_STEP_UP_PHONE_WAIT_MS : Number.NaN;
+  if (!(usableAt > now)) return "";
+  stepUpTimeFormat ??= new Intl.DateTimeFormat("zh-CN", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  return `${stepUpTimeFormat.format(usableAt)} 起`;
 }

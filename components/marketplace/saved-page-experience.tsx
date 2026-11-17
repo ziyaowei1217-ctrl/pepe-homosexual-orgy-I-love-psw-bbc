@@ -21,6 +21,7 @@ export function SavedPageExperience({ listings }: { listings: PreviewListing[] }
   const [mapView, setMapView] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [newCollectionName, setNewCollectionName] = useState("");
+  const [createError, setCreateError] = useState<string | null>(null);
   const [sort, setSort] = useState<"recent" | "price-low" | "price-high">("recent");
   const [confirmDialog, confirm] = useConfirm();
   // A list deleted here, in another tab or on another device shows 全部收藏 instead.
@@ -41,9 +42,18 @@ export function SavedPageExperience({ listings }: { listings: PreviewListing[] }
     event.preventDefault();
     const name = newCollectionName.trim();
     if (!name || atListLimit) return;
+    if (state.collections.some((collection) => collection.name === name)) {
+      setCreateError(`已经有叫「${name}」的清单了，换个名字再新建。`);
+      return;
+    }
     createCollection(name);
     setNewCollectionName("");
     setCreateOpen(false);
+  }
+
+  function closeCreateDialog() {
+    setCreateOpen(false);
+    setCreateError(null);
   }
 
   async function handleRemove(collection: SavedCollection) {
@@ -121,17 +131,19 @@ export function SavedPageExperience({ listings }: { listings: PreviewListing[] }
       </div>
 
       {createOpen ? (
-        <NewCollectionDialog name={newCollectionName} listCount={state.collections.length} onNameChange={setNewCollectionName} onSubmit={handleCreate} onClose={() => setCreateOpen(false)} />
+        <NewCollectionDialog name={newCollectionName} listCount={state.collections.length} error={createError} onNameChange={(name) => { setNewCollectionName(name); setCreateError(null); }} onSubmit={handleCreate} onClose={closeCreateDialog} />
       ) : null}
       {confirmDialog}
     </main>
   );
 }
 
-function NewCollectionDialog({ name, listCount, onNameChange, onSubmit, onClose }: {
+function NewCollectionDialog({ name, listCount, error, onNameChange, onSubmit, onClose }: {
   name: string;
   /** Lists the renter has, 全部收藏 included. A merge of two devices or of guest lists can leave more than the limit. */
   listCount: number;
+  /** Why the last name was not accepted, such as a list with that name already existing. */
+  error: string | null;
   onNameChange: (name: string) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onClose: () => void;
@@ -145,6 +157,7 @@ function NewCollectionDialog({ name, listCount, onNameChange, onSubmit, onClose 
       <form ref={dialog} onSubmit={onSubmit} onMouseDown={(event) => event.stopPropagation()} className="marketplace-modal-panel max-h-[calc(100dvh-32px)] w-full max-w-md overflow-y-auto rounded-psw-2xl bg-surface p-6 shadow-dialog" role="dialog" aria-modal="true" aria-labelledby="create-list-title">
         <div className="flex items-center justify-between"><h2 id="create-list-title" className="text-m-title sm:text-d-title">新建清单</h2><button type="button" onClick={onClose} className="grid size-11 place-items-center rounded-full bg-tag-neutral hover:bg-line-strong" aria-label="关闭"><X className="size-4" /></button></div>
         <label className="mt-6 block text-d-label">清单名称<input value={name} onChange={(event) => onNameChange(event.target.value)} maxLength={40} placeholder="例如：九月入住" className="application-input mt-2" /></label>
+        {error && !atLimit ? <p role="alert" className="mt-3 text-m-footnote font-semibold text-danger-text">{error}</p> : null}
         {atLimit ? <p role="status" className="mt-3 text-m-footnote font-semibold text-warning-text">最多保存 {MAX_SAVED_COLLECTIONS} 个清单（含全部收藏），现在有 {listCount} 个。删掉 {listCount - MAX_SAVED_COLLECTIONS + 1} 个不用的清单后再新建。</p> : null}
         <button type="submit" disabled={atLimit} className="mt-6 min-h-12 w-full rounded-full bg-primary px-5 font-rounded text-base font-bold text-on-primary hover:bg-primary-hover active:scale-[0.97] disabled:pointer-events-none disabled:opacity-50">创建清单</button>
       </form>

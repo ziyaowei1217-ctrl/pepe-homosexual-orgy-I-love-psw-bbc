@@ -155,6 +155,45 @@ describe("saved page", () => {
     expect(within(dialog).getByRole<HTMLButtonElement>("button", { name: "创建清单" }).disabled).toBe(true);
   });
 
+  it("keeps the dialog open and says why when a list with that name already exists", async () => {
+    localStorage.setItem(getSavedCollectionsStorageKey(null), JSON.stringify({
+      version: 1,
+      collections: [{ id: "all", name: "全部收藏", listingIds: [] }, { id: "collection-九月入住", name: "九月入住", listingIds: [] }],
+      notes: {}
+    }));
+    render(<SavedListingsProvider><SavedPageExperience listings={[]} /></SavedListingsProvider>);
+    await screen.findByRole("button", { name: /^九月入住/ });
+    fireEvent.click(screen.getByRole("button", { name: "新建清单" }));
+    const dialog = screen.getByRole("dialog", { name: "新建清单" });
+    fireEvent.change(within(dialog).getByRole("textbox"), { target: { value: " 九月入住 " } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "创建清单" }));
+    expect(within(dialog).getByRole("alert").textContent).toBe("已经有叫「九月入住」的清单了，换个名字再新建。");
+    expect(within(dialog).getByRole<HTMLInputElement>("textbox").value).toBe(" 九月入住 ");
+    expect(JSON.parse(localStorage.getItem(getSavedCollectionsStorageKey(null))!).collections).toHaveLength(2);
+
+    fireEvent.change(within(dialog).getByRole("textbox"), { target: { value: "九月入住 2" } });
+    expect(within(dialog).queryByRole("alert")).toBeNull();
+    fireEvent.click(within(dialog).getByRole("button", { name: "创建清单" }));
+    expect(await screen.findByRole("button", { name: /^九月入住 2/ })).toBeTruthy();
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("makes lists named in other scripts, with only emoji, or with a name that gives the same id as another list", async () => {
+    renderSavedPage();
+    const names = ["すみか", "Квартира", "🏠", "A B", "a-b", "Café"];
+    for (const name of names) {
+      fireEvent.click(screen.getByRole("button", { name: "新建清单" }));
+      fireEvent.change(within(screen.getByRole("dialog", { name: "新建清单" })).getByRole("textbox"), { target: { value: name } });
+      fireEvent.click(screen.getByRole("button", { name: "创建清单" }));
+      expect(await screen.findByRole("button", { name: (accessibleName) => accessibleName.startsWith(`${name} `) })).toBeTruthy();
+      expect(screen.queryByRole("dialog")).toBeNull();
+    }
+    const stored = JSON.parse(localStorage.getItem(getSavedCollectionsStorageKey(null))!).collections as { id: string; name: string }[];
+    expect(stored.map((collection) => collection.name)).toEqual(["全部收藏", ...names]);
+    // Names that already worked keep the ids they had ("Café" was always collection-caf).
+    expect(stored.map((collection) => collection.id)).toEqual(["all", "collection-すみか", "collection-квартира", "collection-1f3e0", "collection-a-b", "collection-a-b-2", "collection-caf"]);
+  });
+
   it("says how many lists to delete when a merge left more than the limit", async () => {
     const lists = Array.from({ length: MAX_SAVED_COLLECTIONS + 1 }, (_, index) => ({ id: `list-${index}`, name: `清单 ${index}`, listingIds: [] }));
     localStorage.setItem(getSavedCollectionsStorageKey(null), JSON.stringify({

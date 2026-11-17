@@ -71,7 +71,21 @@ DELETE FROM "PhoneIdentity" WHERE "phoneNumber" = '+14155550142';
 UPDATE "PhoneIdentity" SET "phoneNumber" = '+14155550142', "verifiedAt" = now() WHERE "userId" = 'the account id';
 ```
 
-Step 2 fails while another account still holds the number, so run step 1 first. The other person's session keeps working until it expires, up to 7 days after it was issued: sessions cannot be ended one at a time. To end it sooner, change `JWT_SECRET` on Render (any new long random value) and deploy; that signs everyone out.
+Step 2 fails while another account still holds the number, so run step 1 first. Then:
+
+3. Change `JWT_SECRET` on Render (any new long random value) and deploy, right after step 2. Sessions cannot be ended one at a time: the other person's session otherwise keeps working for up to 7 days, and if it is less than 15 minutes old it can change the number again. This signs everyone out. Do not change it before step 2, because until then the other number still signs in to the account and gets a new session.
+4. When the deploy is live, check that the account has the owner's number: `SELECT "phoneNumber" FROM "PhoneIdentity" WHERE "userId" = 'the account id';`. If it does not, run steps 1 and 2 again.
+
+### Reset an administrator's phone
+
+An administrator cannot change or remove their number on the website. To let one link a new number, run this in the Neon SQL Editor with their sign-in email:
+
+```sql
+DELETE FROM "PhoneIdentity" WHERE "userId" = (SELECT id FROM "User" WHERE lower(email) = lower('admin@example.com'));
+UPDATE profiles SET phone_verified = false WHERE lower(email) = lower('admin@example.com');
+```
+
+They can then link a number in 账户 → 身份与认证, and it works for administrator verification 24 hours later.
 
 ## 6. Email codes and Google (optional before recruiting)
 

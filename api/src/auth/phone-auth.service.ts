@@ -160,13 +160,16 @@ export class PhoneAuthService {
     }
   }
 
-  async status(userId: string) {
-    const identity = await this.prisma.phoneIdentity.findUnique({ where: { userId }, select: { phoneNumber: true, verifiedAt: true } });
+  // `admin` is the role as stored now (the session's user is re-read on every request), so a page opened before the
+  // role changed still shows an administrator's number as the operator-only step-up number it is.
+  async status(user: { id: string; role: string }) {
+    const identity = await this.prisma.phoneIdentity.findUnique({ where: { userId: user.id }, select: { phoneNumber: true, verifiedAt: true } });
     return {
       ...this.availability(),
       linked: Boolean(identity),
       phoneNumber: identity ? maskPhoneNumber(identity.phoneNumber) : null,
-      verifiedAt: identity?.verifiedAt ?? null
+      verifiedAt: identity?.verifiedAt ?? null,
+      admin: user.role === "ADMIN"
     };
   }
 
@@ -229,7 +232,7 @@ export class PhoneAuthService {
         await this.audit.append(transaction, {
           actorType: "USER", actorUserId: user.id, action: "PHONE_LINKED", targetType: "USER", targetId: user.id, outcome: "SUCCESS"
         });
-        return { linked: true, phoneNumber: maskPhoneNumber(phoneNumber), verifiedAt: now };
+        return { linked: true, phoneNumber: maskPhoneNumber(phoneNumber), verifiedAt: now, admin: current.role === "ADMIN" };
       });
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") throw phoneUnavailable();

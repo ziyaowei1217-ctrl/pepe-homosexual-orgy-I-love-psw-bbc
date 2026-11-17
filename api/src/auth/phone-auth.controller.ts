@@ -47,7 +47,7 @@ export class PhoneAuthController {
   @UseGuards(AuthGuard)
   @Get("phone")
   status(@Req() request: AuthenticatedRequest) {
-    return this.phone.status(request.user.id);
+    return this.phone.status(request.user);
   }
 
   @UseGuards(AuthGuard)

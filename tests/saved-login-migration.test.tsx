@@ -7,7 +7,7 @@ import { SavedPageExperience } from '../components/marketplace/saved-page-experi
 import { writeStoredAuthSession } from '../lib/auth-session';
 import { getSavedCollectionsStorageKey, normalizeSavedCollectionsState, toggleListingInCollection } from '../lib/saved-collections';
 import { createPreviewListings } from '../lib/preview-data';
-import { getGuestUiStorageKey } from '../lib/user-ui-state';
+import { getGuestUiStorageKey, getUserUiStorageKey } from '../lib/user-ui-state';
 
 afterEach(() => { cleanup(); localStorage.clear(); sessionStorage.clear(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
@@ -32,11 +32,14 @@ it('preserves guest saved notes and custom collection membership when logging in
   expect(JSON.parse(localStorage.getItem(guestKey)!).collections).toContainEqual({ id: 'collection-friday-visits', name: 'Friday visits', listingIds: [listing.id] });
   await act(async () => writeStoredAuthSession('new-user-token'));
   await screen.findByText(/^收藏(会|已|先)/);
-  const migrated = JSON.parse(localStorage.getItem(userKey)!);
-  expect(migrated.collections[0].listingIds).toContain(listing.id);
-  expect(migrated.collections).toContainEqual({ id: 'collection-friday-visits', name: 'Friday visits', listingIds: [listing.id] });
-  expect(migrated.notes).toEqual({ [listing.id]: 'Visit on Friday; host allows my cat.' });
-  expect(localStorage.getItem(guestKey)).toBeNull();
+  // Storage is written by an effect after the merged copy renders.
+  await waitFor(() => {
+    const migrated = JSON.parse(localStorage.getItem(userKey)!);
+    expect(migrated.collections[0].listingIds).toContain(listing.id);
+    expect(migrated.collections).toContainEqual({ id: 'collection-friday-visits', name: 'Friday visits', listingIds: [listing.id] });
+    expect(migrated.notes).toEqual({ [listing.id]: 'Visit on Friday; host allows my cat.' });
+    expect(localStorage.getItem(guestKey)).toBeNull();
+  });
   expect(screen.getByRole('button', { name: /Friday visits/ })).toBeTruthy();
   expect(screen.getByRole('textbox', { name: `${listing.title} 的收藏备注` })).toHaveProperty('value', 'Visit on Friday; host allows my cat.');
 });
@@ -99,7 +102,7 @@ it('preserves both sides of ID and note collisions and persists the account befo
   });
   render(provider());
   expectMerged(await hydratedState());
-  expect(persistedAtRemoval).toHaveLength(1);
+  await waitFor(() => expect(persistedAtRemoval).toHaveLength(1));
   expectMerged(persistedAtRemoval[0] as typeof accountState);
   expect(localStorage.getItem(guestKey)).toBeNull();
 });
@@ -117,8 +120,10 @@ it('retries an incomplete source cleanup without duplicating collections or note
   removal.mockRestore();
   render(provider());
   expect(await hydratedState()).toEqual(once);
-  expect(JSON.parse(localStorage.getItem(accountKey)!)).toEqual(once);
-  expect(localStorage.getItem(guestKey)).toBeNull();
+  await waitFor(() => {
+    expect(JSON.parse(localStorage.getItem(accountKey)!)).toEqual(once);
+    expect(localStorage.getItem(guestKey)).toBeNull();
+  });
 });
 
 class StorageErrorBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
@@ -142,7 +147,7 @@ it('retains guest and previous account data when account storage fails, then rec
   writes.mockRestore();
   render(provider());
   expectMerged(await hydratedState());
-  expect(localStorage.getItem(guestKey)).toBeNull();
+  await waitFor(() => expect(localStorage.getItem(guestKey)).toBeNull());
 });
 
 it('clears migrated legacy favorites without removing unrelated guest notifications', async () => {
@@ -158,4 +163,34 @@ it('clears migrated legacy favorites without removing unrelated guest notificati
     expect(JSON.parse(localStorage.getItem(accountKey)!).collections[0].listingIds).toContain('legacy-home');
     expect(JSON.parse(localStorage.getItem(getGuestUiStorageKey())!)).toEqual({ version: 2, favoriteListingIds: [], notifications: [notification] });
   });
+});
+
+function UnsaveButton({ listingId }: { listingId: string }) {
+  const { toggleSaved, savedIds } = useSavedListings();
+  return savedIds.has(listingId) ? <button type="button" onClick={() => toggleSaved(listingId)}>{`remove ${listingId}`}</button> : null;
+}
+const reminder = { id: 'reminder', title: 'Keep', detail: 'Reminder', createdAt: 1, read: false, target: '/saved' };
+
+it.each([
+  { who: 'an account', legacyKey: getUserUiStorageKey('renter'), collectionsKey: getSavedCollectionsStorageKey('renter'), signedIn: true },
+  { who: 'a guest', legacyKey: getGuestUiStorageKey(), collectionsKey: getSavedCollectionsStorageKey(null), signedIn: false }
+])('copies old-format favorites for $who once, so a home removed later is not added back at the next load', async ({ legacyKey, collectionsKey, signedIn }) => {
+  localStorage.setItem(legacyKey, JSON.stringify({ version: 2, favoriteListingIds: ['legacy-home'], notifications: [reminder] }));
+  if (signedIn) writeStoredAuthSession('renter-token');
+  vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => String(input).endsWith('/auth/me')
+    ? Response.json({ id: 'renter', email: 'renter@example.com', role: 'USER' })
+    : Response.json({ message: 'Unexpected path' }, { status: 404 })));
+  const first = render(<SavedListingsProvider><SavedStateProbe /><UnsaveButton listingId="legacy-home" /></SavedListingsProvider>);
+  expect((await hydratedState()).collections[0].listingIds).toContain('legacy-home');
+  await waitFor(() => {
+    expect(JSON.parse(localStorage.getItem(collectionsKey)!).collections[0].listingIds).toContain('legacy-home');
+    expect(JSON.parse(localStorage.getItem(legacyKey)!)).toEqual({ version: 2, favoriteListingIds: [], notifications: [reminder] });
+  });
+  fireEvent.click(screen.getByRole('button', { name: 'remove legacy-home' }));
+  await waitFor(() => expect(JSON.parse(localStorage.getItem(collectionsKey)!).collections[0].listingIds).not.toContain('legacy-home'));
+  first.unmount();
+
+  render(<SavedListingsProvider><SavedStateProbe /></SavedListingsProvider>);
+  expect((await hydratedState()).collections[0].listingIds).not.toContain('legacy-home');
+  expect(JSON.parse(localStorage.getItem(collectionsKey)!).collections[0].listingIds).not.toContain('legacy-home');
 });
