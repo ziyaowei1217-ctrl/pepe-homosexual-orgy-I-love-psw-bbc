@@ -24,7 +24,9 @@ import {
  * Copies what the renter keeps in this browser (saved lists, match preferences, feed signals) to their account
  * (api/src/user-documents), so it survives a new device or a cleared browser. This browser stays the working copy:
  * pages read and write it as before. Saves and preferences go to the server two seconds after the last edit, feed
- * signals at most every 30 seconds; hiding the page or signing out sends whatever is still waiting.
+ * signals at most every 30 seconds, and hiding the page sends whatever is still waiting. When the session ends,
+ * preference and feed-signal changes still waiting are sent once more, because a sign-out removes this browser's copies
+ * of them; saved lists stay in this browser under the account and go out at its next sign-in here.
  *
  * Each document has a revision. A write names the revision it started from; if another device wrote in between,
  * the server answers 409 and this side reloads and merges three ways: the copy last synced from this browser
@@ -192,6 +194,15 @@ export function releaseDeviceDocuments(nextUserId: string | null) {
   }
 }
 
+/** The account this browser's preferences and feed signals belong to, or null when nobody's or unreadable. */
+function readOwner() {
+  try {
+    return window.localStorage.getItem(ownerKey);
+  } catch {
+    return null;
+  }
+}
+
 function forgetSnapshots(userId: string, forget: AccountDocumentKind[]) {
   const key = baseKey(userId);
   try {
@@ -269,10 +280,10 @@ export class AccountDocumentSync {
   }
 
   /**
-   * Ends this session's syncing. Changes the account does not have yet (waiting for their push, or for a retry after a
-   * failed one) are sent one last time with this session's token. They are read here, before anything else runs:
-   * after a sign-out or an account switch, the next screen removes this browser's copies of the preferences and feed
-   * signals straight away.
+   * Ends this session's syncing. Preference and feed-signal changes the account does not have yet (waiting for their
+   * push, or for a retry after a failed one) are sent one last time with this session's token, because a sign-out or an
+   * account switch removes this browser's copies of them straight away. They are read here, before the next screen
+   * runs. Saved lists are kept in this browser under the account and go out at its next sign-in here.
    */
   stop() {
     if (this.stopped) return;
@@ -404,7 +415,11 @@ export class AccountDocumentSync {
       }
       if (error instanceof ProductApiError && error.status === 413) {
         // Sending it again cannot help until something is removed. This browser keeps its copy, and the status says why.
-        if (this.current()) this.tooLarge.set(adapter.kind, mergedJson);
+        if (!this.current()) return;
+        this.tooLarge.set(adapter.kind, mergedJson);
+        // This browser's copy now includes the account's, so the account's copy becomes the base: what the renter deletes
+        // to get back under the limit is then deleted on the account too, instead of being merged back from it.
+        if (remote && remoteValue !== null) this.writeSnapshot(adapter.kind, { revision: remote.revision, value: remoteValue });
         return;
       }
       throw error;
@@ -417,9 +432,15 @@ export class AccountDocumentSync {
     if (!sameValue(savedValue, merged) && sameValue(adapter.read(), merged)) this.writeLocal(adapter, savedValue);
   }
 
-  /** Documents whose copy here differs from what the account last confirmed, except copies it refused as too large. */
+  /**
+   * Preferences and feed signals whose copy here differs from what the account last confirmed, except copies it refused
+   * as too large. Only while this account still owns the copies: if another tab has already signed out or switched
+   * accounts, they now belong to a guest or to someone else and must not reach this account.
+   */
   private unsentDocuments(): UnsentDocument[] {
+    if (readOwner() !== this.userId) return [];
     return this.adapters.flatMap((adapter) => {
+      if (!deviceWideKinds.includes(adapter.kind)) return [];
       const local = adapter.read();
       const snapshot = this.readSnapshot(adapter.kind);
       const base = snapshot ? { revision: snapshot.revision, value: adapter.normalize(snapshot.value) } : null;
@@ -430,8 +451,9 @@ export class AccountDocumentSync {
 
   /**
    * The last push of a session that has ended: the same merge as sync(), with the copies read when it ended. It never
-   * writes this browser's copies or snapshots, which now belong to whoever is signed in next. A failure is dropped,
-   * because nobody is signed in here to retry it for.
+   * writes this browser's copies or snapshots. A sign-out or an account switch removes both; when the same account goes
+   * on with a new session, that session's own sync merges with whatever this push stored. A failure is dropped, because
+   * nobody is signed in here to retry it for.
    */
   private async sendUnsent(unsent: UnsentDocument[]) {
     for (const { adapter, local, base } of unsent) {

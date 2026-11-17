@@ -228,7 +228,7 @@ function GuestAccount({ mode, returnTo, authIntent, onAuthenticated, signInDisab
 
 function AuthenticatedAccount({ mode, token, user, profile, applications, onProfileChange, onNotice }: { mode: AccountMode; token: string; user: SessionUser; profile: ApiProfile | null; applications: ApiRentalApplication[] | null; onProfileChange: (profile: ApiProfile) => void; onNotice: (message: string) => void }) {
   if (mode === "profile") return <ProfileEditor token={token} profile={profile} onProfileChange={onProfileChange} onNotice={onNotice} />;
-  if (mode === "verification") return <VerificationPanel token={token} phoneOnly={isPhoneAccountEmail(user.email)} profile={profile} onProfileChange={onProfileChange} />;
+  if (mode === "verification") return <VerificationPanel token={token} phoneOnly={isPhoneAccountEmail(user.email)} admin={user.role === "ADMIN"} profile={profile} onProfileChange={onProfileChange} />;
   if (mode === "settings") return <SettingsPanel />;
   const activeApplications = applications?.filter((application) => application.status === "DRAFT" || application.status === "SUBMITTED").length;
   const acceptedApplications = applications?.filter((application) => application.status === "ACCEPTED" || application.status === "COMPLETED").length;
@@ -282,11 +282,11 @@ function ProfileEditor({ token, profile, onProfileChange, onNotice }: { token: s
 }
 
 // `phoneOnly` is an account created by phone sign-up: it has no sign-in email (only a placeholder address).
-function VerificationPanel({ token, phoneOnly, profile, onProfileChange }: { token: string; phoneOnly: boolean; profile: ApiProfile | null; onProfileChange: (profile: ApiProfile) => void }) {
+function VerificationPanel({ token, phoneOnly, admin, profile, onProfileChange }: { token: string; phoneOnly: boolean; admin: boolean; profile: ApiProfile | null; onProfileChange: (profile: ApiProfile) => void }) {
   const phoneEnabled = usesNeonAuth() && enabledAuthMethods().includes("phone");
   return <section className="rounded-psw-2xl border border-line-strong bg-surface p-6 sm:p-8">
     <h2 className="font-rounded text-m-title sm:text-d-title font-bold">身份与认证</h2>
-    <p className="mt-2 text-sm leading-6 text-ink-secondary">{phoneOnly ? "这个账户用手机号登录，没有登录邮箱。" : phoneEnabled ? "查看登录邮箱的认证状态，绑定手机号后可用短信验证码登录。" : "查看登录邮箱及其他认证的当前状态。"}</p>
+    <p className="mt-2 text-sm leading-6 text-ink-secondary">{phoneOnly ? "这个账户用手机号登录，没有登录邮箱。" : phoneEnabled && admin ? "查看登录邮箱的认证状态。管理员账户的手机号只用于二次验证，不能用来登录。" : phoneEnabled ? "查看登录邮箱的认证状态，绑定手机号后可用短信验证码登录。" : "查看登录邮箱及其他认证的当前状态。"}</p>
     <div className="mt-7 divide-y divide-line">
       {phoneOnly
         ? <VerificationRow icon={Mail} title="邮箱认证" detail="这个账户用手机号登录，没有登录邮箱。" done={false} badge="无邮箱" />
@@ -294,7 +294,7 @@ function VerificationPanel({ token, phoneOnly, profile, onProfileChange }: { tok
       <VerificationRow icon={IdCard} title="教育邮箱" detail={profile?.eduEmailVerified ? "教育邮箱已验证"
         : phoneOnly ? "学生标记只适用于用学校邮箱（如 .edu、.ac.uk、.edu.cn）登录的账户，手机号账户暂不支持。"
         : "用学校邮箱（如 .edu、.ac.uk、.edu.cn）登录，验证后自动标记为学生。"} done={Boolean(profile?.eduEmailVerified)} />
-      {phoneEnabled ? <PhoneVerificationRow token={token} phoneOnly={phoneOnly} onChanged={(linked) => { if (profile) onProfileChange({ ...profile, phoneVerified: linked }); }}
+      {phoneEnabled ? <PhoneVerificationRow token={token} phoneOnly={phoneOnly} admin={admin} onChanged={(linked) => { if (profile) onProfileChange({ ...profile, phoneVerified: linked }); }}
           fallback={<VerificationRow icon={ShieldCheck} title="手机认证" detail={profile?.phoneVerified ? "手机号已验证" : "手机号认证暂未开放。"} done={Boolean(profile?.phoneVerified)} />} />
         : <VerificationRow icon={ShieldCheck} title="手机认证" detail={profile?.phoneVerified ? "手机号已验证" : "手机号认证暂未开放。"} done={Boolean(profile?.phoneVerified)} />}
     </div>

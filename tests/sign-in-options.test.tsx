@@ -293,6 +293,34 @@ describe("linking a phone number", () => {
     expect(screen.queryByRole("button", { name: "解除绑定" })).toBeNull();
   });
 
+  it("keeps an administrator's linked number fixed and says only an operator changes it", async () => {
+    writeStoredAuthSession("member");
+    routes["/auth/me"] = () => Response.json({ id: "member", email: "admin@example.com", role: "ADMIN" });
+    routes["/auth/phone"] = () => Response.json({ enabled: true, regions: ["US_CA"], linked: true, phoneNumber: "+1 ••• ••• 0142", verifiedAt: "2026-11-17T00:00:00.000Z" });
+    render(<AccountExperience mode="verification" />);
+    expect(await screen.findByText("已绑定 +1 ••• ••• 0142，用于管理员二次验证。只能由运营人员更改或解除。")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "解除绑定" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "更换号码" })).toBeNull();
+    expect(document.body.textContent).not.toContain("短信验证码登录");
+  });
+
+  it("tells an administrator a new number is for step-up after a day, then offers no removal", async () => {
+    writeStoredAuthSession("member");
+    routes["/auth/me"] = () => Response.json({ id: "member", email: "admin@example.com", role: "ADMIN" });
+    routes["/auth/phone/link/verify"] = () => Response.json({ linked: true, phoneNumber: "+86 ••• •••• 8000", verifiedAt: "2026-11-17T00:00:00.000Z" });
+    render(<AccountExperience mode="verification" />);
+    expect(await screen.findByText("绑定后用于管理员二次验证，24 小时后可用，之后只能由运营人员更改或解除。支持美国/加拿大（+1）、中国大陆（+86）手机号。")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "绑定手机号" }));
+    fireEvent.change(screen.getByLabelText("手机号", { selector: "input" }), { target: { value: "138 0013 8000" } });
+    fireEvent.click(screen.getByRole("button", { name: "发送短信验证码" }));
+    fireEvent.change(await screen.findByLabelText("短信验证码", { selector: "input" }), { target: { value: "222222" } });
+    fireEvent.click(screen.getByRole("button", { name: "验证并绑定" }));
+    expect(await screen.findByText("手机号已绑定，24 小时后可用于管理员二次验证。")).toBeTruthy();
+    expect(screen.getByText("已绑定 +86 ••• •••• 8000，用于管理员二次验证。只能由运营人员更改或解除。")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "解除绑定" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "更换号码" })).toBeNull();
+  });
+
   it("shows no linked or unlinked badge until the number's status has loaded", async () => {
     writeStoredAuthSession("member");
     routes["/auth/me"] = () => Response.json({ id: "member", email: "phone-0a1b2c3d4e5f60718293@phone.psw.invalid", role: "USER" });

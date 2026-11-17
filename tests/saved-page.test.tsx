@@ -151,7 +151,22 @@ describe("saved page", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "新建清单" }));
     dialog = screen.getByRole("dialog", { name: "新建清单" });
-    expect(within(dialog).getByRole("status").textContent).toContain(`最多保存 ${MAX_SAVED_COLLECTIONS} 个清单`);
+    expect(within(dialog).getByRole("status").textContent).toBe(`最多保存 ${MAX_SAVED_COLLECTIONS} 个清单（含全部收藏），现在有 ${MAX_SAVED_COLLECTIONS} 个。删掉 1 个不用的清单后再新建。`);
+    expect(within(dialog).getByRole<HTMLButtonElement>("button", { name: "创建清单" }).disabled).toBe(true);
+  });
+
+  it("says how many lists to delete when a merge left more than the limit", async () => {
+    const lists = Array.from({ length: MAX_SAVED_COLLECTIONS + 1 }, (_, index) => ({ id: `list-${index}`, name: `清单 ${index}`, listingIds: [] }));
+    localStorage.setItem(getSavedCollectionsStorageKey(null), JSON.stringify({
+      version: 1,
+      collections: [{ id: "all", name: "全部收藏", listingIds: [] }, ...lists],
+      notes: {}
+    }));
+    render(<SavedListingsProvider><SavedPageExperience listings={[]} /></SavedListingsProvider>);
+    await screen.findByRole("button", { name: /^清单 50/ });
+    fireEvent.click(screen.getByRole("button", { name: "新建清单" }));
+    const dialog = screen.getByRole("dialog", { name: "新建清单" });
+    expect(within(dialog).getByRole("status").textContent).toContain(`现在有 ${MAX_SAVED_COLLECTIONS + 2} 个。删掉 3 个不用的清单后再新建。`);
     expect(within(dialog).getByRole<HTMLButtonElement>("button", { name: "创建清单" }).disabled).toBe(true);
   });
 });

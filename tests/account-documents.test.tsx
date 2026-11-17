@@ -11,6 +11,7 @@ import {
   mergeSavedCollections,
   releaseDeviceDocuments,
   renterPreferencesAdapter,
+  savedCollectionsAdapter,
   type AccountDocument,
   type AccountDocumentKind,
   type AccountDocuments
@@ -19,7 +20,12 @@ import { clearStoredAuthSession, writeStoredAuthSession } from "../lib/auth-sess
 import { readFeedSignals, rememberListingView } from "../lib/feed-signals";
 import { ProductApiError } from "../lib/product-errors";
 import { emptyRenterPreferences, readRenterPreferences, writeRenterPreferences } from "../lib/renter-preferences";
-import { normalizeSavedCollectionsState, type SavedCollectionsState } from "../lib/saved-collections";
+import {
+  MAX_SAVED_COLLECTIONS,
+  normalizeSavedCollectionsState,
+  removeSavedCollection,
+  type SavedCollectionsState
+} from "../lib/saved-collections";
 
 const saved = (all: string[], extra: SavedCollectionsState["collections"] = [], notes: Record<string, string> = {}) =>
   normalizeSavedCollectionsState({ version: 1, collections: [{ id: "all", name: "全部收藏", listingIds: all }, ...extra], notes });
@@ -285,6 +291,7 @@ describe("account document sync", () => {
         return server.put(kind, value, baseRevision)!;
       }
     });
+    releaseDeviceDocuments("user-a");
     writeRenterPreferences({ ...emptyRenterPreferences, destination: "UCLA" });
     await sync.start();
     expect(server.documents.has("renter-preferences")).toBe(false);
@@ -295,6 +302,108 @@ describe("account document sync", () => {
     await vi.waitFor(() => expect(server.documents.get("renter-preferences")).toMatchObject({ revision: 1, value: { destination: "UCLA" } }));
     expect(server.puts.map((entry) => entry.kind)).toEqual(["renter-preferences"]);
     expect(server.documents.get("feed-signals")).toMatchObject({ revision: 4 });
+  });
+
+  it("sends nothing from a tab that stops after another tab handed this browser's copies to someone else", async () => {
+    const server = memoryServer();
+    server.documents.set("feed-signals", { revision: 1, value: { viewedIds: ["a-home"], lastSearch: "" } });
+    releaseDeviceDocuments("user-a");
+    const lateTab = engine(server);
+    await lateTab.start();
+
+    // Another tab signs A out; a guest browses, then B signs in and gets B's own copies.
+    clearStoredAuthSession();
+    releaseDeviceDocuments(null);
+    rememberListingView("guest-home");
+    writeStoredAuthSession("token-b");
+    releaseDeviceDocuments("user-b");
+    writeRenterPreferences({ ...emptyRenterPreferences, destination: "B's school" });
+    rememberListingView("b-home");
+
+    // The late tab wakes and ends A's session: none of that may reach A's account.
+    lateTab.stop();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(server.puts).toEqual([]);
+    expect(server.documents.get("feed-signals")).toMatchObject({ revision: 1, value: { viewedIds: ["a-home"] } });
+  });
+
+  it("keeps a saved-list change made just before signing out for this browser's next sign-in, merged with later edits", async () => {
+    const server = memoryServer();
+    server.documents.set("saved-collections", { revision: 1, value: saved(["a"]) });
+    let state = saved(["a"]);
+    const lists = savedCollectionsAdapter(() => state, (value) => { state = value; });
+    const api = (token: string) => new AccountDocumentSync(token, "user-a", [lists], vi.fn(), {
+      get: async () => server.list(),
+      put: async (_token, kind, value, baseRevision) => {
+        const result = server.put(kind, value, baseRevision);
+        if (!result) throw new ProductApiError({ category: "validation", message: "conflict", retryable: false, status: 409 });
+        return result;
+      }
+    });
+    releaseDeviceDocuments("user-a");
+    const laptop = api("token-a");
+    await laptop.start();
+    state = saved(["a", "y"]);
+    laptop.localChanged("saved-collections");
+    clearStoredAuthSession();
+    laptop.stop();
+    releaseDeviceDocuments(null);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    // Saved lists stay in this browser under the account, so nothing is sent with the ended session.
+    expect(server.puts).toEqual([]);
+
+    // Another device removes "a" meanwhile; signing in here again adds "y" on top of that.
+    server.documents.set("saved-collections", { revision: 2, value: saved([]) });
+    writeStoredAuthSession("token-a2");
+    releaseDeviceDocuments("user-a");
+    const again = api("token-a2");
+    await again.start();
+    again.stop();
+    expect(server.puts).toEqual([expect.objectContaining({ kind: "saved-collections", baseRevision: 2 })]);
+    expect(server.documents.get("saved-collections")).toMatchObject({ revision: 3, value: saved(["y"]) });
+    expect(state).toEqual(saved(["y"]));
+  });
+
+  it("syncs saved lists again once the renter deletes enough of them after a merge went over the account's limit", async () => {
+    vi.useFakeTimers();
+    const lists = (prefix: string, count: number) => Array.from({ length: count }, (_, index) => ({ id: `${prefix}-${index}`, name: `${prefix} ${index}`, listingIds: [] }));
+    const server = memoryServer();
+    server.documents.set("saved-collections", { revision: 3, value: saved([], lists("account", 45)) });
+    // A guest's lists on this browser join the account's at sign-in: 56 lists with 全部收藏.
+    let state = saved([], lists("guest", 10));
+    const status = vi.fn();
+    const sync = new AccountDocumentSync("token-a", "user-a", [savedCollectionsAdapter(() => state, (value) => { state = value; })], status, {
+      get: async () => server.list(),
+      put: async (_token, kind, value, baseRevision) => {
+        if ((value as SavedCollectionsState).collections.length > MAX_SAVED_COLLECTIONS) {
+          throw new ProductApiError({ category: "validation", message: "too large", retryable: false, status: 413 });
+        }
+        const result = server.put(kind, value, baseRevision);
+        if (!result) throw new ProductApiError({ category: "validation", message: "conflict", retryable: false, status: 409 });
+        return result;
+      }
+    });
+    await sync.start();
+    expect(state.collections).toHaveLength(56);
+    expect(status).toHaveBeenLastCalledWith("too-large");
+
+    // Another device deletes one of the account's lists, and the renter deletes six others here.
+    const remote = server.documents.get("saved-collections")!.value as SavedCollectionsState;
+    server.documents.set("saved-collections", { revision: 4, value: removeSavedCollection(remote, "account-10") });
+    for (let index = 0; index < 6; index += 1) state = removeSavedCollection(state, `account-${index}`);
+    sync.localChanged("saved-collections");
+    await vi.advanceTimersByTimeAsync(2_500);
+
+    expect(status).toHaveBeenLastCalledWith("synced");
+    const stored = server.documents.get("saved-collections")!;
+    const ids = (stored.value as SavedCollectionsState).collections.map((collection) => collection.id);
+    expect(stored.revision).toBe(5);
+    expect(ids).toHaveLength(MAX_SAVED_COLLECTIONS - 1);
+    // Neither the lists deleted here nor the one deleted on the other device come back.
+    expect(ids.filter((id) => ["account-0", "account-5", "account-10"].includes(id))).toEqual([]);
+    expect(ids).toContain("guest-9");
+    expect(state.collections.map((collection) => collection.id)).toEqual(ids);
+    sync.stop();
   });
 
   it("never replaces local values with an unexpected answer, and reports being offline", async () => {

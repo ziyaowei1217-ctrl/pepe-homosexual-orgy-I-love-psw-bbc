@@ -58,7 +58,20 @@ Rebuild and publish with `NEXT_PUBLIC_AUTH_METHODS` listing only the methods tha
 
 New numbers create an account while `PUBLIC_BETA_SIGNUP` is `true` on Render. Sign-up texts are capped at 100 a day for the whole site (`api/src/auth/auth-rate-limit.ts`), which caps the cost at about $6 a day, and one network (for example one campus Wi-Fi address) can use 30 of them. Past either cap a new number gets no text and no error message, and the Render log shows `Phone sign-up code not sent`. If many people will sign up from one place on the same day, ask some of them to use Google or email. Someone sending requests from four or more networks can use up the whole day's 100; the same log line shows it, and phone sign-up recovers as those texts become a day old.
 
-A phone account cannot remove its number (it is the only way to sign in), but it can change to another number in 账户 → 身份与认证 within 15 minutes of signing in. If someone else changes it, only an operator can give the account back, by editing its `PhoneIdentity` row in the database. Phone accounts cannot be made administrators.
+A phone account cannot remove its number (it is the only way to sign in), but it can change to another number in 账户 → 身份与认证 within 15 minutes of signing in. Phone accounts cannot be made administrators.
+
+### If someone takes over a phone account
+
+Someone who has the account open within 15 minutes of its sign-in, for example on a phone the owner lent them, can change its number. The owner's number then no longer reaches the account (signing in with it creates a new, empty account). The website has no way back, so you fix it in the Neon SQL Editor. Find the account's id (`User.id`) from what the owner can tell you, such as the display name or applications; `AuditEvent` rows with action `PHONE_LINKED` show when an account's number changed. Then, with the owner's number in E.164 form (`+1` and ten digits for the US and Canada, `+86` for mainland China):
+
+```sql
+-- 1. Free the owner's number. It may belong to the new, empty account now.
+DELETE FROM "PhoneIdentity" WHERE "phoneNumber" = '+14155550142';
+-- 2. Put it back on the taken account. This also removes the other person's number.
+UPDATE "PhoneIdentity" SET "phoneNumber" = '+14155550142', "verifiedAt" = now() WHERE "userId" = 'the account id';
+```
+
+Step 2 fails while another account still holds the number, so run step 1 first. The other person's session keeps working until it expires, up to 7 days after it was issued: sessions cannot be ended one at a time. To end it sooner, change `JWT_SECRET` on Render (any new long random value) and deploy; that signs everyone out.
 
 ## 6. Email codes and Google (optional before recruiting)
 
@@ -67,6 +80,6 @@ A phone account cannot remove its number (it is the only way to sign in), but it
 
 ## What is stored for each account
 
-- Saved homes and lists, match preferences, and recently opened homes with the last search are saved to the account (`/api/v1/me/documents`) and follow the user to another device. Guests keep them in the browser; signing in adds a guest's saves to the account. Signing out first sends any change that has not reached the account yet, then removes the copied preferences and history from that browser.
+- Saved homes and lists, match preferences, and recently opened homes with the last search are saved to the account (`/api/v1/me/documents`) and follow the user to another device. Guests keep them in the browser; signing in adds a guest's saves to the account. When someone signs out, preference and history changes that have not reached the account yet are sent one more time (if that fails, for example offline, they are lost), and those copies are removed from the browser at once. Saved homes and lists stay in that browser under the account and are sent the next time it signs in there.
 - An account keeps up to 50 lists (全部收藏 included), 500 homes in one list and 500 notes of up to 2,000 characters, in at most 64 KB. Past a limit, new changes stay on that device and the saved page says so until the renter deletes some lists, homes or notes.
 - Applications, messages, roommate profiles and matches, listings and trips were already stored in the database.
