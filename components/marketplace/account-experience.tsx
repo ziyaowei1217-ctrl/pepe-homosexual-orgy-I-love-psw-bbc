@@ -19,7 +19,8 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { PageHeader } from "@/components/marketplace/page-header";
 import { SignInOptions } from "@/components/marketplace/sign-in-options";
 import { PhoneVerificationRow } from "@/components/marketplace/phone-verification";
-import { enabledAuthMethods, signInViaPhrase } from "@/lib/auth-methods";
+import { accountEmailLabel, accountGreetingName } from "@/lib/account-label";
+import { enabledAuthMethods, isSocialAuthMethod, signInViaPhrase } from "@/lib/auth-methods";
 import { endGoogleSession, usesNeonAuth } from "@/lib/neon-auth-client";
 import {
   getMyProfile,
@@ -137,7 +138,7 @@ function AccountSessionExperience({ mode, returnTo = null, authIntent = "account
       {notice ? <div role="status" className="mt-5 rounded-psw-md bg-success-soft px-4 py-3 text-d-subhead font-semibold text-success-text">{notice}</div> : null}
       <div className="mt-5 grid items-start gap-4 lg:mt-8 lg:grid-cols-[250px_minmax(0,1fr)] lg:gap-6">
         <aside className="flex min-w-0 items-center overflow-hidden rounded-psw-lg bg-surface p-1 lg:block lg:rounded-psw-xl lg:p-2">
-          <div className="hidden items-center gap-3 p-3 lg:flex"><span className="grid size-11 place-items-center rounded-full bg-surface-subtle text-primary-text"><UserRound className="size-5" /></span><span className="min-w-0"><span className="block truncate text-sm font-bold">{user?.email ?? "访客账户"}</span><span className="mt-0.5 block text-m-footnote text-ink-secondary">{authenticated ? "账户已连接" : loading ? "正在检查登录状态" : "登录后同步进度"}</span></span></div>
+          <div className="hidden items-center gap-3 p-3 lg:flex"><span className="grid size-11 place-items-center rounded-full bg-surface-subtle text-primary-text"><UserRound className="size-5" /></span><span className="min-w-0"><span className="block truncate text-sm font-bold">{user ? accountEmailLabel(user.email) : "访客账户"}</span><span className="mt-0.5 block text-m-footnote text-ink-secondary">{authenticated ? "账户已连接" : loading ? "正在检查登录状态" : "登录后同步进度"}</span></span></div>
           <nav className="grid min-w-0 flex-1 grid-cols-4 lg:mt-2 lg:block lg:space-y-1" aria-label="账户导航">
             {accountNav.map((item) => {
               const Icon = item.icon;
@@ -208,7 +209,7 @@ function GuestAccount({ mode, returnTo, authIntent, onAuthenticated, signInDisab
   const resumingApplication = authIntent === "application" && returnTo?.startsWith("/applications/new");
   const methods = enabledAuthMethods();
   const passwordNote = methods.join(",") === "google" ? "psw 不会接收你的 Google 密码"
-    : methods.some((method) => method === "google" || method === "github") ? "psw 不会接收你的第三方账户密码"
+    : methods.some(isSocialAuthMethod) ? "psw 不会接收你的第三方账户密码"
     : "psw 不使用密码，每次登录都用验证码";
   if (usesNeonAuth()) return <section className="grid overflow-hidden rounded-psw-xl bg-surface xl:grid-cols-[minmax(0,1fr)_320px]">
     <div className="p-5 sm:p-9"><span className="inline-flex items-center gap-1.5 rounded-psw-sm bg-primary-soft px-2.5 py-1 text-m-footnote font-bold text-primary-text"><LockKeyhole className="size-3.5" aria-hidden="true" />{sectionLabel}</span>
@@ -239,9 +240,10 @@ function AuthenticatedAccount({ mode, token, user, profile, applications, onProf
   ];
   const missingFields = profileFields.filter((field) => !field.value?.trim());
   const completion = Math.round((profileFields.length - missingFields.length) / profileFields.length * 100);
+  const greetingName = accountGreetingName(user.email, profile?.displayName);
   return <section className="min-w-0 space-y-6">
     <div className="rounded-psw-xl bg-surface p-7 sm:p-9">
-      <h2 className="break-words text-m-title sm:text-d-title">你好，{profile?.displayName || user.email.split("@")[0]}</h2>
+      <h2 className="break-words text-m-title sm:text-d-title">{greetingName ? `你好，${greetingName}` : "你好"}</h2>
       <p className="mt-2 text-m-subhead text-ink-secondary sm:text-d-subhead">{missingFields.length ? `还可以补充：${missingFields.map((field) => field.label).join("、")}。` : "个人资料已完善，你可以随时更新。"}</p>
       {/* A progress bar only while something is missing; a full bar says nothing. */}
       {completion < 100 ? <div role="progressbar" aria-label="资料完成度" aria-valuenow={completion} aria-valuemin={0} aria-valuemax={100} className="mt-6 h-2 overflow-hidden rounded-full bg-primary-soft">
@@ -252,7 +254,7 @@ function AuthenticatedAccount({ mode, token, user, profile, applications, onProf
         <Link href="/account/profile" className="secondary-action">{completion === 100 ? "编辑资料" : "完善资料"}<ChevronRight className="size-4" aria-hidden="true" /></Link>
       </div>
     </div>
-    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"><QuickLink href="/applications" title="我的申请" detail={activeApplications === undefined ? "暂时无法读取" : `${activeApplications} 个进行中`} /><QuickLink href="/trips" title="租住进度" detail={acceptedApplications === undefined ? "暂时无法读取" : `${acceptedApplications} 个已接受`} /><QuickLink href="/saved" title="收藏清单" detail="保存在这台设备上" />{profile && ["lister", "both"].includes(profile.role) ? <QuickLink href="/host" title="我发布的房间" detail="申请、看房和房源状态" /> : null}</div>
+    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"><QuickLink href="/applications" title="我的申请" detail={activeApplications === undefined ? "暂时无法读取" : `${activeApplications} 个进行中`} /><QuickLink href="/trips" title="租住进度" detail={acceptedApplications === undefined ? "暂时无法读取" : `${acceptedApplications} 个已接受`} /><QuickLink href="/saved" title="收藏清单" detail="随账户保存" />{profile && ["lister", "both"].includes(profile.role) ? <QuickLink href="/host" title="我发布的房间" detail="申请、看房和房源状态" /> : null}</div>
   </section>;
 }
 

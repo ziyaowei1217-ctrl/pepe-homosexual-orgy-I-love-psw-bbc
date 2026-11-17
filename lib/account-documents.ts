@@ -1,0 +1,384 @@
+"use client";
+
+import { apiGet, apiPut } from "./api";
+import { readStoredAuthSession } from "./auth-session";
+import { clearFeedSignals, normalizeFeedSignals, readFeedSignals, writeFeedSignals, type FeedSignals } from "./feed-signals";
+import { localStoreChangedEvent } from "./local-store";
+import { ProductApiError } from "./product-errors";
+import {
+  clearRenterPreferences,
+  hasRenterPreferences,
+  normalizeRenterPreferences,
+  readRenterPreferences,
+  writeRenterPreferences,
+  type RenterPreferences
+} from "./renter-preferences";
+import {
+  getSavedListingIds,
+  normalizeSavedCollectionsState,
+  type SavedCollection,
+  type SavedCollectionsState
+} from "./saved-collections";
+
+/**
+ * Copies what the renter keeps in this browser (saved lists, match preferences, feed signals) to their account
+ * (api/src/user-documents), so it survives a new device or a cleared browser. This browser stays the working copy:
+ * pages read and write it as before, and changes go to the server a couple of seconds later.
+ *
+ * Each document has a revision. A write names the revision it started from; if another device wrote in between,
+ * the server answers 409 and this side reloads and merges three ways: the copy last synced from this browser
+ * (kept in localStorage) is the common ancestor, so a removal on one device is not undone by the other.
+ */
+export type AccountDocumentKind = "saved-collections" | "renter-preferences" | "feed-signals";
+export type AccountDocument = { revision: number; value: unknown; updatedAt: string };
+export type AccountDocuments = Record<AccountDocumentKind, AccountDocument | null>;
+export type AccountSyncStatus = "syncing" | "synced" | "offline";
+
+const kinds: AccountDocumentKind[] = ["saved-collections", "renter-preferences", "feed-signals"];
+
+/** Rejects a response that is not a list of documents, so a wrong answer can never replace the renter's saves. */
+export async function getAccountDocuments(token: string): Promise<AccountDocuments> {
+  const documents = await apiGet<unknown>("/me/documents", token);
+  if (!isRecord(documents) || !kinds.every((kind) => documents[kind] === null || isAccountDocument(documents[kind]))) {
+    throw new Error("Unexpected account documents response");
+  }
+  return documents as AccountDocuments;
+}
+
+export async function putAccountDocument(token: string, kind: AccountDocumentKind, value: unknown, baseRevision: number) {
+  const saved = await apiPut<unknown>(`/me/documents/${kind}`, { value, baseRevision }, token);
+  if (!isAccountDocument(saved)) throw new Error("Unexpected account document response");
+  return saved;
+}
+
+function isAccountDocument(value: unknown): value is AccountDocument {
+  return isRecord(value) && Number.isInteger(value.revision) && (value.revision as number) > 0 && isRecord(value.value);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+export type AccountDocumentAdapter<T> = {
+  kind: AccountDocumentKind;
+  normalize(value: unknown): T;
+  /** `base` is the value both sides last agreed on, or null when this browser has never synced this account. */
+  merge(base: T | null, local: T, remote: T): T;
+  isEmpty(value: T): boolean;
+  read(): T;
+  write(value: T): void;
+};
+
+export type AnyAccountDocumentAdapter =
+  | AccountDocumentAdapter<SavedCollectionsState>
+  | AccountDocumentAdapter<RenterPreferences>
+  | AccountDocumentAdapter<FeedSignals>;
+
+export function mergeSavedCollections(
+  base: SavedCollectionsState | null,
+  local: SavedCollectionsState,
+  remote: SavedCollectionsState
+): SavedCollectionsState {
+  const byId = (state: SavedCollectionsState | null) => new Map((state?.collections ?? []).map((collection) => [collection.id, collection]));
+  const baseCollections = byId(base);
+  const localCollections = byId(local);
+  const remoteCollections = byId(remote);
+  const ids = unique([...remoteCollections.keys(), ...localCollections.keys()]);
+  const collections = ids.flatMap((id): SavedCollection[] => {
+    const before = baseCollections.get(id);
+    const mine = localCollections.get(id);
+    const theirs = remoteCollections.get(id);
+    // A list that existed when the two last agreed and is gone from one side was removed there.
+    if (before && (!mine || !theirs)) return [];
+    if (!mine) return theirs ? [theirs] : [];
+    if (!theirs) return [mine];
+    const beforeIds = before?.listingIds ?? [];
+    const added = mine.listingIds.filter((listingId) => !beforeIds.includes(listingId));
+    const removed = new Set(beforeIds.filter((listingId) => !mine.listingIds.includes(listingId)));
+    return [{
+      id,
+      name: before && mine.name !== before.name ? mine.name : theirs.name,
+      listingIds: unique([...theirs.listingIds.filter((listingId) => !removed.has(listingId)), ...added])
+    }];
+  });
+  const notes: Record<string, string> = {};
+  for (const listingId of unique([...Object.keys(remote.notes), ...Object.keys(local.notes), ...Object.keys(base?.notes ?? {})])) {
+    const mine = local.notes[listingId];
+    const note = mine !== base?.notes[listingId] ? mine : remote.notes[listingId];
+    if (note) notes[listingId] = note;
+  }
+  return normalizeSavedCollectionsState({ version: 1, collections, notes });
+}
+
+export function mergeRenterPreferences(base: RenterPreferences | null, local: RenterPreferences, remote: RenterPreferences) {
+  // Signing in on a new browser loads the account's preferences; a guest's take over only when the account has none.
+  if (!base) return hasRenterPreferences(remote) ? remote : local;
+  return sameValue(local, base) ? remote : local;
+}
+
+export function mergeFeedSignals(base: FeedSignals | null, local: FeedSignals, remote: FeedSignals): FeedSignals {
+  const removed = new Set((base?.viewedIds ?? []).filter((listingId) => !local.viewedIds.includes(listingId)));
+  return normalizeFeedSignals({
+    viewedIds: unique([...local.viewedIds, ...remote.viewedIds.filter((listingId) => !removed.has(listingId))]),
+    lastSearch: base ? (local.lastSearch !== base.lastSearch ? local.lastSearch : remote.lastSearch) : local.lastSearch || remote.lastSearch
+  });
+}
+
+export function savedCollectionsAdapter(read: () => SavedCollectionsState, write: (value: SavedCollectionsState) => void): AccountDocumentAdapter<SavedCollectionsState> {
+  return {
+    kind: "saved-collections",
+    normalize: (value) => normalizeSavedCollectionsState(value),
+    merge: mergeSavedCollections,
+    isEmpty: (value) => getSavedListingIds(value).length === 0 && value.collections.length <= 1 && Object.keys(value.notes).length === 0,
+    read,
+    write
+  };
+}
+
+export const renterPreferencesAdapter: AccountDocumentAdapter<RenterPreferences> = {
+  kind: "renter-preferences",
+  normalize: (value) => normalizeRenterPreferences(value),
+  merge: mergeRenterPreferences,
+  isEmpty: (value) => !hasRenterPreferences(value),
+  read: readRenterPreferences,
+  write: writeRenterPreferences
+};
+
+export const feedSignalsAdapter: AccountDocumentAdapter<FeedSignals> = {
+  kind: "feed-signals",
+  normalize: normalizeFeedSignals,
+  merge: mergeFeedSignals,
+  isEmpty: (value) => value.viewedIds.length === 0 && !value.lastSearch,
+  read: readFeedSignals,
+  write: writeFeedSignals
+};
+
+const ownerKey = "sublet_account_documents_owner_v1";
+const baseKey = (userId: string) => `sublet_account_documents_v1:${userId}`;
+const pushDelayMs = 2_000;
+const pullIntervalMs = 60_000;
+const retryDelayMs = 30_000;
+
+/**
+ * Preferences and feed signals live under one device-wide key each. Once they belong to an account they are removed
+ * when nobody is signed in, and they never carry over into a different account.
+ */
+export function releaseDeviceDocuments(nextUserId: string | null) {
+  let owner: string | null = null;
+  try {
+    owner = window.localStorage.getItem(ownerKey);
+  } catch {
+    return;
+  }
+  if (owner && owner !== nextUserId) {
+    clearRenterPreferences();
+    clearFeedSignals();
+  }
+  try {
+    if (nextUserId) window.localStorage.setItem(ownerKey, nextUserId);
+    else window.localStorage.removeItem(ownerKey);
+  } catch {
+    // Storage is blocked; there is nothing on this device to protect.
+  }
+}
+
+type Api = { get: typeof getAccountDocuments; put: typeof putAccountDocument };
+type Snapshot = { revision: number; value: unknown };
+
+export class AccountDocumentSync {
+  private readonly adapters: AccountDocumentAdapter<unknown>[];
+  private readonly timers = new Map<AccountDocumentKind, ReturnType<typeof setTimeout>>();
+  private readonly lastSeen = new Map<AccountDocumentKind, string>();
+  private queue: Promise<void> = Promise.resolve();
+  private retryTimer: ReturnType<typeof setTimeout> | null = null;
+  private lastPullAt = 0;
+  private stopped = false;
+  private failures = 0;
+
+  constructor(
+    private readonly token: string,
+    private readonly userId: string,
+    adapters: AnyAccountDocumentAdapter[],
+    private readonly onStatus: (status: AccountSyncStatus) => void = () => undefined,
+    private readonly api: Api = { get: getAccountDocuments, put: putAccountDocument }
+  ) {
+    this.adapters = adapters as unknown as AccountDocumentAdapter<unknown>[];
+  }
+
+  /** Loads the account's documents, merges them with this browser's copies and listens for later changes. */
+  start() {
+    for (const adapter of this.adapters) this.lastSeen.set(adapter.kind, stableJson(adapter.read()));
+    window.addEventListener(localStoreChangedEvent, this.onLocalStore);
+    window.addEventListener("focus", this.onFocus);
+    document.addEventListener("visibilitychange", this.onVisibility);
+    return this.pull();
+  }
+
+  stop() {
+    this.stopped = true;
+    for (const timer of this.timers.values()) clearTimeout(timer);
+    this.timers.clear();
+    if (this.retryTimer) clearTimeout(this.retryTimer);
+    window.removeEventListener(localStoreChangedEvent, this.onLocalStore);
+    window.removeEventListener("focus", this.onFocus);
+    document.removeEventListener("visibilitychange", this.onVisibility);
+  }
+
+  /** Call after this browser's copy of `kind` changed; it is written to the account shortly after. */
+  localChanged(kind: AccountDocumentKind) {
+    const adapter = this.adapters.find((candidate) => candidate.kind === kind);
+    if (!adapter || this.stopped) return;
+    const current = stableJson(adapter.read());
+    if (this.lastSeen.get(kind) === current) return;
+    this.lastSeen.set(kind, current);
+    const existing = this.timers.get(kind);
+    if (existing) clearTimeout(existing);
+    this.timers.set(kind, setTimeout(() => {
+      this.timers.delete(kind);
+      void this.run(() => this.sync(adapter, this.snapshotAsRemote(kind), 0));
+    }, pushDelayMs));
+  }
+
+  pull() {
+    this.lastPullAt = Date.now();
+    return this.run(async () => {
+      const documents = await this.api.get(this.token);
+      for (const adapter of this.adapters) await this.sync(adapter, documents[adapter.kind], 0);
+    });
+  }
+
+  private readonly onLocalStore = () => {
+    for (const adapter of this.adapters) {
+      if (adapter.kind !== "saved-collections") this.localChanged(adapter.kind);
+    }
+  };
+
+  private readonly onFocus = () => {
+    if (Date.now() - this.lastPullAt >= pullIntervalMs) void this.pull();
+  };
+
+  private readonly onVisibility = () => {
+    if (document.visibilityState === "visible") {
+      this.onFocus();
+      return;
+    }
+    // Leaving the page: send what is waiting now instead of after the delay.
+    for (const [kind, timer] of this.timers) {
+      clearTimeout(timer);
+      this.timers.delete(kind);
+      const adapter = this.adapters.find((candidate) => candidate.kind === kind);
+      if (adapter) void this.run(() => this.sync(adapter, this.snapshotAsRemote(kind), 0));
+    }
+  };
+
+  private run(operation: () => Promise<void>) {
+    const next = this.queue.then(async () => {
+      if (!this.current()) return;
+      this.onStatus("syncing");
+      try {
+        await operation();
+        this.failures = 0;
+        if (this.current()) this.onStatus("synced");
+      } catch (error) {
+        if (!this.current()) return;
+        this.onStatus("offline");
+        if (error instanceof ProductApiError && error.category === "authentication") return;
+        // Free-tier API instances sleep when idle and take about a minute to wake; try again later.
+        this.failures += 1;
+        if (!this.retryTimer && this.failures <= 5) {
+          this.retryTimer = setTimeout(() => {
+            this.retryTimer = null;
+            void this.pull();
+          }, retryDelayMs * this.failures);
+        }
+      }
+    });
+    this.queue = next;
+    return next;
+  }
+
+  /** Merges the account's copy into this browser's and writes the result back when the two differ. */
+  private async sync(adapter: AccountDocumentAdapter<unknown>, remote: AccountDocument | null, attempt: number): Promise<void> {
+    if (!this.current()) return;
+    const local = adapter.read();
+    const base = this.readSnapshot(adapter.kind);
+    const baseValue = base ? adapter.normalize(base.value) : null;
+    const remoteValue = remote ? adapter.normalize(remote.value) : null;
+    const merged = remoteValue === null ? local
+      : baseValue !== null && sameValue(local, baseValue) ? remoteValue
+        : baseValue !== null && sameValue(remoteValue, baseValue) ? local
+          : adapter.merge(baseValue, local, remoteValue);
+
+    if (!sameValue(merged, local)) this.writeLocal(adapter, merged);
+    if (remote && remoteValue !== null && sameValue(merged, remoteValue)) {
+      this.writeSnapshot(adapter.kind, { revision: remote.revision, value: remoteValue });
+      return;
+    }
+    if (!remote && adapter.isEmpty(merged)) return;
+
+    let saved: AccountDocument;
+    try {
+      saved = await this.api.put(this.token, adapter.kind, merged, remote?.revision ?? 0);
+    } catch (error) {
+      if (error instanceof ProductApiError && error.status === 409 && attempt < 3) {
+        const documents = await this.api.get(this.token);
+        return this.sync(adapter, documents[adapter.kind], attempt + 1);
+      }
+      throw error;
+    }
+    if (!this.current()) return;
+    const savedValue = adapter.normalize(saved.value);
+    this.writeSnapshot(adapter.kind, { revision: saved.revision, value: savedValue });
+    // The server may trim an oversized value; adopt its copy unless the page changed it meanwhile.
+    if (!sameValue(savedValue, merged) && sameValue(adapter.read(), merged)) this.writeLocal(adapter, savedValue);
+  }
+
+  /** What this browser last synced, used as the server's copy when only local changes need sending. */
+  private snapshotAsRemote(kind: AccountDocumentKind): AccountDocument | null {
+    const snapshot = this.readSnapshot(kind);
+    return snapshot ? { revision: snapshot.revision, value: snapshot.value, updatedAt: "" } : null;
+  }
+
+  private writeLocal(adapter: AccountDocumentAdapter<unknown>, value: unknown) {
+    this.lastSeen.set(adapter.kind, stableJson(value));
+    adapter.write(value);
+  }
+
+  private current() {
+    return !this.stopped && readStoredAuthSession()?.accessToken === this.token;
+  }
+
+  private readSnapshot(kind: AccountDocumentKind): Snapshot | null {
+    try {
+      const parsed = JSON.parse(window.localStorage.getItem(baseKey(this.userId)) ?? "{}") as Record<string, Snapshot | undefined>;
+      const snapshot = parsed[kind];
+      return snapshot && Number.isInteger(snapshot.revision) && snapshot.revision > 0 ? snapshot : null;
+    } catch {
+      return null;
+    }
+  }
+
+  private writeSnapshot(kind: AccountDocumentKind, snapshot: Snapshot) {
+    try {
+      const key = baseKey(this.userId);
+      const parsed = JSON.parse(window.localStorage.getItem(key) ?? "{}") as Record<string, Snapshot>;
+      window.localStorage.setItem(key, JSON.stringify({ ...parsed, [kind]: snapshot }));
+    } catch {
+      // Without storage every sync is a first sync, which merges by union and loses nothing.
+    }
+  }
+}
+
+export function sameValue(left: unknown, right: unknown) {
+  return stableJson(left) === stableJson(right);
+}
+
+function stableJson(value: unknown): string {
+  return JSON.stringify(value, (_key, item: unknown) => item && typeof item === "object" && !Array.isArray(item)
+    ? Object.fromEntries(Object.entries(item as Record<string, unknown>).sort(([left], [right]) => left.localeCompare(right)))
+    : item);
+}
+
+function unique<T>(values: T[]) {
+  return [...new Set(values)];
+}

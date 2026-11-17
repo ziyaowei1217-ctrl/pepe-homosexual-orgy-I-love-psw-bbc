@@ -9,10 +9,10 @@ import { AdminGuard } from "../src/auth/admin.guard";
 import { AdminStepUpGuard } from "../src/auth/admin-step-up.guard";
 import { AuthGuard } from "../src/auth/auth.guard";
 import { AuthRateLimiter, InMemoryRateLimitStore } from "../src/auth/auth-rate-limit";
-import { PHONE_AUTH_CONFIG } from "../src/auth/auth.tokens";
+import { NEON_AUTH_CONFIG, PHONE_AUTH_CONFIG } from "../src/auth/auth.tokens";
 import { AuthenticatedUserService } from "../src/auth/authenticated-user.service";
 import { PhoneAuthController } from "../src/auth/phone-auth.controller";
-import { PhoneAuthService } from "../src/auth/phone-auth.service";
+import { isPhoneAccountEmail, PhoneAuthService } from "../src/auth/phone-auth.service";
 import { maskPhoneNumber, normalizePhoneNumber } from "../src/auth/phone-number";
 import { DevelopmentPhoneVerificationProvider, type PhoneAuthConfig, type PhoneVerificationProvider } from "../src/auth/phone-verification-provider";
 import { PrismaService } from "../src/prisma/prisma.service";
@@ -40,6 +40,11 @@ function memoryDatabase() {
         const user = state.users.find((entry) => entry.id === where.id);
         if (!user) return null;
         return select?.phoneIdentity ? { ...user, phoneIdentity: state.identities.find((entry) => entry.userId === user.id) ?? null } : { ...user };
+      },
+      create: async ({ data }: { data: { email: string; role: string } }) => {
+        const created = { id: `user-${state.users.length + 1}`, ...data };
+        state.users.push(created);
+        return { ...created };
       }
     },
     phoneIdentity: {
@@ -115,7 +120,7 @@ describe("phone sign-in and linking HTTP boundary", () => {
   let jwt: JwtService;
   let enabled = true;
 
-  async function build(config: PhoneAuthConfig) {
+  async function build(config: PhoneAuthConfig, publicSignup = false) {
     memory = memoryDatabase();
     jwt = new JwtService({ secret });
     const limiter = new AuthRateLimiter({ store: new InMemoryRateLimitStore(), nodeEnv: "production", identifierHashSecret: "test-identifier-secret" });
@@ -125,7 +130,8 @@ describe("phone sign-in and linking HTTP boundary", () => {
       providers: [AuthGuard, AdminGuard, AuthenticatedUserService, AuditService, PhoneAuthService,
         { provide: PrismaService, useValue: memory.prisma },
         { provide: AuthRateLimiter, useValue: limiter },
-        { provide: PHONE_AUTH_CONFIG, useValue: config }]
+        { provide: PHONE_AUTH_CONFIG, useValue: config },
+        ...(publicSignup ? [{ provide: NEON_AUTH_CONFIG, useValue: { publicSignup: true } }] : [])]
     }).compile();
     app = moduleRef.createNestApplication(); app.useLogger(false); app.setGlobalPrefix("api/v1");
     app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }));
@@ -330,9 +336,55 @@ describe("phone sign-in and linking HTTP boundary", () => {
     enabled = false;
     await build({ enabled: false });
     const http = request(app.getHttpServer());
-    expect((await http.get("/api/v1/auth/phone/availability").expect(200)).body).toEqual({ enabled: false, regions: [] });
+    expect((await http.get("/api/v1/auth/phone/availability").expect(200)).body).toEqual({ enabled: false, regions: [], signUp: false });
     const response = await http.post("/api/v1/auth/phone/sign-in/code").send({ phoneNumber: "+14155552671" }).expect(503);
     expect(response.body.code).toBe("PHONE_AUTH_UNAVAILABLE");
     expect(enabled).toBe(false);
+  });
+  it("creates an account for a new number only when public sign-up is on", async () => {
+    await app.close();
+    await build({ enabled: true, regions: ["US_CA", "CN"], provider }, true);
+    const http = request(app.getHttpServer());
+    expect((await http.get("/api/v1/auth/phone/availability").expect(200)).body).toEqual({ enabled: true, regions: ["US_CA", "CN"], signUp: true });
+    const sent = await http.post("/api/v1/auth/phone/sign-in/code").send({ phoneNumber: "(415) 555-0142" }).expect(200);
+    expect(sent.body).toEqual({ phoneNumber: "+1 ••• ••• 0142", expiresInSeconds: 600 });
+    await flush();
+    expect(provider.sent).toEqual(["+14155550142"]);
+    const code = provider.codeFor("+14155550142");
+    const wrong = code === "000000" ? "111111" : "000000";
+    await http.post("/api/v1/auth/phone/sign-in/verify").send({ phoneNumber: "+14155550142", code: wrong }).expect(401);
+    expect(memory.state.users).toHaveLength(3);
+    const created = await http.post("/api/v1/auth/phone/sign-in/verify").send({ phoneNumber: "+14155550142", code }).expect(200);
+    expect(created.body.isNewUser).toBe(true);
+    expect(created.body.user.role).toBe("USER");
+    expect(isPhoneAccountEmail(created.body.user.email)).toBe(true);
+    expect(JSON.stringify(created.body)).not.toContain("4155550142");
+    expect(memory.state.identities).toEqual([expect.objectContaining({ userId: created.body.user.id, phoneNumber: "+14155550142" })]);
+    expect(memory.state.profiles.get(created.body.user.email)).toEqual({ phoneVerified: true });
+    expect(memory.state.audits.map((entry) => entry.action)).toEqual(["PHONE_SIGN_UP"]);
+
+    // The same number signs back in to the same account; it never creates a second one.
+    await http.post("/api/v1/auth/phone/sign-in/code").send({ phoneNumber: "4155550142" }).expect(200);
+    await flush();
+    const again = await http.post("/api/v1/auth/phone/sign-in/verify").send({ phoneNumber: "4155550142", code: provider.codeFor("+14155550142") }).expect(200);
+    expect(again.body).toMatchObject({ isNewUser: false, user: { id: created.body.user.id } });
+    expect(memory.state.users).toHaveLength(4);
+    // Sign-up never applies to an administrator's number.
+    await link("admin-1", "admin@example.test", "+14155552672");
+    provider.sent.length = 0;
+    await http.post("/api/v1/auth/phone/sign-in/code").send({ phoneNumber: "+14155552672" }).expect(200);
+    await flush();
+    expect(provider.sent).toEqual([]);
+  });
+
+  it("keeps invite-only deployments closed to new numbers", async () => {
+    const http = request(app.getHttpServer());
+    expect((await http.get("/api/v1/auth/phone/availability").expect(200)).body).toEqual({ enabled: true, regions: ["US_CA", "CN"], signUp: false });
+    await http.post("/api/v1/auth/phone/sign-in/code").send({ phoneNumber: "+14155550142" }).expect(200);
+    await flush();
+    expect(provider.sent).toEqual([]);
+    await http.post("/api/v1/auth/phone/sign-in/verify").send({ phoneNumber: "+14155550142", code: "123456" }).expect(401);
+    expect(provider.checked).toEqual([]);
+    expect(memory.state.users).toHaveLength(3);
   });
 });

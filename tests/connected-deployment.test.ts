@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
@@ -80,7 +81,8 @@ describe("connected Netlify build preflight", () => {
     expect(config.previews.generation).toBe("off");
     expect(config.services).toHaveLength(1);
     const [service] = config.services;
-    expect(service).toMatchObject({ type: "web", runtime: "docker", branch: "connected-demo-2026-10-22", region: "ohio", plan: "free", autoDeployTrigger: "off", healthCheckPath: "/api/v1/ready", numInstances: 1 });
+    // The health check must not query the database, or Render's checks would keep the free Neon compute awake.
+    expect(service).toMatchObject({ type: "web", runtime: "docker", branch: "main", region: "ohio", plan: "free", autoDeployTrigger: "off", healthCheckPath: "/api/v1/health", numInstances: 1 });
     expect(service.preDeployCommand).toBeUndefined();
     const environment = new Map(service.envVars.map(entry => [entry.key, entry]));
     expect(environment.size).toBe(service.envVars.length);
@@ -92,5 +94,34 @@ describe("connected Netlify build preflight", () => {
       expect(environment.get(key)).toEqual({ key, sync: false });
     }
     for (const key of ["JWT_SECRET", "OTP_HASH_SECRET", "SECURITY_IDENTIFIER_HASH_SECRET"]) expect(environment.get(key)).toEqual({ key, generateValue: true });
+  });
+
+  it("keeps the API awake during the day by pinging the endpoint that does not touch the database", () => {
+    const workflow = yaml.load(readFileSync(".github/workflows/keep-api-awake.yml", "utf8")) as {
+      on: { schedule: Array<{ cron: string }> }; permissions: unknown; jobs: { ping: { steps: Array<{ env?: Record<string, string>; run?: string }> } };
+    };
+    expect(workflow.permissions).toEqual({});
+    const [{ cron }] = workflow.on.schedule;
+    const [minutes, hours] = cron.split(" ");
+    expect(minutes.split(",")).toHaveLength(6);
+    const hoursAwake = hours.split(",").reduce((total, range) => {
+      const [start, end = start] = range.split("-").map(Number);
+      return total + end - start + 1;
+    }, 0);
+    // Render's free plan has 750 instance hours a month for the whole workspace.
+    expect(hoursAwake * 31).toBeLessThanOrEqual(600);
+    const [step] = workflow.jobs.ping.steps;
+    expect(step.env?.API_HEALTH_URL).toContain("/api/v1/health");
+    expect(step.run).toContain("--max-time");
+  });
+
+  it("records the checked-in migrations with their current checksums in the paste-able database update", () => {
+    const sql = readFileSync("docs/backend-database-update.sql", "utf8");
+    for (const migration of ["20261024060000_phone_identities", "20261117000000_user_documents"]) {
+      const checksum = createHash("sha256").update(readFileSync(`api/prisma/migrations/${migration}/migration.sql`)).digest("hex");
+      expect(sql).toContain(`'${checksum}', now(), '${migration}'`);
+      expect(sql).toContain(`WHERE migration_name = '${migration}')`);
+    }
+    expect(sql).not.toMatch(/DROP |TRUNCATE|DELETE FROM/i);
   });
 });

@@ -1,7 +1,11 @@
 // Which sign-in methods this build shows. Neon mode only; an unset value keeps
 // the original Google-only screen. The API still decides what actually works.
-export type AuthMethod = "google" | "github" | "email" | "phone";
-const knownMethods: readonly AuthMethod[] = ["google", "github", "email", "phone"];
+export type AuthMethod = "google" | "apple" | "github" | "email" | "phone";
+const knownMethods: readonly AuthMethod[] = ["google", "apple", "github", "email", "phone"];
+// Social providers go through Neon's OAuth redirect; each must also be set up in the Neon console.
+export const socialAuthMethods = ["google", "apple", "github"] as const;
+export type SocialAuthMethod = (typeof socialAuthMethods)[number];
+export const isSocialAuthMethod = (method: string): method is SocialAuthMethod => (socialAuthMethods as readonly string[]).includes(method);
 
 export function enabledAuthMethods(raw = process.env.NEXT_PUBLIC_AUTH_METHODS): AuthMethod[] {
   const methods = (raw ?? "").split(",").map((entry) => entry.trim()).filter(Boolean);
@@ -10,7 +14,7 @@ export function enabledAuthMethods(raw = process.env.NEXT_PUBLIC_AUTH_METHODS): 
   return unique.some((entry) => entry !== "phone") ? unique : ["google"];
 }
 
-const methodNames: Record<AuthMethod, string> = { google: "Google", github: "GitHub", email: "邮箱验证码", phone: "手机号" };
+const methodNames: Record<AuthMethod, string> = { google: "Google", apple: "Apple", github: "GitHub", email: "邮箱验证码", phone: "手机号" };
 
 // Guest copy for Neon mode, e.g. "使用 Google 账户登录" or "使用 Google、邮箱验证码或手机号登录".
 export function signInViaPhrase(methods = enabledAuthMethods()) {

@@ -31,7 +31,7 @@ it('preserves guest saved notes and custom collection membership when logging in
   await waitFor(() => expect(localStorage.getItem(guestKey)).toContain('Visit on Friday; host allows my cat.'));
   expect(JSON.parse(localStorage.getItem(guestKey)!).collections).toContainEqual({ id: 'collection-friday-visits', name: 'Friday visits', listingIds: [listing.id] });
   await act(async () => writeStoredAuthSession('new-user-token'));
-  await screen.findByText('此设备上的账号收藏，暂不跨设备同步');
+  await screen.findByText(/^收藏(会|已|先)/);
   const migrated = JSON.parse(localStorage.getItem(userKey)!);
   expect(migrated.collections[0].listingIds).toContain(listing.id);
   expect(migrated.collections).toContainEqual({ id: 'collection-friday-visits', name: 'Friday visits', listingIds: [listing.id] });

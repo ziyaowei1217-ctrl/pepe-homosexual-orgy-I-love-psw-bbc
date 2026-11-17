@@ -166,6 +166,9 @@ DATABASE_URL='postgresql://sublet:sublet@localhost:5432/sublet_pipeline?schema=p
 
 ## Launch Readiness
 
+The hosted test setup (free Render, Neon, Netlify and Upstash plans; Google, Apple, email and phone sign-in) and
+the steps only an account owner can do are in [`docs/backend-setup.md`](docs/backend-setup.md).
+
 For the provider-independent production configuration and operator checklist, see
 [`docs/production-launch-checklist.md`](docs/production-launch-checklist.md). Run the complete local
 release gate with `pnpm release:check` after PostgreSQL and MinIO are available.

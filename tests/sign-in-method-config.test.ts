@@ -14,13 +14,13 @@ const twilio = { PHONE_AUTH_PROVIDER: "twilio-verify", TWILIO_ACCOUNT_SID: sid("
 
 describe("sign-in method configuration gate", () => {
   it("accepts the supported website method lists", () => {
-    for (const methods of [undefined, "google", "google,email", "google,github,email,phone"]) {
+    for (const methods of [undefined, "google", "google,email", "google,github,email,phone", "google,apple,email,phone", "apple,email"]) {
       expect(validateAuthProviderConfig({ ...neonWeb, NEXT_PUBLIC_AUTH_METHODS: methods }, true)).toEqual([]);
     }
   });
 
   it("rejects unknown, duplicate, phone-only or email-mode method lists", () => {
-    for (const methods of ["google,sms", "email,email", "phone", "google,"]) {
+    for (const methods of ["google,sms", "email,email", "phone", "google,", "apple,apple", "wechat"]) {
       expect(validateAuthProviderConfig({ ...neonWeb, NEXT_PUBLIC_AUTH_METHODS: methods }, true)).not.toEqual([]);
     }
     expect(validateAuthProviderConfig({ NEXT_PUBLIC_AUTH_METHODS: "email" }, true)).not.toEqual([]);

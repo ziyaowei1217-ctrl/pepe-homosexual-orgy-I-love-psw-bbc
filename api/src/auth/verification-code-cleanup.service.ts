@@ -1,9 +1,15 @@
 import { Inject, Injectable, OnModuleDestroy, OnModuleInit, Optional } from "@nestjs/common";
 
 import { PrismaService } from "../prisma/prisma.service";
+import { getAuthProvider } from "./auth-provider";
 
-const cleanupIntervalMs = 60 * 60 * 1000;
 const retentionMs = 24 * 60 * 60 * 1000;
+
+// Email codes are only created when the API sends its own codes. With Neon Auth (which sends sign-in emails
+// itself) a daily pass is enough, and each pass wakes the scale-to-zero Neon database once instead of hourly.
+export function verificationCodeCleanupIntervalMs(environment: Record<string, string | undefined> = process.env) {
+  return getAuthProvider(environment) === "neon" ? 24 * 60 * 60 * 1000 : 60 * 60 * 1000;
+}
 
 @Injectable()
 export class VerificationCodeCleanupService implements OnModuleInit, OnModuleDestroy {
@@ -18,7 +24,7 @@ export class VerificationCodeCleanupService implements OnModuleInit, OnModuleDes
   onModuleInit() {
     this.interval = setInterval(() => {
       void this.cleanup().catch(() => undefined);
-    }, cleanupIntervalMs);
+    }, verificationCodeCleanupIntervalMs());
     this.interval.unref?.();
   }
 

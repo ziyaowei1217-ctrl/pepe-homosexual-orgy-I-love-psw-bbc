@@ -11,6 +11,14 @@ import {
   type ReactNode
 } from "react";
 
+import {
+  AccountDocumentSync,
+  feedSignalsAdapter,
+  releaseDeviceDocuments,
+  renterPreferencesAdapter,
+  savedCollectionsAdapter,
+  type AccountSyncStatus
+} from "@/lib/account-documents";
 import { getSessionUser } from "@/lib/api";
 import { readStoredAuthSession } from "@/lib/auth-session";
 import { useAuthSessionToken } from "@/lib/use-auth-session-token";
@@ -30,11 +38,22 @@ import {
   normalizeUserUiState
 } from "@/lib/user-ui-state";
 
+/** "device": a guest's saves, kept in this browser only. The others describe copying a signed-in renter's saves to the account. */
+export type SavedListingsSyncStatus = "device" | AccountSyncStatus;
+
+const guestLabel = "访客收藏只保存在这台设备上，登录后保存到账户";
+const syncLabels: Record<AccountSyncStatus, string> = {
+  syncing: "收藏会保存到账户，换设备登录也能看到",
+  synced: "收藏已保存到账户，换设备登录也能看到",
+  offline: "收藏先保存在这台设备上，联网后同步到账户"
+};
+
 type SavedListingsContextValue = {
   state: SavedCollectionsState;
   savedIds: ReadonlySet<string>;
   hydrated: boolean;
   accountLabel: string;
+  syncStatus: SavedListingsSyncStatus;
   toggleSaved: (listingId: string) => void;
   toggleInCollection: (listingId: string, collectionId: string) => void;
   createCollection: (name: string) => void;
@@ -51,8 +70,13 @@ export function SavedListingsProvider({ children }: { children: ReactNode }) {
 function SessionSavedListingsProvider({ children, token }: { children: ReactNode; token: string | null }) {
   const [state, setState] = useState(() => normalizeSavedCollectionsState(null));
   const [storageKey, setStorageKey] = useState<string | null>(null);
-  const [accountLabel, setAccountLabel] = useState("此设备上的访客收藏");
+  const [accountUserId, setAccountUserId] = useState<string | null>(null);
+  const [syncStatus, setSyncStatus] = useState<SavedListingsSyncStatus>("device");
+  const [storageProblem, setStorageProblem] = useState<string | null>(null);
   const guestMigration = useRef<{ raw: string | null; legacyRaw: string | null } | null>(null);
+  const stateRef = useRef(state);
+  stateRef.current = state;
+  const sync = useRef<AccountDocumentSync | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -87,17 +111,18 @@ function SessionSavedListingsProvider({ children, token }: { children: ReactNode
         );
         next = mergeSavedCollectionsState(next, guest);
         guestMigration.current = { raw: guestRaw, legacyRaw: guestLegacyRaw };
-        setAccountLabel("此设备上的账号收藏");
-      } else {
-        setAccountLabel("此设备上的访客收藏");
+      } else if (!token) {
+        // Nobody is signed in: preferences and feed signals copied from an account leave this browser.
+        releaseDeviceDocuments(null);
       }
 
       setState(next);
       setStorageKey(key);
+      setAccountUserId(userId);
     }
 
     void hydrate().catch(() => {
-      if (!cancelled) setAccountLabel("设备存储暂不可用，请稍后重试");
+      if (!cancelled) setStorageProblem("设备存储暂不可用，请稍后重试");
     });
     return () => {
       cancelled = true;
@@ -109,7 +134,7 @@ function SessionSavedListingsProvider({ children, token }: { children: ReactNode
     try {
       window.localStorage.setItem(storageKey, JSON.stringify(state));
     } catch {
-      setAccountLabel("收藏暂存于当前页面，设备存储暂不可用");
+      setStorageProblem("收藏暂存于当前页面，设备存储暂不可用");
       return;
     }
     if ((readStoredAuthSession()?.accessToken ?? null) !== token) return;
@@ -130,8 +155,41 @@ function SessionSavedListingsProvider({ children, token }: { children: ReactNode
         // The account copy is durable; retain the source for an idempotent retry.
       }
     }
-    setAccountLabel(storageKey === getSavedCollectionsStorageKey(null) ? "此设备上的访客收藏" : "此设备上的账号收藏");
+    setStorageProblem(null);
+    sync.current?.localChanged("saved-collections");
   }, [state, storageKey, token]);
+
+  // Another tab changed this account's saves: show the same list here, so neither tab sends an older copy.
+  useEffect(() => {
+    if (!storageKey) return;
+    const onStorage = (event: StorageEvent) => {
+      if (event.key !== storageKey || event.newValue === null) return;
+      const next = normalizeSavedCollectionsState(safelyParse(event.newValue));
+      if (JSON.stringify(next) !== JSON.stringify(stateRef.current)) setState(next);
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, [storageKey]);
+
+  // Signed in: copy saves, match preferences and feed signals to the account and keep them in step.
+  useEffect(() => {
+    if (!token || !accountUserId || !storageKey) return;
+    releaseDeviceDocuments(accountUserId);
+    const engine = new AccountDocumentSync(token, accountUserId, [
+      savedCollectionsAdapter(() => stateRef.current, (value) => {
+        stateRef.current = value;
+        setState(value);
+      }),
+      renterPreferencesAdapter,
+      feedSignalsAdapter
+    ], setSyncStatus);
+    sync.current = engine;
+    void engine.start();
+    return () => {
+      engine.stop();
+      if (sync.current === engine) sync.current = null;
+    };
+  }, [accountUserId, storageKey, token]);
 
   const savedIds = useMemo(() => new Set(getSavedListingIds(state)), [state]);
 
@@ -165,16 +223,18 @@ function SessionSavedListingsProvider({ children, token }: { children: ReactNode
     setState((current) => setSavedListingNote(current, listingId, note));
   }, [token]);
 
+  const accountLabel = storageProblem ?? (accountUserId ? syncLabels[syncStatus === "device" ? "syncing" : syncStatus] : guestLabel);
   const value = useMemo<SavedListingsContextValue>(() => ({
     state,
     savedIds,
     hydrated: Boolean(storageKey),
     accountLabel,
+    syncStatus: accountUserId ? syncStatus : "device",
     toggleSaved,
     toggleInCollection,
     createCollection,
     setNote
-  }), [accountLabel, createCollection, savedIds, setNote, state, storageKey, toggleInCollection, toggleSaved]);
+  }), [accountLabel, accountUserId, createCollection, savedIds, setNote, state, storageKey, syncStatus, toggleInCollection, toggleSaved]);
 
   return <SavedListingsContext.Provider value={value}>{children}</SavedListingsContext.Provider>;
 }

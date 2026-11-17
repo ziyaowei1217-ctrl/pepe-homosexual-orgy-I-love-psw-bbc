@@ -201,10 +201,10 @@ export function validateAuthProviderConfig(environment, frontend = false) {
     if (raw !== undefined && raw.trim() !== "") {
       const methods = raw.split(",").map(entry => entry.trim());
       if (provider !== "neon") errors.push("NEXT_PUBLIC_AUTH_METHODS applies only with NEXT_PUBLIC_AUTH_PROVIDER=neon");
-      if (methods.some(entry => !["google", "github", "email", "phone"].includes(entry)) || new Set(methods).size !== methods.length) {
-        errors.push("NEXT_PUBLIC_AUTH_METHODS must be a comma-separated subset of google,github,email,phone");
+      if (methods.some(entry => !["google", "apple", "github", "email", "phone"].includes(entry)) || new Set(methods).size !== methods.length) {
+        errors.push("NEXT_PUBLIC_AUTH_METHODS must be a comma-separated subset of google,apple,github,email,phone");
       }
-      if (!methods.some(entry => ["google", "github", "email"].includes(entry))) errors.push("NEXT_PUBLIC_AUTH_METHODS needs a method that can create an account (google, github or email)");
+      if (!methods.some(entry => ["google", "apple", "github", "email"].includes(entry))) errors.push("NEXT_PUBLIC_AUTH_METHODS needs a method that can create an account (google, apple, github or email)");
     }
   } else errors.push(...validatePhoneAuthConfig(environment));
   return errors;

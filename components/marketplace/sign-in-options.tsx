@@ -4,7 +4,7 @@ import { useCallback, useEffect, useId, useRef, useState, type FormEvent, type K
 
 import { GoogleSignIn } from "@/components/marketplace/google-sign-in";
 import { getResendSeconds, normalizeVerificationCode } from "@/lib/auth-flow";
-import { enabledAuthMethods } from "@/lib/auth-methods";
+import { enabledAuthMethods, isSocialAuthMethod } from "@/lib/auth-methods";
 import { readStoredAuthSession } from "@/lib/auth-session";
 import { acceptEmailSignInCode, EmailCodeError, exchangeProviderSession, sendEmailSignInCode, signInFailureMessage, SocialSignInError, startSocialSignIn, type SignInAttempt, type SocialProvider } from "@/lib/neon-auth-client";
 import { apiGet } from "@/lib/api";
@@ -14,16 +14,17 @@ import { cn } from "@/lib/utils";
 
 type Props = { returnTo: string | null; disabled?: boolean; onAuthenticated: (accessToken: string) => void };
 type CodeMethod = "email" | "phone";
-type PhoneAvailability = { state: "loading" } | { state: "on"; regions: string[] } | { state: "off" } | { state: "offline" };
+type PhoneAvailability = { state: "loading" } | { state: "on"; regions: string[]; signUp: boolean } | { state: "off" } | { state: "offline" };
 
-const socialLabels: Record<SocialProvider, string> = { google: "使用 Google 登录", github: "使用 GitHub 登录" };
+const socialLabels: Record<SocialProvider, string> = { google: "使用 Google 登录", apple: "通过 Apple 登录", github: "使用 GitHub 登录" };
+const socialNames: Record<SocialProvider, string> = { google: "Google", apple: "Apple", github: "GitHub" };
 const codeLabels: Record<CodeMethod, string> = { email: "邮箱验证码", phone: "手机号" };
 export const RESEND_COOLDOWN_MS = 60_000;
 
 // Neon-mode sign-in. With only Google configured this is the original screen.
 export function SignInOptions({ returnTo, disabled = false, onAuthenticated }: Props) {
   const methods = enabledAuthMethods();
-  const social = methods.filter((method): method is SocialProvider => method === "google" || method === "github");
+  const social: SocialProvider[] = methods.filter(isSocialAuthMethod);
   const configuredCodeMethods = methods.filter((method): method is CodeMethod => method === "email" || method === "phone");
   const phoneConfigured = configuredCodeMethods.includes("phone");
   const [phone, setPhone] = useState<PhoneAvailability>({ state: phoneConfigured ? "loading" : "off" });
@@ -34,8 +35,8 @@ export function SignInOptions({ returnTo, disabled = false, onAuthenticated }: P
   const loadPhone = useCallback(() => {
     let active = true;
     setPhone({ state: "loading" });
-    apiGet<{ enabled: boolean; regions: string[] }>("/auth/phone/availability")
-      .then((value) => { if (active) setPhone(value.enabled === true ? { state: "on", regions: Array.isArray(value.regions) ? value.regions : [] } : { state: "off" }); })
+    apiGet<{ enabled: boolean; regions: string[]; signUp?: boolean }>("/auth/phone/availability")
+      .then((value) => { if (active) setPhone(value.enabled === true ? { state: "on", regions: Array.isArray(value.regions) ? value.regions : [], signUp: value.signUp === true } : { state: "off" }); })
       // A missing route (an older API) counts as off; only a network failure offers a retry.
       .catch((caught) => { if (active) setPhone(toProductApiError(caught).category === "network" ? { state: "offline" } : { state: "off" }); });
     return () => { active = false; };
@@ -48,7 +49,7 @@ export function SignInOptions({ returnTo, disabled = false, onAuthenticated }: P
   const codeMethods = configuredCodeMethods.filter((method) => method !== "phone" || phone.state !== "off");
   const active = selected && codeMethods.includes(selected) ? selected : codeMethods[0];
   const tabbed = codeMethods.length > 1;
-  const accountCreators = methods.filter((method) => method !== "phone").map((method) => method === "email" ? "邮箱验证码" : method === "github" ? "GitHub" : "Google");
+  const accountCreators = methods.filter((method) => method !== "phone").map((method) => method === "email" ? "邮箱验证码" : socialNames[method]);
 
   function onTabKey(event: KeyboardEvent<HTMLButtonElement>, index: number) {
     if (event.key !== "ArrowRight" && event.key !== "ArrowLeft" && event.key !== "Home" && event.key !== "End") return;
@@ -85,10 +86,19 @@ function SocialButton({ provider, primary, returnTo, disabled }: { provider: Soc
     catch (caught) { setError(caught instanceof SocialSignInError ? caught.message : "暂时无法登录。请检查网络并允许本站存储登录状态后重试。"); }
     finally { busy.current = false; setPending(false); }
   }
+  // Apple's sign-in button guidelines ask for its own black button with the Apple logo.
+  const style = provider === "apple" ? "inline-flex min-h-11 items-center justify-center gap-2 rounded-full bg-black px-5 py-2.5 font-rounded text-sm font-bold text-white transition active:scale-[0.97] hover:bg-black/85"
+    : primary ? "primary-action" : "secondary-action";
   return <div>
-    <button type="button" disabled={pending || disabled} onClick={signIn} className={cn(primary ? "primary-action" : "secondary-action", "w-full disabled:opacity-60")}>{pending ? "正在连接…" : socialLabels[provider]}</button>
+    <button type="button" disabled={pending || disabled} onClick={signIn} className={cn(style, "w-full disabled:opacity-60")}>
+      {provider === "apple" && !pending ? <AppleLogo /> : null}{pending ? "正在连接…" : socialLabels[provider]}
+    </button>
     {error ? <p role="alert" className="mt-2 text-sm font-bold text-danger-text">{error}</p> : null}
   </div>;
+}
+
+function AppleLogo() {
+  return <svg aria-hidden="true" viewBox="0 0 814 1000" className="size-4 shrink-0 fill-current"><path d="M788.1 340.9c-5.8 4.5-108.2 62.2-108.2 190.5 0 148.4 130.3 200.9 134.2 202.2-.6 3.2-20.7 71.9-68.7 141.9-42.8 61.6-87.5 123.1-155.5 123.1s-85.5-39.5-164-39.5c-76.5 0-103.7 40.8-165.9 40.8s-105.6-57-155.5-127C46.7 790.7 0 663 0 541.8c0-194.4 126.4-297.5 250.8-297.5 66.1 0 121.2 43.4 162.7 43.4 39.5 0 101.1-46 176.3-46 28.5 0 130.9 2.6 198.3 99.2zm-234-181.5c31.1-36.9 53.1-88.1 53.1-139.3 0-7.1-.6-14.3-1.9-20.1-50.6 1.9-110.8 33.7-147.1 75.8-28.5 32.4-55.1 83.6-55.1 135.5 0 7.8 1.3 15.6 1.9 18.1 3.2.6 8.4 1.3 13.6 1.3 45.4 0 102.5-30.4 135.5-71.3z" /></svg>;
 }
 
 function useMounted() {
@@ -254,7 +264,8 @@ function PhoneCodeSignIn({ availability, onRetry, disabled = false, onAuthentica
     } catch (caught) {
       if (!mounted.current) return;
       const productError = toProductApiError(caught);
-      setError(productError.status === 401 ? "验证码无效或已过期。请确认号码已绑定 psw 账户，或重新获取验证码。" : phoneErrorMessage(caught, "登录未完成，请重新尝试。"));
+      const invalid = availability.state === "on" && availability.signUp ? "验证码无效或已过期，请重新获取验证码。" : "验证码无效或已过期。请确认号码已绑定 psw 账户，或重新获取验证码。";
+      setError(productError.status === 401 ? invalid : phoneErrorMessage(caught, "登录未完成，请重新尝试。"));
     } finally { busy.current = false; if (mounted.current) setPending(false); }
   }
 
@@ -267,13 +278,13 @@ function PhoneCodeSignIn({ availability, onRetry, disabled = false, onAuthentica
   if (step === "phone") return <form onSubmit={send} noValidate>
     <label className="text-sm font-bold" htmlFor={`${id}-phone`}>手机号</label>
     <input id={`${id}-phone`} type="tel" autoComplete="tel" inputMode="tel" value={phone} maxLength={24} onChange={(event) => { setPhone(normalizePhoneInput(event.target.value)); setError(null); }} placeholder="+1 415 555 0123" className="application-input mt-2" />
-    <p className="mt-2 text-m-footnote leading-5 text-ink-secondary">{phoneRegionText(availability.regions)}手机号需要先在 账户 → 身份与认证 中绑定。{accountCreators.length ? `新用户请先用${joinChoices(accountCreators)}注册。` : ""}</p>
+    <p className="mt-2 text-m-footnote leading-5 text-ink-secondary">{phoneRegionText(availability.regions)}{availability.signUp ? "还没有账户时，验证后会自动创建。" : `手机号需要先在 账户 → 身份与认证 中绑定。${accountCreators.length ? `新用户请先用${joinChoices(accountCreators)}注册。` : ""}`}</p>
     <button disabled={pending || disabled} className="primary-action mt-3 w-full disabled:opacity-60">{pending ? "发送中…" : "发送短信验证码"}</button>
     {error ? <p role="alert" className="mt-3 text-sm font-bold text-danger-text">{error}</p> : null}
   </form>;
   return <form onSubmit={verify} noValidate>
     <label className="text-sm font-bold" htmlFor={`${id}-sms`}>短信验证码</label>
-    <p role="status" className="mt-1 text-m-footnote leading-5 text-ink-secondary">如果 {masked} 已绑定 psw 账户，验证码短信会在一分钟内送达，10 分钟内有效。</p>
+    <p role="status" className="mt-1 text-m-footnote leading-5 text-ink-secondary">{availability.state === "on" && availability.signUp ? `验证码短信已发送至 ${masked}，一分钟内送达，10 分钟内有效。` : `如果 ${masked} 已绑定 psw 账户，验证码短信会在一分钟内送达，10 分钟内有效。`}</p>
     <input ref={codeInput} id={`${id}-sms`} inputMode="numeric" autoComplete="one-time-code" value={code} onChange={(event) => { setCode(normalizeVerificationCode(event.target.value)); setError(null); }} placeholder="六位验证码" className="application-input mt-2" />
     <button disabled={pending || disabled} className="primary-action mt-3 w-full disabled:opacity-60">{pending ? "验证中…" : "验证并登录"}</button>
     <div className="mt-2 flex flex-wrap gap-2">

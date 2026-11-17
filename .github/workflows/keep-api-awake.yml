@@ -1,0 +1,27 @@
+name: Keep API awake
+
+# Render's free web service sleeps after 15 minutes without requests and then takes about a minute to answer.
+# This pings /api/v1/health, which does not touch the database, every 10 minutes from 7 AM to 1 AM US Eastern
+# (12:00-06:00 UTC). That is about 550 of the 750 free Render instance hours a month, which leaves room for the
+# workspace's other free services; outside those hours the first request waits for the API to wake.
+# Set the repository variable API_HEALTH_URL to ping a different deployment.
+on:
+  schedule:
+    - cron: "7,17,27,37,47,57 0-5,12-23 * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: keep-api-awake
+  cancel-in-progress: false
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Ping the API health endpoint
+        env:
+          API_HEALTH_URL: ${{ vars.API_HEALTH_URL || 'https://psw-connected-api.onrender.com/api/v1/health' }}
+        run: curl --fail --silent --show-error --max-time 100 --retry 2 --retry-delay 10 "$API_HEALTH_URL"

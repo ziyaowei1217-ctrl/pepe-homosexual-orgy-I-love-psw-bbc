@@ -1,11 +1,12 @@
 "use client";
 
-import { readLocalStore, useLocalStore, writeLocalStore } from "./local-store";
+import { readLocalStore, removeLocalStore, useLocalStore, writeLocalStore } from "./local-store";
 import { defaultSearch, parseSearchState, searchHref, type SearchState } from "./search-state";
 
 /**
  * What this browser remembers for the listing feeds: homes opened recently (newest first) and the last search.
- * Kept next to the match preferences (lib/renter-preferences.ts) and never sent to the server.
+ * Kept next to the match preferences (lib/renter-preferences.ts). While someone is signed in, lib/account-documents.ts
+ * copies them to the account so another device sees the same feeds; guests' signals stay in this browser.
  */
 export type FeedSignals = { viewedIds: string[]; lastSearch: string };
 
@@ -40,6 +41,18 @@ export function lastSearchState(lastSearch: string, today: string): SearchState 
   const parsed = parseSearchState(new URLSearchParams(lastSearch.slice("/search?".length)));
   const state = parsed.moveIn && parsed.moveIn < today ? { ...parsed, moveIn: "", moveOut: "" } : parsed;
   return searchHref(state) === searchHref(defaultSearch) ? null : state;
+}
+
+export function readFeedSignals() {
+  return readLocalStore(storageKey, normalizeFeedSignals);
+}
+
+export function writeFeedSignals(signals: FeedSignals) {
+  writeLocalStore(storageKey, normalizeFeedSignals(signals));
+}
+
+export function clearFeedSignals() {
+  removeLocalStore(storageKey);
 }
 
 export function useFeedSignals() {

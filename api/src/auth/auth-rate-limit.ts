@@ -4,7 +4,7 @@ import { HttpException, ServiceUnavailableException } from "@nestjs/common";
 import { hashSecurityIdentifier, normalizeEmail } from "./code-security";
 
 export type AuthRateLimitAction = "send" | "verify" | "exchange" | "identity" | "deliver";
-export type AuthRateLimitPurpose = "LOGIN" | "ADMIN_STEP_UP" | "PHONE_LOGIN" | "PHONE_LINK" | "PHONE_STEP_UP";
+export type AuthRateLimitPurpose = "LOGIN" | "ADMIN_STEP_UP" | "PHONE_LOGIN" | "PHONE_SIGNUP" | "PHONE_LINK" | "PHONE_STEP_UP";
 // Phone purposes key their per-destination limit on `subject` (a normalized
 // phone number, or the account for administrator step-up) rather than an email
 // address. Texts cost money, so their limits are lower.
@@ -122,7 +122,9 @@ export class AuthRateLimiter {
     // has its own budget: a flood of sign-in requests never blocks
     // administrator step-up.
     if (action === "deliver") {
-      const [minute, day] = purpose === "PHONE_STEP_UP" ? [10, 50] : [20, 200];
+      // Sign-up texts go to numbers nobody has proven yet, so they get the
+      // smallest budget; it caps what a flood of new numbers can cost per day.
+      const [minute, day] = purpose === "PHONE_STEP_UP" ? [10, 50] : purpose === "PHONE_SIGNUP" ? [10, 100] : [20, 200];
       return [
         rule("phone-deliver", "global-minute", scope, minute, 60),
         rule("phone-deliver", "global-day", scope, day, 86_400)

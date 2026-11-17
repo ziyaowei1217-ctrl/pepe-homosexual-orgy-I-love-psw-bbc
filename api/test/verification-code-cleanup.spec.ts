@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { VerificationCodeCleanupService } from "../src/auth/verification-code-cleanup.service";
+import { VerificationCodeCleanupService, verificationCodeCleanupIntervalMs } from "../src/auth/verification-code-cleanup.service";
 
 describe("VerificationCodeCleanupService", () => {
   it("deletes only terminal or expired codes older than 24 hours while holding the advisory lock", async () => {
@@ -40,5 +40,13 @@ describe("VerificationCodeCleanupService", () => {
 
     await expect(service.cleanup()).resolves.toBe(0);
     expect(deleteMany).not.toHaveBeenCalled();
+  });
+});
+
+describe("verification code cleanup cadence", () => {
+  it("runs hourly when the API sends its own codes and daily with Neon Auth", () => {
+    expect(verificationCodeCleanupIntervalMs({})).toBe(60 * 60 * 1000);
+    expect(verificationCodeCleanupIntervalMs({ AUTH_PROVIDER: "email" })).toBe(60 * 60 * 1000);
+    expect(verificationCodeCleanupIntervalMs({ AUTH_PROVIDER: "neon" })).toBe(24 * 60 * 60 * 1000);
   });
 });

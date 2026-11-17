@@ -4,9 +4,11 @@ import { useMemo, useSyncExternalStore } from "react";
 
 /**
  * JSON values this browser keeps for the renter (match preferences, feed signals). Reads go through `normalize`,
- * so a missing, blocked or malformed value reads as its empty state. Every open tab sees a write.
+ * so a missing, blocked or malformed value reads as its empty state. Every open tab sees a write. While someone is
+ * signed in, lib/account-documents.ts copies these values to their account.
  */
-const changedEvent = "sublet:local-store-changed";
+export const localStoreChangedEvent = "sublet:local-store-changed";
+const changedEvent = localStoreChangedEvent;
 
 export function useLocalStore<T>(key: string, normalize: (value: unknown) => T): T {
   const raw = useSyncExternalStore(subscribe, () => readRaw(key), () => null);
@@ -22,6 +24,15 @@ export function writeLocalStore(key: string, value: unknown) {
     window.localStorage.setItem(key, JSON.stringify(value));
   } catch {
     // Private sessions may deny storage; the page keeps working without it.
+  }
+  window.dispatchEvent(new Event(changedEvent));
+}
+
+export function removeLocalStore(key: string) {
+  try {
+    window.localStorage.removeItem(key);
+  } catch {
+    // Nothing to remove when storage is blocked.
   }
   window.dispatchEvent(new Event(changedEvent));
 }

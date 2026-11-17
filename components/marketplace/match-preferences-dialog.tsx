@@ -23,7 +23,7 @@ export function MatchPreferencesDialog({ initial, onSave, onClose }: {
   return <div className="marketplace-modal-backdrop fixed inset-0 z-[85] flex items-end justify-center bg-ink-block/40 backdrop-blur-sm sm:items-center sm:p-6" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
     <section ref={dialog} role="dialog" aria-modal="true" aria-labelledby="match-preferences-title" className="marketplace-modal-panel flex max-h-[94dvh] w-full flex-col overflow-hidden rounded-t-psw-2xl bg-surface shadow-dialog sm:max-h-[88dvh] sm:max-w-[560px] sm:rounded-psw-2xl">
       <header className="flex shrink-0 items-start justify-between gap-4 border-b border-line-strong px-6 py-5">
-        <div><h2 id="match-preferences-title" className="font-rounded text-m-title text-ink sm:text-d-title">匹配偏好</h2><p className="mt-1 text-m-subhead text-ink-secondary sm:text-d-subhead">用来给房源排序和算匹配度，不会隐藏房源。只保存在这台设备上。</p></div>
+        <div><h2 id="match-preferences-title" className="font-rounded text-m-title text-ink sm:text-d-title">匹配偏好</h2><p className="mt-1 text-m-subhead text-ink-secondary sm:text-d-subhead">用来给房源排序和算匹配度，不会隐藏房源。登录后保存到账户，未登录时只保存在这台设备上。</p></div>
         <button type="button" onClick={onClose} aria-label="关闭匹配偏好" className="grid size-11 shrink-0 place-items-center rounded-full bg-tag-neutral hover:bg-line-strong"><X className="size-5" /></button>
       </header>
       <div className="space-y-7 overflow-y-auto px-6 py-6">

@@ -15,7 +15,7 @@ import type { PreviewListing } from "@/lib/preview-data";
 import { cn } from "@/lib/utils";
 
 export function SavedPageExperience({ listings }: { listings: PreviewListing[] }) {
-  const { state, savedIds, accountLabel, createCollection, toggleSaved, toggleInCollection, setNote } = useSavedListings();
+  const { state, savedIds, accountLabel, syncStatus, createCollection, toggleSaved, toggleInCollection, setNote } = useSavedListings();
   const [activeCollectionId, setActiveCollectionId] = useState(DEFAULT_SAVED_COLLECTION_ID);
   const [mapView, setMapView] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
@@ -48,10 +48,10 @@ export function SavedPageExperience({ listings }: { listings: PreviewListing[] }
       <div className="page-container pb-16 pt-8 sm:pt-12">
         <PageHeader
           title="收藏清单"
-          description="把喜欢的房放在一起比较。清单、备注和排序都只保存在这台设备上。"
+          description="把喜欢的房放在一起比较。清单和备注只有自己看得到。"
           action={<button type="button" onClick={() => setCreateOpen(true)} className="flex min-h-11 items-center justify-center gap-1.5 rounded-full bg-primary px-5 font-rounded text-[15px] font-bold text-on-primary transition-colors hover:bg-primary-hover active:scale-[0.97] sm:text-sm"><Plus className="size-4" aria-hidden="true" />新建清单</button>}
         >
-          <p className="mt-3 inline-flex w-fit items-center gap-1.5 rounded-psw-sm bg-warning-soft px-2.5 py-1 text-m-footnote font-semibold text-warning-text"><Info className="size-3.5 shrink-0" aria-hidden="true" />{accountLabel}，暂不跨设备同步</p>
+          <p className={`mt-3 inline-flex w-fit items-center gap-1.5 rounded-psw-sm px-2.5 py-1 text-m-footnote font-semibold ${syncStatus === "synced" || syncStatus === "syncing" ? "bg-success-soft text-success-text" : "bg-warning-soft text-warning-text"}`}><Info className="size-3.5 shrink-0" aria-hidden="true" />{accountLabel}</p>
         </PageHeader>
 
         <div className="mt-6 flex items-center gap-2 overflow-x-auto pb-1 [scrollbar-width:none]" aria-label="收藏分组">
@@ -80,7 +80,7 @@ export function SavedPageExperience({ listings }: { listings: PreviewListing[] }
                 <div key={listing.id} className="flex min-w-0 flex-col gap-2">
                   <ListingCard listing={listing} href={`/listing/${encodeURIComponent(listing.id)}`} saved onToggleSave={toggleSaved} sizes="(max-width: 640px) 100vw, 33vw" />
                   <div className="flex flex-col gap-2 rounded-psw-lg bg-surface p-3">
-                    <textarea defaultValue={state.notes[listing.id] ?? ""} onBlur={(event) => setNote(listing.id, event.target.value)} aria-label={`${listing.title} 的收藏备注`} placeholder="添加只有自己看得到的备注…" className="min-h-16 w-full resize-none rounded-psw-md border border-control-border bg-surface px-3 py-2 text-base outline-none focus:border-primary sm:text-d-subhead" />
+                    <textarea defaultValue={state.notes[listing.id] ?? ""} maxLength={1000} onBlur={(event) => setNote(listing.id, event.target.value)} aria-label={`${listing.title} 的收藏备注`} placeholder="添加只有自己看得到的备注…" className="min-h-16 w-full resize-none rounded-psw-md border border-control-border bg-surface px-3 py-2 text-base outline-none focus:border-primary sm:text-d-subhead" />
                     {state.collections.length > 1 ? <label className="flex items-center justify-between gap-3 text-m-footnote font-semibold text-ink-secondary">加入清单<select aria-label={`${listing.title} 所属清单`} className="min-h-11 max-w-[170px] rounded-full border-[1.5px] border-outline bg-surface px-3 text-base text-ink sm:text-sm" value="" onChange={(event) => { if (event.target.value) toggleInCollection(listing.id, event.target.value); }}><option value="">选择清单</option>{state.collections.filter((collection) => collection.id !== DEFAULT_SAVED_COLLECTION_ID).map((collection) => <option key={collection.id} value={collection.id}>{collection.listingIds.includes(listing.id) ? "✓ " : ""}{collection.name}</option>)}</select></label> : null}
                   </div>
                 </div>
@@ -119,7 +119,7 @@ function NewCollectionDialog({ name, onNameChange, onSubmit, onClose }: {
     <div className="marketplace-modal-backdrop fixed inset-0 z-[80] grid place-items-center bg-ink-block/35 p-4 backdrop-blur-sm" role="presentation" onMouseDown={() => onClose()}>
       <form ref={dialog} onSubmit={onSubmit} onMouseDown={(event) => event.stopPropagation()} className="marketplace-modal-panel max-h-[calc(100dvh-32px)] w-full max-w-md overflow-y-auto rounded-psw-2xl bg-surface p-6 shadow-dialog" role="dialog" aria-modal="true" aria-labelledby="create-list-title">
         <div className="flex items-center justify-between"><h2 id="create-list-title" className="text-m-title sm:text-d-title">新建清单</h2><button type="button" onClick={onClose} className="grid size-11 place-items-center rounded-full bg-tag-neutral hover:bg-line-strong" aria-label="关闭"><X className="size-4" /></button></div>
-        <label className="mt-6 block text-d-label">清单名称<input value={name} onChange={(event) => onNameChange(event.target.value)} placeholder="例如：九月入住" className="application-input mt-2" /></label>
+        <label className="mt-6 block text-d-label">清单名称<input value={name} onChange={(event) => onNameChange(event.target.value)} maxLength={40} placeholder="例如：九月入住" className="application-input mt-2" /></label>
         <button type="submit" className="mt-6 min-h-12 w-full rounded-full bg-primary px-5 font-rounded text-base font-bold text-on-primary hover:bg-primary-hover active:scale-[0.97]">创建清单</button>
       </form>
     </div>
