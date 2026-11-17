@@ -118,7 +118,9 @@ describe("connected Netlify build preflight", () => {
   it("records the checked-in migrations with their current checksums in the paste-able database update", () => {
     const sql = readFileSync("docs/backend-database-update.sql", "utf8");
     for (const migration of ["20261024060000_phone_identities", "20261117000000_user_documents"]) {
-      const checksum = createHash("sha256").update(readFileSync(`api/prisma/migrations/${migration}/migration.sql`)).digest("hex");
+      // Hash the text as committed, with LF line endings: a Windows checkout can turn them into CRLF.
+      const committed = readFileSync(`api/prisma/migrations/${migration}/migration.sql`, "utf8").replace(/\r\n/g, "\n");
+      const checksum = createHash("sha256").update(committed).digest("hex");
       expect(sql).toContain(`'${checksum}', now(), '${migration}'`);
       expect(sql).toContain(`WHERE migration_name = '${migration}')`);
     }
