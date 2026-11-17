@@ -150,7 +150,10 @@ describe("account sign-in methods", () => {
     render(<AccountExperience mode="overview" />);
     fireEvent.change(await screen.findByLabelText("邮箱地址", { selector: "input" }), { target: { value: "new@example.com" } });
     fireEvent.click(screen.getByRole("button", { name: "发送验证码" }));
-    await screen.findByLabelText("邮箱验证码", { selector: "input" });
+    const codeInput = await screen.findByLabelText("邮箱验证码", { selector: "input" });
+    // The code field takes focus in an effect after the step changes. Wait for it, or that effect can run during the
+    // key press below and move focus off the tab the test just selected.
+    await waitFor(() => expect(document.activeElement).toBe(codeInput));
     const emailTab = screen.getByRole("tab", { name: "邮箱验证码" });
     emailTab.focus();
     fireEvent.keyDown(emailTab, { key: "ArrowRight" });
