@@ -1,7 +1,8 @@
-import { Body, Controller, Get, HttpException, Inject, Param, Put, Req, Res, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, HttpException, Inject, NotFoundException, Param, Put, Req, Res, UseGuards } from "@nestjs/common";
 
 import { AuthGuard, type AuthenticatedRequest } from "../auth/auth.guard";
 import { PutUserDocumentDto } from "./dto";
+import { userDocumentKind } from "./user-document-values";
 import { UserDocumentWriteLimiter } from "./user-document-write-limiter";
 import { UserDocumentsService } from "./user-documents.service";
 
@@ -29,7 +30,9 @@ export class UserDocumentsController {
     @Res({ passthrough: true }) response: HeaderResponse
   ) {
     response.setHeader("Cache-Control", "no-store");
-    const retryAfterSeconds = this.limiter.take(request.user.id);
+    if (!userDocumentKind(kind)) throw new NotFoundException();
+    // Each kind has its own budget, so frequent feed-signal writes never hold back saves or preferences.
+    const retryAfterSeconds = this.limiter.take(`${request.user.id}:${kind}`);
     if (retryAfterSeconds > 0) {
       response.setHeader("Retry-After", String(retryAfterSeconds));
       throw new HttpException(

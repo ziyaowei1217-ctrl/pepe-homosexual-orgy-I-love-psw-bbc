@@ -32,7 +32,8 @@ import {
 export type AccountDocumentKind = "saved-collections" | "renter-preferences" | "feed-signals";
 export type AccountDocument = { revision: number; value: unknown; updatedAt: string };
 export type AccountDocuments = Record<AccountDocumentKind, AccountDocument | null>;
-export type AccountSyncStatus = "syncing" | "synced" | "offline";
+/** "too-large": the account refused a document over its size limits (413); this browser keeps it until it fits. */
+export type AccountSyncStatus = "syncing" | "synced" | "offline" | "too-large";
 
 const kinds: AccountDocumentKind[] = ["saved-collections", "renter-preferences", "feed-signals"];
 
@@ -155,7 +156,11 @@ export const feedSignalsAdapter: AccountDocumentAdapter<FeedSignals> = {
 
 const ownerKey = "sublet_account_documents_owner_v1";
 const baseKey = (userId: string) => `sublet_account_documents_v1:${userId}`;
+const deviceWideKinds: AccountDocumentKind[] = ["renter-preferences", "feed-signals"];
 const pushDelayMs = 2_000;
+// Every opened home changes the feed signals; sending them at most twice a minute keeps the account's write
+// budget for saves and preferences. Leaving the page still sends what is waiting.
+const feedSignalsPushDelayMs = 30_000;
 const pullIntervalMs = 60_000;
 const retryDelayMs = 30_000;
 
@@ -171,6 +176,9 @@ export function releaseDeviceDocuments(nextUserId: string | null) {
     return;
   }
   if (owner && owner !== nextUserId) {
+    // Forget what this browser last synced for the copies being cleared. Otherwise the next sign-in to that account
+    // would read the empty copies as the renter clearing them and overwrite the account's preferences and history.
+    forgetSnapshots(owner, deviceWideKinds);
     clearRenterPreferences();
     clearFeedSignals();
   }
@@ -182,6 +190,35 @@ export function releaseDeviceDocuments(nextUserId: string | null) {
   }
 }
 
+function forgetSnapshots(userId: string, forget: AccountDocumentKind[]) {
+  const key = baseKey(userId);
+  try {
+    const raw = window.localStorage.getItem(key);
+    if (raw === null) return;
+    const parsed = safelyParseJson(raw);
+    if (isRecord(parsed)) {
+      for (const kind of forget) delete parsed[kind];
+      try {
+        window.localStorage.setItem(key, JSON.stringify(parsed));
+        return;
+      } catch {
+        // Fall through: without any snapshot the next sync is a first sync, which keeps the account's copies.
+      }
+    }
+    window.localStorage.removeItem(key);
+  } catch {
+    // Storage is blocked entirely, so the device copies can be neither read nor cleared.
+  }
+}
+
+function safelyParseJson(value: string): unknown {
+  try {
+    return JSON.parse(value) as unknown;
+  } catch {
+    return null;
+  }
+}
+
 type Api = { get: typeof getAccountDocuments; put: typeof putAccountDocument };
 type Snapshot = { revision: number; value: unknown };
 
@@ -189,6 +226,8 @@ export class AccountDocumentSync {
   private readonly adapters: AccountDocumentAdapter<unknown>[];
   private readonly timers = new Map<AccountDocumentKind, ReturnType<typeof setTimeout>>();
   private readonly lastSeen = new Map<AccountDocumentKind, string>();
+  /** Documents the account refused as too large, with the value it refused, so the same value is not sent again. */
+  private readonly tooLarge = new Map<AccountDocumentKind, string>();
   private queue: Promise<void> = Promise.resolve();
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
   private lastPullAt = 0;
@@ -232,18 +271,29 @@ export class AccountDocumentSync {
     if (this.lastSeen.get(kind) === current) return;
     this.lastSeen.set(kind, current);
     const existing = this.timers.get(kind);
+    // Feed signals wait for the pending push, which sends the latest copy; other kinds go out once edits pause.
+    if (existing && kind === "feed-signals") return;
     if (existing) clearTimeout(existing);
     this.timers.set(kind, setTimeout(() => {
       this.timers.delete(kind);
       void this.run(() => this.sync(adapter, this.snapshotAsRemote(kind), 0));
-    }, pushDelayMs));
+    }, kind === "feed-signals" ? feedSignalsPushDelayMs : pushDelayMs));
   }
 
   pull() {
     this.lastPullAt = Date.now();
     return this.run(async () => {
       const documents = await this.api.get(this.token);
-      for (const adapter of this.adapters) await this.sync(adapter, documents[adapter.kind], 0);
+      const failures: unknown[] = [];
+      for (const adapter of this.adapters) {
+        try {
+          await this.sync(adapter, documents[adapter.kind], 0);
+        } catch (error) {
+          // One document failing must not keep the others from syncing; the first failure still sets the status.
+          failures.push(error);
+        }
+      }
+      if (failures.length > 0) throw failures[0];
     });
   }
 
@@ -278,7 +328,7 @@ export class AccountDocumentSync {
       try {
         await operation();
         this.failures = 0;
-        if (this.current()) this.onStatus("synced");
+        if (this.current()) this.onStatus(this.tooLarge.size > 0 ? "too-large" : "synced");
       } catch (error) {
         if (!this.current()) return;
         this.onStatus("offline");
@@ -311,10 +361,16 @@ export class AccountDocumentSync {
 
     if (!sameValue(merged, local)) this.writeLocal(adapter, merged);
     if (remote && remoteValue !== null && sameValue(merged, remoteValue)) {
+      this.tooLarge.delete(adapter.kind);
       this.writeSnapshot(adapter.kind, { revision: remote.revision, value: remoteValue });
       return;
     }
-    if (!remote && adapter.isEmpty(merged)) return;
+    if (!remote && adapter.isEmpty(merged)) {
+      this.tooLarge.delete(adapter.kind);
+      return;
+    }
+    const mergedJson = stableJson(merged);
+    if (this.tooLarge.get(adapter.kind) === mergedJson) return;
 
     let saved: AccountDocument;
     try {
@@ -324,12 +380,18 @@ export class AccountDocumentSync {
         const documents = await this.api.get(this.token);
         return this.sync(adapter, documents[adapter.kind], attempt + 1);
       }
+      if (error instanceof ProductApiError && error.status === 413) {
+        // Sending it again cannot help until something is removed. This browser keeps its copy, and the status says why.
+        if (this.current()) this.tooLarge.set(adapter.kind, mergedJson);
+        return;
+      }
       throw error;
     }
     if (!this.current()) return;
+    this.tooLarge.delete(adapter.kind);
     const savedValue = adapter.normalize(saved.value);
     this.writeSnapshot(adapter.kind, { revision: saved.revision, value: savedValue });
-    // The server may trim an oversized value; adopt its copy unless the page changed it meanwhile.
+    // The server stores its normalized copy (for example trimmed text); adopt it unless the page changed meanwhile.
     if (!sameValue(savedValue, merged) && sameValue(adapter.read(), merged)) this.writeLocal(adapter, savedValue);
   }
 

@@ -11,14 +11,14 @@ import {
 } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { Prisma } from "@prisma/client";
-import { randomBytes } from "node:crypto";
 
 import { AuditService } from "../audit/audit.service";
 import { PrismaService } from "../prisma/prisma.service";
+import { isPhoneAccountEmail, newPhoneAccountEmail } from "./phone-account";
 import { maskPhoneNumber, normalizePhoneNumber } from "./phone-number";
 import { PhoneVerificationUnavailableError, type PhoneAuthConfig, type PhoneVerificationProvider } from "./phone-verification-provider";
 import { NEON_AUTH_CONFIG, PHONE_AUTH_CONFIG } from "./auth.tokens";
-import { AuthRateLimiter, type AuthRateLimitPurpose } from "./auth-rate-limit";
+import { AuthRateLimiter, AuthRateLimitException, type AuthRateLimitPurpose } from "./auth-rate-limit";
 import type { NeonAuthConfig } from "./auth-provider";
 import { applicationSessionSeconds } from "./application-session";
 
@@ -32,18 +32,7 @@ export const PHONE_LIMIT_EMAIL = "phone-sign-in@psw.invalid";
 // long ago, so a stolen administrator session (one hour, application-session.ts)
 // expires before a phone it adds could be used for step-up.
 export const ADMIN_STEP_UP_PHONE_MIN_AGE_MS = 24 * 60 * 60 * 1000;
-// Accounts created by phone have no email. User.email stays required and
-// unique, so they get a random address under a reserved domain (RFC 2606
-// .invalid never delivers mail). The web shows the masked phone instead.
-export const PHONE_ACCOUNT_EMAIL_DOMAIN = "phone.psw.invalid";
-
-export function newPhoneAccountEmail() {
-  return `phone-${randomBytes(10).toString("hex")}@${PHONE_ACCOUNT_EMAIL_DOMAIN}`;
-}
-
-export function isPhoneAccountEmail(email: string) {
-  return email.endsWith(`@${PHONE_ACCOUNT_EMAIL_DOMAIN}`);
-}
+export { isPhoneAccountEmail, newPhoneAccountEmail, PHONE_ACCOUNT_EMAIL_DOMAIN } from "./phone-account";
 
 @Injectable()
 export class PhoneAuthService {
@@ -84,7 +73,9 @@ export class PhoneAuthService {
   // is on, to new numbers so they can create one. The response is identical in
   // every case, so it reveals nothing about which numbers exist. Without public
   // sign-up nobody can make the service text an unlinked number.
-  async requestSignInCode(phoneNumber: string) {
+  // `requesterIp` (from getRequestIdentity) charges a sign-up text to the
+  // requester's network as well as to the site-wide budget.
+  async requestSignInCode(phoneNumber: string, requesterIp = "unknown") {
     const { provider } = this.requireEnabled();
     const startedAt = Date.now();
     const identity = await this.prisma.phoneIdentity.findUnique({ where: { phoneNumber }, select: { user: { select: { role: true } } } });
@@ -100,7 +91,7 @@ export class PhoneAuthService {
         if (result.status === "sent" && result.devCode) return { ...accepted, devCode: result.devCode };
       } else {
         // Sent in the background so response time does not depend on the provider.
-        void this.deliverQuietly(purpose, provider, phoneNumber);
+        void this.deliverQuietly(purpose, provider, phoneNumber, requesterIp);
       }
     }
     await this.padResponse(startedAt);
@@ -113,9 +104,15 @@ export class PhoneAuthService {
     const identity = await this.prisma.phoneIdentity.findUnique({ where: { phoneNumber }, include: { user: true } });
     const eligible = identity && identity.user.role !== "ADMIN" ? identity : null;
     const signUp = !identity && this.signUpAllowed();
-    // Only numbers that can sign in (or sign up) are checked with the provider,
-    // so guesses at an unlinked or administrator number cannot use up a code
-    // sent for another purpose. The padded response hides which case applied.
+    // A code is checked with the provider only when it could open an account:
+    // a linked number that is not an administrator's, or with public sign-up
+    // a number that belongs to no account. Guesses at an administrator's number
+    // never reach the provider, so they cannot use up a step-up code. With
+    // public sign-up, guesses at a free number do reach it and count against a
+    // link code someone may be waiting for on that number (Twilio Verify keeps
+    // one pending code per number and stops it after five wrong checks); the
+    // per-number verify limits bound that, and the user can ask for a new code.
+    // The padded response hides which case applied.
     const result = eligible || signUp ? await this.check(provider, phoneNumber, code) : "invalid";
     await this.padResponse(startedAt);
     if (result !== "approved" || (!eligible && !signUp)) throw new UnauthorizedException({ code: "INVALID_PHONE_CODE", message: "Invalid or expired verification code" });
@@ -244,6 +241,13 @@ export class PhoneAuthService {
     assertRecentSignIn(sessionIssuedAt);
     await this.assertAdminPhoneUnlocked(user);
     return this.prisma.$transaction(async (transaction) => {
+      // An account created by phone has a placeholder address that receives no mail, so unless Google or email
+      // sign-in was bound to it, this number is its only way in. It may move to another number (link one), but
+      // removing the last one would lock it out and a later sign-in with the same number would start a new account.
+      const current = await transaction.user.findUnique({ where: { id: user.id }, select: { email: true } });
+      if (current && isPhoneAccountEmail(current.email) && await transaction.externalAuthIdentity.count({ where: { userId: user.id } }) === 0) {
+        throw new ConflictException({ code: "PHONE_REQUIRED_FOR_ACCOUNT", message: "This number is the only way to sign in to this account; link another number to change it" });
+      }
       const removed = await transaction.phoneIdentity.deleteMany({ where: { userId: user.id } });
       await transaction.profile.updateMany({ where: { email: user.email }, data: { phoneVerified: false } });
       if (removed.count) {
@@ -322,11 +326,14 @@ export class PhoneAuthService {
 
   // Charges the per-purpose delivery budget, then sends. Failures stay silent
   // because the caller has already answered the same way for every number.
-  private async deliverQuietly(purpose: AuthRateLimitPurpose, provider: PhoneVerificationProvider, phoneNumber: string) {
+  private async deliverQuietly(purpose: AuthRateLimitPurpose, provider: PhoneVerificationProvider, phoneNumber: string, requesterIp = "service") {
     try {
-      await this.rateLimiter.enforce("deliver", purpose, { email: PHONE_LIMIT_EMAIL, ip: "service", subject: phoneNumber });
-    } catch {
-      this.logger.warn("Phone code delivery budget reached", { purpose });
+      await this.rateLimiter.enforce("deliver", purpose, { email: PHONE_LIMIT_EMAIL, ip: requesterIp, subject: phoneNumber });
+    } catch (error) {
+      if (!(error instanceof AuthRateLimitException)) this.logger.error("Phone code not sent: the rate-limit store is unavailable", { purpose });
+      // A new number then gets no text and sees no error, so the operator has to hear about it.
+      else if (purpose === "PHONE_SIGNUP") this.logger.error("Phone sign-up code not sent: sign-up text limit reached (100 a day for the site, 10 a minute, 30 a day from one network)", { purpose });
+      else this.logger.warn("Phone code delivery budget reached", { purpose });
       return;
     }
     try {

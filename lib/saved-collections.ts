@@ -1,4 +1,12 @@
 export const DEFAULT_SAVED_COLLECTION_ID = "all";
+/** The account keeps notes up to this length (api/src/user-documents/user-document-values.ts) and refuses longer ones. */
+export const MAX_SAVED_NOTE_LENGTH = 2000;
+
+/** Cuts a note to the account's limit without splitting an emoji (half of one cannot be stored). */
+function cutNote(note: string) {
+  if (note.length <= MAX_SAVED_NOTE_LENGTH) return note;
+  return note.slice(0, /[\uD800-\uDBFF]/.test(note.charAt(MAX_SAVED_NOTE_LENGTH - 1)) ? MAX_SAVED_NOTE_LENGTH - 1 : MAX_SAVED_NOTE_LENGTH);
+}
 
 export type SavedCollection = {
   id: string;
@@ -38,10 +46,12 @@ export function normalizeSavedCollectionsState(
     ],
     notes: isRecord(value) && isRecord(value.notes)
       ? Object.fromEntries(
-          Object.entries(value.notes).filter(
-            (entry): entry is [string, string] =>
-              entry[0].trim().length > 0 && typeof entry[1] === "string"
-          )
+          Object.entries(value.notes)
+            .filter(
+              (entry): entry is [string, string] =>
+                entry[0].trim().length > 0 && typeof entry[1] === "string"
+            )
+            .map(([listingId, note]) => [listingId, cutNote(note)])
         )
       : {}
   };
@@ -72,7 +82,7 @@ export function mergeSavedCollectionsState(account: SavedCollectionsState, guest
     const existing = notes.get(listingId);
     if (!existing) notes.set(listingId, note);
     else if (note && existing !== note && !existing.endsWith(`\n\n${note}`)) {
-      notes.set(listingId, `${existing}\n\n${note}`);
+      notes.set(listingId, cutNote(`${existing}\n\n${note}`));
     }
   }
   return { version: 1, collections, notes: Object.fromEntries(notes) };
@@ -128,7 +138,7 @@ export function setSavedListingNote(
   const normalizedListingId = listingId.trim();
   if (!normalizedListingId) return state;
   const notes = { ...state.notes };
-  const normalizedNote = note.trim();
+  const normalizedNote = cutNote(note.trim());
   if (normalizedNote) notes[normalizedListingId] = normalizedNote;
   else delete notes[normalizedListingId];
   return { ...state, notes };

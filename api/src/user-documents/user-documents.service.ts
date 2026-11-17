@@ -5,6 +5,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import {
   MAX_USER_DOCUMENT_BYTES,
   normalizeUserDocument,
+  UserDocumentTooLargeError,
   userDocumentKind,
   userDocumentSlug,
   userDocumentSlugs,
@@ -31,10 +32,14 @@ export class UserDocumentsService {
   async put(userId: string, slug: string, input: unknown, baseRevision: number): Promise<PresentedUserDocument> {
     const kind = userDocumentKind(slug);
     if (!kind) throw new NotFoundException();
-    const value = normalizeUserDocument(kind, input);
-    if (Buffer.byteLength(JSON.stringify(value), "utf8") > MAX_USER_DOCUMENT_BYTES) {
-      throw new PayloadTooLargeException({ statusCode: 413, error: "Payload Too Large", code: "DOCUMENT_TOO_LARGE", message: "Document is too large" });
+    let value: Record<string, unknown>;
+    try {
+      value = normalizeUserDocument(kind, input);
+    } catch (error) {
+      if (error instanceof UserDocumentTooLargeError) throw documentTooLarge();
+      throw error;
     }
+    if (Buffer.byteLength(JSON.stringify(value), "utf8") > MAX_USER_DOCUMENT_BYTES) throw documentTooLarge();
 
     const data = value as Prisma.InputJsonObject;
     try {
@@ -53,6 +58,10 @@ export class UserDocumentsService {
       throw error;
     }
   }
+}
+
+function documentTooLarge() {
+  return new PayloadTooLargeException({ statusCode: 413, error: "Payload Too Large", code: "DOCUMENT_TOO_LARGE", message: "Document is too large" });
 }
 
 function present(row: Pick<UserDocument, "revision" | "value" | "updatedAt">): PresentedUserDocument {

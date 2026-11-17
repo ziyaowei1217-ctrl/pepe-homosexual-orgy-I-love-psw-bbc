@@ -124,8 +124,13 @@ export class AuthRateLimiter {
     if (action === "deliver") {
       // Sign-up texts go to numbers nobody has proven yet, so they get the
       // smallest budget; it caps what a flood of new numbers can cost per day.
+      // One network (an IPv4 address or an IPv6 /64) may use 30 of the 100,
+      // so a single client cannot spend the whole day's budget and stop phone
+      // sign-up for everyone else.
       const [minute, day] = purpose === "PHONE_STEP_UP" ? [10, 50] : purpose === "PHONE_SIGNUP" ? [10, 100] : [20, 200];
+      const networkRules = purpose === "PHONE_SIGNUP" ? [rule("phone-deliver", "network-day", `${scope}:${hash(addressPrefix(identity.ip))}`, 30, 86_400)] : [];
       return [
+        ...networkRules,
         rule("phone-deliver", "global-minute", scope, minute, 60),
         rule("phone-deliver", "global-day", scope, day, 86_400)
       ];

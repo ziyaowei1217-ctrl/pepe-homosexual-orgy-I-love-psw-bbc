@@ -11,6 +11,7 @@ import { isUUID } from "class-validator";
 import { parseStrictDate } from "../http/strict-date";
 import { PrismaService } from "../prisma/prisma.service";
 import { LocalRoommateMessageRateLimiter, RoommateMessageRateLimiter } from "../roommate-conversations/roommate-message-rate-limit";
+import { fallbackDisplayName } from "../auth/phone-account";
 import { CreateDealThreadDto, CreateViewingRequestDto, SendDealMessageDto, ViewingModeDtoValue } from "./dto";
 import {
   chronologicalHistoryPage, DEAL_MESSAGE_PREVIEW_LIMIT, DEAL_VIEWING_PREVIEW_LIMIT,
@@ -329,7 +330,7 @@ export class DealThreadsService {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new NotFoundException("User not found");
     const profile = await this.prisma.profile.findUnique({ where: { email: user.email } });
-    return profile?.displayName?.trim() || user.email.split("@")[0];
+    return profile?.displayName?.trim() || fallbackDisplayName(user.email);
   }
 
   private async toThreadResponse(thread: any, viewerId: string, messageLimit = DEAL_MESSAGE_PREVIEW_LIMIT, currentRequest?: ViewingRequest | null) {

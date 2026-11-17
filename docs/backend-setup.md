@@ -13,7 +13,7 @@ The backend runs on free plans: the API on Render, the database and sign-in (Neo
 
 Free-plan limits that matter during testing:
 
-- Render free web service: sleeps after 15 minutes without requests and takes about a minute to wake. `.github/workflows/keep-api-awake.yml` pings `/api/v1/health` every 10 minutes from 7 AM to 1 AM US Eastern. A workspace gets 750 instance hours a month for all its free services, and the keep-alive uses about 560, so keep only this one free web service in the Render workspace. If the hours run out, Render suspends the free services until the next month.
+- Render free web service: sleeps after 15 minutes without requests and takes about a minute to wake. `.github/workflows/keep-api-awake.yml` pings `/api/v1/health` every 10 minutes from 7 AM to 1 AM US Eastern (8 AM to 2 AM during daylight saving time). A workspace gets 750 instance hours a month for all its free services, and the keep-alive uses about 560 in a 31-day month, so keep only this one free web service in the Render workspace. If the hours run out, Render suspends the free services until the next month.
 - Neon free: 100 compute hours a month (the database sleeps after 5 minutes idle and does not count while asleep), 5 GB data transfer a month. Render's health check must use `/api/v1/health`: `/api/v1/ready` queries the database, and Render checks every few seconds, which would keep the database awake whenever the API is up and use up the compute hours in under three weeks.
 - Upstash free: 500,000 commands a month.
 
@@ -56,7 +56,9 @@ Rebuild and publish with `NEXT_PUBLIC_AUTH_METHODS` listing only the methods tha
 4. Render → psw-connected-api → Environment: set `PHONE_AUTH_PROVIDER` to `twilio-verify`, add `TWILIO_ACCOUNT_SID`, `TWILIO_VERIFY_SERVICE_SID`, `TWILIO_API_KEY_SID` and `TWILIO_API_KEY_SECRET`, keep `PHONE_AUTH_REGIONS` as `US_CA` (add `,CN` for mainland China mobile numbers), save, and deploy.
 5. Add `phone` to `NEXT_PUBLIC_AUTH_METHODS` and republish the website.
 
-New numbers create an account while `PUBLIC_BETA_SIGNUP` is `true` on Render. Sign-up texts are capped at 100 a day for the whole site (`api/src/auth/auth-rate-limit.ts`), which caps the cost at about $6 a day.
+New numbers create an account while `PUBLIC_BETA_SIGNUP` is `true` on Render. Sign-up texts are capped at 100 a day for the whole site (`api/src/auth/auth-rate-limit.ts`), which caps the cost at about $6 a day, and one network (for example one campus Wi-Fi address) can use 30 of them. Past either cap a new number gets no text and no error message, and the Render log shows `Phone sign-up code not sent`. If many people will sign up from one place on the same day, ask some of them to use Google or email.
+
+A phone account cannot remove its number (it is the only way to sign in), but it can change to another number in 账户 → 身份与认证. Phone accounts cannot be made administrators.
 
 ## 6. Email codes and Google (optional before recruiting)
 

@@ -1,9 +1,11 @@
 name: Keep API awake
 
 # Render's free web service sleeps after 15 minutes without requests and then takes about a minute to answer.
-# This pings /api/v1/health, which does not touch the database, every 10 minutes from 7 AM to 1 AM US Eastern
-# (12:00-06:00 UTC). That is about 550 of the 750 free Render instance hours a month, which leaves room for the
-# workspace's other free services; outside those hours the first request waits for the API to wake.
+# This pings /api/v1/health, which does not touch the database, every 10 minutes from 12:00 to 06:00 UTC: 7 AM to
+# 1 AM US Eastern in winter (EST), 8 AM to 2 AM during daylight saving time (EDT). The API then stays up about 18 hours
+# a day, about 560 of the 750 free Render instance hours in a 31-day month. The rest covers requests outside those
+# hours, so the Render workspace should run no other free service. Outside those hours the first request waits for
+# the API to wake.
 # Set the repository variable API_HEALTH_URL to ping a different deployment.
 on:
   schedule:

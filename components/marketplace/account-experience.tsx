@@ -19,7 +19,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { PageHeader } from "@/components/marketplace/page-header";
 import { SignInOptions } from "@/components/marketplace/sign-in-options";
 import { PhoneVerificationRow } from "@/components/marketplace/phone-verification";
-import { accountEmailLabel, accountGreetingName } from "@/lib/account-label";
+import { accountEmailLabel, accountGreetingName, isPhoneAccountEmail } from "@/lib/account-label";
 import { enabledAuthMethods, isSocialAuthMethod, signInViaPhrase } from "@/lib/auth-methods";
 import { endGoogleSession, usesNeonAuth } from "@/lib/neon-auth-client";
 import {
@@ -228,7 +228,7 @@ function GuestAccount({ mode, returnTo, authIntent, onAuthenticated, signInDisab
 
 function AuthenticatedAccount({ mode, token, user, profile, applications, onProfileChange, onNotice }: { mode: AccountMode; token: string; user: SessionUser; profile: ApiProfile | null; applications: ApiRentalApplication[] | null; onProfileChange: (profile: ApiProfile) => void; onNotice: (message: string) => void }) {
   if (mode === "profile") return <ProfileEditor token={token} profile={profile} onProfileChange={onProfileChange} onNotice={onNotice} />;
-  if (mode === "verification") return <VerificationPanel token={token} profile={profile} onProfileChange={onProfileChange} />;
+  if (mode === "verification") return <VerificationPanel token={token} phoneOnly={isPhoneAccountEmail(user.email)} profile={profile} onProfileChange={onProfileChange} />;
   if (mode === "settings") return <SettingsPanel />;
   const activeApplications = applications?.filter((application) => application.status === "DRAFT" || application.status === "SUBMITTED").length;
   const acceptedApplications = applications?.filter((application) => application.status === "ACCEPTED" || application.status === "COMPLETED").length;
@@ -281,15 +281,20 @@ function ProfileEditor({ token, profile, onProfileChange, onNotice }: { token: s
   return <section className="rounded-psw-2xl border border-line-strong bg-surface p-6 sm:p-8"><h2 className="font-rounded text-m-title sm:text-d-title font-bold">个人资料</h2><p className="mt-2 text-sm text-ink-secondary">更新账户名称、所在地和个人简介。租房申请的联系人信息请在提交时核对。</p><form className="mt-7 grid gap-5 sm:grid-cols-2" onSubmit={save}><Field label="显示名称" value={draft.displayName ?? ""} onChange={(value) => { setDraft({ ...draft, displayName: value }); setError(null); }} /><Field label="学校或公司" value={draft.school ?? ""} onChange={(value) => { setDraft({ ...draft, school: value }); setError(null); }} /><Field label="城市" value={draft.city ?? ""} onChange={(value) => { setDraft({ ...draft, city: value }); setError(null); }} /><label className="grid gap-2 text-sm font-bold">身份<select className="application-input" value={draft.role} onChange={(event) => { setDraft({ ...draft, role: event.target.value as UpdateProfileInput["role"] }); setError(null); }}><option value="renter">租客</option><option value="lister">转租人</option><option value="both">租客兼转租人</option></select></label><label className="grid gap-2 text-sm font-bold sm:col-span-2">个人简介<textarea className="min-h-28 rounded-psw-lg border border-line-strong p-4 text-sm outline-none focus:border-primary" value={draft.bio ?? ""} onChange={(event) => { setDraft({ ...draft, bio: event.target.value }); setError(null); }} /></label>{error ? <p role="alert" className="rounded-psw-lg bg-danger-soft px-4 py-3 text-sm font-bold text-danger-text sm:col-span-2">{error}</p> : null}<button disabled={saving} className="w-fit rounded-full bg-primary px-6 py-3 text-sm font-bold text-white">{saving ? "保存中…" : "保存资料"}</button></form></section>;
 }
 
-function VerificationPanel({ token, profile, onProfileChange }: { token: string; profile: ApiProfile | null; onProfileChange: (profile: ApiProfile) => void }) {
+// `phoneOnly` is an account created by phone sign-up: it has no sign-in email (only a placeholder address).
+function VerificationPanel({ token, phoneOnly, profile, onProfileChange }: { token: string; phoneOnly: boolean; profile: ApiProfile | null; onProfileChange: (profile: ApiProfile) => void }) {
   const phoneEnabled = usesNeonAuth() && enabledAuthMethods().includes("phone");
   return <section className="rounded-psw-2xl border border-line-strong bg-surface p-6 sm:p-8">
     <h2 className="font-rounded text-m-title sm:text-d-title font-bold">身份与认证</h2>
-    <p className="mt-2 text-sm leading-6 text-ink-secondary">{phoneEnabled ? "查看登录邮箱的认证状态，绑定手机号后可用短信验证码登录。" : "查看登录邮箱及其他认证的当前状态。"}</p>
+    <p className="mt-2 text-sm leading-6 text-ink-secondary">{phoneOnly ? "这个账户用手机号登录，没有登录邮箱。" : phoneEnabled ? "查看登录邮箱的认证状态，绑定手机号后可用短信验证码登录。" : "查看登录邮箱及其他认证的当前状态。"}</p>
     <div className="mt-7 divide-y divide-line">
-      <VerificationRow icon={Mail} title="邮箱认证" detail="账户登录邮箱已验证" done />
-      <VerificationRow icon={IdCard} title="教育邮箱" detail={profile?.eduEmailVerified ? "教育邮箱已验证" : "用学校邮箱（如 .edu、.ac.uk、.edu.cn）登录，验证后自动标记为学生。"} done={Boolean(profile?.eduEmailVerified)} />
-      {phoneEnabled ? <PhoneVerificationRow token={token} onChanged={(linked) => { if (profile) onProfileChange({ ...profile, phoneVerified: linked }); }}
+      {phoneOnly
+        ? <VerificationRow icon={Mail} title="邮箱认证" detail="这个账户用手机号登录，没有登录邮箱。" done={false} badge="无邮箱" />
+        : <VerificationRow icon={Mail} title="邮箱认证" detail="账户登录邮箱已验证" done />}
+      <VerificationRow icon={IdCard} title="教育邮箱" detail={profile?.eduEmailVerified ? "教育邮箱已验证"
+        : phoneOnly ? "学生标记只适用于用学校邮箱（如 .edu、.ac.uk、.edu.cn）登录的账户，手机号账户暂不支持。"
+        : "用学校邮箱（如 .edu、.ac.uk、.edu.cn）登录，验证后自动标记为学生。"} done={Boolean(profile?.eduEmailVerified)} />
+      {phoneEnabled ? <PhoneVerificationRow token={token} phoneOnly={phoneOnly} onChanged={(linked) => { if (profile) onProfileChange({ ...profile, phoneVerified: linked }); }}
           fallback={<VerificationRow icon={ShieldCheck} title="手机认证" detail={profile?.phoneVerified ? "手机号已验证" : "手机号认证暂未开放。"} done={Boolean(profile?.phoneVerified)} />} />
         : <VerificationRow icon={ShieldCheck} title="手机认证" detail={profile?.phoneVerified ? "手机号已验证" : "手机号认证暂未开放。"} done={Boolean(profile?.phoneVerified)} />}
     </div>
@@ -309,11 +314,11 @@ function SettingsPanel() {
 function Benefit({ icon: Icon, title, detail }: { icon: typeof Heart; title: string; detail: string }) { return <div className="flex gap-3"><span className="grid size-10 shrink-0 place-items-center rounded-full bg-surface text-primary-text"><Icon className="size-[18px]" aria-hidden="true" /></span><span><span className="block text-d-label text-ink">{title}</span><span className="mt-0.5 block text-m-footnote text-ink-secondary">{detail}</span></span></div>; }
 function QuickLink({ href, title, detail }: { href: string; title: string; detail: string }) { return <Link href={href} className="flex items-center gap-3 rounded-psw-xl bg-surface p-5 transition-[box-shadow,transform] hover:-translate-y-1 hover:shadow-card-hover"><span className="min-w-0 flex-1"><span className="block font-rounded text-d-label text-ink">{title}</span><span className="mt-1 block text-m-footnote text-ink-secondary">{detail}</span></span><ChevronRight className="size-4 shrink-0 text-primary-text" aria-hidden="true" /></Link>; }
 function Field({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) { return <label className="grid gap-2 text-sm font-bold">{label}<input className="application-input" value={value} onChange={(event) => onChange(event.target.value)} /></label>; }
-function VerificationRow({ icon: Icon, title, detail, done }: { icon: typeof Mail; title: string; detail: string; done: boolean }) {
+function VerificationRow({ icon: Icon, title, detail, done, badge = "暂未开放" }: { icon: typeof Mail; title: string; detail: string; done: boolean; badge?: string }) {
   return <div className="flex items-center gap-3 py-5 sm:gap-4">
     <span className="grid size-11 shrink-0 place-items-center rounded-psw-md bg-tag-neutral"><Icon className="size-5" aria-hidden="true" /></span>
     <span className="min-w-0 flex-1"><span className="block text-sm font-bold">{title}</span><span className="mt-1 block text-m-footnote leading-5 text-ink-secondary">{detail}</span></span>
-    <span className={cn("shrink-0 rounded-psw-sm px-2.5 py-1 text-m-footnote font-bold", done ? "bg-surface-subtle text-primary-text" : "bg-tag-neutral text-ink-secondary")}>{done ? "已完成" : "暂未开放"}</span>
+    <span className={cn("shrink-0 rounded-psw-sm px-2.5 py-1 text-m-footnote font-bold", done ? "bg-surface-subtle text-primary-text" : "bg-tag-neutral text-ink-secondary")}>{done ? "已完成" : badge}</span>
   </div>;
 }
 function SettingsRow({ icon: Icon, title, detail, href }: { icon: typeof Bell; title: string; detail: string; href?: string }) {

@@ -20,7 +20,7 @@ import {
   type AccountSyncStatus
 } from "@/lib/account-documents";
 import { getSessionUser } from "@/lib/api";
-import { readStoredAuthSession } from "@/lib/auth-session";
+import { readStoredAuthSession, sessionUserId } from "@/lib/auth-session";
 import { useAuthSessionToken } from "@/lib/use-auth-session-token";
 import {
   addSavedCollection,
@@ -45,7 +45,8 @@ const guestLabel = "访客收藏只保存在这台设备上，登录后保存到
 const syncLabels: Record<AccountSyncStatus, string> = {
   syncing: "收藏会保存到账户，换设备登录也能看到",
   synced: "收藏已保存到账户，换设备登录也能看到",
-  offline: "收藏先保存在这台设备上，联网后同步到账户"
+  offline: "收藏先保存在这台设备上，联网后同步到账户",
+  "too-large": "收藏和备注超过账户的保存上限，新的改动只保存在这台设备上。删掉一些备注或收藏后会重新同步"
 };
 
 type SavedListingsContextValue = {
@@ -82,16 +83,8 @@ function SessionSavedListingsProvider({ children, token }: { children: ReactNode
     let cancelled = false;
 
     async function hydrate() {
-      let userId: string | null = null;
-      if (token) {
-        try {
-          const user = await getSessionUser(token);
-          userId = user.id;
-        } catch {
-          userId = null;
-        }
-      }
-      if (cancelled || (readStoredAuthSession()?.accessToken ?? null) !== token) return;
+      const userId = token ? await accountIdFor(token, () => cancelled) : null;
+      if (cancelled || (readStoredAuthSession()?.accessToken ?? null) !== token || (token && !userId)) return;
 
       const key = getSavedCollectionsStorageKey(userId);
       const legacyKey = userId ? getUserUiStorageKey(userId) : getGuestUiStorageKey();
@@ -165,7 +158,10 @@ function SessionSavedListingsProvider({ children, token }: { children: ReactNode
     const onStorage = (event: StorageEvent) => {
       if (event.key !== storageKey || event.newValue === null) return;
       const next = normalizeSavedCollectionsState(safelyParse(event.newValue));
-      if (JSON.stringify(next) !== JSON.stringify(stateRef.current)) setState(next);
+      if (JSON.stringify(next) === JSON.stringify(stateRef.current)) return;
+      // Update the ref now: a sync that runs before React renders must merge this copy, not the one it replaces.
+      stateRef.current = next;
+      setState(next);
     };
     window.addEventListener("storage", onStorage);
     return () => window.removeEventListener("storage", onStorage);
@@ -243,6 +239,26 @@ export function useSavedListings() {
   const value = useContext(SavedListingsContext);
   if (!value) throw new Error("useSavedListings must be used inside SavedListingsProvider");
   return value;
+}
+
+/**
+ * The signed-in account's id. Session tokens carry it; for any other token the API is asked, and a failure that is not
+ * a rejected session (a timeout while the free API wakes up, a network error) is retried. Treating the account as a
+ * guest meanwhile would file its saves under the guest key, where the next account to sign in here would pick them up.
+ * A rejected session is cleared by the API client, which remounts this provider as a guest.
+ */
+async function accountIdFor(token: string, stopped: () => boolean): Promise<string | null> {
+  const fromToken = sessionUserId(token);
+  if (fromToken) return fromToken;
+  for (let attempt = 0; !stopped(); attempt += 1) {
+    try {
+      return (await getSessionUser(token)).id;
+    } catch {
+      if (stopped() || readStoredAuthSession()?.accessToken !== token) return null;
+      await new Promise((resolve) => setTimeout(resolve, Math.min(30_000, 2_000 * 2 ** attempt)));
+    }
+  }
+  return null;
 }
 
 function safelyParse(value: string) {

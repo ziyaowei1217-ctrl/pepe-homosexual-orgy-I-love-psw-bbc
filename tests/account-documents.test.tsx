@@ -9,6 +9,7 @@ import {
   mergeFeedSignals,
   mergeRenterPreferences,
   mergeSavedCollections,
+  releaseDeviceDocuments,
   renterPreferencesAdapter,
   type AccountDocument,
   type AccountDocumentKind,
@@ -81,8 +82,8 @@ describe("account document sync", () => {
   beforeEach(() => writeStoredAuthSession("token-a"));
   afterEach(() => { cleanup(); localStorage.clear(); vi.useRealTimers(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
-  function engine(server: ReturnType<typeof memoryServer>, onStatus = vi.fn()) {
-    return new AccountDocumentSync("token-a", "user-a", [renterPreferencesAdapter, feedSignalsAdapter], onStatus, {
+  function engine(server: ReturnType<typeof memoryServer>, onStatus = vi.fn(), token = "token-a", userId = "user-a") {
+    return new AccountDocumentSync(token, userId, [renterPreferencesAdapter, feedSignalsAdapter], onStatus, {
       get: async () => server.list(),
       put: async (_token, kind, value, baseRevision) => {
         const result = server.put(kind, value, baseRevision);
@@ -91,6 +92,95 @@ describe("account document sync", () => {
       }
     });
   }
+
+  async function signInAndSync(server: ReturnType<typeof memoryServer>, token: string, userId: string) {
+    writeStoredAuthSession(token);
+    releaseDeviceDocuments(userId);
+    const sync = engine(server, vi.fn(), token, userId);
+    await sync.start();
+    sync.stop();
+  }
+
+  it("gives the account's preferences back after the same renter signs out and in again", async () => {
+    const server = memoryServer();
+    releaseDeviceDocuments("user-a");
+    writeRenterPreferences({ ...emptyRenterPreferences, destination: "UCLA" });
+    await signInAndSync(server, "token-a", "user-a");
+    expect(server.documents.get("renter-preferences")).toMatchObject({ revision: 1, value: { destination: "UCLA" } });
+
+    // Signing out clears the copy on this browser; that must not read as the renter clearing their preferences.
+    releaseDeviceDocuments(null);
+    expect(readRenterPreferences()).toEqual(emptyRenterPreferences);
+    await signInAndSync(server, "token-a", "user-a");
+    expect(readRenterPreferences()).toMatchObject({ destination: "UCLA" });
+    expect(server.documents.get("renter-preferences")).toMatchObject({ revision: 1, value: { destination: "UCLA" } });
+  });
+
+  it("gives each account its own preferences when accounts take turns on one browser", async () => {
+    const serverA = memoryServer();
+    const serverB = memoryServer();
+    serverA.documents.set("renter-preferences", { revision: 3, value: { ...emptyRenterPreferences, destination: "UCLA" } });
+    serverB.documents.set("renter-preferences", { revision: 5, value: { ...emptyRenterPreferences, destination: "USC" } });
+    await signInAndSync(serverA, "token-a", "user-a");
+    expect(readRenterPreferences().destination).toBe("UCLA");
+    await signInAndSync(serverB, "token-b", "user-b");
+    expect(readRenterPreferences().destination).toBe("USC");
+    await signInAndSync(serverA, "token-a", "user-a");
+    expect(readRenterPreferences().destination).toBe("UCLA");
+    expect(serverA.puts).toEqual([]);
+    expect(serverB.puts).toEqual([]);
+  });
+
+  it("keeps a document the account refuses as too large on this browser, and does not send it again", async () => {
+    vi.useFakeTimers();
+    const server = memoryServer();
+    const status = vi.fn();
+    let refused = 0;
+    const sync = new AccountDocumentSync("token-a", "user-a", [renterPreferencesAdapter], status, {
+      get: async () => server.list(),
+      put: async (_token, kind, value, baseRevision) => {
+        if ((value as { destination?: string }).destination === "Huge") {
+          refused += 1;
+          throw new ProductApiError({ category: "service", message: "too large", retryable: false, status: 413 });
+        }
+        return server.put(kind, value, baseRevision)!;
+      }
+    });
+    writeRenterPreferences({ ...emptyRenterPreferences, destination: "Huge" });
+    await sync.start();
+    expect(refused).toBe(1);
+    expect(status).toHaveBeenLastCalledWith("too-large");
+    await sync.pull();
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(refused).toBe(1);
+    expect(status).toHaveBeenLastCalledWith("too-large");
+    expect(readRenterPreferences().destination).toBe("Huge");
+
+    writeRenterPreferences({ ...emptyRenterPreferences, destination: "UCLA" });
+    await vi.advanceTimersByTimeAsync(2_500);
+    expect(server.documents.get("renter-preferences")).toMatchObject({ revision: 1, value: { destination: "UCLA" } });
+    expect(status).toHaveBeenLastCalledWith("synced");
+    sync.stop();
+  });
+
+  it("still syncs the other documents when one of them fails", async () => {
+    const server = memoryServer();
+    writeRenterPreferences({ ...emptyRenterPreferences, destination: "UCLA" });
+    rememberListingView("home-1");
+    const status = vi.fn();
+    const sync = new AccountDocumentSync("token-a", "user-a", [renterPreferencesAdapter, feedSignalsAdapter], status, {
+      get: async () => server.list(),
+      put: async (_token, kind, value, baseRevision) => {
+        if (kind === "renter-preferences") throw new ProductApiError({ category: "service", message: "down", retryable: true, status: 503 });
+        return server.put(kind, value, baseRevision)!;
+      }
+    });
+    await sync.start();
+    sync.stop();
+    expect(server.documents.get("feed-signals")).toMatchObject({ revision: 1, value: { viewedIds: ["home-1"] } });
+    expect(server.documents.has("renter-preferences")).toBe(false);
+    expect(status).toHaveBeenLastCalledWith("offline");
+  });
 
   it("sends this browser's values to an empty account and loads them on another browser", async () => {
     const server = memoryServer();
@@ -115,15 +205,45 @@ describe("account document sync", () => {
     const sync = engine(server);
     await sync.start();
     rememberListingView("home-1");
-    await vi.advanceTimersByTimeAsync(2_500);
+    await vi.advanceTimersByTimeAsync(30_500);
     expect(server.documents.get("feed-signals")).toMatchObject({ revision: 1, value: { viewedIds: ["home-1"] } });
 
     server.documents.set("feed-signals", { revision: 2, value: { viewedIds: ["home-9", "home-1"], lastSearch: "" } });
     rememberListingView("home-2");
-    await vi.advanceTimersByTimeAsync(2_500);
+    await vi.advanceTimersByTimeAsync(30_500);
     expect(server.puts.at(-1)).toMatchObject({ baseRevision: 2 });
     expect(server.documents.get("feed-signals")).toMatchObject({ revision: 3, value: { viewedIds: ["home-2", "home-1", "home-9"] } });
     expect(readFeedSignals().viewedIds).toEqual(["home-2", "home-1", "home-9"]);
+    sync.stop();
+  });
+
+  it("sends preferences once edits pause, opened homes at most twice a minute, and both when the page is left", async () => {
+    vi.useFakeTimers();
+    const server = memoryServer();
+    const sync = engine(server);
+    await sync.start();
+    for (const id of ["home-1", "home-2", "home-3"]) {
+      rememberListingView(id);
+      await vi.advanceTimersByTimeAsync(5_000);
+    }
+    writeRenterPreferences({ ...emptyRenterPreferences, destination: "UCLA" });
+    await vi.advanceTimersByTimeAsync(2_500);
+    expect(server.documents.get("renter-preferences")).toMatchObject({ value: { destination: "UCLA" } });
+    expect(server.documents.has("feed-signals")).toBe(false);
+    await vi.advanceTimersByTimeAsync(15_000);
+    expect(server.puts.filter((entry) => entry.kind === "feed-signals")).toEqual([
+      expect.objectContaining({ value: expect.objectContaining({ viewedIds: ["home-3", "home-2", "home-1"] }) })
+    ]);
+
+    rememberListingView("home-4");
+    Object.defineProperty(document, "visibilityState", { value: "hidden", configurable: true });
+    try {
+      document.dispatchEvent(new Event("visibilitychange"));
+      await vi.advanceTimersByTimeAsync(0);
+    } finally {
+      Object.defineProperty(document, "visibilityState", { value: "visible", configurable: true });
+    }
+    expect(server.documents.get("feed-signals")).toMatchObject({ revision: 2, value: { viewedIds: ["home-4", "home-3", "home-2", "home-1"] } });
     sync.stop();
   });
 
@@ -149,11 +269,11 @@ function Probe() {
 describe("signed-in saves", () => {
   afterEach(() => { cleanup(); localStorage.clear(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
-  function stubApi(server: ReturnType<typeof memoryServer>, userFor: (token: string) => string) {
+  function stubApi(server: ReturnType<typeof memoryServer>, userFor: (token: string) => string, me?: () => Response | null) {
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       const token = String((init?.headers as Record<string, string>)?.Authorization ?? "").replace("Bearer ", "");
-      if (url.endsWith("/auth/me")) return Response.json({ id: userFor(token), email: `${userFor(token)}@example.com`, role: "USER" });
+      if (url.endsWith("/auth/me")) return me?.() ?? Response.json({ id: userFor(token), email: `${userFor(token)}@example.com`, role: "USER" });
       if (url.endsWith("/me/documents") && init?.method === "GET") return Response.json(server.list());
       const kind = url.match(/\/me\/documents\/([a-z-]+)$/)?.[1] as AccountDocumentKind | undefined;
       if (kind && init?.method === "PUT") {
@@ -176,6 +296,36 @@ describe("signed-in saves", () => {
     await waitFor(() => expect(server.documents.get("saved-collections")).toMatchObject({ revision: 5 }));
     expect((server.documents.get("saved-collections")!.value as SavedCollectionsState).collections[0].listingIds).toEqual(["from-phone", "from-guest"]);
     await screen.findByText("收藏已保存到账户，换设备登录也能看到");
+  });
+
+  const encode = (value: unknown) => btoa(JSON.stringify(value)).replace(/=+$/, "").replace(/\+/g, "-").replace(/\//g, "_");
+
+  it("files saves under the account named in the session token without waiting for the API", async () => {
+    const server = memoryServer();
+    server.documents.set("saved-collections", { revision: 2, value: saved(["from-phone"]) });
+    localStorage.setItem("sublet-saved-collections-v1:guest", JSON.stringify(saved(["from-guest"])));
+    stubApi(server, () => "renter", () => Response.json({ code: "SERVICE_UNAVAILABLE" }, { status: 503 }));
+    writeStoredAuthSession(`${encode({ alg: "HS256", typ: "JWT" })}.${encode({ sub: "renter", role: "USER" })}.signature`);
+    render(<SavedListingsProvider><Probe /></SavedListingsProvider>);
+    await waitFor(() => expect(screen.getByTestId("ids").textContent).toBe("from-phone,from-guest"));
+    expect(JSON.parse(localStorage.getItem("sublet-saved-collections-v1:renter")!).collections[0].listingIds).toEqual(["from-phone", "from-guest"]);
+    expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).endsWith("/auth/me"))).toBe(false);
+  });
+
+  it("waits for a slow API instead of filing a signed-in account's saves as a guest's", async () => {
+    const server = memoryServer();
+    server.documents.set("saved-collections", { revision: 2, value: saved(["from-phone"]) });
+    const guestRaw = JSON.stringify(saved(["from-guest"]));
+    localStorage.setItem("sublet-saved-collections-v1:guest", guestRaw);
+    let meCalls = 0;
+    stubApi(server, () => "renter", () => (meCalls += 1) === 1 ? Response.json({ code: "SERVICE_UNAVAILABLE" }, { status: 503 }) : null);
+    writeStoredAuthSession("renter-token");
+    render(<SavedListingsProvider><Probe /></SavedListingsProvider>);
+    await waitFor(() => expect(meCalls).toBe(1));
+    expect(screen.getByTestId("ids").textContent).toBe("loading");
+    expect(localStorage.getItem("sublet-saved-collections-v1:guest")).toBe(guestRaw);
+    await waitFor(() => expect(screen.getByTestId("ids").textContent).toBe("from-phone,from-guest"), { timeout: 6_000 });
+    expect(meCalls).toBe(2);
   });
 
   it("removes an account's preferences from the browser on sign-out and never gives them to the next account", async () => {

@@ -22,6 +22,23 @@ describe("phone text budgets", () => {
     await limiter.enforce("deliver", "PHONE_LINK", phone("+14155550002", "service"));
   });
 
+  it("lets one network use only 30 of the day's 100 sign-up texts", async () => {
+    let now = 1_800_000_000_000;
+    const limiter = createLimiter(() => now);
+    const signUp = (index: number, ip: string) => limiter.enforce("deliver", "PHONE_SIGNUP", phone(`+1415555${String(index).padStart(4, "0")}`, ip));
+    // Sign-up texts are also limited to 10 a minute for the site, so the clock moves on.
+    const tick = (index: number) => { if (index % 10 === 0) now += 61_000; };
+    for (let index = 0; index < 30; index += 1) { tick(index); await signUp(index, `2001:db8:1:2::${index + 1}`); }
+    now += 61_000;
+    await expectLimited(signUp(30, "2001:db8:1:2:ffff::1"));
+    // Other networks still get texts until the site-wide 100 are used.
+    for (let index = 30; index < 100; index += 1) { tick(index); await signUp(index, `198.51.100.${index}`); }
+    now += 61_000;
+    await expectLimited(signUp(100, "203.0.113.9"));
+    // Signing in with a linked number has its own budget.
+    await limiter.enforce("deliver", "PHONE_LOGIN", phone("+14155550001", "service"));
+  });
+
   it("counts an IPv6 /64 as one address for phone requests", async () => {
     expect(addressPrefix("2001:db8:1:2:aaaa::1")).toBe("2001:db8:1:2::/64");
     expect(addressPrefix("2001:db8::5")).toBe("2001:db8:0:0::/64");

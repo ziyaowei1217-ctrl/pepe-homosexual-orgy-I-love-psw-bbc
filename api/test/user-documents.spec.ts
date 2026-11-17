@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { AuthGuard } from "../src/auth/auth.guard";
 import { AuthenticatedUserService } from "../src/auth/authenticated-user.service";
 import { PrismaService } from "../src/prisma/prisma.service";
-import { normalizeUserDocument } from "../src/user-documents/user-document-values";
+import { normalizeUserDocument, SAVED_COLLECTION_LIMITS, UserDocumentTooLargeError } from "../src/user-documents/user-document-values";
 import { UserDocumentWriteLimiter } from "../src/user-documents/user-document-write-limiter";
 import { UserDocumentsController } from "../src/user-documents/user-documents.controller";
 import { UserDocumentsService } from "../src/user-documents/user-documents.service";
@@ -146,6 +146,16 @@ describe("account documents", () => {
     expect(database.rows.size).toBe(0);
   });
 
+  it("refuses saved lists over their item limits instead of cutting them", async () => {
+    const auth = await bearer("user-1");
+    const listingIds = Array.from({ length: SAVED_COLLECTION_LIMITS.listingsPerCollection + 1 }, (_, index) => `listing-${index}`);
+    const response = await request(app.getHttpServer())
+      .put("/api/v1/me/documents/saved-collections").set("Authorization", auth)
+      .send({ value: { version: 1, collections: [{ id: "all", name: "全部收藏", listingIds }], notes: {} }, baseRevision: 0 }).expect(413);
+    expect(response.body.code).toBe("DOCUMENT_TOO_LARGE");
+    expect(database.rows.size).toBe(0);
+  });
+
   it("limits writes per account and says when to retry", async () => {
     await app.close();
     let now = 0;
@@ -157,6 +167,8 @@ describe("account documents", () => {
     const limited = await http.put("/api/v1/me/documents/feed-signals").set("Authorization", auth).send({ value: {}, baseRevision: 2 }).expect(429);
     expect(limited.body.code).toBe("DOCUMENT_RATE_LIMITED");
     expect(limited.headers["retry-after"]).toBe("60");
+    // Each kind has its own budget: busy feed signals do not hold back saves.
+    await http.put("/api/v1/me/documents/saved-collections").set("Authorization", auth).send({ value: saved, baseRevision: 0 }).expect(200);
     await http.put("/api/v1/me/documents/feed-signals").set("Authorization", await bearer("user-2")).send({ value: {}, baseRevision: 0 }).expect(200);
     now = 60_000;
     await http.put("/api/v1/me/documents/feed-signals").set("Authorization", auth).send({ value: {}, baseRevision: 2 }).expect(200);
@@ -184,6 +196,32 @@ describe("account document values", () => {
       ],
       notes: { a: "近地铁" }
     });
+  });
+
+  it("refuses saved lists past each limit rather than dropping saves or notes", () => {
+    const list = (count: number) => Array.from({ length: count }, (_, index) => `listing-${index}`);
+    const saved = (value: Record<string, unknown>) => () => normalizeUserDocument(UserDocumentKind.SAVED_COLLECTIONS, { version: 1, collections: [], notes: {}, ...value });
+    const atLimit = saved({
+      collections: Array.from({ length: SAVED_COLLECTION_LIMITS.collections }, (_, index) => ({ id: `list-${index}`, name: `清单 ${index}`, listingIds: index === 0 ? list(SAVED_COLLECTION_LIMITS.listingsPerCollection) : [] })),
+      notes: Object.fromEntries(list(SAVED_COLLECTION_LIMITS.notes).map((id, index) => [id, index === 0 ? "备".repeat(SAVED_COLLECTION_LIMITS.noteLength) : "近地铁"]))
+    });
+    expect(atLimit).not.toThrow();
+    expect(saved({ collections: Array.from({ length: SAVED_COLLECTION_LIMITS.collections + 1 }, (_, index) => ({ id: `list-${index}`, name: "清单", listingIds: [] })) })).toThrow(UserDocumentTooLargeError);
+    expect(saved({ collections: [{ id: "all", name: "全部收藏", listingIds: list(SAVED_COLLECTION_LIMITS.listingsPerCollection + 1) }] })).toThrow(UserDocumentTooLargeError);
+    expect(saved({ notes: Object.fromEntries(list(SAVED_COLLECTION_LIMITS.notes + 1).map((id) => [id, "近地铁"])) })).toThrow(UserDocumentTooLargeError);
+    expect(saved({ notes: { "listing-1": "备".repeat(SAVED_COLLECTION_LIMITS.noteLength + 1) } })).toThrow(UserDocumentTooLargeError);
+  });
+
+  it("stores only text Postgres accepts as JSON, and cuts without splitting an emoji", () => {
+    const value = normalizeUserDocument(UserDocumentKind.SAVED_COLLECTIONS, {
+      version: 1,
+      collections: [{ id: "all", name: `${"x".repeat(59)}😀`, listingIds: ["a\u0000"] }],
+      notes: { a: "近\u0000地铁 \ud83d", "b\udc00": "ok" }
+    });
+    expect(value).toEqual({ version: 1, collections: [{ id: "all", name: "x".repeat(59), listingIds: ["a"] }], notes: { a: "近地铁 \uFFFD", "b\uFFFD": "ok" } });
+    expect(normalizeUserDocument(UserDocumentKind.RENTER_PREFERENCES, { destination: `${"y".repeat(79)}😀` })).toMatchObject({ destination: "y".repeat(79) });
+    expect(normalizeUserDocument(UserDocumentKind.FEED_SIGNALS, { viewedIds: [], lastSearch: "/search?q=\ud800" })).toEqual({ viewedIds: [], lastSearch: "/search?q=\uFFFD" });
+    expect(JSON.stringify(value)).not.toMatch(/\\u0000|\\ud[89a-f]/i);
   });
 
   it("keeps preferences and feed signals to what the web app reads", () => {

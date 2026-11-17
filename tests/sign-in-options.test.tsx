@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { webcrypto } from "node:crypto";
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 
 import { AccountExperience } from "../components/marketplace/account-experience";
@@ -244,5 +244,41 @@ describe("linking a phone number", () => {
     expect(await screen.findByText(/已绑定 \+86 ••• •••• 8000/)).toBeTruthy();
     expect(screen.getByRole("button", { name: "解除绑定" })).toBeTruthy();
     expect(document.body.textContent).not.toContain("13800138000");
+  });
+
+  it("lets an account created by phone change its number but not remove it", async () => {
+    writeStoredAuthSession("member");
+    routes["/auth/me"] = () => Response.json({ id: "member", email: "phone-0a1b2c3d4e5f60718293@phone.psw.invalid", role: "USER" });
+    routes["/auth/phone"] = () => Response.json({ enabled: true, regions: ["US_CA"], linked: true, phoneNumber: "+1 ••• ••• 0142", verifiedAt: "2026-11-17T00:00:00.000Z" });
+    routes["/auth/phone/link/code"] = () => Response.json({ phoneNumber: "+1 ••• ••• 0143", expiresInSeconds: 600 });
+    routes["/auth/phone/link/verify"] = () => Response.json({ linked: true, phoneNumber: "+1 ••• ••• 0143", verifiedAt: "2026-11-17T01:00:00.000Z" });
+    render(<AccountExperience mode="verification" />);
+    expect(await screen.findByText(/已绑定 \+1 ••• ••• 0142。这个账户用手机号登录，可以更换号码，不能解除绑定。/)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "解除绑定" })).toBeNull();
+    // The placeholder address is not a sign-in email, so the email row does not claim one was verified.
+    expect(screen.getByText("这个账户用手机号登录，没有登录邮箱。", { selector: "span" })).toBeTruthy();
+    expect(document.body.textContent).not.toContain("账户登录邮箱已验证");
+    expect(document.body.textContent).not.toContain("phone.psw.invalid");
+
+    fireEvent.click(screen.getByRole("button", { name: "更换号码" }));
+    fireEvent.change(screen.getByLabelText("新手机号", { selector: "input" }), { target: { value: "415 555 0143" } });
+    fireEvent.click(screen.getByRole("button", { name: "发送短信验证码" }));
+    fireEvent.change(await screen.findByLabelText("短信验证码", { selector: "input" }), { target: { value: "222222" } });
+    fireEvent.click(screen.getByRole("button", { name: "验证并绑定" }));
+    expect(await screen.findByText("手机号已更换，之后用新号码登录。")).toBeTruthy();
+    expect(screen.getByText(/已绑定 \+1 ••• ••• 0143/)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "解除绑定" })).toBeNull();
+  });
+
+  it("explains the refusal if the API will not remove an account's only sign-in", async () => {
+    writeStoredAuthSession("member");
+    routes["/auth/phone"] = () => Response.json({ enabled: true, regions: ["US_CA"], linked: true, phoneNumber: "+1 ••• ••• 0142", verifiedAt: "2026-11-17T00:00:00.000Z" });
+    routes["/auth/phone/unlink"] = () => Response.json({ code: "PHONE_REQUIRED_FOR_ACCOUNT" }, { status: 409 });
+    render(<AccountExperience mode="verification" />);
+    fireEvent.click(await screen.findByRole("button", { name: "解除绑定" }));
+    fireEvent.click(within(await screen.findByRole("alertdialog", { name: "解除绑定手机号？" })).getByRole("button", { name: "解除绑定" }));
+    expect((await screen.findByRole("alert")).textContent).toBe("这个账户用手机号登录，号码不能解除绑定。可以绑定新号码来更换。");
+    expect(screen.getByText(/已绑定 \+1 ••• ••• 0142/)).toBeTruthy();
+    expect(readStoredAuthSession()?.accessToken).toBe("member");
   });
 });

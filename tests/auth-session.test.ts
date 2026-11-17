@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   clearStoredAuthSession,
   readStoredAuthSession,
+  sessionUserId,
   writeStoredAuthSession
 } from "../lib/auth-session";
 
@@ -60,5 +61,15 @@ describe("auth session storage", () => {
   it("treats denied browser storage as signed out without crashing page navigation", () => {
     vi.spyOn(window.localStorage, "getItem").mockImplementation(() => { throw new DOMException("Storage denied", "SecurityError"); });
     expect(readStoredAuthSession()).toBeNull();
+  });
+
+  it("reads the account id from an application session token and nothing from other strings", () => {
+    const encode = (value: unknown) => Buffer.from(JSON.stringify(value)).toString("base64url");
+    expect(sessionUserId(`${encode({ alg: "HS256", typ: "JWT" })}.${encode({ sub: "user-1", role: "USER" })}.signature`)).toBe("user-1");
+    // base64url characters and text outside ASCII decode as the API wrote them.
+    expect(sessionUserId(`h.${encode({ sub: "账户?>~~" })}.s`)).toBe("账户?>~~");
+    for (const token of ["opaque-token", "a.b", "h..s", "h.%%%.s", `h.${encode("text")}.s`, `h.${encode({ sub: 42 })}.s`, `h.${encode({ sub: " " })}.s`, `h.${encode({})}.s`]) {
+      expect(sessionUserId(token)).toBeNull();
+    }
   });
 });

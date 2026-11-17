@@ -147,6 +147,7 @@ const productCodeMessages: Record<string, string> = {
   PHONE_NUMBER_REJECTED: "这个号码无法接收验证短信，请换一个手机号。",
   PHONE_TOO_NEW: "新绑定的手机号需满 24 小时后才能用于管理员验证。",
   ADMIN_PHONE_LOCKED: "管理员账户已绑定的手机号不能在网站上更换或解除，请联系运营人员。",
+  PHONE_REQUIRED_FOR_ACCOUNT: "这个账户用手机号登录，号码不能解除绑定。可以绑定新号码来更换。",
   RECENT_SIGN_IN_REQUIRED: "为保护账户，修改手机号前请退出并重新登录（15 分钟内登录过即可）。"
 };
 

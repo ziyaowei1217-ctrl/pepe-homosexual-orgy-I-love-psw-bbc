@@ -6,6 +6,7 @@ import { DealThreadsService } from "../deal-threads/deal-threads.service";
 import { validateListingAvailability } from "../listings/listing-availability";
 import { PAYMENT_COMMANDS, type PaymentCommands } from "../payments/payment-commands";
 import { PaymentOperationsService } from "../payments/payment-operations.service";
+import { fallbackDisplayName } from "../auth/phone-account";
 import { applicationBusinessDate, assertMoveInNotPast } from "./application-business-date";
 import { requireIdempotencyKey } from "./application-idempotency";
 import type { ApplicationDecisionDto, CancelRentalApplicationDto, CreateRentalApplicationDto } from "./applications.dto";
@@ -387,7 +388,7 @@ export class ApplicationsService {
       client.profile.findUnique({ where: { email: user.email } }),
       client.roommateProfile.findUnique({ where: { ownerId: userId } })
     ]);
-    const displayName = profile?.displayName?.trim() || roommateProfile?.name?.trim() || fallbackName?.trim() || user.email.split("@")[0];
+    const displayName = profile?.displayName?.trim() || roommateProfile?.name?.trim() || fallbackName?.trim() || fallbackDisplayName(user.email);
     return { userId, displayName };
   }
 
